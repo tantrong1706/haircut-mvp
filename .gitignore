@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+lib/
+.firebase/
+*.log
+
+# Firebase and local config
+.firebaserc
+*.local
+
+# Zalo Mini App env
+zalo-mini-app/.env
+zalo-mini-app/.env.local
+firebase/functions/.env
+
+# iOS
+DerivedData/
+*.xcuserdata/
+*.xcuserstate
+ios-app/Haircut/Resources/GoogleService-Info.plist
