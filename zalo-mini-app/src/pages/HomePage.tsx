@@ -1,4 +1,14 @@
-import { CalendarClock, Gift, Scissors, ShieldCheck, Sparkles, type LucideIcon } from "lucide-react";
+import {
+  CalendarClock,
+  CheckCircle2,
+  Gift,
+  Hourglass,
+  Scissors,
+  ShieldCheck,
+  Sparkles,
+  type LucideIcon,
+} from "lucide-react";
+import { BrandLogo } from "../components/BrandLogo";
 import { AppSession, TabKey } from "../services/types";
 
 type Props = {
@@ -39,7 +49,7 @@ export function HomePage({ session, onTabChange }: Props) {
     <section className="page customer-home">
       <header className="customer-hero">
         <div className="hero-topline">
-          <div className="brand-mark">HAIRCUT</div>
+          <BrandLogo />
           <span className="soft-chip">{mirrorLabel(session.qr.mirrorId)}</span>
         </div>
         <p className="eyebrow">Hồ sơ thành viên</p>
@@ -49,6 +59,30 @@ export function HomePage({ session, onTabChange }: Props) {
           để chủ salon duyệt.
         </p>
       </header>
+
+      <div className="status-banner">
+        <div className="status-step done">
+          <CheckCircle2 size={20} aria-hidden="true" />
+          <div>
+            <strong>Đã nhận khách tại {mirrorLabel(session.qr.mirrorId)}</strong>
+            <span>Hồ sơ của bạn đã được tạo cho lượt cắt này.</span>
+          </div>
+        </div>
+        <div className="status-step">
+          <Hourglass size={20} aria-hidden="true" />
+          <div>
+            <strong>Vui lòng chờ nhân viên xác nhận sau khi cắt</strong>
+            <span>Nhân viên sẽ ghi chú kiểu tóc và gửi yêu cầu cộng điểm.</span>
+          </div>
+        </div>
+        <div className="status-step">
+          <Gift size={20} aria-hidden="true" />
+          <div>
+            <strong>Điểm được cộng sau khi chủ salon duyệt</strong>
+            <span>Bạn có thể quay thưởng khi đủ điểm tích lũy.</span>
+          </div>
+        </div>
+      </div>
 
       <div className="points-panel">
         <div>

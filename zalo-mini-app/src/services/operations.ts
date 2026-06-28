@@ -5,6 +5,7 @@ import {
   collection,
   doc,
   getDoc,
+  getDocs,
   onSnapshot,
   query,
   runTransaction,
@@ -48,6 +49,14 @@ export type PointRequest = {
   status: "pending" | "approved" | "rejected";
   createdAtMs: number | null;
   customer?: CustomerSummary;
+};
+
+export type OwnerOverview = {
+  customersToday: number;
+  pendingRequests: number;
+  pointsApprovedToday: number;
+  spinsToday: number;
+  unusedRewards: number;
 };
 
 export function listenActiveSessions(
@@ -112,6 +121,59 @@ export function listenPendingPointRequests(
     },
     (error) => onError(error.message),
   );
+}
+
+export async function getOwnerOverview(salonId: string): Promise<OwnerOverview> {
+  const db = getFirebaseDb();
+
+  if (!isFirebaseConfigured() || !db) {
+    return {
+      customersToday: 0,
+      pendingRequests: 0,
+      pointsApprovedToday: 0,
+      spinsToday: 0,
+      unusedRewards: 0,
+    };
+  }
+
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const startMs = startOfToday.getTime();
+
+  const [sessionsSnap, requestsSnap, rewardsSnap] = await Promise.all([
+    getDocs(query(collection(db, "chair_sessions"), where("salonId", "==", salonId))),
+    getDocs(query(collection(db, "point_requests"), where("salonId", "==", salonId))),
+    getDocs(query(collection(db, "reward_history"), where("salonId", "==", salonId))),
+  ]);
+
+  const customersToday = sessionsSnap.docs.filter((item) => {
+    const createdAt = toMillis(item.data().createdAt);
+    return Number(createdAt ?? 0) >= startMs;
+  }).length;
+
+  const requests = requestsSnap.docs.map((item) => item.data());
+  const pendingRequests = requests.filter((request) => request.status === "pending").length;
+  const pointsApprovedToday = requests
+    .filter((request) => {
+      const approvedAt = toMillis(request.approvedAt) ?? toMillis(request.createdAt);
+      return request.status === "approved" && Number(approvedAt ?? 0) >= startMs;
+    })
+    .reduce((total, request) => total + Number(request.pointsAdded ?? request.pointsRequested ?? 1), 0);
+
+  const rewards = rewardsSnap.docs.map((item) => item.data());
+  const spinsToday = rewards.filter((reward) => {
+    const createdAt = toMillis(reward.createdAt);
+    return Number(createdAt ?? 0) >= startMs;
+  }).length;
+  const unusedRewards = rewards.filter((reward) => reward.status === "unused").length;
+
+  return {
+    customersToday,
+    pendingRequests,
+    pointsApprovedToday,
+    spinsToday,
+    unusedRewards,
+  };
 }
 
 export async function submitPointRequest(input: {

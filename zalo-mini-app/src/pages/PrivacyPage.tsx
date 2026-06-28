@@ -1,7 +1,10 @@
+import { BrandLogo } from "../components/BrandLogo";
+
 export function PrivacyPage() {
   return (
     <section className="privacy-page">
       <header className="page-header">
+        <BrandLogo />
         <p className="eyebrow">HAIRCUT</p>
         <h1>Chính sách quyền riêng tư</h1>
         <p className="muted">Cập nhật: 28/06/2026</p>
@@ -56,4 +59,3 @@ export function PrivacyPage() {
     </section>
   );
 }
-

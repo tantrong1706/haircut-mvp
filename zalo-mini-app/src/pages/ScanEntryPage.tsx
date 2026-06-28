@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { CheckCircle2, MessageCircle, Phone, ShieldCheck, Sparkles } from "lucide-react";
+import { BrandLogo } from "../components/BrandLogo";
 import { buildRegisterInput, parseQrContext, registerCustomer } from "../services/api";
 import { AppSession } from "../services/types";
 import { getZaloIdentity } from "../services/zalo";
@@ -35,7 +36,7 @@ export function ScanEntryPage({ onReady }: Props) {
     <section className="entry-page">
       <header className="entry-hero">
         <div className="hero-topline">
-          <div className="brand-mark">HAIRCUT</div>
+          <BrandLogo />
           <span className="soft-chip">{mirrorLabel(qr.mirrorId)}</span>
         </div>
         <p className="eyebrow">Chăm sóc khách quen</p>
@@ -89,10 +90,15 @@ export function ScanEntryPage({ onReady }: Props) {
         ) : (
           <>
             <MessageCircle size={20} aria-hidden="true" />
-            Tiếp tục với Zalo
+            Xác nhận và tạo lượt cắt
           </>
         )}
       </button>
+
+      <p className="fine-print">
+        Bạn không cần tạo tài khoản. Salon chỉ dùng thông tin này để cộng điểm và lưu lịch sử
+        cắt tóc.
+      </p>
 
       <p className="fine-print">
         <Sparkles size={16} aria-hidden="true" />

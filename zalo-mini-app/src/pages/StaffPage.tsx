@@ -12,6 +12,15 @@ type Props = {
   currentUser: AppUser;
 };
 
+const quickNotes = [
+  "Fade thấp",
+  "Fade cao",
+  "Cắt ngắn gọn",
+  "Tỉa mái",
+  "Giữ form cũ",
+  "Nhuộm / uốn",
+];
+
 export function StaffPage({ currentUser }: Props) {
   const salonId = useMemo(() => {
     const params = new URLSearchParams(window.location.search);
@@ -29,6 +38,9 @@ export function StaffPage({ currentUser }: Props) {
   const [error, setError] = useState("");
 
   const selectedSession = sessions.find((session) => session.id === selectedId) || sessions[0];
+  const waitingCount = sessions.filter((session) => session.status === "waiting").length;
+  const pendingApprovalCount = sessions.filter((session) => session.status === "serving").length;
+  const isPendingApproval = selectedSession?.status === "serving";
 
   useEffect(() => {
     return listenActiveSessions(
@@ -68,13 +80,31 @@ export function StaffPage({ currentUser }: Props) {
         staffName: staffName || "Nhân viên",
         note,
       });
+      setSessions((current) =>
+        current.map((session) =>
+          session.id === selectedSession.id ? { ...session, status: "serving" } : session,
+        ),
+      );
       setNote("");
-      setMessage("Đã gửi yêu cầu cộng 1 điểm cho chủ salon duyệt.");
+      setMessage("Đã gửi yêu cầu. Khách này đang chờ chủ salon duyệt điểm.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không gửi được yêu cầu");
     } finally {
       setLoading(false);
     }
+  }
+
+  function addQuickNote(nextNote: string) {
+    setNote((current) => {
+      const trimmed = current.trim();
+      if (!trimmed) {
+        return nextNote;
+      }
+      if (trimmed.includes(nextNote)) {
+        return current;
+      }
+      return `${trimmed}, ${nextNote}`;
+    });
   }
 
   return (
@@ -89,12 +119,12 @@ export function StaffPage({ currentUser }: Props) {
         <div className="metric-card">
           <UsersRound size={20} aria-hidden="true" />
           <span>Đang chờ</span>
-          <strong>{sessions.length}</strong>
+          <strong>{waitingCount}</strong>
         </div>
         <div className="metric-card">
           <UserRoundCheck size={20} aria-hidden="true" />
-          <span>Đang chọn</span>
-          <strong>{selectedSession ? mirrorLabel(selectedSession.mirrorId) : "Chưa có"}</strong>
+          <span>Chờ chủ duyệt</span>
+          <strong>{pendingApprovalCount}</strong>
         </div>
       </div>
 
@@ -127,7 +157,13 @@ export function StaffPage({ currentUser }: Props) {
             sessions.map((session) => (
               <button
                 key={session.id}
-                className={selectedSession?.id === session.id ? "ops-card active" : "ops-card"}
+                className={[
+                  "ops-card",
+                  selectedSession?.id === session.id ? "active" : "",
+                  session.status === "serving" ? "pending-card" : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
                 onClick={() => setSelectedId(session.id)}
               >
                 <span className="ops-card-title">{mirrorLabel(session.mirrorId)}</span>
@@ -160,19 +196,41 @@ export function StaffPage({ currentUser }: Props) {
                   <ClipboardPenLine size={18} aria-hidden="true" />
                   Ghi chú kiểu tóc
                 </span>
+                <div className="quick-note-row" aria-label="Ghi chú nhanh">
+                  {quickNotes.map((quickNote) => (
+                    <button
+                      key={quickNote}
+                      type="button"
+                      disabled={isPendingApproval}
+                      onClick={() => addQuickNote(quickNote)}
+                    >
+                      {quickNote}
+                    </button>
+                  ))}
+                </div>
                 <textarea
                   value={note}
                   onChange={(event) => setNote(event.target.value)}
                   placeholder="Ví dụ: Fade thấp, để mái dài, không cắt quá cao"
+                  disabled={isPendingApproval}
                 />
               </label>
 
+              {isPendingApproval ? (
+                <div className="notice-banner">
+                  <Clock3 size={20} aria-hidden="true" />
+                  <span>Yêu cầu đã gửi. Vui lòng chờ chủ salon duyệt điểm.</span>
+                </div>
+              ) : null}
+
               <button
                 className="primary-button"
-                disabled={loading || note.trim().length === 0}
+                disabled={loading || isPendingApproval || note.trim().length === 0}
                 onClick={handleSubmit}
               >
-                {loading ? (
+                {isPendingApproval ? (
+                  "Đang chờ chủ duyệt"
+                ) : loading ? (
                   "Đang gửi..."
                 ) : (
                   <>
@@ -213,7 +271,7 @@ function mirrorLabel(mirrorId: string) {
 
 function statusLabel(status: StaffSession["status"]) {
   if (status === "serving") {
-    return "Đang phục vụ";
+    return "Chờ chủ duyệt";
   }
 
   return "Đang chờ";

@@ -43,6 +43,7 @@ export type SpinResult = {
   rewardName: string;
   rewardCode: string;
   pointsAfter: number;
+  selectedIndex?: number;
 };
 
 export type LuckyWheelSlot = {

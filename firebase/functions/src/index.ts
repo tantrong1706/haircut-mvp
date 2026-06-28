@@ -33,6 +33,7 @@ type SpinWheelResult = {
   rewardName: string;
   rewardCode: string;
   pointsAfter: number;
+  selectedIndex: number;
 };
 
 function requireString(value: unknown, field: string): string {
@@ -143,6 +144,7 @@ async function spinWheelForCustomer(
 
   let selectedReward = "";
   let selectedCode = "";
+  let selectedIndex = 0;
   let pointsAfter = 0;
 
   await db.runTransaction(async (tx) => {
@@ -171,8 +173,8 @@ async function spinWheelForCustomer(
       throw new HttpsError("failed-precondition", "Vòng quay chưa có ô thưởng đang bật");
     }
 
-    const index = Math.floor(Math.random() * activeSlots.length);
-    selectedReward = activeSlots[index].label;
+    selectedIndex = Math.floor(Math.random() * activeSlots.length);
+    selectedReward = activeSlots[selectedIndex].label;
     selectedCode = rewardCode();
     const deductPoints = Boolean(wheel?.deductPointsAfterSpin);
     pointsAfter = deductPoints ? points - requiredPoints : points;
@@ -182,6 +184,7 @@ async function spinWheelForCustomer(
       customerId,
       rewardName: selectedReward,
       rewardCode: selectedCode,
+      selectedIndex,
       pointsSpent: deductPoints ? requiredPoints : 0,
       status: "unused",
       createdAt: now,
@@ -200,6 +203,7 @@ async function spinWheelForCustomer(
     rewardName: selectedReward,
     rewardCode: selectedCode,
     pointsAfter,
+    selectedIndex,
   };
 }
 

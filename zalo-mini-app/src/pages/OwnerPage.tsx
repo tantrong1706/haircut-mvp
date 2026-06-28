@@ -1,18 +1,25 @@
 import { useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import {
+  BarChart3,
   CheckCircle2,
   ClipboardCheck,
   Gift,
+  RefreshCcw,
   Save,
   Settings2,
   SlidersHorizontal,
+  TicketCheck,
+  UsersRound,
   XCircle,
 } from "lucide-react";
 import {
+  OwnerOverview,
   PointRequest,
   approvePointRequest,
   formatDateTime,
   getLuckyWheelConfig,
+  getOwnerOverview,
   listenPendingPointRequests,
   rejectPointRequest,
   saveLuckyWheelConfig,
@@ -20,7 +27,7 @@ import {
 import { AppUser } from "../services/auth";
 import { LuckyWheelConfig, defaultLuckyWheelConfig } from "../services/types";
 
-type OwnerTab = "approvals" | "wheel";
+type OwnerTab = "overview" | "approvals" | "wheel";
 
 type Props = {
   currentUser: AppUser;
@@ -31,10 +38,12 @@ export function OwnerPage({ currentUser }: Props) {
     const params = new URLSearchParams(window.location.search);
     return currentUser.salonId || params.get("salonId") || "demo-salon";
   }, [currentUser.salonId]);
-  const [activeTab, setActiveTab] = useState<OwnerTab>("approvals");
+  const [activeTab, setActiveTab] = useState<OwnerTab>("overview");
   const [requests, setRequests] = useState<PointRequest[]>([]);
+  const [overview, setOverview] = useState<OwnerOverview | null>(null);
   const [wheelConfig, setWheelConfig] = useState<LuckyWheelConfig>(defaultLuckyWheelConfig);
   const [busyId, setBusyId] = useState("");
+  const [loadingOverview, setLoadingOverview] = useState(true);
   const [savingWheel, setSavingWheel] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -56,13 +65,36 @@ export function OwnerPage({ currentUser }: Props) {
       .catch((err) => setError(err instanceof Error ? err.message : "Không tải được vòng quay"));
   }, [salonId]);
 
+  useEffect(() => {
+    refreshOverview();
+  }, [salonId]);
+
+  async function refreshOverview() {
+    setLoadingOverview(true);
+    try {
+      setOverview(await getOwnerOverview(salonId));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không tải được tổng quan");
+    } finally {
+      setLoadingOverview(false);
+    }
+  }
+
   async function approve(request: PointRequest) {
+    const ok = window.confirm(
+      `Duyệt cộng ${request.pointsAdded} điểm cho ${request.customer?.name || "khách hàng"}?`,
+    );
+    if (!ok) {
+      return;
+    }
+
     setBusyId(request.id);
     setMessage("");
     setError("");
 
     try {
       await approvePointRequest(request);
+      refreshOverview();
       setMessage("Đã duyệt cộng điểm và lưu lịch sử cắt tóc.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không duyệt được yêu cầu");
@@ -72,12 +104,20 @@ export function OwnerPage({ currentUser }: Props) {
   }
 
   async function reject(request: PointRequest) {
+    const ok = window.confirm(
+      `Từ chối yêu cầu cộng điểm của ${request.customer?.name || "khách hàng"}?`,
+    );
+    if (!ok) {
+      return;
+    }
+
     setBusyId(request.id);
     setMessage("");
     setError("");
 
     try {
       await rejectPointRequest(request);
+      refreshOverview();
       setMessage("Đã từ chối yêu cầu.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không từ chối được yêu cầu");
@@ -122,7 +162,14 @@ export function OwnerPage({ currentUser }: Props) {
         </div>
       </div>
 
-      <div className="segmented-control" aria-label="Chọn mục quản lý">
+      <div className="segmented-control owner-tabs" aria-label="Chọn mục quản lý">
+        <button
+          className={activeTab === "overview" ? "active" : ""}
+          onClick={() => setActiveTab("overview")}
+        >
+          <BarChart3 size={18} aria-hidden="true" />
+          Tổng quan
+        </button>
         <button
           className={activeTab === "approvals" ? "active" : ""}
           onClick={() => setActiveTab("approvals")}
@@ -139,7 +186,9 @@ export function OwnerPage({ currentUser }: Props) {
         </button>
       </div>
 
-      {activeTab === "approvals" ? (
+      {activeTab === "overview" ? (
+        <OverviewPanel overview={overview} loading={loadingOverview} onRefresh={refreshOverview} />
+      ) : activeTab === "approvals" ? (
         <ApprovalsPanel
           requests={requests}
           busyId={busyId}
@@ -158,6 +207,85 @@ export function OwnerPage({ currentUser }: Props) {
       {message ? <p className="alert success">{message}</p> : null}
       {error ? <p className="alert error">{error}</p> : null}
     </section>
+  );
+}
+
+function OverviewPanel({
+  overview,
+  loading,
+  onRefresh,
+}: {
+  overview: OwnerOverview | null;
+  loading: boolean;
+  onRefresh: () => void;
+}) {
+  const data =
+    overview ||
+    ({
+      customersToday: 0,
+      pendingRequests: 0,
+      pointsApprovedToday: 0,
+      spinsToday: 0,
+      unusedRewards: 0,
+    } satisfies OwnerOverview);
+
+  return (
+    <div className="panel overview-panel">
+      <div className="section-heading">
+        <BarChart3 size={22} aria-hidden="true" />
+        <div>
+          <h2>Tổng quan hôm nay</h2>
+          <p className="muted">Các số liệu nhanh để chủ salon biết việc cần xử lý.</p>
+        </div>
+      </div>
+
+      <div className="overview-grid">
+        <OverviewMetric
+          icon={<UsersRound size={21} />}
+          label="Khách hôm nay"
+          value={data.customersToday}
+        />
+        <OverviewMetric
+          icon={<ClipboardCheck size={21} />}
+          label="Chờ duyệt"
+          value={data.pendingRequests}
+        />
+        <OverviewMetric
+          icon={<CheckCircle2 size={21} />}
+          label="Điểm đã cộng"
+          value={data.pointsApprovedToday}
+        />
+        <OverviewMetric icon={<Gift size={21} />} label="Lượt quay" value={data.spinsToday} />
+        <OverviewMetric
+          icon={<TicketCheck size={21} />}
+          label="Mã quà chưa dùng"
+          value={data.unusedRewards}
+        />
+      </div>
+
+      <button className="secondary-button" disabled={loading} onClick={onRefresh}>
+        <RefreshCcw size={18} aria-hidden="true" />
+        {loading ? "Đang tải..." : "Làm mới tổng quan"}
+      </button>
+    </div>
+  );
+}
+
+function OverviewMetric({
+  icon,
+  label,
+  value,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: number;
+}) {
+  return (
+    <div className="overview-metric">
+      {icon}
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
   );
 }
 

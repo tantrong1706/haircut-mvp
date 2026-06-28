@@ -162,15 +162,18 @@ export async function spinWheel(session: AppSession): Promise<SpinResult> {
 
 async function spinWheelDirect(session: AppSession): Promise<SpinResult> {
   if (!isFirebaseConfigured()) {
+    const activeSlots = activeWheelSlots(defaultLuckyWheelConfig);
+    const selectedIndex = Math.min(1, activeSlots.length - 1);
     const pointsAfter = Math.max(
       0,
       session.customer.points - defaultLuckyWheelConfig.requiredPoints,
     );
     const reward = {
       rewardId: `reward-${Date.now()}`,
-      rewardName: "Gội đầu miễn phí",
+      rewardName: activeSlots[selectedIndex]?.label || "Gội đầu miễn phí",
       rewardCode: `HC-${Math.floor(1000 + Math.random() * 9000)}`,
       pointsAfter,
+      selectedIndex,
     };
 
     saveMockReward({
@@ -220,7 +223,8 @@ async function spinWheelDirect(session: AppSession): Promise<SpinResult> {
       throw new Error(`Khách chưa đủ ${wheelConfig.requiredPoints} điểm để quay`);
     }
 
-    const rewardName = activeSlots[Math.floor(Math.random() * activeSlots.length)].label;
+    const selectedIndex = Math.floor(Math.random() * activeSlots.length);
+    const rewardName = activeSlots[selectedIndex].label;
     const rewardCode = `HC-${Math.floor(1000 + Math.random() * 9000)}`;
     const pointsAfter = wheelConfig.deductPointsAfterSpin
       ? currentPoints - wheelConfig.requiredPoints
@@ -239,6 +243,7 @@ async function spinWheelDirect(session: AppSession): Promise<SpinResult> {
       zaloUserId: session.zaloUserId,
       rewardName,
       rewardCode,
+      selectedIndex,
       status: "unused",
       pointsUsed: wheelConfig.deductPointsAfterSpin ? wheelConfig.requiredPoints : 0,
       createdAt: serverTimestamp(),
@@ -249,6 +254,7 @@ async function spinWheelDirect(session: AppSession): Promise<SpinResult> {
       rewardName,
       rewardCode,
       pointsAfter,
+      selectedIndex,
     };
   });
 }

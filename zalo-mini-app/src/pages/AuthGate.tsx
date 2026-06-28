@@ -1,5 +1,6 @@
 import { ReactNode, useEffect, useState } from "react";
 import { KeyRound, LockKeyhole, LogOut, Mail, ShieldCheck } from "lucide-react";
+import { BrandLogo } from "../components/BrandLogo";
 import {
   AppRole,
   AppUser,
@@ -90,7 +91,7 @@ export function AuthGate({ allowedRoles, children }: Props) {
     return (
       <section className="entry-page auth-entry">
         <header className="entry-hero">
-          <div className="brand-mark">HAIRCUT</div>
+          <BrandLogo />
           <p className="eyebrow">Chủ salon / Nhân viên</p>
           <h1>Đăng nhập quản lý</h1>
           <p className="muted">

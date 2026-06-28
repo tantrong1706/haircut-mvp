@@ -19,11 +19,18 @@ export function WheelPage({ session, onSessionChange }: Props) {
   const [loadingConfig, setLoadingConfig] = useState(true);
   const [spinning, setSpinning] = useState(false);
   const [result, setResult] = useState<SpinResult | null>(null);
+  const [rotationDeg, setRotationDeg] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const slots = useMemo(() => activeWheelSlots(wheelConfig), [wheelConfig]);
   const missingPoints = Math.max(0, wheelConfig.requiredPoints - session.customer.points);
   const canSpin = !loadingConfig && !spinning && missingPoints === 0 && slots.length > 0;
-  const wheelStyle = useMemo(() => ({ background: wheelBackground(slots.length) }), [slots.length]);
+  const wheelStyle = useMemo(
+    () => ({
+      background: wheelBackground(slots.length),
+      transform: `rotate(${rotationDeg}deg)`,
+    }),
+    [rotationDeg, slots.length],
+  );
 
   useEffect(() => {
     setLoadingConfig(true);
@@ -40,10 +47,14 @@ export function WheelPage({ session, onSessionChange }: Props) {
 
   async function handleSpin() {
     setSpinning(true);
+    setResult(null);
     setError(null);
     try {
       const spinResult = await spinWheel(session);
-      setResult(spinResult);
+      const selectedIndex = selectedIndexFromResult(spinResult, slots);
+      setRotationDeg((current) => nextRotation(current, selectedIndex, slots.length));
+      await wait(1300);
+      setResult({ ...spinResult, selectedIndex });
       onSessionChange({
         ...session,
         customer: {
@@ -72,6 +83,21 @@ export function WheelPage({ session, onSessionChange }: Props) {
       <div className="wheel-stage">
         <div className="wheel-pointer" aria-hidden="true" />
         <div className={spinning ? "wheel spinning" : "wheel"} style={wheelStyle}>
+          {slots.map((slot, index) => {
+            const angle = index * (360 / Math.max(slots.length, 1)) + 360 / Math.max(slots.length, 1) / 2;
+
+            return (
+              <span
+                className="wheel-label"
+                key={`${slot.label}-${index}`}
+                style={{
+                  transform: `translate(-50%, -50%) rotate(${angle}deg) translateY(-108px) rotate(${-angle}deg)`,
+                }}
+              >
+                {shortWheelLabel(slot.label)}
+              </span>
+            );
+          })}
           <div className="wheel-center">
             <Sparkles size={26} aria-hidden="true" />
             <span>HAIRCUT</span>
@@ -146,4 +172,49 @@ function wheelBackground(slotCount: number) {
     const end = (index + 1) * slice;
     return `${colors[index % colors.length]} ${start}deg ${end}deg`;
   }).join(", ")})`;
+}
+
+function selectedIndexFromResult(result: SpinResult, slots: Array<{ label: string }>) {
+  if (
+    typeof result.selectedIndex === "number" &&
+    result.selectedIndex >= 0 &&
+    result.selectedIndex < slots.length
+  ) {
+    return result.selectedIndex;
+  }
+
+  const foundIndex = slots.findIndex((slot) => slot.label === result.rewardName);
+  return foundIndex >= 0 ? foundIndex : 0;
+}
+
+function nextRotation(currentRotation: number, selectedIndex: number, slotCount: number) {
+  if (slotCount <= 0) {
+    return currentRotation;
+  }
+
+  const slice = 360 / slotCount;
+  const selectedCenter = selectedIndex * slice + slice / 2;
+  const target = normalizeDegrees(270 - selectedCenter);
+  const current = normalizeDegrees(currentRotation);
+  return currentRotation + 1080 + normalizeDegrees(target - current);
+}
+
+function normalizeDegrees(value: number) {
+  return ((value % 360) + 360) % 360;
+}
+
+function shortWheelLabel(label: string) {
+  const normalized = label.toLowerCase();
+  if (normalized.includes("giảm 10")) return "-10%";
+  if (normalized.includes("giảm 20")) return "-20%";
+  if (normalized.includes("gội")) return "Gội đầu";
+  if (normalized.includes("sáp")) return "Sáp tóc";
+  if (normalized.includes("may mắn")) return "May mắn";
+  if (normalized.includes("hấp")) return "Hấp dầu";
+  if (label.length <= 10) return label;
+  return `${label.slice(0, 9)}...`;
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
