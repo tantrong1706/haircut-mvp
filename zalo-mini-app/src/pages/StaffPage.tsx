@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { ClipboardPenLine, Clock3, Send, UserRoundCheck, UsersRound } from "lucide-react";
 import {
   StaffSession,
   formatDateTime,
@@ -23,6 +24,7 @@ export function StaffPage({ currentUser }: Props) {
   );
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -33,9 +35,13 @@ export function StaffPage({ currentUser }: Props) {
       salonId,
       (nextSessions) => {
         setSessions(nextSessions);
+        setLoaded(true);
         setError("");
       },
-      setError,
+      (message) => {
+        setLoaded(true);
+        setError(message);
+      },
     );
   }, [salonId]);
 
@@ -79,8 +85,21 @@ export function StaffPage({ currentUser }: Props) {
         <p className="muted">Salon: {salonId}</p>
       </header>
 
+      <div className="metrics-row">
+        <div className="metric-card">
+          <UsersRound size={20} aria-hidden="true" />
+          <span>Đang chờ</span>
+          <strong>{sessions.length}</strong>
+        </div>
+        <div className="metric-card">
+          <UserRoundCheck size={20} aria-hidden="true" />
+          <span>Đang chọn</span>
+          <strong>{selectedSession ? mirrorLabel(selectedSession.mirrorId) : "Chưa có"}</strong>
+        </div>
+      </div>
+
       <div className="ops-grid">
-        <div className="panel">
+        <div className="panel form-panel">
           <label className="field">
             <span>Tên nhân viên</span>
             <input
@@ -92,8 +111,18 @@ export function StaffPage({ currentUser }: Props) {
         </div>
 
         <div className="ops-list">
-          {sessions.length === 0 ? (
-            <p className="empty">Chưa có khách quét QR.</p>
+          {!loaded ? (
+            <div className="empty-state compact-empty">
+              <Clock3 size={26} aria-hidden="true" />
+              <strong>Đang tải khách</strong>
+              <p>Danh sách sẽ tự cập nhật khi khách quét QR.</p>
+            </div>
+          ) : sessions.length === 0 ? (
+            <div className="empty-state compact-empty">
+              <UsersRound size={28} aria-hidden="true" />
+              <strong>Chưa có khách quét QR</strong>
+              <p>Khi khách quét mã tại gương, hồ sơ sẽ xuất hiện ở đây.</p>
+            </div>
           ) : (
             sessions.map((session) => (
               <button
@@ -127,7 +156,10 @@ export function StaffPage({ currentUser }: Props) {
               </div>
 
               <label className="field">
-                <span>Ghi chú kiểu tóc</span>
+                <span>
+                  <ClipboardPenLine size={18} aria-hidden="true" />
+                  Ghi chú kiểu tóc
+                </span>
                 <textarea
                   value={note}
                   onChange={(event) => setNote(event.target.value)}
@@ -140,14 +172,21 @@ export function StaffPage({ currentUser }: Props) {
                 disabled={loading || note.trim().length === 0}
                 onClick={handleSubmit}
               >
-                {loading ? "Đang gửi..." : "Gửi yêu cầu cộng 1 điểm"}
+                {loading ? (
+                  "Đang gửi..."
+                ) : (
+                  <>
+                    <Send size={20} aria-hidden="true" />
+                    Gửi yêu cầu cộng 1 điểm
+                  </>
+                )}
               </button>
             </div>
           </div>
         ) : null}
 
-        {message ? <p className="success">{message}</p> : null}
-        {error ? <p className="error">{error}</p> : null}
+        {message ? <p className="alert success">{message}</p> : null}
+        {error ? <p className="alert error">{error}</p> : null}
       </div>
     </section>
   );

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { CalendarCheck2, ClipboardList, Scissors } from "lucide-react";
 import { getHaircutHistory } from "../services/api";
 import { AppSession, HaircutRecord } from "../services/types";
 
@@ -8,9 +9,35 @@ type Props = {
 
 export function HistoryPage({ session }: Props) {
   const [records, setRecords] = useState<HaircutRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    getHaircutHistory(session).then(setRecords).catch(() => setRecords([]));
+    let cancelled = false;
+    setLoading(true);
+    setError("");
+
+    getHaircutHistory(session)
+      .then((nextRecords) => {
+        if (!cancelled) {
+          setRecords(nextRecords);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setRecords([]);
+          setError(err instanceof Error ? err.message : "Không tải được lịch sử cắt tóc");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [session]);
 
   return (
@@ -21,15 +48,28 @@ export function HistoryPage({ session }: Props) {
       </header>
 
       <div className="list">
-        {records.length === 0 ? (
-          <p className="empty">Chưa có lịch sử cắt tóc.</p>
+        {loading ? (
+          <div className="empty-state">
+            <Scissors size={28} aria-hidden="true" />
+            <strong>Đang tải lịch sử</strong>
+            <p>Vui lòng chờ trong giây lát.</p>
+          </div>
+        ) : error ? (
+          <p className="alert error">{error}</p>
+        ) : records.length === 0 ? (
+          <div className="empty-state">
+            <ClipboardList size={30} aria-hidden="true" />
+            <strong>Chưa có lịch sử cắt tóc</strong>
+            <p>Sau khi chủ salon duyệt điểm, ghi chú kiểu tóc sẽ xuất hiện tại đây.</p>
+          </div>
         ) : (
           records.map((record) => (
             <article className="list-item" key={record.id}>
+              <CalendarCheck2 size={22} aria-hidden="true" />
               <div>
-                <strong>{record.createdAt}</strong>
-                <p>{record.note}</p>
-                <small>Thợ: {record.staffName}</small>
+                <strong>{record.createdAt || "Chưa có ngày"}</strong>
+                <p>{record.note || "Không có ghi chú kiểu tóc"}</p>
+                <small>Nhân viên: {record.staffName || "Chưa rõ"}</small>
               </div>
               <span className="pill">+{record.pointsAdded}</span>
             </article>
@@ -39,4 +79,3 @@ export function HistoryPage({ session }: Props) {
     </section>
   );
 }
-

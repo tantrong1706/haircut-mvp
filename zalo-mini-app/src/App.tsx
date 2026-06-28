@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Gift, History, House, Sparkles, type LucideIcon } from "lucide-react";
 import { AuthGate } from "./pages/AuthGate";
 import { HistoryPage } from "./pages/HistoryPage";
 import { HomePage } from "./pages/HomePage";
@@ -10,7 +11,12 @@ import { StaffPage } from "./pages/StaffPage";
 import { WheelPage } from "./pages/WheelPage";
 import { AppSession, TabKey } from "./services/types";
 
-const tabs: TabKey[] = ["home", "history", "wheel", "rewards"];
+const tabs: Array<{ key: TabKey; label: string; Icon: LucideIcon }> = [
+  { key: "home", label: "Điểm", Icon: House },
+  { key: "history", label: "Lịch sử", Icon: History },
+  { key: "wheel", label: "Vòng quay", Icon: Sparkles },
+  { key: "rewards", label: "Quà", Icon: Gift },
+];
 
 export default function App() {
   const [session, setSession] = useState<AppSession | null>(null);
@@ -73,30 +79,18 @@ export default function App() {
       <main className="app-main">{content}</main>
       {session ? (
         <nav className="bottom-nav" aria-label="Điều hướng">
-          {tabs.map((tab) => (
+          {tabs.map(({ key, label, Icon }) => (
             <button
-              key={tab}
-              className={activeTab === tab ? "active" : ""}
-              onClick={() => setActiveTab(tab)}
+              key={key}
+              className={activeTab === key ? "active" : ""}
+              onClick={() => setActiveTab(key)}
             >
-              {tabLabel(tab)}
+              <Icon size={20} strokeWidth={2.3} aria-hidden="true" />
+              <span>{label}</span>
             </button>
           ))}
         </nav>
       ) : null}
     </div>
   );
-}
-
-function tabLabel(tab: TabKey) {
-  switch (tab) {
-    case "home":
-      return "Điểm";
-    case "history":
-      return "Lịch sử";
-    case "wheel":
-      return "Vòng quay";
-    case "rewards":
-      return "Quà";
-  }
 }

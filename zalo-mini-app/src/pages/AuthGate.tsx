@@ -1,4 +1,5 @@
 import { ReactNode, useEffect, useState } from "react";
+import { KeyRound, LockKeyhole, LogOut, Mail, ShieldCheck } from "lucide-react";
 import {
   AppRole,
   AppUser,
@@ -74,22 +75,35 @@ export function AuthGate({ allowedRoles, children }: Props) {
   }
 
   if (loading) {
-    return <p className="muted">Đang kiểm tra đăng nhập...</p>;
+    return (
+      <section className="entry-page auth-entry">
+        <div className="empty-state">
+          <ShieldCheck size={32} aria-hidden="true" />
+          <strong>Đang kiểm tra đăng nhập</strong>
+          <p>Hệ thống đang xác nhận quyền truy cập của tài khoản này.</p>
+        </div>
+      </section>
+    );
   }
 
   if (!appUser) {
     return (
-      <section className="entry-page">
-        <div className="brand-mark">HAIRCUT</div>
-        <header className="page-header">
+      <section className="entry-page auth-entry">
+        <header className="entry-hero">
+          <div className="brand-mark">HAIRCUT</div>
           <p className="eyebrow">Chủ salon / Nhân viên</p>
-          <h1>Đăng nhập</h1>
-          <p className="muted">Dùng email và mật khẩu đã tạo trong Firebase Authentication.</p>
+          <h1>Đăng nhập quản lý</h1>
+          <p className="muted">
+            Chỉ tài khoản đã được phân quyền trong salon mới truy cập được khu vực này.
+          </p>
         </header>
 
-        <div className="panel">
+        <div className="panel form-panel">
           <label className="field">
-            <span>Email</span>
+            <span>
+              <Mail size={18} aria-hidden="true" />
+              Email
+            </span>
             <input
               value={email}
               onChange={(event) => setEmail(event.target.value)}
@@ -100,7 +114,10 @@ export function AuthGate({ allowedRoles, children }: Props) {
           </label>
 
           <label className="field">
-            <span>Mật khẩu</span>
+            <span>
+              <KeyRound size={18} aria-hidden="true" />
+              Mật khẩu
+            </span>
             <input
               value={password}
               onChange={(event) => setPassword(event.target.value)}
@@ -116,23 +133,31 @@ export function AuthGate({ allowedRoles, children }: Props) {
           disabled={signingIn || !email.trim() || !password}
           onClick={handleSignIn}
         >
-          {signingIn ? "Đang đăng nhập..." : "Đăng nhập"}
+          {signingIn ? (
+            "Đang đăng nhập..."
+          ) : (
+            <>
+              <LockKeyhole size={20} aria-hidden="true" />
+              Đăng nhập
+            </>
+          )}
         </button>
 
-        {error ? <p className="error">{error}</p> : null}
+        {error ? <p className="alert error">{error}</p> : null}
       </section>
     );
   }
 
   if (!allowedRoles.includes(appUser.role)) {
     return (
-      <section className="entry-page">
+      <section className="entry-page auth-entry">
         <header className="page-header">
           <p className="eyebrow">Không có quyền</p>
           <h1>Tài khoản này không được vào trang này</h1>
           <p className="muted">Vai trò hiện tại: {roleLabel(appUser.role)}</p>
         </header>
         <button className="secondary-button" onClick={handleSignOut}>
+          <LogOut size={18} aria-hidden="true" />
           Đăng xuất
         </button>
       </section>
@@ -145,7 +170,10 @@ export function AuthGate({ allowedRoles, children }: Props) {
         <span>
           {appUser.name || appUser.uid} · {roleLabel(appUser.role)}
         </span>
-        <button onClick={handleSignOut}>Đăng xuất</button>
+        <button onClick={handleSignOut}>
+          <LogOut size={16} aria-hidden="true" />
+          Đăng xuất
+        </button>
       </div>
       {children(appUser)}
     </>

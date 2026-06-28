@@ -1,5 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  CheckCircle2,
+  ClipboardCheck,
+  Gift,
+  Save,
+  Settings2,
+  SlidersHorizontal,
+  XCircle,
+} from "lucide-react";
+import {
   PointRequest,
   approvePointRequest,
   formatDateTime,
@@ -100,17 +109,32 @@ export function OwnerPage({ currentUser }: Props) {
         <p className="muted">Salon: {salonId}</p>
       </header>
 
+      <div className="metrics-row">
+        <div className="metric-card">
+          <ClipboardCheck size={20} aria-hidden="true" />
+          <span>Chờ duyệt</span>
+          <strong>{requests.length}</strong>
+        </div>
+        <div className="metric-card">
+          <Gift size={20} aria-hidden="true" />
+          <span>Ô đang bật</span>
+          <strong>{wheelConfig.slots.filter((slot) => slot.active).length}</strong>
+        </div>
+      </div>
+
       <div className="segmented-control" aria-label="Chọn mục quản lý">
         <button
           className={activeTab === "approvals" ? "active" : ""}
           onClick={() => setActiveTab("approvals")}
         >
+          <ClipboardCheck size={18} aria-hidden="true" />
           Duyệt điểm
         </button>
         <button
           className={activeTab === "wheel" ? "active" : ""}
           onClick={() => setActiveTab("wheel")}
         >
+          <SlidersHorizontal size={18} aria-hidden="true" />
           Vòng quay
         </button>
       </div>
@@ -131,8 +155,8 @@ export function OwnerPage({ currentUser }: Props) {
         />
       )}
 
-      {message ? <p className="success">{message}</p> : null}
-      {error ? <p className="error">{error}</p> : null}
+      {message ? <p className="alert success">{message}</p> : null}
+      {error ? <p className="alert error">{error}</p> : null}
     </section>
   );
 }
@@ -151,7 +175,11 @@ function ApprovalsPanel({
   return (
     <div className="ops-list">
       {requests.length === 0 ? (
-        <p className="empty">Chưa có yêu cầu cộng điểm.</p>
+        <div className="empty-state">
+          <ClipboardCheck size={30} aria-hidden="true" />
+          <strong>Chưa có yêu cầu cộng điểm</strong>
+          <p>Khi nhân viên gửi yêu cầu sau khi cắt, chủ salon sẽ duyệt tại đây.</p>
+        </div>
       ) : (
         requests.map((request) => (
           <article className="ops-card static-card" key={request.id}>
@@ -172,6 +200,7 @@ function ApprovalsPanel({
                 disabled={busyId === request.id}
                 onClick={() => onApprove(request)}
               >
+                <CheckCircle2 size={18} aria-hidden="true" />
                 Duyệt
               </button>
               <button
@@ -179,6 +208,7 @@ function ApprovalsPanel({
                 disabled={busyId === request.id}
                 onClick={() => onReject(request)}
               >
+                <XCircle size={18} aria-hidden="true" />
                 Từ chối
               </button>
             </div>
@@ -221,6 +251,14 @@ function WheelConfigPanel({
   return (
     <div className="panel">
       <div className="detail-stack">
+        <div className="section-heading">
+          <Settings2 size={22} aria-hidden="true" />
+          <div>
+            <h2>Cấu hình vòng quay</h2>
+            <p className="muted">Chủ salon có thể đổi điểm cần quay và nội dung từng ô.</p>
+          </div>
+        </div>
+
         <label className="field">
           <span>Số điểm cần để quay</span>
           <input
@@ -247,7 +285,7 @@ function WheelConfigPanel({
           <span>Trừ điểm sau khi khách quay</span>
         </label>
 
-        <div className="wheel-config-list">
+        <div className="wheel-config-list" aria-label="Danh sách ô vòng quay">
           {config.slots.map((slot, index) => (
             <div className="wheel-slot-row" key={index}>
               <span>{index + 1}</span>
@@ -269,7 +307,14 @@ function WheelConfigPanel({
         </div>
 
         <button className="primary-button" disabled={saving} onClick={onSave}>
-          {saving ? "Đang lưu..." : "Lưu vòng quay"}
+          {saving ? (
+            "Đang lưu..."
+          ) : (
+            <>
+              <Save size={20} aria-hidden="true" />
+              Lưu vòng quay
+            </>
+          )}
         </button>
       </div>
     </div>

@@ -20,7 +20,7 @@ export async function getZaloIdentity(): Promise<ZaloIdentity> {
   } catch {
     return {
       zaloUserId: "mock-zalo-user",
-      name: "Nguyen Van A",
+      name: "Nguyễn Văn A",
     };
   }
 }
@@ -33,4 +33,3 @@ export async function requestPhoneToken(): Promise<string | null> {
     return null;
   }
 }
-

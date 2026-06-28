@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Gift, LockKeyhole, Sparkles, Ticket } from "lucide-react";
 import { getCustomerWheelConfig, spinWheel } from "../services/api";
 import {
   AppSession,
@@ -21,6 +22,8 @@ export function WheelPage({ session, onSessionChange }: Props) {
   const [error, setError] = useState<string | null>(null);
   const slots = useMemo(() => activeWheelSlots(wheelConfig), [wheelConfig]);
   const missingPoints = Math.max(0, wheelConfig.requiredPoints - session.customer.points);
+  const canSpin = !loadingConfig && !spinning && missingPoints === 0 && slots.length > 0;
+  const wheelStyle = useMemo(() => ({ background: wheelBackground(slots.length) }), [slots.length]);
 
   useEffect(() => {
     setLoadingConfig(true);
@@ -60,14 +63,26 @@ export function WheelPage({ session, onSessionChange }: Props) {
       <header className="page-header">
         <p className="eyebrow">Cần {wheelConfig.requiredPoints} điểm để quay</p>
         <h1>Vòng quay may mắn</h1>
+        <p className="muted">
+          Bạn đang có {session.customer.points} điểm.{" "}
+          {missingPoints > 0 ? `Cần thêm ${missingPoints} điểm.` : "Bạn đã đủ điểm để quay."}
+        </p>
       </header>
 
-      <div className={spinning ? "wheel spinning" : "wheel"}>
+      <div className="wheel-stage">
+        <div className="wheel-pointer" aria-hidden="true" />
+        <div className={spinning ? "wheel spinning" : "wheel"} style={wheelStyle}>
+          <div className="wheel-center">
+            <Sparkles size={26} aria-hidden="true" />
+            <span>HAIRCUT</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="prize-strip" aria-label="Các ô phần thưởng">
         {slots.map((slot, index) => (
-          <span
-            key={`${slot.label}-${index}`}
-            style={{ transform: `rotate(${index * (360 / Math.max(slots.length, 1))}deg)` }}
-          >
+          <span key={`${slot.label}-${index}`}>
+            <Ticket size={15} aria-hidden="true" />
             {slot.label}
           </span>
         ))}
@@ -75,29 +90,60 @@ export function WheelPage({ session, onSessionChange }: Props) {
 
       <button
         className="primary-button"
-        disabled={loadingConfig || spinning || missingPoints > 0 || slots.length === 0}
+        disabled={!canSpin}
         onClick={handleSpin}
       >
-        {loadingConfig ? "Đang tải vòng quay..." : spinning ? "Đang quay..." : "Quay ngay"}
+        {loadingConfig ? (
+          "Đang tải vòng quay..."
+        ) : spinning ? (
+          "Đang quay..."
+        ) : missingPoints > 0 ? (
+          <>
+            <LockKeyhole size={20} aria-hidden="true" />
+            Cần thêm {missingPoints} điểm
+          </>
+        ) : (
+          <>
+            <Sparkles size={20} aria-hidden="true" />
+            Quay ngay
+          </>
+        )}
       </button>
 
       {slots.length === 0 ? (
-        <p className="muted">Salon chưa bật phần thưởng nào cho vòng quay.</p>
+        <div className="empty-state">
+          <Gift size={30} aria-hidden="true" />
+          <strong>Salon chưa bật phần thưởng</strong>
+          <p>Chủ salon có thể cấu hình các ô trong trang quản lý.</p>
+        </div>
       ) : null}
 
-      {missingPoints > 0 ? (
-        <p className="muted">Bạn cần thêm {missingPoints} điểm để quay.</p>
-      ) : null}
-
-      {error ? <p className="error">{error}</p> : null}
+      {error ? <p className="alert error">{error}</p> : null}
 
       {result ? (
         <div className="reward-result">
-          <p>Chúc mừng!</p>
+          <Gift size={32} aria-hidden="true" />
+          <p>Chúc mừng, bạn nhận được</p>
           <strong>{result.rewardName}</strong>
           <span>Mã quà: {result.rewardCode}</span>
+          <small>Hãy đưa mã này cho nhân viên khi sử dụng.</small>
         </div>
       ) : null}
     </section>
   );
+}
+
+function wheelBackground(slotCount: number) {
+  if (slotCount <= 0) {
+    return "#dbe3dd";
+  }
+
+  const colors = ["#13795b", "#f2b84b", "#e66f4d", "#4267c9", "#7a5aa6", "#2f8fa5"];
+  const slice = 360 / slotCount;
+
+  return `conic-gradient(${Array.from({ length: slotCount }, (_, index) => {
+    const start = index * slice;
+    const end = (index + 1) * slice;
+    return `${colors[index % colors.length]} ${start}deg ${end}deg`;
+  }).join(", ")})`;
 }

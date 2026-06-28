@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { BadgeCheck, Gift, Ticket } from "lucide-react";
 import { getRewards } from "../services/api";
 import { AppSession, Reward } from "../services/types";
 
@@ -8,9 +9,35 @@ type Props = {
 
 export function RewardsPage({ session }: Props) {
   const [rewards, setRewards] = useState<Reward[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    getRewards(session).then(setRewards).catch(() => setRewards([]));
+    let cancelled = false;
+    setLoading(true);
+    setError("");
+
+    getRewards(session)
+      .then((nextRewards) => {
+        if (!cancelled) {
+          setRewards(nextRewards);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setRewards([]);
+          setError(err instanceof Error ? err.message : "Không tải được mã quà");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [session]);
 
   return (
@@ -21,17 +48,32 @@ export function RewardsPage({ session }: Props) {
       </header>
 
       <div className="list">
-        {rewards.length === 0 ? (
-          <p className="empty">Bạn chưa có mã quà.</p>
+        {loading ? (
+          <div className="empty-state">
+            <Gift size={30} aria-hidden="true" />
+            <strong>Đang tải mã quà</strong>
+            <p>Danh sách ưu đãi của bạn sẽ hiện ở đây.</p>
+          </div>
+        ) : error ? (
+          <p className="alert error">{error}</p>
+        ) : rewards.length === 0 ? (
+          <div className="empty-state">
+            <Ticket size={30} aria-hidden="true" />
+            <strong>Chưa có mã quà</strong>
+            <p>Khi quay trúng thưởng, mã quà sẽ được lưu vào danh sách này.</p>
+          </div>
         ) : (
           rewards.map((reward) => (
             <article className="list-item" key={reward.id}>
+              <BadgeCheck size={22} aria-hidden="true" />
               <div>
                 <strong>{reward.rewardName}</strong>
                 <p>Mã: {reward.rewardCode}</p>
-                <small>{statusLabel(reward.status)}</small>
+                <small>{reward.createdAt || "Chưa có ngày tạo"}</small>
               </div>
-              <span className="pill">{statusLabel(reward.status)}</span>
+              <span className={reward.status === "unused" ? "pill" : "pill muted-pill"}>
+                {statusLabel(reward.status)}
+              </span>
             </article>
           ))
         )}
