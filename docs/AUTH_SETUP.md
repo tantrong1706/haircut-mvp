@@ -1,50 +1,50 @@
-# Owner/Staff Auth Setup
+# Thiết Lập Đăng Nhập Chủ Salon/Nhân Viên
 
-The customer page still runs as an internal-test flow, but staff and owner pages now require Firebase Auth plus a `users/{uid}` profile document.
+Trang khách vẫn đang chạy theo luồng test nội bộ. Riêng trang `/staff` và `/owner` đã yêu cầu Firebase Auth kèm hồ sơ phân quyền trong `users/{uid}`.
 
-## Enable Firebase Auth
+## Bật Firebase Auth
 
-1. Open Firebase Console.
-2. Select project `haircut-c7d12`.
-3. Go to Authentication > Sign-in method.
-4. Enable Email/Password.
+1. Mở Firebase Console.
+2. Chọn project `haircut-c7d12`.
+3. Vào Authentication > Sign-in method.
+4. Bật đăng nhập email/mật khẩu.
 
-## Create Owner Account
+## Tạo tài khoản chủ salon
 
-1. Go to Authentication > Users.
-2. Add a user with owner email and password.
-3. Copy the new Firebase Auth UID.
-4. Go to Firestore Database.
-5. Create document `users/{uid}` with:
+1. Vào Authentication > Users.
+2. Thêm user bằng email và mật khẩu của chủ salon.
+3. Sao chép Firebase Auth UID vừa tạo.
+4. Vào Firestore Database.
+5. Tạo document `users/{uid}`:
 
 ```json
 {
   "salonId": "demo-salon",
-  "name": "Chu salon",
+  "name": "Chủ salon",
   "role": "owner",
   "isActive": true
 }
 ```
 
-## Create Staff Account
+## Tạo tài khoản nhân viên
 
-Create another Firebase Auth user, copy that UID, then create `users/{uid}`:
+Tạo thêm một Firebase Auth user, sao chép UID rồi tạo `users/{uid}`:
 
 ```json
 {
   "salonId": "demo-salon",
-  "name": "Nhan vien",
+  "name": "Nhân viên",
   "role": "staff",
   "isActive": true
 }
 ```
 
-## Access Rules
+## Quyền truy cập
 
-- `/owner?salonId=demo-salon`: owner only.
-- `/staff?salonId=demo-salon`: owner or staff.
-- Inactive users cannot access owner/staff screens.
+- `/owner?salonId=demo-salon`: chỉ chủ salon.
+- `/staff?salonId=demo-salon`: chủ salon hoặc nhân viên.
+- User có `isActive: false` sẽ bị chặn.
 
-## Firestore Rules Warning
+## Lưu ý về Firestore rules
 
-Do not deploy `firebase/firestore.rules.production.example` yet. It is a production draft for after the customer/Zalo auth flow is implemented. The current live `firebase/firestore.rules` file remains open so the customer MVP can still create customers and chair sessions during internal testing.
+Chưa triển khai `firebase/firestore.rules.production.example` ở thời điểm này. File đó là bản nháp production cho giai đoạn sau khi xác thực khách/Zalo hoàn tất. File rules đang chạy `firebase/firestore.rules` vẫn đang mở để MVP khách có thể tạo `customers` và `chair_sessions` khi test nội bộ.

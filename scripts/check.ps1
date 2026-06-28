@@ -1,7 +1,7 @@
-$ErrorActionPreference = "Stop"
+﻿$ErrorActionPreference = "Stop"
 $root = Resolve-Path (Join-Path $PSScriptRoot "..")
 
-Write-Host "== HAIRCUT MVP check ==" -ForegroundColor Green
+Write-Host "== Kiểm tra HAIRCUT MVP ==" -ForegroundColor Green
 
 Push-Location (Join-Path $root "firebase/functions")
 npm run build
@@ -11,5 +11,4 @@ Push-Location (Join-Path $root "zalo-mini-app")
 npm run build
 Pop-Location
 
-Write-Host "All checks passed." -ForegroundColor Green
-
+Write-Host "Tất cả kiểm tra đã đạt." -ForegroundColor Green

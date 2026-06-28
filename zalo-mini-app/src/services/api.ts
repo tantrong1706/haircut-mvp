@@ -20,6 +20,7 @@ import {
   SpinResult,
   defaultLuckyWheelConfig,
 } from "./types";
+import { activeWheelSlots, normalizeLuckyWheelConfig } from "./wheel";
 import { ZaloIdentity } from "./zalo";
 
 type RegisterInput = QrContext & {
@@ -143,7 +144,7 @@ export async function spinWheel(session: AppSession): Promise<SpinResult> {
     const wheelConfig = wheelSnap.exists()
       ? normalizeLuckyWheelConfig(wheelSnap.data())
       : defaultLuckyWheelConfig;
-    const activeSlots = wheelConfig.slots.filter((slot) => slot.active && slot.label.length > 0);
+    const activeSlots = activeWheelSlots(wheelConfig);
     const currentPoints = Number(customerData.points ?? 0);
 
     if (activeSlots.length === 0) {
@@ -229,6 +230,22 @@ export async function getHaircutHistory(session: AppSession): Promise<HaircutRec
     })
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .slice(0, 20);
+}
+
+export async function getCustomerWheelConfig(salonId: string): Promise<LuckyWheelConfig> {
+  if (!isFirebaseConfigured()) {
+    return defaultLuckyWheelConfig;
+  }
+
+  const db = getFirebaseDb();
+
+  if (!db) {
+    return defaultLuckyWheelConfig;
+  }
+
+  const snap = await getDoc(doc(db, "lucky_wheel", salonId));
+
+  return snap.exists() ? normalizeLuckyWheelConfig(snap.data()) : defaultLuckyWheelConfig;
 }
 
 export async function getRewards(session: AppSession): Promise<Reward[]> {
@@ -373,25 +390,4 @@ function toMillis(value: any): number | null {
   }
 
   return null;
-}
-
-function normalizeLuckyWheelConfig(value: any): LuckyWheelConfig {
-  const rawSlots = Array.isArray(value?.slots) ? value.slots : defaultLuckyWheelConfig.slots;
-  const slots = rawSlots.slice(0, 6).map((slot: any, index: number) => ({
-    label:
-      typeof slot?.label === "string" && slot.label.trim().length > 0
-        ? slot.label.trim()
-        : defaultLuckyWheelConfig.slots[index]?.label || `Ô ${index + 1}`,
-    active: Boolean(slot?.active ?? true),
-  }));
-
-  while (slots.length < 6) {
-    slots.push(defaultLuckyWheelConfig.slots[slots.length]);
-  }
-
-  return {
-    requiredPoints: Math.max(1, Number(value?.requiredPoints ?? 5)),
-    deductPointsAfterSpin: Boolean(value?.deductPointsAfterSpin ?? true),
-    slots,
-  };
 }

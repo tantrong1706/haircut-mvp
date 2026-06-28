@@ -1,6 +1,6 @@
-# Cloud Function API Contracts
+# Hợp Đồng API Cloud Functions
 
-All functions are callable HTTPS functions unless noted.
+Các hàm dưới đây là callable HTTPS Functions, trừ khi có ghi chú khác.
 
 ## createSalon
 
@@ -9,7 +9,7 @@ Input:
 ```json
 {
   "name": "Salon Nam",
-  "address": "123 Duong A",
+  "address": "123 Đường A",
   "phone": "0900000000"
 }
 ```
@@ -20,7 +20,7 @@ Output:
 { "salonId": "..." }
 ```
 
-Requires signed-in Firebase owner.
+Cần đăng nhập Firebase.
 
 ## createStaffProfile
 
@@ -30,13 +30,13 @@ Input:
 {
   "salonId": "...",
   "uid": "...",
-  "name": "Tho Nam",
+  "name": "Thợ Nam",
   "phone": "0900000001",
   "canRedeemRewards": true
 }
 ```
 
-Requires owner.
+Chỉ chủ salon được gọi.
 
 ## createMirror
 
@@ -45,11 +45,11 @@ Input:
 ```json
 {
   "salonId": "...",
-  "name": "Guong so 1"
+  "name": "Gương số 1"
 }
 ```
 
-Requires owner.
+Chỉ chủ salon được gọi.
 
 ## createManualCustomer
 
@@ -58,7 +58,7 @@ Input:
 ```json
 {
   "salonId": "...",
-  "name": "Nguyen Van A",
+  "name": "Nguyễn Văn A",
   "phone": "0900000000",
   "birthday": "1998-01-01",
   "allowPhoto": true
@@ -71,7 +71,7 @@ Output:
 { "customerId": "..." }
 ```
 
-Requires owner. Use this only when a customer cannot scan QR or does not use Zalo.
+Dùng khi khách không quét QR hoặc không dùng Zalo.
 
 ## registerCustomerFromZalo
 
@@ -83,7 +83,7 @@ Input:
   "mirrorId": "...",
   "qrToken": "...",
   "zaloUserId": "...",
-  "name": "Nguyen Van A",
+  "name": "Nguyễn Văn A",
   "phone": "84900000000",
   "birthday": "1998-01-01",
   "allowPhoto": true
@@ -100,7 +100,7 @@ Output:
 }
 ```
 
-Called from Zalo Mini App. Production version should verify Zalo access token server-side.
+Production phải xác minh Zalo token ở server trước khi tin dữ liệu khách.
 
 ## submitPointRequest
 
@@ -110,23 +110,26 @@ Input:
 {
   "salonId": "...",
   "sessionId": "...",
-  "note": "Fade thap, de mai dai",
+  "note": "Fade thấp, để mái dài",
   "photoUrls": [],
   "pointsRequested": 1
 }
 ```
 
-Requires staff or owner.
+Chủ salon hoặc nhân viên được gọi.
 
 ## approvePointRequest
 
 Input:
 
 ```json
-{ "salonId": "...", "requestId": "..." }
+{
+  "salonId": "...",
+  "requestId": "..."
+}
 ```
 
-Requires owner.
+Chỉ chủ salon được gọi. Khi duyệt, hệ thống tăng điểm, tạo lịch sử cắt tóc và đóng phiên phục vụ.
 
 ## rejectPointRequest
 
@@ -136,105 +139,48 @@ Input:
 {
   "salonId": "...",
   "requestId": "...",
-  "reason": "Thong tin chua du"
+  "reason": "Chủ salon từ chối"
 }
 ```
 
-Requires owner.
+Chỉ chủ salon được gọi.
 
-## spinLuckyWheel
+## updateLuckyWheel
 
 Input:
 
 ```json
 {
   "salonId": "...",
-  "customerId": "..."
+  "requiredPoints": 5,
+  "deductPointsAfterSpin": true,
+  "slots": [
+    { "label": "Giảm 10%", "active": true },
+    { "label": "Gội đầu miễn phí", "active": true },
+    { "label": "Tặng sáp tóc", "active": true },
+    { "label": "Giảm 20%", "active": true },
+    { "label": "Chúc bạn may mắn", "active": true },
+    { "label": "Hấp dầu miễn phí", "active": true }
+  ]
 }
 ```
 
-Called from Zalo Mini App. Production version should verify the customer identity with Zalo.
+Chỉ chủ salon được gọi.
 
-## spinLuckyWheelFromZalo
+## spinLuckyWheel / spinLuckyWheelFromZalo
 
-Input:
-
-```json
-{
-  "salonId": "...",
-  "zaloUserId": "..."
-}
-```
-
-Output:
+Trả về:
 
 ```json
 {
   "rewardId": "...",
-  "rewardName": "Goi dau mien phi",
-  "rewardCode": "HC-8291",
+  "rewardName": "Giảm 10%",
+  "rewardCode": "HC-1234",
   "pointsAfter": 0
 }
 ```
 
-MVP customer-facing spin endpoint. Production version should verify Zalo access token server-side.
-
-## getCustomerHistoryFromZalo
-
-Input:
-
-```json
-{
-  "salonId": "...",
-  "zaloUserId": "...",
-  "limit": 20
-}
-```
-
-Output:
-
-```json
-{
-  "records": [
-    {
-      "id": "...",
-      "createdAtMs": 1782560000000,
-      "staffName": "Nam",
-      "note": "Fade thap",
-      "photoUrls": [],
-      "pointsAdded": 1
-    }
-  ]
-}
-```
-
-## getCustomerRewardsFromZalo
-
-Input:
-
-```json
-{
-  "salonId": "...",
-  "zaloUserId": "...",
-  "limit": 20
-}
-```
-
-Output:
-
-```json
-{
-  "rewards": [
-    {
-      "id": "...",
-      "rewardName": "Goi dau mien phi",
-      "rewardCode": "HC-8291",
-      "status": "unused",
-      "createdAtMs": 1782560000000
-    }
-  ]
-}
-```
+Bản production nên quay thưởng ở server để tránh gian lận.
 
 ## redeemRewardCode
 
@@ -243,8 +189,8 @@ Input:
 ```json
 {
   "salonId": "...",
-  "rewardCode": "HC-8291"
+  "rewardCode": "HC-1234"
 }
 ```
 
-Requires owner or staff with redemption permission.
+Chủ salon hoặc nhân viên có quyền xác nhận mã quà được gọi.

@@ -126,7 +126,7 @@ final class SalonViewModel: ObservableObject {
             try await client.rejectPointRequest(
                 salonId: user.salonId,
                 requestId: request.id,
-                reason: "Owner rejected"
+                reason: "Chủ salon từ chối"
             )
         }
     }

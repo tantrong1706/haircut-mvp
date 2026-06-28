@@ -1,79 +1,55 @@
-# Implementation Plan
+# Kế Hoạch Triển Khai
 
-## Phase 1: Foundation
+## Giai đoạn 1: Nền tảng
 
-- Create Firebase project.
-- Enable Authentication.
-- Enable Firestore.
-- Enable Storage.
-- Deploy rules.
-- Deploy Cloud Functions.
-- Create first owner account manually or through `createSalon`.
-- Create first salon.
+- Tạo Firebase project.
+- Bật Authentication.
+- Bật Firestore.
+- Cấu hình Hosting.
+- Triển khai web MVP.
+- Tạo tài khoản chủ salon/nhân viên.
+- Tạo salon demo.
 
-## Phase 2: iOS Owner/Staff App
+## Giai đoạn 2: Web MVP
 
-- Create Xcode SwiftUI app named `Haircut`.
-- Add Firebase SDK.
-- Add source files from `ios-app/Haircut`.
-- Configure `GoogleService-Info.plist`.
-- Test owner/staff role routing.
-- Test dashboard, pending requests, staff active sessions.
+- Khách quét QR và tạo phiên phục vụ.
+- Nhân viên xem khách đang chờ.
+- Nhân viên gửi yêu cầu cộng điểm.
+- Chủ salon duyệt/từ chối.
+- Khách xem lịch sử và quà.
+- Chủ salon cấu hình vòng quay.
 
-## Phase 3: Zalo Mini App
+## Giai đoạn 3: Bảo mật
 
-- Create Zalo Mini App in Zalo developer console.
-- Configure required scopes.
-- Use `getUserInfo` for Zalo identity.
-- Ask phone only when needed and explain why.
-- Connect React app to Firebase Functions.
-- Configure QR URL format.
+- Hoàn thiện đăng nhập chủ salon/nhân viên.
+- Dùng `users/{uid}` để phân quyền.
+- Hoàn thiện xác thực khách từ Zalo.
+- Chuyển các thao tác nhạy cảm sang Cloud Functions.
+- Khóa Firestore rules.
+- Bật App Check.
 
-## Phase 4: QR + Chair Session
+## Giai đoạn 4: Zalo Mini App production
 
-- Owner creates mirror records.
-- Backend creates `qrToken` and `qrUrl`.
-- QR opens Mini App with `salonId`, `mirrorId`, `qrToken`.
-- Customer scans QR.
-- Backend verifies mirror token.
-- Backend creates/updates customer profile.
-- Backend creates active chair session.
-- Staff app listens to active sessions in realtime.
+- Tạo Mini App trong Zalo developer console.
+- Cấu hình quyền cần thiết.
+- Dùng `getUserInfo` để nhận diện khách.
+- Chỉ xin số điện thoại khi đã giải thích lý do.
+- Xác minh Zalo token ở server.
+- Cấu hình URL QR thật.
 
-## Phase 5: Notes, Photos, Points
+## Giai đoạn 5: Ảnh, điểm và quà
 
-- Staff opens customer session.
-- Staff adds haircut note.
-- Staff uploads photo only if customer consented.
-- Staff submits point request.
-- Owner approves.
-- Backend creates haircut history and increments customer points.
+- Upload ảnh kiểu tóc khi khách đồng ý.
+- Giới hạn quyền xem ảnh.
+- Cho chủ salon cấu hình số điểm mỗi lần cắt.
+- Xác nhận mã quà bằng chủ salon/nhân viên được cấp quyền.
+- Ghi lịch sử sử dụng mã quà.
 
-## Phase 6: Lucky Wheel
+## Giai đoạn 6: iOS
 
-- Owner configures 6 slots.
-- Customer can spin only if enough points.
-- Backend performs random selection.
-- Backend creates reward code.
-- Owner/staff marks reward used.
-
-## Phase 7: Trial With One Salon
-
-Test with:
-
-- 1 owner.
-- 2 staff.
-- 3 mirrors.
-- 20 customers.
-- 10 point approvals.
-- 5 wheel spins.
-- 3 redeemed rewards.
-
-Track:
-
-- Can customers scan QR without staff help?
-- Can staff find current customer quickly?
-- Does owner trust approval workflow?
-- Is phone number required too early?
-- Are haircut notes useful on return visit?
-
+- Tạo Xcode project.
+- Thêm Firebase SDK.
+- Chép mã SwiftUI từ `ios-app/Haircut`.
+- Thêm `GoogleService-Info.plist`.
+- Test phân quyền chủ salon/nhân viên.
+- Chuẩn bị TestFlight sau khi web MVP ổn định.

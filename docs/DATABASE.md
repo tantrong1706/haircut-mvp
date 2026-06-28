@@ -1,6 +1,6 @@
-# Database Design
+# Thiết Kế Dữ Liệu
 
-Use top-level Firestore collections for the MVP. Every business document includes `salonId` so security rules and queries remain simple.
+MVP dùng các collection cấp cao trong Firestore. Mỗi document nghiệp vụ đều có `salonId` để query và phân quyền đơn giản.
 
 ## salons
 
@@ -19,7 +19,7 @@ salons/{salonId}
 
 ## users
 
-Firebase Auth users for owner/staff iOS app.
+Firebase Auth user cho chủ salon và nhân viên.
 
 ```text
 users/{uid}
@@ -48,12 +48,12 @@ mirrors/{mirrorId}
 
 ## customers
 
-Customer profiles. Do not call this "customer account" in the UI.
+Hồ sơ khách hàng. Trên UI không nên gọi đây là “tài khoản khách”.
 
 ```text
 customers/{customerId}
   salonId: string
-  zaloUserId: string
+  zaloUserId: string?
   name: string
   phone: string?
   phoneLast4: string?
@@ -65,24 +65,18 @@ customers/{customerId}
   lastVisitAt: timestamp?
 ```
 
-Recommended unique key in Cloud Functions:
-
-```text
-customerId = sha256(salonId + ":" + zaloUserId)
-```
-
 ## chair_sessions
-
-Represents a customer currently sitting at a mirror/chair.
 
 ```text
 chair_sessions/{sessionId}
   salonId: string
   mirrorId: string
+  qrToken: string?
   customerId: string
+  zaloUserId: string?
   status: waiting | serving | completed | cancelled
   createdAt: timestamp
-  updatedAt: timestamp
+  updatedAt: timestamp?
 ```
 
 ## point_requests
@@ -92,15 +86,15 @@ point_requests/{requestId}
   salonId: string
   sessionId: string
   customerId: string
-  staffId: string
+  staffId: string?
+  staffName: string?
   note: string
   photoUrls: string[]
-  pointsRequested: number
+  pointsAdded: number
+  pointsRequested: number?
   status: pending | approved | rejected
-  approvedBy: string?
-  rejectedBy: string?
   createdAt: timestamp
-  updatedAt: timestamp
+  updatedAt: timestamp?
 ```
 
 ## haircut_records
@@ -109,27 +103,26 @@ point_requests/{requestId}
 haircut_records/{recordId}
   salonId: string
   customerId: string
-  staffId: string
-  pointRequestId: string
+  staffId: string?
+  staffName: string?
+  pointRequestId: string?
   note: string
   photoUrls: string[]
   pointsAdded: number
-  approvedBy: string
+  approvedBy: string?
   createdAt: timestamp
 ```
 
 ## lucky_wheel
-
-One document per salon, ID equals `salonId`.
 
 ```text
 lucky_wheel/{salonId}
   salonId: string
   requiredPoints: number
   deductPointsAfterSpin: boolean
-  slots:
-    - label: string
-      active: boolean
+  slots: [
+    { label: string, active: boolean }
+  ]
   updatedAt: timestamp
 ```
 
@@ -139,12 +132,13 @@ lucky_wheel/{salonId}
 reward_history/{rewardId}
   salonId: string
   customerId: string
+  zaloUserId: string?
   rewardName: string
   rewardCode: string
-  pointsSpent: number
   status: unused | used | expired
+  pointsUsed: number?
+  pointsSpent: number?
   createdAt: timestamp
   usedAt: timestamp?
   usedBy: string?
 ```
-

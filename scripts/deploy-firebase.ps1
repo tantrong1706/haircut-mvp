@@ -1,4 +1,4 @@
-param(
+﻿param(
   [switch]$OnlyRules,
   [switch]$OnlyHosting,
   [switch]$IncludeFunctions,
@@ -12,11 +12,11 @@ $firebaseDir = Join-Path $root "firebase"
 $firebaserc = Join-Path $firebaseDir ".firebaserc"
 
 if (-not (Get-Command firebase -ErrorAction SilentlyContinue)) {
-  throw "Firebase CLI is not installed. Run .\scripts\setup.ps1 -InstallFirebaseCli first."
+  throw "Chưa cài Firebase CLI. Hãy chạy .\scripts\setup.ps1 -InstallFirebaseCli trước."
 }
 
 if (-not (Test-Path -LiteralPath $firebaserc)) {
-  throw "Missing firebase/.firebaserc. Run .\scripts\set-firebase-project.ps1 -ProjectId your-project-id first."
+  throw "Thiếu firebase/.firebaserc. Hãy chạy .\scripts\set-firebase-project.ps1 -ProjectId your-project-id trước."
 }
 
 if ($IncludeFunctions) {

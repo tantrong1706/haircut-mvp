@@ -1,67 +1,62 @@
-# Next Steps
+# Việc Cần Làm Tiếp
 
-## What Exists Now
+## Đã có
 
-- Product spec.
-- Firestore schema.
-- Privacy checklist.
-- Firebase rules.
-- Cloud Functions for the core MVP flow.
-- Zalo Mini App React source.
-- SwiftUI iOS source for owner/staff workflows.
+- Đặc tả sản phẩm.
+- Thiết kế dữ liệu Firestore.
+- Checklist quyền riêng tư.
+- Firebase Hosting.
+- Cloud Functions nền tảng.
+- Web/Zalo Mini App bằng React.
+- Mã nguồn SwiftUI cho app iOS chủ salon/nhân viên sau này.
+- Đăng nhập và chặn quyền cho `/staff` và `/owner`.
+- Chủ salon cấu hình vòng quay trong Firestore.
 
-## What You Must Configure
+## Bạn cần cấu hình
 
-1. Firebase project ID.
-2. Firebase web app config for Zalo Mini App.
-3. Firebase iOS config `GoogleService-Info.plist`.
-4. Real Zalo Mini App ID.
-5. Real Zalo phone token exchange endpoint.
-6. App Store production login methods.
+1. Firebase web app config cho `zalo-mini-app`.
+2. Firebase Auth email/mật khẩu.
+3. Document `users/{uid}` cho chủ salon/nhân viên.
+4. Firebase iOS config `GoogleService-Info.plist` nếu build iOS.
+5. Zalo Mini App ID thật.
+6. Endpoint xác minh phone/token Zalo khi lên production.
+7. Chính sách quyền riêng tư production.
 
-## First Real Test
+## Test web MVP
 
-1. Create owner Firebase Auth account.
-2. Sign in from iOS app.
-3. Create salon.
-4. Create 3 mirror QR codes.
-5. Print QR or open QR URL manually.
-6. Customer scans QR in Zalo Mini App.
-7. Staff sees active session.
-8. Staff submits point request.
-9. Owner approves.
-10. Customer checks points and spins wheel.
+1. Khách mở `/`.
+2. Khách nhập số điện thoại nếu muốn.
+3. Kiểm tra Firestore có `customers` và `chair_sessions`.
+4. Nhân viên mở `/staff?salonId=demo-salon` và đăng nhập.
+5. Nhân viên thấy khách đang chờ.
+6. Nhân viên nhập tên/ghi chú kiểu tóc.
+7. Nhân viên gửi yêu cầu cộng điểm.
+8. Kiểm tra Firestore có `point_requests`.
+9. Chủ salon mở `/owner?salonId=demo-salon` và đăng nhập.
+10. Chủ salon duyệt điểm.
+11. Kiểm tra `customers.points` tăng.
+12. Kiểm tra `haircut_records` có lịch sử.
+13. Khách quay lại xem lịch sử và vòng quay.
 
-## Local Demo Test
+## Demo local
 
-Use this when you want to test without a real Firebase project:
+1. Mở terminal 1.
+2. Chạy `.\scripts\start-emulators.ps1`.
+3. Mở terminal 2.
+4. Chạy `.\scripts\seed-demo.ps1`.
+5. Chạy `.\scripts\start-miniapp.ps1`.
+6. Mở `http://127.0.0.1:5173/?salonId=demo-salon&mirrorId=demo-mirror-1&qrToken=demo-token`.
 
-1. Open terminal 1.
-2. Run `.\scripts\start-emulators.ps1`.
-3. Open terminal 2.
-4. Run `.\scripts\seed-demo.ps1`.
-5. Run `.\scripts\start-miniapp.ps1`.
-6. Open `http://127.0.0.1:5173/?salonId=demo-salon&mirrorId=demo-mirror-1&qrToken=demo-token`.
+## Ưu tiên sản phẩm
 
-## Web MVP Test
+1. Test full flow hiện có.
+2. Tạo Auth user cho chủ salon/nhân viên và `users/{uid}`.
+3. Test cấu hình vòng quay trong `/owner`.
+4. Hoàn thiện xác thực khách/Zalo.
+5. Khóa Firestore rules.
+6. Tạo chính sách quyền riêng tư production.
+7. Sau đó mới làm Zalo production và App Store.
 
-1. Customer opens `/` and creates a chair session.
-2. Staff opens `/staff?salonId=demo-salon`.
-3. Staff selects the waiting customer and submits a haircut note.
-4. Owner opens `/owner?salonId=demo-salon`.
-5. Owner approves the point request.
-6. Customer opens history and sees the haircut record.
-7. Customer reaches 5 points and tests lucky wheel.
+## Đăng nhập
 
-## Next Product Step
-
-1. Test the full web MVP flow.
-2. Configure lucky wheel in `/owner?salonId=demo-salon`.
-3. Create Firebase Auth owner/staff users and `users/{uid}` role documents.
-4. Test wheel rewards from the customer page.
-5. Replace open Firestore rules with locked rules after customer/Zalo auth is finished.
-6. Build iOS owner/staff app on Mac.
-
-## Auth Setup
-
-See `docs/AUTH_SETUP.md`.
+Xem [AUTH_SETUP.md](AUTH_SETUP.md).

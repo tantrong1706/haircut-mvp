@@ -1,23 +1,22 @@
 # HAIRCUT iOS App
 
-SwiftUI source for the owner/staff iOS app.
+Thư mục này chứa mã SwiftUI cho app iOS chủ salon/nhân viên.
 
-## Setup On Mac
+## Thiết lập trên Mac
 
-1. Open Xcode.
-2. Create a new iOS App project named `Haircut`.
-3. Set interface to SwiftUI.
-4. Add Firebase packages:
+1. Mở Xcode.
+2. Tạo iOS App project mới tên `Haircut`.
+3. Chọn giao diện SwiftUI.
+4. Thêm Firebase packages:
    - FirebaseAuth
    - FirebaseCore
    - FirebaseFirestore
    - FirebaseFunctions
    - FirebaseStorage
-5. Copy the `Haircut/` source folder into the Xcode project.
-6. Add `GoogleService-Info.plist` to `Haircut/Resources`.
-7. Build and run.
+5. Chép thư mục nguồn `Haircut/` vào Xcode project.
+6. Thêm `GoogleService-Info.plist` vào `Haircut/Resources`.
+7. Build và chạy.
 
-## MVP Login
+## Đăng nhập MVP
 
-The source includes email/password login for development testing. Before App Store release, add the production login methods you want to support, such as Sign in with Apple and phone login.
-
+Mã hiện tại có đăng nhập email/mật khẩu để test. Trước khi đưa lên App Store, hãy chọn phương thức đăng nhập production phù hợp, ví dụ Sign in with Apple và đăng nhập bằng số điện thoại.

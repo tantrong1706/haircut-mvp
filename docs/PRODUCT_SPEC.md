@@ -1,143 +1,73 @@
-# HAIRCUT Product Spec
+# Đặc Tả Sản Phẩm HAIRCUT
 
-## Positioning
+## Định vị
 
-HAIRCUT helps hair salons turn walk-in customers into repeat customers by storing haircut history, awarding points, and giving rewards through a Zalo Mini App.
+HAIRCUT giúp salon tóc biến khách ghé một lần thành khách quay lại bằng cách lưu lịch sử cắt tóc, cộng điểm và đổi quà qua Zalo Mini App.
 
-The app is not mainly an HR system. Staff management exists only to support the salon workflow.
+Ứng dụng không phải hệ thống nhân sự. Quản lý nhân viên chỉ phục vụ luồng vận hành salon.
 
-## Main Decision
+## Quyết định chính
 
-Use QR codes per salon mirror/chair, not per customer.
+Dùng QR theo từng gương/ghế, không tạo QR riêng cho từng khách.
 
-Why:
+Lý do:
 
-- Customers do not need to keep a personal QR.
-- Owners do not need to print a QR for every customer.
-- Staff do not need to search for a customer's QR.
-- First-time customers can join naturally by scanning the mirror QR.
+- Khách không phải giữ QR cá nhân.
+- Chủ salon không phải in QR cho từng khách.
+- Nhân viên không phải tìm QR của khách.
+- Khách mới chỉ cần quét QR tại gương là tham gia được.
 
-## Systems
+## Hệ thống
 
-### iOS App
+### App iOS
 
-One iOS app for both owner and staff.
+Một app iOS cho cả chủ salon và nhân viên.
 
-Owner role:
+Chủ salon:
 
-- Create and manage salon.
-- Add or disable staff.
-- Configure points.
-- Configure lucky wheel.
-- Create mirror QR codes.
-- Approve point requests.
-- View customers and reports.
+- Tạo và quản lý salon.
+- Thêm hoặc tắt nhân viên.
+- Cấu hình điểm.
+- Cấu hình vòng quay may mắn.
+- Tạo QR gương.
+- Duyệt yêu cầu cộng điểm.
+- Xem khách hàng và báo cáo.
 
-Staff role:
+Nhân viên:
 
-- See customers currently being served.
-- View customer name and last 4 digits of phone.
-- View haircut history for the selected customer.
-- Take photos only if customer allows it.
-- Add haircut notes.
-- Submit point requests.
-- Mark rewards as used if owner allows it.
+- Xem khách đang phục vụ.
+- Xem tên khách và 4 số cuối điện thoại.
+- Xem lịch sử cắt tóc của khách được chọn.
+- Chụp/lưu ảnh chỉ khi khách đồng ý.
+- Ghi chú kiểu tóc.
+- Gửi yêu cầu cộng điểm.
+- Xác nhận mã quà nếu được chủ salon cho phép.
 
 ### Zalo Mini App
 
-Customer does not install iOS/Android app.
+Khách không cần cài app iOS/Android. Khách dùng Zalo để:
 
-Customer can:
+- Quét QR tại gương.
+- Xác nhận hồ sơ.
+- Xem điểm.
+- Xem lịch sử cắt tóc.
+- Quay vòng may mắn.
+- Xem mã quà.
 
-- Scan mirror QR with Zalo.
-- Continue with Zalo identity.
-- Confirm name and optional phone number.
-- Allow or deny haircut photo storage.
-- View points.
-- View haircut history.
-- Spin lucky wheel when eligible.
-- View rewards.
+## Luồng MVP
 
-## Primary Flow
+1. Khách quét QR gương.
+2. Web/Zalo Mini App tạo `customers` và `chair_sessions`.
+3. Nhân viên mở `/staff`, thấy khách đang chờ.
+4. Nhân viên ghi chú và gửi `point_requests`.
+5. Chủ salon mở `/owner`, duyệt hoặc từ chối.
+6. Khi duyệt, hệ thống tăng điểm, tạo `haircut_records`, đóng session.
+7. Khách xem lịch sử và quay vòng may mắn khi đủ điểm.
 
-Owner:
+## Nguyên tắc bảo mật
 
-1. Opens HAIRCUT iOS app.
-2. Signs in.
-3. Creates salon.
-4. Adds staff.
-5. Configures point rule.
-6. Configures 6-slot lucky wheel.
-7. Creates QR code for each mirror.
-8. Prints and sticks QR to mirrors.
-
-Customer first visit:
-
-1. Customer sits at a mirror.
-2. Customer scans mirror QR in Zalo.
-3. Zalo Mini App opens.
-4. Customer confirms Zalo identity.
-5. Customer optionally shares phone number.
-6. Customer chooses whether salon may store haircut photos.
-7. System creates customer profile.
-8. Staff app shows customer at that mirror.
-
-Customer return visit:
-
-1. Customer scans mirror QR.
-2. System identifies customer by Zalo user ID.
-3. Staff app shows current points and haircut history.
-4. Staff can reuse previous notes.
-
-Staff service:
-
-1. Staff opens "Khach dang phuc vu".
-2. Staff selects the customer session.
-3. Staff adds notes.
-4. Staff takes photos only if allowed.
-5. Staff submits point request.
-
-Owner approval:
-
-1. Owner receives pending request.
-2. Owner reviews customer, staff, notes, photos, points.
-3. Owner approves or rejects.
-4. On approval, system adds points and creates haircut history.
-
-Lucky wheel:
-
-1. Customer opens Zalo Mini App.
-2. Customer opens lucky wheel.
-3. Backend checks points.
-4. Backend randomly picks one of 6 slots.
-5. Backend creates reward code.
-6. Backend deducts points if salon configured deduction.
-
-## MVP Scope
-
-Build first:
-
-- Owner/staff login foundation.
-- Salon creation.
-- Staff profile.
-- Mirror QR creation.
-- Customer profile from Zalo.
-- Active chair sessions.
-- Haircut notes/photos.
-- Point request.
-- Owner approval.
-- Customer points.
-- Haircut history.
-- 6-slot lucky wheel.
-- Reward code.
-
-Do not build first:
-
-- Android app.
-- AI hairstyle suggestions.
-- Multi-branch salon management.
-- Automated customer reactivation messages.
-- Payment/subscription collection.
-- Customer username/password accounts.
-- Personal QR per customer.
-
+- Chủ salon/nhân viên phải đăng nhập Firebase Auth.
+- `users/{uid}` quyết định `salonId`, `role`, `isActive`.
+- Nhân viên không được vào `/owner`.
+- Firestore rules live hiện đang mở để test nội bộ, chưa dùng cho khách thật.
+- Trước production phải hoàn thiện xác thực khách/Zalo và khóa rules.

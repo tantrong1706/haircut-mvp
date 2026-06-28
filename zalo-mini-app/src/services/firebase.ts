@@ -83,7 +83,7 @@ export async function callFunction<TInput, TOutput>(
   const fns = getFirebaseFunctions();
 
   if (!fns) {
-    throw new Error("Firebase is not configured");
+    throw new Error("Firebase chưa được cấu hình");
   }
 
   const fn = httpsCallable<TInput, TOutput>(fns, name);

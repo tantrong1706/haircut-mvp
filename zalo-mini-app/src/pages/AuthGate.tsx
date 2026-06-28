@@ -34,7 +34,13 @@ export function AuthGate({ allowedRoles, children }: Props) {
 
         const profile = await getAppUser(firebaseUser.uid);
 
-        if (!profile || !profile.isActive) {
+        if (!profile) {
+          setAppUser(null);
+          setError("Tài khoản chưa có hồ sơ phân quyền trong Firestore.");
+          return;
+        }
+
+        if (!profile.isActive) {
           setAppUser(null);
           setError("Tài khoản chưa được chủ salon kích hoạt.");
           return;
@@ -54,7 +60,7 @@ export function AuthGate({ allowedRoles, children }: Props) {
     setError("");
 
     try {
-      await signInOwnerStaff(email, password);
+      await signInOwnerStaff(email.trim(), password);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không đăng nhập được");
     } finally {
@@ -76,9 +82,9 @@ export function AuthGate({ allowedRoles, children }: Props) {
       <section className="entry-page">
         <div className="brand-mark">HAIRCUT</div>
         <header className="page-header">
-          <p className="eyebrow">Owner / Staff</p>
+          <p className="eyebrow">Chủ salon / Nhân viên</p>
           <h1>Đăng nhập</h1>
-          <p className="muted">Dùng tài khoản Email/Password đã tạo trong Firebase Auth.</p>
+          <p className="muted">Dùng email và mật khẩu đã tạo trong Firebase Authentication.</p>
         </header>
 
         <div className="panel">
@@ -89,7 +95,7 @@ export function AuthGate({ allowedRoles, children }: Props) {
               onChange={(event) => setEmail(event.target.value)}
               autoComplete="email"
               inputMode="email"
-              placeholder="owner@example.com"
+              placeholder="email@salon.com"
             />
           </label>
 
@@ -107,7 +113,7 @@ export function AuthGate({ allowedRoles, children }: Props) {
 
         <button
           className="primary-button"
-          disabled={signingIn || !email || !password}
+          disabled={signingIn || !email.trim() || !password}
           onClick={handleSignIn}
         >
           {signingIn ? "Đang đăng nhập..." : "Đăng nhập"}
@@ -124,7 +130,7 @@ export function AuthGate({ allowedRoles, children }: Props) {
         <header className="page-header">
           <p className="eyebrow">Không có quyền</p>
           <h1>Tài khoản này không được vào trang này</h1>
-          <p className="muted">Vai trò hiện tại: {appUser.role}</p>
+          <p className="muted">Vai trò hiện tại: {roleLabel(appUser.role)}</p>
         </header>
         <button className="secondary-button" onClick={handleSignOut}>
           Đăng xuất
@@ -137,7 +143,7 @@ export function AuthGate({ allowedRoles, children }: Props) {
     <>
       <div className="auth-bar">
         <span>
-          {appUser.name || appUser.uid} · {appUser.role}
+          {appUser.name || appUser.uid} · {roleLabel(appUser.role)}
         </span>
         <button onClick={handleSignOut}>Đăng xuất</button>
       </div>
@@ -146,3 +152,6 @@ export function AuthGate({ allowedRoles, children }: Props) {
   );
 }
 
+function roleLabel(role: AppRole) {
+  return role === "owner" ? "Chủ salon" : "Nhân viên";
+}

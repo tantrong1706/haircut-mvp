@@ -1,101 +1,74 @@
-# App Store Guide
+# Hướng Dẫn App Store
 
-This project is not ready for App Store submission yet. Use this checklist after the web MVP flow is stable.
+Dự án chưa sẵn sàng nộp App Store. Chỉ dùng checklist này sau khi web MVP ổn định.
 
-## Requirements
+## Điều kiện cần
 
-- Mac or Mac cloud.
+- Máy Mac hoặc Mac cloud.
 - Xcode.
 - Apple ID.
-- Apple Developer Program membership.
-- App Store Connect access.
-- Firebase iOS config file: `GoogleService-Info.plist`.
-- App icon, screenshots, support URL, and privacy policy URL.
+- Tài khoản Apple Developer Program.
+- Quyền truy cập App Store Connect.
+- Firebase iOS config: `GoogleService-Info.plist`.
+- App icon, ảnh chụp màn hình, URL hỗ trợ và URL chính sách quyền riêng tư.
 
-Apple Developer Program is required for TestFlight and App Store distribution.
+Apple Developer Program là bắt buộc nếu muốn dùng TestFlight và phát hành App Store.
 
-## Recommended Bundle ID
+## Bundle ID đề xuất
 
 ```text
 com.tantrong.haircut
 ```
 
-Use the same Bundle ID in:
+Dùng cùng Bundle ID trong:
 
 - Xcode target settings.
 - Apple Developer Identifiers.
 - Firebase iOS app config.
 
-## iOS Login Recommendation
+## Đăng nhập iOS
 
-For the first iOS version, keep the iOS app for owner/staff only.
+Bản iOS đầu tiên nên dành cho chủ salon/nhân viên.
 
-Recommended login order:
+Thứ tự đề xuất:
 
-1. Email/password for owner and staff.
-2. Sign in with Apple before App Store release if third-party login is added.
-3. Zalo login later.
+1. Email/mật khẩu cho chủ salon và nhân viên.
+2. Thêm Sign in with Apple trước khi App Store nếu có đăng nhập bên thứ ba.
+3. Đăng nhập Zalo để sau.
 
-Customers should keep using the Zalo Mini App and should not be forced to install the iOS app.
+Khách vẫn nên dùng Zalo Mini App và không bị ép cài app iOS.
 
-## App Store Metadata
+## Metadata App Store
 
-Suggested app name:
+Tên app:
 
 ```text
 HAIRCUT
 ```
 
-Suggested subtitle:
+Subtitle:
 
 ```text
 Chăm sóc khách hàng salon tóc
 ```
 
-Suggested category:
+Danh mục:
 
 ```text
 Business
 ```
 
-Suggested description:
+Mô tả gợi ý:
 
 ```text
-HAIRCUT giúp salon tóc quản lý hồ sơ khách hàng, lưu lịch sử kiểu tóc,
-tích điểm, duyệt điểm nhân viên và chăm sóc khách bằng QR/Zalo.
+HAIRCUT giúp salon tóc lưu lịch sử cắt tóc, cộng điểm, quản lý nhân viên và giữ chân khách hàng bằng QR/Zalo.
 ```
 
-Privacy Policy URL:
+## Trước khi nộp
 
-```text
-https://haircut-c7d12.web.app/privacy
-```
-
-## TestFlight Flow
-
-1. Build the iOS app in Xcode.
-2. Product -> Archive.
-3. Distribute App -> App Store Connect.
-4. Wait for build processing.
-5. Add internal or external testers in TestFlight.
-6. Test owner/staff workflows on a real iPhone.
-7. Fix issues and upload a new build.
-8. Submit for App Review only after TestFlight is stable.
-
-## Review Notes Template
-
-```text
-This app is for salon owners and staff.
-
-Test account:
-Email:
-Password:
-
-Test flow:
-1. Sign in.
-2. Open waiting customers.
-3. Submit haircut note and point request.
-4. Owner approves the point request.
-5. Check customer history and points.
-```
-
+- Có trang chính sách quyền riêng tư công khai.
+- Có tài khoản test cho Apple review.
+- Không dùng dữ liệu demo nhạy cảm.
+- Không để Firestore rules mở.
+- Không yêu cầu quyền không cần thiết.
+- App không crash khi thiếu dữ liệu salon.

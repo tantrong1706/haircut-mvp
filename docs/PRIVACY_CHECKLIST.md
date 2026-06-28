@@ -1,62 +1,62 @@
-# Privacy Checklist
+# Checklist Quyền Riêng Tư
 
-This app stores customer names, optional phone numbers, haircut history, photos, and rewards. Treat this as sensitive customer data.
+Ứng dụng lưu tên khách, số điện thoại tùy chọn, lịch sử cắt tóc, ảnh kiểu tóc và mã quà. Cần xem đây là dữ liệu nhạy cảm của khách hàng.
 
-## Customer Consent
+## Đồng ý của khách
 
-Ask clearly:
+Câu hỏi nên rõ ràng:
 
 ```text
-Salon co duoc luu anh kieu toc de lan sau phuc vu tot hon khong?
+Salon có được lưu ảnh kiểu tóc để lần sau phục vụ tốt hơn không?
 ```
 
-Options:
+Lựa chọn:
 
-- Dong y
-- Khong dong y
+- Đồng ý
+- Không đồng ý
 
-If customer does not consent:
+Nếu khách không đồng ý:
 
-- Do not take photo.
-- Do not upload photo.
-- Keep only basic notes and points.
+- Không chụp ảnh.
+- Không upload ảnh.
+- Chỉ lưu ghi chú cơ bản và điểm.
 
-## Phone Number
+## Số điện thoại
 
-Do not request phone immediately unless needed. Best MVP flow:
+Không nên xin số điện thoại ngay nếu chưa cần. Luồng tốt cho MVP:
 
-1. Use Zalo user ID and display name first.
-2. Ask phone number after explaining it helps salon identify customers with the same name.
-3. Show staff only the last 4 digits.
+1. Dùng Zalo user ID và tên hiển thị trước.
+2. Xin số điện thoại sau khi giải thích rằng số điện thoại giúp salon phân biệt khách trùng tên.
+3. Nhân viên chỉ thấy 4 số cuối.
 
-## Staff Privacy
+## Quyền của nhân viên
 
-Staff should see:
+Nhân viên nên thấy:
 
-- Customer name.
-- Last 4 digits of phone.
-- Points.
-- History for the selected customer.
+- Tên khách.
+- 4 số cuối điện thoại.
+- Điểm.
+- Lịch sử của khách đang phục vụ.
 
-Staff should not see:
+Nhân viên không nên thấy:
 
-- Full phone number by default.
-- All salon customer exports.
-- Settings.
-- Wheel configuration.
-- Raw data deletion controls.
+- Số điện thoại đầy đủ mặc định.
+- Export toàn bộ khách.
+- Cài đặt salon.
+- Cấu hình vòng quay.
+- Công cụ xóa dữ liệu thô.
 
-## Delete Requests
+## Yêu cầu xóa dữ liệu
 
-Customer should be able to request:
+Khách nên có quyền yêu cầu:
 
-- Delete stored haircut photos.
-- Delete profile.
-- Withdraw photo consent.
+- Xóa ảnh kiểu tóc đã lưu.
+- Xóa hồ sơ khách.
+- Rút lại đồng ý lưu ảnh.
 
-## Public URL
+## Trang công khai
 
-Current public privacy policy page:
+Trang chính sách hiện tại:
 
 ```text
 https://haircut-c7d12.web.app/privacy
@@ -64,10 +64,4 @@ https://haircut-c7d12.web.app/privacy
 
 ## Storage
 
-Use paths like:
-
-```text
-salons/{salonId}/customers/{customerId}/haircuts/{recordId}/{fileName}
-```
-
-Never place customer photos in public storage paths.
+Chưa triển khai Storage nếu project chưa nâng Blaze. Khi bật upload ảnh, cần rules riêng cho ảnh theo `salonId`, `customerId` và quyền chủ salon/nhân viên.

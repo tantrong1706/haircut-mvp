@@ -72,7 +72,7 @@ export default function App() {
     <div className="app-shell">
       <main className="app-main">{content}</main>
       {session ? (
-        <nav className="bottom-nav" aria-label="Dieu huong">
+        <nav className="bottom-nav" aria-label="Điều hướng">
           {tabs.map((tab) => (
             <button
               key={tab}

@@ -1,60 +1,60 @@
 # HAIRCUT MVP
 
-HAIRCUT is a salon loyalty product for hair salons. The current MVP is a Firebase-hosted web/Zalo Mini App flow with customer, staff, and owner screens.
+HAIRCUT là sản phẩm chăm sóc và giữ chân khách hàng cho salon tóc. Bản hiện tại là MVP chạy trên Firebase Hosting, dùng chung cho luồng khách quét QR, nhân viên ghi nhận khách và chủ salon duyệt điểm.
 
-Core idea:
+## Luồng chính
 
-1. Owner creates a salon.
-2. Owner creates QR codes for mirrors/chairs.
-3. Customer scans the mirror QR with Zalo.
-4. Zalo Mini App creates or finds the customer profile.
-5. Staff sees the customer in the iOS app.
-6. Staff adds haircut notes/photos and requests points.
-7. Owner approves points.
-8. Customer uses points for a lucky wheel reward.
+1. Chủ salon tạo salon.
+2. Chủ salon tạo QR cho từng gương hoặc ghế.
+3. Khách quét QR bằng Zalo.
+4. Ứng dụng tạo hoặc tìm hồ sơ khách.
+5. Nhân viên thấy khách đang chờ.
+6. Nhân viên ghi chú kiểu tóc và gửi yêu cầu cộng điểm.
+7. Chủ salon duyệt điểm.
+8. Khách xem lịch sử, tích điểm và quay vòng may mắn.
 
-## Folder Structure
+## Cấu trúc thư mục
 
 ```text
 haircut-mvp/
-  docs/                 Product spec, database, roadmap, privacy checklist
-  firebase/             Firestore rules, Hosting build, optional Functions/Storage config
-  ios-app/              SwiftUI source for future owner/staff iOS app
-  zalo-mini-app/        React/TypeScript source for customer/staff/owner web app
+  docs/                 Tài liệu sản phẩm, dữ liệu, bảo mật và lộ trình
+  firebase/             Firestore rules, Hosting, Functions/Storage tùy chọn
+  ios-app/              Mã SwiftUI cho app iOS chủ salon/nhân viên sau này
+  zalo-mini-app/        Web app React/TypeScript cho khách, nhân viên, chủ salon
 ```
 
-## MVP Modules
+## Thành phần MVP
 
-- `firebase`: Firestore rules/indexes and Firebase Hosting output. Storage is optional and currently not deployed unless Blaze is enabled.
-- `zalo-mini-app`: current MVP web app for customer scan flow, staff requests, owner approvals, wheel config, and privacy page.
-- `ios-app`: future SwiftUI owner/staff app source. It still requires Mac/Xcode and Firebase iOS config.
+- `firebase`: cấu hình Firestore, Hosting và bản build public. Storage chưa deploy nếu dự án Firebase chưa nâng Blaze.
+- `zalo-mini-app`: app web hiện tại cho khách quét QR, nhân viên gửi yêu cầu, chủ salon duyệt điểm, cấu hình vòng quay và trang quyền riêng tư.
+- `ios-app`: mã nguồn SwiftUI cho app iOS tương lai. Muốn build thật cần Mac, Xcode và file `GoogleService-Info.plist`.
 
-## Recommended Build Order
+## Thứ tự làm tiếp
 
-1. Test the current web MVP flow end to end.
-2. Configure lucky wheel in `/owner`.
-3. Create Firebase Auth owner/staff accounts and `users/{uid}` role documents.
-4. Finish customer/Zalo auth, then replace open Firestore test rules with production rules.
-5. Create the real Zalo Mini App.
-6. Build the iOS owner/staff app later on Mac/Xcode.
+1. Test trọn luồng web MVP.
+2. Cấu hình vòng quay trong `/owner`.
+3. Tạo tài khoản Firebase Auth cho chủ salon/nhân viên và tạo document `users/{uid}`.
+4. Hoàn thiện xác thực khách/Zalo rồi mới khóa Firestore rules.
+5. Tạo Zalo Mini App production.
+6. Build app iOS chủ salon/nhân viên trên Mac/Xcode sau.
 
-## Windows Automation
+## Chạy trên Windows
 
-Run from the `haircut-mvp` folder:
+Chạy từ thư mục `haircut-mvp`:
 
 ```powershell
 .\scripts\setup.ps1 -InstallFirebaseCli
 .\scripts\start-miniapp.ps1
 ```
 
-Local demo with Firebase Emulator:
+Chạy demo với Firebase Emulator:
 
 ```powershell
 .\scripts\start-emulators.ps1
 .\scripts\seed-demo.ps1
 ```
 
-Firebase deploy after login. Current MVP should deploy Firestore + Hosting only:
+Triển khai Firebase sau khi đăng nhập. MVP hiện tại chỉ nên triển khai Firestore + Hosting:
 
 ```powershell
 .\scripts\firebase-login.ps1
@@ -62,25 +62,25 @@ Firebase deploy after login. Current MVP should deploy Firestore + Hosting only:
 .\scripts\deploy-firebase.ps1
 ```
 
-Do not deploy Storage unless the Firebase project has Blaze enabled:
+Không triển khai Storage nếu Firebase project chưa nâng Blaze:
 
 ```powershell
 .\scripts\deploy-firebase.ps1 -IncludeStorage
 ```
 
-Deploy Functions only when the app is moved back to server-side business logic:
+Chỉ triển khai Functions khi chuyển lại logic nghiệp vụ sang callable backend:
 
 ```powershell
 .\scripts\deploy-firebase.ps1 -IncludeFunctions
 ```
 
-Deploy only the web app after UI changes:
+Triển khai riêng web app sau khi sửa giao diện:
 
 ```powershell
 .\scripts\deploy-hosting.ps1
 ```
 
-Useful test URLs:
+## URL test
 
 ```text
 https://haircut-c7d12.web.app
@@ -89,8 +89,8 @@ https://haircut-c7d12.web.app/owner?salonId=demo-salon
 https://haircut-c7d12.web.app/privacy
 ```
 
-Owner/staff routes now require Firebase Auth plus a `users/{uid}` role document. See `docs/AUTH_SETUP.md`.
+Trang `/staff` và `/owner` cần Firebase Auth và document phân quyền `users/{uid}`. Xem [docs/AUTH_SETUP.md](docs/AUTH_SETUP.md).
 
-## Current Status
+## Trạng thái hiện tại
 
-This repository contains an internal-test MVP. Firestore rules are intentionally open for testing right now and must be locked before real salon/customer usage.
+Repo này là MVP test nội bộ. Firestore rules live vẫn đang mở để khách test tạo hồ sơ và phiên ghế. Trước khi dùng cho salon thật, bắt buộc hoàn thiện xác thực khách/Zalo và khóa rules.

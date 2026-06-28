@@ -1,22 +1,22 @@
 # Firebase Backend
 
-## Setup
+## Thiết lập
 
 ```bash
 cd haircut/firebase
 cp .firebaserc.example .firebaserc
 ```
 
-Edit `.firebaserc` and replace `your-firebase-project-id`.
+Sửa `.firebaserc` và thay `your-firebase-project-id` bằng project thật.
 
-Install Firebase CLI if needed:
+Cài Firebase CLI nếu máy chưa có:
 
 ```bash
 npm install -g firebase-tools
 firebase login
 ```
 
-Optional: install Functions dependencies only if you work on Cloud Functions:
+Chỉ cài thư viện Functions khi cần sửa Cloud Functions:
 
 ```bash
 cd functions
@@ -24,25 +24,25 @@ npm install
 npm run build
 ```
 
-Configure Zalo Mini App ID:
+Cấu hình Zalo Mini App ID nếu dùng Functions:
 
 ```bash
 cp functions/.env.example functions/.env
 ```
 
-Edit `functions/.env` and set `ZALO_MINI_APP_ID`.
+Sửa `functions/.env` và đặt `ZALO_MINI_APP_ID`.
 
-Deploy current MVP:
+Triển khai MVP hiện tại:
 
 ```bash
 cd ..
 firebase deploy --only firestore:rules,firestore:indexes,hosting
 ```
 
-Do not deploy Storage unless the Firebase project has Blaze enabled.
-Do not deploy Functions unless the web app is switched back to callable backend logic.
+Không triển khai Storage nếu Firebase project chưa nâng Blaze.
+Không triển khai Functions nếu web app vẫn đang ghi Firestore trực tiếp.
 
-## Local Emulator Demo
+## Demo bằng Emulator
 
 Terminal 1:
 
@@ -56,9 +56,9 @@ Terminal 2:
 .\scripts\seed-demo.ps1
 ```
 
-## Production Notes
+## Ghi chú production
 
-- Verify Zalo identity server-side before trusting `zaloUserId`.
-- Replace the placeholder Mini App URL in `miniAppUrl`.
-- Add scheduled cleanup for old `chair_sessions`.
-- Add App Check before public testing.
+- Xác minh Zalo identity ở server trước khi tin `zaloUserId`.
+- Thay Mini App URL mẫu trong `miniAppUrl`.
+- Thêm job dọn `chair_sessions` cũ.
+- Bật App Check trước khi public test.

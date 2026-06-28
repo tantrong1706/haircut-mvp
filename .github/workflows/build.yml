@@ -1,4 +1,4 @@
-name: Build
+name: Kiểm tra build
 
 on:
   push:
@@ -8,25 +8,25 @@ on:
 
 jobs:
   zalo-mini-app:
-    name: Zalo Mini App
+    name: Ứng dụng Zalo
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Lấy mã nguồn
         uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: Cài Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
           cache-dependency-path: zalo-mini-app/package-lock.json
 
-      - name: Install dependencies
+      - name: Cài thư viện
         working-directory: zalo-mini-app
         run: npm ci
 
-      - name: Build
+      - name: Biên dịch
         working-directory: zalo-mini-app
         run: npm run build
 
@@ -35,21 +35,20 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Lấy mã nguồn
         uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: Cài Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
           cache-dependency-path: firebase/functions/package-lock.json
 
-      - name: Install dependencies
+      - name: Cài thư viện
         working-directory: firebase/functions
         run: npm ci
 
-      - name: Build
+      - name: Biên dịch
         working-directory: firebase/functions
         run: npm run build
-

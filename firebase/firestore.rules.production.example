@@ -2,8 +2,8 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Production draft. Do not deploy until the customer/Zalo auth flow is finished.
-    // The current web MVP still lets the customer page write directly to Firestore.
+    // Bản nháp production. Chưa triển khai khi luồng xác thực khách/Zalo chưa xong.
+    // Web MVP hiện tại vẫn để trang khách ghi trực tiếp vào Firestore khi test nội bộ.
     function signedIn() {
       return request.auth != null;
     }
@@ -43,14 +43,14 @@ service cloud.firestore {
 
     match /customers/{customerId} {
       allow read: if isStaffOrOwner(resource.data.salonId);
-      allow create: if true; // TODO: replace with verified Zalo/custom-token auth.
+      allow create: if true; // Cần thay bằng xác thực Zalo/custom token đã kiểm chứng.
       allow update: if isOwner(resource.data.salonId);
       allow delete: if isOwner(resource.data.salonId);
     }
 
     match /chair_sessions/{sessionId} {
       allow read: if isStaffOrOwner(resource.data.salonId);
-      allow create: if true; // TODO: replace with verified Zalo/custom-token auth.
+      allow create: if true; // Cần thay bằng xác thực Zalo/custom token đã kiểm chứng.
       allow update: if isStaffOrOwner(resource.data.salonId);
       allow delete: if isOwner(resource.data.salonId);
     }
@@ -75,7 +75,7 @@ service cloud.firestore {
 
     match /reward_history/{rewardId} {
       allow read: if isStaffOrOwner(resource.data.salonId);
-      allow create: if true; // TODO: move spin/reward issuance to Cloud Functions.
+      allow create: if true; // Cần chuyển phát quà/quay thưởng sang Cloud Functions.
       allow update: if isStaffOrOwner(resource.data.salonId);
       allow delete: if isOwner(resource.data.salonId);
     }

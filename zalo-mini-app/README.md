@@ -1,8 +1,8 @@
-# HAIRCUT Zalo Mini App
+# HAIRCUT Web/Zalo Mini App
 
-Customer-facing Mini App.
+Đây là app web hiện tại cho khách, nhân viên và chủ salon. Khi đưa vào Zalo Mini App production, màn khách sẽ là luồng chính.
 
-## Development
+## Chạy dev
 
 ```bash
 cd haircut/zalo-mini-app
@@ -10,28 +10,27 @@ npm install
 npm run dev
 ```
 
-Open the URL with query parameters:
+Mở URL kèm tham số test:
 
 ```text
 http://localhost:5173/?salonId=demo-salon&mirrorId=demo-mirror-1&qrToken=demo-token
 ```
 
-If `.env` is missing, the app runs in mock mode so you can preview the UI flow.
+Nếu thiếu `.env`, app chạy bằng dữ liệu giả để xem giao diện.
 
-## Connect Firebase
+## Kết nối Firebase
 
 ```bash
 cp .env.example .env
 ```
 
-Fill the Firebase web config values.
+Điền Firebase web config vào `.env`.
 
-## Zalo Permissions
+## Quyền Zalo
 
-Use:
+Nên dùng:
 
-- `getUserInfo` to identify the customer.
-- `getPhoneNumber` only after explaining why the phone number is helpful.
+- `getUserInfo` để nhận diện khách.
+- `getPhoneNumber` chỉ sau khi giải thích vì sao cần số điện thoại.
 
-Do not force phone number on the first screen unless the salon requires it.
-
+Không ép khách cung cấp số điện thoại ngay màn đầu nếu salon chưa thật sự cần.

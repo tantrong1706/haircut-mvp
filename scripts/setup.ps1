@@ -1,4 +1,4 @@
-param(
+﻿param(
   [switch]$InstallFirebaseCli
 )
 
@@ -6,8 +6,8 @@ $ErrorActionPreference = "Stop"
 $env:FIREBASE_CLI_DISABLE_UPDATE_CHECK = "true"
 $root = Resolve-Path (Join-Path $PSScriptRoot "..")
 
-Write-Host "== HAIRCUT MVP setup ==" -ForegroundColor Green
-Write-Host "Project: $root"
+Write-Host "== Thiết lập HAIRCUT MVP ==" -ForegroundColor Green
+Write-Host "Dự án: $root"
 
 function Run-Step($Name, $ScriptBlock) {
   Write-Host ""
@@ -15,17 +15,17 @@ function Run-Step($Name, $ScriptBlock) {
   & $ScriptBlock
 }
 
-Run-Step "Checking Node/NPM" {
+Run-Step "Kiểm tra Node/NPM" {
   node --version
   npm --version
 }
 
-Run-Step "Checking Firebase CLI" {
+Run-Step "Kiểm tra Firebase CLI" {
   $firebase = Get-Command firebase -ErrorAction SilentlyContinue
   if (-not $firebase -and $InstallFirebaseCli) {
     npm install -g firebase-tools
   } elseif (-not $firebase) {
-    Write-Host "Firebase CLI is not installed. Run: .\scripts\setup.ps1 -InstallFirebaseCli" -ForegroundColor Yellow
+    Write-Host "Chưa cài Firebase CLI. Chạy: .\scripts\setup.ps1 -InstallFirebaseCli" -ForegroundColor Yellow
   }
 
   if (Get-Command firebase -ErrorAction SilentlyContinue) {
@@ -33,14 +33,14 @@ Run-Step "Checking Firebase CLI" {
   }
 }
 
-Run-Step "Installing Firebase Functions dependencies" {
+Run-Step "Cài thư viện Firebase Functions" {
   Push-Location (Join-Path $root "firebase/functions")
   npm install
   npm run build
   Pop-Location
 }
 
-Run-Step "Installing Zalo Mini App dependencies" {
+Run-Step "Cài thư viện Zalo Mini App" {
   Push-Location (Join-Path $root "zalo-mini-app")
   npm install
   npm run build
@@ -48,10 +48,10 @@ Run-Step "Installing Zalo Mini App dependencies" {
 }
 
 Write-Host ""
-Write-Host "Setup finished." -ForegroundColor Green
-Write-Host "Run Mini App: .\scripts\start-miniapp.ps1"
-Write-Host "Run Firebase Emulator: .\scripts\start-emulators.ps1"
-Write-Host "Seed demo data: .\scripts\seed-demo.ps1"
-Write-Host "Login Firebase: .\scripts\firebase-login.ps1"
-Write-Host "Set Firebase project: .\scripts\set-firebase-project.ps1 -ProjectId your-project-id"
-Write-Host "Deploy Firebase: .\scripts\deploy-firebase.ps1"
+Write-Host "Thiết lập xong." -ForegroundColor Green
+Write-Host "Chạy Mini App: .\scripts\start-miniapp.ps1"
+Write-Host "Chạy Firebase Emulator: .\scripts\start-emulators.ps1"
+Write-Host "Nạp dữ liệu demo: .\scripts\seed-demo.ps1"
+Write-Host "Đăng nhập Firebase: .\scripts\firebase-login.ps1"
+Write-Host "Chọn Firebase project: .\scripts\set-firebase-project.ps1 -ProjectId your-project-id"
+Write-Host "Triển khai Firebase: .\scripts\deploy-firebase.ps1"

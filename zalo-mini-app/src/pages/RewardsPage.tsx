@@ -31,7 +31,7 @@ export function RewardsPage({ session }: Props) {
                 <p>Mã: {reward.rewardCode}</p>
                 <small>{statusLabel(reward.status)}</small>
               </div>
-              <span className="pill">{reward.status}</span>
+              <span className="pill">{statusLabel(reward.status)}</span>
             </article>
           ))
         )}
@@ -49,4 +49,3 @@ function statusLabel(status: Reward["status"]) {
   }
   return "Chưa sử dụng";
 }
-

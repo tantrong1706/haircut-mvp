@@ -37,7 +37,7 @@ type SpinWheelResult = {
 
 function requireString(value: unknown, field: string): string {
   if (typeof value !== "string" || value.trim().length === 0) {
-    throw new HttpsError("invalid-argument", `${field} is required`);
+    throw new HttpsError("invalid-argument", `Thiếu trường bắt buộc: ${field}`);
   }
   return value.trim();
 }
@@ -47,7 +47,7 @@ function optionalString(value: unknown): string | undefined {
     return undefined;
   }
   if (typeof value !== "string") {
-    throw new HttpsError("invalid-argument", "Expected string value");
+    throw new HttpsError("invalid-argument", "Giá trị phải là chuỗi");
   }
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
@@ -55,21 +55,21 @@ function optionalString(value: unknown): string | undefined {
 
 function requireBoolean(value: unknown, field: string): boolean {
   if (typeof value !== "boolean") {
-    throw new HttpsError("invalid-argument", `${field} must be boolean`);
+    throw new HttpsError("invalid-argument", `${field} phải là đúng/sai`);
   }
   return value;
 }
 
 function requirePositiveNumber(value: unknown, field: string): number {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
-    throw new HttpsError("invalid-argument", `${field} must be positive`);
+    throw new HttpsError("invalid-argument", `${field} phải là số dương`);
   }
   return Math.floor(value);
 }
 
 function currentUid(auth: { uid?: string } | undefined): string {
   if (!auth?.uid) {
-    throw new HttpsError("unauthenticated", "Sign in is required");
+    throw new HttpsError("unauthenticated", "Bạn cần đăng nhập");
   }
   return auth.uid;
 }
@@ -77,11 +77,11 @@ function currentUid(auth: { uid?: string } | undefined): string {
 async function getAppUser(uid: string): Promise<AppUser> {
   const snap = await db.collection("users").doc(uid).get();
   if (!snap.exists) {
-    throw new HttpsError("permission-denied", "User profile not found");
+    throw new HttpsError("permission-denied", "Không tìm thấy hồ sơ phân quyền");
   }
   const user = snap.data() as AppUser;
   if (!user.isActive) {
-    throw new HttpsError("permission-denied", "User is disabled");
+    throw new HttpsError("permission-denied", "Tài khoản đã bị tắt");
   }
   return user;
 }
@@ -93,7 +93,7 @@ async function assertSalonRole(
 ): Promise<AppUser> {
   const user = await getAppUser(uid);
   if (user.salonId !== salonId || !allowedRoles.includes(user.role)) {
-    throw new HttpsError("permission-denied", "Missing salon permission");
+    throw new HttpsError("permission-denied", "Không có quyền với salon này");
   }
   return user;
 }
@@ -151,10 +151,10 @@ async function spinWheelForCustomer(
       tx.get(customerRef),
     ]);
     if (!wheelSnap.exists) {
-      throw new HttpsError("not-found", "Lucky wheel not configured");
+      throw new HttpsError("not-found", "Vòng quay chưa được cấu hình");
     }
     if (!customerSnap.exists || customerSnap.data()?.salonId !== salonId) {
-      throw new HttpsError("not-found", "Customer not found");
+      throw new HttpsError("not-found", "Không tìm thấy khách hàng");
     }
 
     const wheel = wheelSnap.data();
@@ -162,13 +162,13 @@ async function spinWheelForCustomer(
     const requiredPoints = Number(wheel?.requiredPoints ?? 5);
     const points = Number(customer?.points ?? 0);
     if (points < requiredPoints) {
-      throw new HttpsError("failed-precondition", "Not enough points");
+      throw new HttpsError("failed-precondition", "Khách chưa đủ điểm để quay");
     }
 
     const activeSlots = (wheel?.slots ?? [])
       .filter((slot: LuckyWheelSlot) => slot.active && slot.label.trim().length > 0);
     if (activeSlots.length === 0) {
-      throw new HttpsError("failed-precondition", "No active wheel slots");
+      throw new HttpsError("failed-precondition", "Vòng quay chưa có ô thưởng đang bật");
     }
 
     const index = Math.floor(Math.random() * activeSlots.length);
@@ -241,12 +241,12 @@ export const createSalon = onCall(functionOptions, async (request) => {
       requiredPoints: 5,
       deductPointsAfterSpin: true,
       slots: [
-        { label: "Giam 10%", active: true },
-        { label: "Goi dau mien phi", active: true },
-        { label: "Tang sap toc", active: true },
-        { label: "Giam 20%", active: true },
-        { label: "Chuc ban may man", active: true },
-        { label: "Hap dau mien phi", active: true },
+        { label: "Giảm 10%", active: true },
+        { label: "Gội đầu miễn phí", active: true },
+        { label: "Tặng sáp tóc", active: true },
+        { label: "Giảm 20%", active: true },
+        { label: "Chúc bạn may mắn", active: true },
+        { label: "Hấp dầu miễn phí", active: true },
       ],
       updatedAt: now,
     });
@@ -362,7 +362,7 @@ export const registerCustomerFromZalo = onCall(functionOptions, async (request) 
 
   const mirrorSnap = await db.collection("mirrors").doc(mirrorId).get();
   if (!mirrorSnap.exists) {
-    throw new HttpsError("not-found", "Mirror not found");
+    throw new HttpsError("not-found", "Không tìm thấy QR gương");
   }
   const mirror = mirrorSnap.data();
   if (
@@ -370,7 +370,7 @@ export const registerCustomerFromZalo = onCall(functionOptions, async (request) 
     mirror?.qrToken !== qrToken ||
     mirror?.isActive !== true
   ) {
-    throw new HttpsError("permission-denied", "Invalid mirror QR");
+    throw new HttpsError("permission-denied", "QR gương không hợp lệ");
   }
 
   const customerId = customerIdFor(salonId, zaloUserId);
@@ -437,7 +437,7 @@ export const submitPointRequest = onCall(functionOptions, async (request) => {
 
   const sessionSnap = await db.collection("chair_sessions").doc(sessionId).get();
   if (!sessionSnap.exists || sessionSnap.data()?.salonId !== salonId) {
-    throw new HttpsError("not-found", "Session not found");
+    throw new HttpsError("not-found", "Không tìm thấy phiên phục vụ");
   }
 
   const session = sessionSnap.data();
@@ -477,14 +477,14 @@ export const approvePointRequest = onCall(functionOptions, async (request) => {
   await db.runTransaction(async (tx) => {
     const pointSnap = await tx.get(requestRef);
     if (!pointSnap.exists) {
-      throw new HttpsError("not-found", "Point request not found");
+      throw new HttpsError("not-found", "Không tìm thấy yêu cầu cộng điểm");
     }
     const pointRequest = pointSnap.data();
     if (pointRequest?.salonId !== salonId) {
-      throw new HttpsError("permission-denied", "Wrong salon");
+      throw new HttpsError("permission-denied", "Yêu cầu không thuộc salon này");
     }
     if (pointRequest?.status !== "pending") {
-      throw new HttpsError("failed-precondition", "Request already handled");
+      throw new HttpsError("failed-precondition", "Yêu cầu đã được xử lý");
     }
 
     const customerRef = db.collection("customers").doc(pointRequest.customerId);
@@ -531,7 +531,7 @@ export const rejectPointRequest = onCall(functionOptions, async (request) => {
   const ref = db.collection("point_requests").doc(requestId);
   const snap = await ref.get();
   if (!snap.exists || snap.data()?.salonId !== salonId) {
-    throw new HttpsError("not-found", "Point request not found");
+    throw new HttpsError("not-found", "Không tìm thấy yêu cầu cộng điểm");
   }
 
   await ref.set({
@@ -559,7 +559,7 @@ export const updateLuckyWheel = onCall(functionOptions, async (request) => {
   );
   const slots = request.data?.slots;
   if (!Array.isArray(slots) || slots.length !== 6) {
-    throw new HttpsError("invalid-argument", "Exactly 6 slots are required");
+    throw new HttpsError("invalid-argument", "Vòng quay phải có đúng 6 ô");
   }
   const cleanedSlots: LuckyWheelSlot[] = slots.map((slot: unknown, index) => {
     if (
@@ -567,7 +567,7 @@ export const updateLuckyWheel = onCall(functionOptions, async (request) => {
       slot === null ||
       typeof (slot as { label?: unknown }).label !== "string"
     ) {
-      throw new HttpsError("invalid-argument", `slot ${index + 1} is invalid`);
+      throw new HttpsError("invalid-argument", `Ô ${index + 1} không hợp lệ`);
     }
     return {
       label: (slot as { label: string }).label.trim(),
@@ -634,7 +634,7 @@ export const getCustomerHistoryFromZalo = onCall(functionOptions, async (request
       return {
         id: doc.id,
         createdAtMs: timestampMillis(data.createdAt),
-        staffName: staffNames.get(data.staffId) ?? "Nhan vien",
+        staffName: staffNames.get(data.staffId) ?? "Nhân viên",
         note: data.note ?? "",
         photoUrls: data.photoUrls ?? [],
         pointsAdded: data.pointsAdded ?? 0,
@@ -677,7 +677,7 @@ export const redeemRewardCode = onCall(functionOptions, async (request) => {
   const user = await assertSalonRole(uid, salonId, ["owner", "staff"]);
 
   if (user.role === "staff" && user.canRedeemRewards !== true) {
-    throw new HttpsError("permission-denied", "Staff cannot redeem rewards");
+    throw new HttpsError("permission-denied", "Nhân viên chưa được phép xác nhận mã quà");
   }
 
   const query = await db.collection("reward_history")
@@ -687,13 +687,13 @@ export const redeemRewardCode = onCall(functionOptions, async (request) => {
     .get();
 
   if (query.empty) {
-    throw new HttpsError("not-found", "Reward not found");
+    throw new HttpsError("not-found", "Không tìm thấy mã quà");
   }
 
   const rewardRef = query.docs[0].ref;
   const reward = query.docs[0].data();
   if (reward.status !== "unused") {
-    throw new HttpsError("failed-precondition", "Reward already handled");
+    throw new HttpsError("failed-precondition", "Mã quà đã được xử lý");
   }
 
   await rewardRef.set({
