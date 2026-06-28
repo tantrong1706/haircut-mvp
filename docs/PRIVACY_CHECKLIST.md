@@ -54,6 +54,14 @@ Customer should be able to request:
 - Delete profile.
 - Withdraw photo consent.
 
+## Public URL
+
+Current public privacy policy page:
+
+```text
+https://haircut-c7d12.web.app/privacy
+```
+
 ## Storage
 
 Use paths like:
@@ -63,4 +71,3 @@ salons/{salonId}/customers/{customerId}/haircuts/{recordId}/{fileName}
 ```
 
 Never place customer photos in public storage paths.
-

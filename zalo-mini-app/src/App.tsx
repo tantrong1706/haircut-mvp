@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { HistoryPage } from "./pages/HistoryPage";
 import { HomePage } from "./pages/HomePage";
 import { OwnerPage } from "./pages/OwnerPage";
+import { PrivacyPage } from "./pages/PrivacyPage";
 import { RewardsPage } from "./pages/RewardsPage";
 import { ScanEntryPage } from "./pages/ScanEntryPage";
 import { StaffPage } from "./pages/StaffPage";
@@ -30,6 +31,16 @@ export default function App() {
       <div className="app-shell ops-shell">
         <main className="app-main wide-main">
           <OwnerPage />
+        </main>
+      </div>
+    );
+  }
+
+  if (path.startsWith("/privacy")) {
+    return (
+      <div className="app-shell ops-shell">
+        <main className="app-main wide-main">
+          <PrivacyPage />
         </main>
       </div>
     );

@@ -74,6 +74,7 @@ Useful test URLs:
 https://haircut-c7d12.web.app
 https://haircut-c7d12.web.app/staff?salonId=demo-salon
 https://haircut-c7d12.web.app/owner?salonId=demo-salon
+https://haircut-c7d12.web.app/privacy
 ```
 
 ## Current Status

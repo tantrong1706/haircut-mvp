@@ -52,3 +52,12 @@ Use this when you want to test without a real Firebase project:
 5. Owner approves the point request.
 6. Customer opens history and sees the haircut record.
 7. Customer reaches 5 points and tests lucky wheel.
+
+## Next Product Step
+
+1. Test the full web MVP flow.
+2. Configure lucky wheel in `/owner?salonId=demo-salon`.
+3. Test wheel rewards from the customer page.
+4. Add owner/staff authentication and role checks.
+5. Replace open Firestore rules with locked rules.
+6. Build iOS owner/staff app on Mac.

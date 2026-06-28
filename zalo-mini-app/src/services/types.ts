@@ -45,3 +45,26 @@ export type SpinResult = {
   pointsAfter: number;
 };
 
+export type LuckyWheelSlot = {
+  label: string;
+  active: boolean;
+};
+
+export type LuckyWheelConfig = {
+  requiredPoints: number;
+  deductPointsAfterSpin: boolean;
+  slots: LuckyWheelSlot[];
+};
+
+export const defaultLuckyWheelConfig: LuckyWheelConfig = {
+  requiredPoints: 5,
+  deductPointsAfterSpin: true,
+  slots: [
+    { label: "Giảm 10%", active: true },
+    { label: "Gội đầu miễn phí", active: true },
+    { label: "Tặng sáp tóc", active: true },
+    { label: "Giảm 20%", active: true },
+    { label: "Chúc bạn may mắn lần sau", active: true },
+    { label: "Hấp dầu miễn phí", active: true },
+  ],
+};

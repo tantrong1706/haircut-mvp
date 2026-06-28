@@ -14,9 +14,11 @@ import { getFirebaseDb, isFirebaseConfigured } from "./firebase";
 import {
   AppSession,
   HaircutRecord,
+  LuckyWheelConfig,
   QrContext,
   Reward,
   SpinResult,
+  defaultLuckyWheelConfig,
 } from "./types";
 import { ZaloIdentity } from "./zalo";
 
@@ -94,7 +96,10 @@ export async function registerCustomer(input: RegisterInput): Promise<AppSession
 
 export async function spinWheel(session: AppSession): Promise<SpinResult> {
   if (!isFirebaseConfigured()) {
-    const pointsAfter = Math.max(0, session.customer.points - 5);
+    const pointsAfter = Math.max(
+      0,
+      session.customer.points - defaultLuckyWheelConfig.requiredPoints,
+    );
     const reward = {
       rewardId: `reward-${Date.now()}`,
       rewardName: "Gội đầu miễn phí",
@@ -121,39 +126,46 @@ export async function spinWheel(session: AppSession): Promise<SpinResult> {
   }
 
   const customerRef = doc(db, "customers", session.customer.customerId);
+  const wheelRef = doc(db, "lucky_wheel", session.qr.salonId);
   const rewardRef = doc(collection(db, "reward_history"));
 
-  const wheelSlots = [
-    "Giảm 10%",
-    "Gội đầu miễn phí",
-    "Tặng sáp tóc",
-    "Giảm 20%",
-    "Chúc bạn may mắn lần sau",
-    "Hấp dầu miễn phí",
-  ];
-
   return runTransaction(db, async (transaction) => {
-    const customerSnap = await transaction.get(customerRef);
+    const [customerSnap, wheelSnap] = await Promise.all([
+      transaction.get(customerRef),
+      transaction.get(wheelRef),
+    ]);
 
     if (!customerSnap.exists()) {
       throw new Error("Không tìm thấy khách hàng");
     }
 
     const customerData = customerSnap.data();
+    const wheelConfig = wheelSnap.exists()
+      ? normalizeLuckyWheelConfig(wheelSnap.data())
+      : defaultLuckyWheelConfig;
+    const activeSlots = wheelConfig.slots.filter((slot) => slot.active && slot.label.length > 0);
     const currentPoints = Number(customerData.points ?? 0);
 
-    if (currentPoints < 5) {
-      throw new Error("Khách chưa đủ 5 điểm để quay");
+    if (activeSlots.length === 0) {
+      throw new Error("Vòng quay chưa có phần thưởng đang bật");
     }
 
-    const rewardName = wheelSlots[Math.floor(Math.random() * wheelSlots.length)];
-    const rewardCode = `HC-${Math.floor(1000 + Math.random() * 9000)}`;
-    const pointsAfter = currentPoints - 5;
+    if (currentPoints < wheelConfig.requiredPoints) {
+      throw new Error(`Khách chưa đủ ${wheelConfig.requiredPoints} điểm để quay`);
+    }
 
-    transaction.update(customerRef, {
-      points: pointsAfter,
-      updatedAt: serverTimestamp(),
-    });
+    const rewardName = activeSlots[Math.floor(Math.random() * activeSlots.length)].label;
+    const rewardCode = `HC-${Math.floor(1000 + Math.random() * 9000)}`;
+    const pointsAfter = wheelConfig.deductPointsAfterSpin
+      ? currentPoints - wheelConfig.requiredPoints
+      : currentPoints;
+
+    if (wheelConfig.deductPointsAfterSpin) {
+      transaction.update(customerRef, {
+        points: pointsAfter,
+        updatedAt: serverTimestamp(),
+      });
+    }
 
     transaction.set(rewardRef, {
       salonId: session.qr.salonId,
@@ -162,7 +174,7 @@ export async function spinWheel(session: AppSession): Promise<SpinResult> {
       rewardName,
       rewardCode,
       status: "unused",
-      pointsUsed: 5,
+      pointsUsed: wheelConfig.deductPointsAfterSpin ? wheelConfig.requiredPoints : 0,
       createdAt: serverTimestamp(),
     });
 
@@ -361,4 +373,25 @@ function toMillis(value: any): number | null {
   }
 
   return null;
+}
+
+function normalizeLuckyWheelConfig(value: any): LuckyWheelConfig {
+  const rawSlots = Array.isArray(value?.slots) ? value.slots : defaultLuckyWheelConfig.slots;
+  const slots = rawSlots.slice(0, 6).map((slot: any, index: number) => ({
+    label:
+      typeof slot?.label === "string" && slot.label.trim().length > 0
+        ? slot.label.trim()
+        : defaultLuckyWheelConfig.slots[index]?.label || `Ô ${index + 1}`,
+    active: Boolean(slot?.active ?? true),
+  }));
+
+  while (slots.length < 6) {
+    slots.push(defaultLuckyWheelConfig.slots[slots.length]);
+  }
+
+  return {
+    requiredPoints: Math.max(1, Number(value?.requiredPoints ?? 5)),
+    deductPointsAfterSpin: Boolean(value?.deductPointsAfterSpin ?? true),
+    slots,
+  };
 }

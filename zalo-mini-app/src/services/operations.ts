@@ -9,10 +9,12 @@ import {
   query,
   runTransaction,
   serverTimestamp,
+  setDoc,
   updateDoc,
   where,
 } from "firebase/firestore";
 import { getFirebaseDb, isFirebaseConfigured } from "./firebase";
+import { LuckyWheelConfig, defaultLuckyWheelConfig } from "./types";
 
 export type CustomerSummary = {
   id: string;
@@ -213,6 +215,44 @@ export async function rejectPointRequest(request: PointRequest) {
   });
 }
 
+export async function getLuckyWheelConfig(salonId: string): Promise<LuckyWheelConfig> {
+  const db = getFirebaseDb();
+
+  if (!isFirebaseConfigured() || !db) {
+    return defaultLuckyWheelConfig;
+  }
+
+  const snap = await getDoc(doc(db, "lucky_wheel", salonId));
+
+  if (!snap.exists()) {
+    return defaultLuckyWheelConfig;
+  }
+
+  return normalizeLuckyWheelConfig(snap.data());
+}
+
+export async function saveLuckyWheelConfig(salonId: string, config: LuckyWheelConfig) {
+  const db = getFirebaseDb();
+
+  if (!isFirebaseConfigured() || !db) {
+    return;
+  }
+
+  const normalized = normalizeLuckyWheelConfig(config);
+
+  await setDoc(
+    doc(db, "lucky_wheel", salonId),
+    {
+      salonId,
+      requiredPoints: normalized.requiredPoints,
+      deductPointsAfterSpin: normalized.deductPointsAfterSpin,
+      slots: normalized.slots,
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true },
+  );
+}
+
 export function formatDateTime(ms: number | null) {
   if (!ms) {
     return "";
@@ -319,6 +359,27 @@ function normalizeRequestStatus(value: unknown): PointRequest["status"] {
   return "pending";
 }
 
+function normalizeLuckyWheelConfig(value: DocumentData | LuckyWheelConfig): LuckyWheelConfig {
+  const rawSlots = Array.isArray(value.slots) ? value.slots : defaultLuckyWheelConfig.slots;
+  const slots = rawSlots.slice(0, 6).map((slot, index) => ({
+    label:
+      typeof slot?.label === "string" && slot.label.trim().length > 0
+        ? slot.label.trim()
+        : defaultLuckyWheelConfig.slots[index]?.label || `Ô ${index + 1}`,
+    active: Boolean(slot?.active ?? true),
+  }));
+
+  while (slots.length < 6) {
+    slots.push(defaultLuckyWheelConfig.slots[slots.length]);
+  }
+
+  return {
+    requiredPoints: Math.max(1, Number(value.requiredPoints ?? 5)),
+    deductPointsAfterSpin: Boolean(value.deductPointsAfterSpin ?? true),
+    slots,
+  };
+}
+
 function toMillis(value: unknown): number | null {
   if (!value) {
     return null;
@@ -365,4 +426,3 @@ function mockSessions(): StaffSession[] {
     },
   ];
 }
-
