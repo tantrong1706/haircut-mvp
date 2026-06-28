@@ -1,8 +1,10 @@
 import { FirebaseApp, initializeApp } from "firebase/app";
+import { Auth, getAuth } from "firebase/auth";
 import { Firestore, getFirestore } from "firebase/firestore";
 import { Functions, getFunctions, httpsCallable } from "firebase/functions";
 
 let app: FirebaseApp | null = null;
+let auth: Auth | null = null;
 let db: Firestore | null = null;
 let functions: Functions | null = null;
 
@@ -41,6 +43,20 @@ export function getFirebaseDb() {
   }
 
   return db;
+}
+
+export function getFirebaseAuth() {
+  const firebaseApp = getFirebaseApp();
+
+  if (!firebaseApp) {
+    return null;
+  }
+
+  if (!auth) {
+    auth = getAuth(firebaseApp);
+  }
+
+  return auth;
 }
 
 export function getFirebaseFunctions() {

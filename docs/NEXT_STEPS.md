@@ -57,7 +57,11 @@ Use this when you want to test without a real Firebase project:
 
 1. Test the full web MVP flow.
 2. Configure lucky wheel in `/owner?salonId=demo-salon`.
-3. Test wheel rewards from the customer page.
-4. Add owner/staff authentication and role checks.
-5. Replace open Firestore rules with locked rules.
+3. Create Firebase Auth owner/staff users and `users/{uid}` role documents.
+4. Test wheel rewards from the customer page.
+5. Replace open Firestore rules with locked rules after customer/Zalo auth is finished.
 6. Build iOS owner/staff app on Mac.
+
+## Auth Setup
+
+See `docs/AUTH_SETUP.md`.

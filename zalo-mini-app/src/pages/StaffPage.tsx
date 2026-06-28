@@ -5,15 +5,22 @@ import {
   listenActiveSessions,
   submitPointRequest,
 } from "../services/operations";
+import { AppUser } from "../services/auth";
 
-export function StaffPage() {
+type Props = {
+  currentUser: AppUser;
+};
+
+export function StaffPage({ currentUser }: Props) {
   const salonId = useMemo(() => {
     const params = new URLSearchParams(window.location.search);
-    return params.get("salonId") || "demo-salon";
-  }, []);
+    return currentUser.salonId || params.get("salonId") || "demo-salon";
+  }, [currentUser.salonId]);
   const [sessions, setSessions] = useState<StaffSession[]>([]);
   const [selectedId, setSelectedId] = useState("");
-  const [staffName, setStaffName] = useState(localStorage.getItem("haircut_staff_name") || "");
+  const [staffName, setStaffName] = useState(
+    localStorage.getItem("haircut_staff_name") || currentUser.name || "",
+  );
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -172,4 +179,3 @@ function statusLabel(status: StaffSession["status"]) {
 
   return "Đang chờ";
 }
-

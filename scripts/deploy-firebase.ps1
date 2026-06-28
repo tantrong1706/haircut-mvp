@@ -1,6 +1,8 @@
 param(
   [switch]$OnlyRules,
-  [switch]$OnlyFunctions
+  [switch]$OnlyHosting,
+  [switch]$IncludeFunctions,
+  [switch]$IncludeStorage
 )
 
 $ErrorActionPreference = "Stop"
@@ -17,17 +19,22 @@ if (-not (Test-Path -LiteralPath $firebaserc)) {
   throw "Missing firebase/.firebaserc. Run .\scripts\set-firebase-project.ps1 -ProjectId your-project-id first."
 }
 
-Push-Location (Join-Path $firebaseDir "functions")
-npm install
-npm run build
-Pop-Location
+if ($IncludeFunctions) {
+  Push-Location (Join-Path $firebaseDir "functions")
+  npm install
+  npm run build
+  Pop-Location
+}
 
 Push-Location $firebaseDir
 if ($OnlyRules) {
-  firebase deploy --only firestore:rules,firestore:indexes,storage
-} elseif ($OnlyFunctions) {
-  firebase deploy --only functions
+  firebase deploy --only firestore:rules,firestore:indexes
+} elseif ($OnlyHosting) {
+  firebase deploy --only hosting
 } else {
-  firebase deploy --only firestore:rules,firestore:indexes,storage,functions
+  $targets = @("firestore:rules", "firestore:indexes", "hosting")
+  if ($IncludeFunctions) { $targets += "functions" }
+  if ($IncludeStorage) { $targets += "storage" }
+  firebase deploy --only ($targets -join ",")
 }
 Pop-Location

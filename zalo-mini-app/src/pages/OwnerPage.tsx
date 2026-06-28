@@ -8,15 +8,20 @@ import {
   rejectPointRequest,
   saveLuckyWheelConfig,
 } from "../services/operations";
+import { AppUser } from "../services/auth";
 import { LuckyWheelConfig, defaultLuckyWheelConfig } from "../services/types";
 
 type OwnerTab = "approvals" | "wheel";
 
-export function OwnerPage() {
+type Props = {
+  currentUser: AppUser;
+};
+
+export function OwnerPage({ currentUser }: Props) {
   const salonId = useMemo(() => {
     const params = new URLSearchParams(window.location.search);
-    return params.get("salonId") || "demo-salon";
-  }, []);
+    return currentUser.salonId || params.get("salonId") || "demo-salon";
+  }, [currentUser.salonId]);
   const [activeTab, setActiveTab] = useState<OwnerTab>("approvals");
   const [requests, setRequests] = useState<PointRequest[]>([]);
   const [wheelConfig, setWheelConfig] = useState<LuckyWheelConfig>(defaultLuckyWheelConfig);
@@ -270,4 +275,3 @@ function WheelConfigPanel({
     </div>
   );
 }
-

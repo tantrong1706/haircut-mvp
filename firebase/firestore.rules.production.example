@@ -2,31 +2,82 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Draft only. Do not deploy until owner/staff/customer auth is implemented.
+    // Production draft. Do not deploy until the customer/Zalo auth flow is finished.
+    // The current web MVP still lets the customer page write directly to Firestore.
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userPath() {
+      return /databases/$(database)/documents/users/$(request.auth.uid);
+    }
+
+    function hasUserProfile() {
+      return signedIn() && exists(userPath());
+    }
+
+    function appUser() {
+      return get(userPath()).data;
+    }
+
+    function isActiveMember(salonId) {
+      return hasUserProfile()
+        && appUser().salonId == salonId
+        && appUser().isActive == true;
+    }
+
+    function isOwner(salonId) {
+      return isActiveMember(salonId) && appUser().role == "owner";
+    }
+
+    function isStaffOrOwner(salonId) {
+      return isActiveMember(salonId)
+        && (appUser().role == "owner" || appUser().role == "staff");
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow create: if false;
+      allow update, delete: if false;
+    }
+
     match /customers/{customerId} {
-      allow read, write: if request.auth != null;
+      allow read: if isStaffOrOwner(resource.data.salonId);
+      allow create: if true; // TODO: replace with verified Zalo/custom-token auth.
+      allow update: if isOwner(resource.data.salonId);
+      allow delete: if isOwner(resource.data.salonId);
     }
 
     match /chair_sessions/{sessionId} {
-      allow read, write: if request.auth != null;
+      allow read: if isStaffOrOwner(resource.data.salonId);
+      allow create: if true; // TODO: replace with verified Zalo/custom-token auth.
+      allow update: if isStaffOrOwner(resource.data.salonId);
+      allow delete: if isOwner(resource.data.salonId);
     }
 
     match /point_requests/{requestId} {
-      allow read, write: if request.auth != null;
+      allow read: if isStaffOrOwner(resource.data.salonId);
+      allow create: if isStaffOrOwner(request.resource.data.salonId);
+      allow update: if isOwner(resource.data.salonId);
+      allow delete: if isOwner(resource.data.salonId);
     }
 
     match /haircut_records/{recordId} {
-      allow read, write: if request.auth != null;
+      allow read: if isStaffOrOwner(resource.data.salonId);
+      allow create: if isOwner(request.resource.data.salonId);
+      allow update, delete: if isOwner(resource.data.salonId);
     }
 
     match /lucky_wheel/{salonId} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow write: if isOwner(salonId);
     }
 
     match /reward_history/{rewardId} {
-      allow read, write: if request.auth != null;
+      allow read: if isStaffOrOwner(resource.data.salonId);
+      allow create: if true; // TODO: move spin/reward issuance to Cloud Functions.
+      allow update: if isStaffOrOwner(resource.data.salonId);
+      allow delete: if isOwner(resource.data.salonId);
     }
   }
 }
-

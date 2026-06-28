@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { AuthGate } from "./pages/AuthGate";
 import { HistoryPage } from "./pages/HistoryPage";
 import { HomePage } from "./pages/HomePage";
 import { OwnerPage } from "./pages/OwnerPage";
@@ -20,7 +21,9 @@ export default function App() {
     return (
       <div className="app-shell ops-shell">
         <main className="app-main wide-main">
-          <StaffPage />
+          <AuthGate allowedRoles={["owner", "staff"]}>
+            {(user) => <StaffPage currentUser={user} />}
+          </AuthGate>
         </main>
       </div>
     );
@@ -30,7 +33,9 @@ export default function App() {
     return (
       <div className="app-shell ops-shell">
         <main className="app-main wide-main">
-          <OwnerPage />
+          <AuthGate allowedRoles={["owner"]}>
+            {(user) => <OwnerPage currentUser={user} />}
+          </AuthGate>
         </main>
       </div>
     );

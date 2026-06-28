@@ -32,12 +32,15 @@ cp functions/.env.example functions/.env
 
 Edit `functions/.env` and set `ZALO_MINI_APP_ID`.
 
-Deploy:
+Deploy current MVP:
 
 ```bash
 cd ..
-firebase deploy --only firestore:rules,firestore:indexes,storage,functions
+firebase deploy --only firestore:rules,firestore:indexes,hosting
 ```
+
+Do not deploy Storage unless the Firebase project has Blaze enabled.
+Do not deploy Functions unless the web app is switched back to callable backend logic.
 
 ## Local Emulator Demo
 

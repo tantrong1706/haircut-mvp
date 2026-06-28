@@ -1,6 +1,6 @@
 # HAIRCUT MVP
 
-HAIRCUT is a salon loyalty product with one iOS app for owners/staff and one Zalo Mini App for customers.
+HAIRCUT is a salon loyalty product for hair salons. The current MVP is a Firebase-hosted web/Zalo Mini App flow with customer, staff, and owner screens.
 
 Core idea:
 
@@ -16,27 +16,27 @@ Core idea:
 ## Folder Structure
 
 ```text
-haircut/
+haircut-mvp/
   docs/                 Product spec, database, roadmap, privacy checklist
-  firebase/             Firestore rules, Storage rules, Cloud Functions
-  ios-app/              SwiftUI source for owner/staff app
-  zalo-mini-app/        React/TypeScript source for customer Mini App
+  firebase/             Firestore rules, Hosting build, optional Functions/Storage config
+  ios-app/              SwiftUI source for future owner/staff iOS app
+  zalo-mini-app/        React/TypeScript source for customer/staff/owner web app
 ```
 
 ## MVP Modules
 
-- `firebase`: backend logic for salon setup, mirror QR, chair sessions, point approval, lucky wheel, reward redemption.
-- `ios-app`: SwiftUI screens for owner dashboard, pending approvals, staff serving workflow, customers, wheel setup.
-- `zalo-mini-app`: customer flow for scan QR, Zalo identity, profile, points, haircut history, wheel, rewards.
+- `firebase`: Firestore rules/indexes and Firebase Hosting output. Storage is optional and currently not deployed unless Blaze is enabled.
+- `zalo-mini-app`: current MVP web app for customer scan flow, staff requests, owner approvals, wheel config, and privacy page.
+- `ios-app`: future SwiftUI owner/staff app source. It still requires Mac/Xcode and Firebase iOS config.
 
 ## Recommended Build Order
 
-1. Create Firebase project.
-2. Deploy Firestore/Storage rules.
-3. Deploy Cloud Functions.
-4. Create the iOS app in Xcode and add the SwiftUI source.
-5. Create the Zalo Mini App and connect the React app to Firebase Functions.
-6. Test with one real salon and three mirror QR codes.
+1. Test the current web MVP flow end to end.
+2. Configure lucky wheel in `/owner`.
+3. Add owner/staff authentication and role checks.
+4. Replace open Firestore test rules with production rules.
+5. Create the real Zalo Mini App.
+6. Build the iOS owner/staff app later on Mac/Xcode.
 
 ## Windows Automation
 
@@ -54,12 +54,24 @@ Local demo with Firebase Emulator:
 .\scripts\seed-demo.ps1
 ```
 
-Firebase deploy after login:
+Firebase deploy after login. Current MVP should deploy Firestore + Hosting only:
 
 ```powershell
 .\scripts\firebase-login.ps1
 .\scripts\set-firebase-project.ps1 -ProjectId your-firebase-project-id
 .\scripts\deploy-firebase.ps1
+```
+
+Do not deploy Storage unless the Firebase project has Blaze enabled:
+
+```powershell
+.\scripts\deploy-firebase.ps1 -IncludeStorage
+```
+
+Deploy Functions only when the app is moved back to server-side business logic:
+
+```powershell
+.\scripts\deploy-firebase.ps1 -IncludeFunctions
 ```
 
 Deploy only the web app after UI changes:
@@ -77,6 +89,8 @@ https://haircut-c7d12.web.app/owner?salonId=demo-salon
 https://haircut-c7d12.web.app/privacy
 ```
 
+Owner/staff routes now require Firebase Auth plus a `users/{uid}` role document. See `docs/AUTH_SETUP.md`.
+
 ## Current Status
 
-This repository contains the MVP foundation and implementation skeleton. You still need real Firebase config files and real Zalo app credentials before production testing.
+This repository contains an internal-test MVP. Firestore rules are intentionally open for testing right now and must be locked before real salon/customer usage.
