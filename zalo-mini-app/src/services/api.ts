@@ -10,7 +10,7 @@ import {
   setDoc,
   where,
 } from "firebase/firestore";
-import { callWriteFunctionOrFallback } from "./functionWrites";
+import { callFunctionOrFallback, callWriteFunctionOrFallback } from "./functionWrites";
 import { callFunction, getFirebaseDb, getFunctionWriteMode, isFirebaseConfigured } from "./firebase";
 import {
   AppSession,
@@ -36,6 +36,27 @@ type RegisterCustomerFunctionResult = {
   customerId: string;
   sessionId: string;
   points: number;
+};
+
+type CustomerHistoryFunctionResult = {
+  records: Array<{
+    id: string;
+    createdAtMs: number | null;
+    staffName: string;
+    note: string;
+    photoUrls: string[];
+    pointsAdded: number;
+  }>;
+};
+
+type CustomerRewardsFunctionResult = {
+  rewards: Array<{
+    id: string;
+    rewardName: string;
+    rewardCode: string;
+    status: Reward["status"];
+    createdAtMs: number | null;
+  }>;
 };
 
 export async function registerCustomer(input: RegisterInput): Promise<AppSession> {
@@ -233,6 +254,34 @@ async function spinWheelDirect(session: AppSession): Promise<SpinResult> {
 }
 
 export async function getHaircutHistory(session: AppSession): Promise<HaircutRecord[]> {
+  return callFunctionOrFallback<
+    { salonId: string; zaloUserId: string; limit: number },
+    CustomerHistoryFunctionResult | HaircutRecord[]
+  >(
+    "getCustomerHistoryFromZalo",
+    {
+      salonId: session.qr.salonId,
+      zaloUserId: session.zaloUserId,
+      limit: 20,
+    },
+    () => getHaircutHistoryDirect(session),
+  ).then((result) => {
+    if (Array.isArray(result)) {
+      return result;
+    }
+
+    return result.records.map((record) => ({
+      id: record.id,
+      createdAt: formatDate(record.createdAtMs),
+      staffName: record.staffName || "",
+      note: record.note || "",
+      photoUrls: Array.isArray(record.photoUrls) ? record.photoUrls : [],
+      pointsAdded: Number(record.pointsAdded ?? 0),
+    }));
+  });
+}
+
+async function getHaircutHistoryDirect(session: AppSession): Promise<HaircutRecord[]> {
   if (!isFirebaseConfigured()) {
     return [
       {
@@ -262,18 +311,23 @@ export async function getHaircutHistory(session: AppSession): Promise<HaircutRec
   return snap.docs
     .map((item) => {
       const data = item.data();
+      const createdAtMs = toMillis(data.createdAt);
 
       return {
-        id: item.id,
-        createdAt: formatDate(toMillis(data.createdAt)),
-        staffName: data.staffName || "",
-        note: data.note || "",
-        photoUrls: Array.isArray(data.photoUrls) ? data.photoUrls : [],
-        pointsAdded: Number(data.pointsAdded ?? 0),
+        createdAtMs,
+        record: {
+          id: item.id,
+          createdAt: formatDate(createdAtMs),
+          staffName: data.staffName || "",
+          note: data.note || "",
+          photoUrls: Array.isArray(data.photoUrls) ? data.photoUrls : [],
+          pointsAdded: Number(data.pointsAdded ?? 0),
+        },
       };
     })
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .slice(0, 20);
+    .sort((a, b) => Number(b.createdAtMs ?? 0) - Number(a.createdAtMs ?? 0))
+    .slice(0, 20)
+    .map((item) => item.record);
 }
 
 export async function getCustomerWheelConfig(salonId: string): Promise<LuckyWheelConfig> {
@@ -293,6 +347,33 @@ export async function getCustomerWheelConfig(salonId: string): Promise<LuckyWhee
 }
 
 export async function getRewards(session: AppSession): Promise<Reward[]> {
+  return callFunctionOrFallback<
+    { salonId: string; zaloUserId: string; limit: number },
+    CustomerRewardsFunctionResult | Reward[]
+  >(
+    "getCustomerRewardsFromZalo",
+    {
+      salonId: session.qr.salonId,
+      zaloUserId: session.zaloUserId,
+      limit: 20,
+    },
+    () => getRewardsDirect(session),
+  ).then((result) => {
+    if (Array.isArray(result)) {
+      return result;
+    }
+
+    return result.rewards.map((reward) => ({
+      id: reward.id,
+      rewardName: reward.rewardName || "",
+      rewardCode: reward.rewardCode || "",
+      status: normalizeRewardStatus(reward.status),
+      createdAt: formatDate(reward.createdAtMs),
+    }));
+  });
+}
+
+async function getRewardsDirect(session: AppSession): Promise<Reward[]> {
   if (!isFirebaseConfigured()) {
     return getMockRewards();
   }
@@ -313,16 +394,22 @@ export async function getRewards(session: AppSession): Promise<Reward[]> {
   return snap.docs
     .map((item) => {
       const data = item.data();
+      const createdAtMs = toMillis(data.createdAt);
 
       return {
-        id: item.id,
-        rewardName: data.rewardName || "",
-        rewardCode: data.rewardCode || "",
-        status: data.status || "unused",
-        createdAt: formatDate(toMillis(data.createdAt)),
+        createdAtMs,
+        reward: {
+          id: item.id,
+          rewardName: data.rewardName || "",
+          rewardCode: data.rewardCode || "",
+          status: normalizeRewardStatus(data.status),
+          createdAt: formatDate(createdAtMs),
+        },
       };
     })
-    .slice(0, 20);
+    .sort((a, b) => Number(b.createdAtMs ?? 0) - Number(a.createdAtMs ?? 0))
+    .slice(0, 20)
+    .map((item) => item.reward);
 }
 
 export function parseQrContext(): QrContext {
@@ -407,6 +494,14 @@ function getMockRewards(): Reward[] {
 function saveMockReward(reward: Reward) {
   const rewards = getMockRewards();
   localStorage.setItem("haircut_mock_rewards", JSON.stringify([reward, ...rewards]));
+}
+
+function normalizeRewardStatus(status: unknown): Reward["status"] {
+  if (status === "used" || status === "expired") {
+    return status;
+  }
+
+  return "unused";
 }
 
 function formatDate(value: number | null) {

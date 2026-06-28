@@ -1,6 +1,6 @@
 import { callFunction, getFunctionWriteMode, isFirebaseConfigured } from "./firebase";
 
-export async function callWriteFunctionOrFallback<TInput, TOutput>(
+export async function callFunctionOrFallback<TInput, TOutput>(
   name: string,
   payload: TInput,
   fallback: () => Promise<TOutput>,
@@ -22,7 +22,15 @@ export async function callWriteFunctionOrFallback<TInput, TOutput>(
       throw error;
     }
 
-    console.warn(`Cloud Function ${name} lỗi, dùng luồng Firestore trực tiếp để test nội bộ.`, error);
+    console.warn(`Cloud Function ${name} lỗi, dùng fallback để test nội bộ.`, error);
     return fallback();
   }
+}
+
+export async function callWriteFunctionOrFallback<TInput, TOutput>(
+  name: string,
+  payload: TInput,
+  fallback: () => Promise<TOutput>,
+): Promise<TOutput> {
+  return callFunctionOrFallback(name, payload, fallback);
 }

@@ -2,8 +2,8 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Bản nháp production. Chưa triển khai khi luồng xác thực khách/Zalo chưa xong.
-    // Web MVP hiện tại vẫn để trang khách ghi trực tiếp vào Firestore khi test nội bộ.
+    // Bản production mục tiêu cho VITE_FUNCTION_WRITE_MODE=required.
+    // Các thao tác ghi nghiệp vụ quan trọng phải đi qua Cloud Functions/Admin SDK.
     function signedIn() {
       return request.auth != null;
     }
@@ -41,43 +41,48 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    match /salons/{salonId} {
+      allow read: if isStaffOrOwner(salonId);
+      allow create, update, delete: if false;
+    }
+
+    match /mirrors/{mirrorId} {
+      allow read: if isStaffOrOwner(resource.data.salonId);
+      allow create, update, delete: if false;
+    }
+
     match /customers/{customerId} {
       allow read: if isStaffOrOwner(resource.data.salonId);
-      allow create: if true; // Cần thay bằng xác thực Zalo/custom token đã kiểm chứng.
-      allow update: if isOwner(resource.data.salonId);
-      allow delete: if isOwner(resource.data.salonId);
+      allow create, update, delete: if false;
     }
 
     match /chair_sessions/{sessionId} {
       allow read: if isStaffOrOwner(resource.data.salonId);
-      allow create: if true; // Cần thay bằng xác thực Zalo/custom token đã kiểm chứng.
-      allow update: if isStaffOrOwner(resource.data.salonId);
-      allow delete: if isOwner(resource.data.salonId);
+      allow create, update, delete: if false;
     }
 
     match /point_requests/{requestId} {
       allow read: if isStaffOrOwner(resource.data.salonId);
-      allow create: if isStaffOrOwner(request.resource.data.salonId);
-      allow update: if isOwner(resource.data.salonId);
-      allow delete: if isOwner(resource.data.salonId);
+      allow create, update, delete: if false;
     }
 
     match /haircut_records/{recordId} {
       allow read: if isStaffOrOwner(resource.data.salonId);
-      allow create: if isOwner(request.resource.data.salonId);
-      allow update, delete: if isOwner(resource.data.salonId);
+      allow create, update, delete: if false;
     }
 
     match /lucky_wheel/{salonId} {
       allow read: if true;
-      allow write: if isOwner(salonId);
+      allow create, update, delete: if false;
     }
 
     match /reward_history/{rewardId} {
       allow read: if isStaffOrOwner(resource.data.salonId);
-      allow create: if true; // Cần chuyển phát quà/quay thưởng sang Cloud Functions.
-      allow update: if isStaffOrOwner(resource.data.salonId);
-      allow delete: if isOwner(resource.data.salonId);
+      allow create, update, delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

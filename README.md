@@ -66,6 +66,14 @@ Chạy demo với Firebase Emulator:
 .\scripts\seed-demo.ps1
 ```
 
+Kiểm tra sẵn sàng production:
+
+```powershell
+.\scripts\check-production-readiness.ps1 -RunBuild -CheckLiveUrls
+```
+
+Chi tiết xem [docs/PRODUCTION_READINESS.md](docs/PRODUCTION_READINESS.md).
+
 Triển khai Firebase sau khi đăng nhập. MVP hiện tại chỉ nên triển khai Firestore + Hosting:
 
 ```powershell
