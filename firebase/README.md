@@ -16,7 +16,7 @@ npm install -g firebase-tools
 firebase login
 ```
 
-Install functions dependencies:
+Optional: install Functions dependencies only if you work on Cloud Functions:
 
 ```bash
 cd functions

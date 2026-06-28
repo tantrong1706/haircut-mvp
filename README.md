@@ -33,8 +33,8 @@ haircut-mvp/
 
 1. Test the current web MVP flow end to end.
 2. Configure lucky wheel in `/owner`.
-3. Add owner/staff authentication and role checks.
-4. Replace open Firestore test rules with production rules.
+3. Create Firebase Auth owner/staff accounts and `users/{uid}` role documents.
+4. Finish customer/Zalo auth, then replace open Firestore test rules with production rules.
 5. Create the real Zalo Mini App.
 6. Build the iOS owner/staff app later on Mac/Xcode.
 
