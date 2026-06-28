@@ -8,8 +8,20 @@ let auth: Auth | null = null;
 let db: Firestore | null = null;
 let functions: Functions | null = null;
 
+export type FunctionWriteMode = "direct" | "auto" | "required";
+
 export function isFirebaseConfigured() {
   return Boolean(import.meta.env.VITE_FIREBASE_API_KEY);
+}
+
+export function getFunctionWriteMode(): FunctionWriteMode {
+  const mode = String(import.meta.env.VITE_FUNCTION_WRITE_MODE || "direct").toLowerCase();
+
+  if (mode === "auto" || mode === "required") {
+    return mode;
+  }
+
+  return "direct";
 }
 
 export function getFirebaseApp() {

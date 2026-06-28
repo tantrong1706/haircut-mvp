@@ -2,6 +2,8 @@
 
 Các hàm dưới đây là callable HTTPS Functions, trừ khi có ghi chú khác.
 
+Web app có thể gọi các hàm ghi dữ liệu qua `VITE_FUNCTION_WRITE_MODE=auto|required`. Khi dùng `required`, client không fallback về ghi Firestore trực tiếp.
+
 ## createSalon
 
 Input:

@@ -29,14 +29,26 @@ haircut-mvp/
 - `zalo-mini-app`: app web hiện tại cho khách quét QR, nhân viên gửi yêu cầu, chủ salon duyệt điểm, cấu hình vòng quay và trang quyền riêng tư.
 - `ios-app`: mã nguồn SwiftUI cho app iOS tương lai. Muốn build thật cần Mac, Xcode và file `GoogleService-Info.plist`.
 
+## Chế độ ghi dữ liệu
+
+Web app hỗ trợ `VITE_FUNCTION_WRITE_MODE` trong `zalo-mini-app/.env`:
+
+- `direct`: MVP test nội bộ, client ghi Firestore trực tiếp.
+- `auto`: thử gọi Cloud Functions, nếu lỗi thì fallback về Firestore trực tiếp.
+- `required`: production, bắt buộc gọi Cloud Functions và không fallback.
+
+Khi chuẩn bị khóa Firestore rules, chuyển sang `required` và deploy Functions trước.
+
 ## Thứ tự làm tiếp
 
 1. Test trọn luồng web MVP.
 2. Cấu hình vòng quay trong `/owner`.
 3. Tạo tài khoản Firebase Auth cho chủ salon/nhân viên và tạo document `users/{uid}`.
-4. Hoàn thiện xác thực khách/Zalo rồi mới khóa Firestore rules.
-5. Tạo Zalo Mini App production.
-6. Build app iOS chủ salon/nhân viên trên Mac/Xcode sau.
+4. Deploy Cloud Functions và thử `VITE_FUNCTION_WRITE_MODE=auto`.
+5. Khi Functions ổn, đổi sang `VITE_FUNCTION_WRITE_MODE=required`.
+6. Hoàn thiện xác thực khách/Zalo rồi mới khóa Firestore rules.
+7. Tạo Zalo Mini App production.
+8. Build app iOS chủ salon/nhân viên trên Mac/Xcode sau.
 
 ## Chạy trên Windows
 

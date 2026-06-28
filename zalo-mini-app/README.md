@@ -26,6 +26,22 @@ cp .env.example .env
 
 Điền Firebase web config vào `.env`.
 
+## Chế độ Cloud Functions
+
+Trong `.env` có biến:
+
+```text
+VITE_FUNCTION_WRITE_MODE=direct
+```
+
+Giá trị:
+
+- `direct`: dùng Firestore trực tiếp cho MVP test nội bộ.
+- `auto`: thử gọi Cloud Functions, nếu lỗi thì fallback về Firestore trực tiếp.
+- `required`: production, bắt buộc gọi Cloud Functions.
+
+Muốn khóa Firestore rules thì phải deploy Functions và đổi sang `required`.
+
 ## Quyền Zalo
 
 Nên dùng:

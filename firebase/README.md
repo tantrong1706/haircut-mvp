@@ -42,6 +42,12 @@ firebase deploy --only firestore:rules,firestore:indexes,hosting
 Không triển khai Storage nếu Firebase project chưa nâng Blaze.
 Không triển khai Functions nếu web app vẫn đang ghi Firestore trực tiếp.
 
+Khi chuyển web app sang `VITE_FUNCTION_WRITE_MODE=required`, cần deploy Functions:
+
+```powershell
+.\scripts\deploy-firebase.ps1 -IncludeFunctions
+```
+
 ## Demo bằng Emulator
 
 Terminal 1:

@@ -23,6 +23,7 @@
 
 - Hoàn thiện đăng nhập chủ salon/nhân viên.
 - Dùng `users/{uid}` để phân quyền.
+- Chuyển `VITE_FUNCTION_WRITE_MODE` từ `direct` sang `auto`, rồi sang `required`.
 - Hoàn thiện xác thực khách từ Zalo.
 - Chuyển các thao tác nhạy cảm sang Cloud Functions.
 - Khóa Firestore rules.

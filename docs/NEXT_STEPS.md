@@ -52,10 +52,22 @@
 1. Test full flow hiện có.
 2. Tạo Auth user cho chủ salon/nhân viên và `users/{uid}`.
 3. Test cấu hình vòng quay trong `/owner`.
-4. Hoàn thiện xác thực khách/Zalo.
-5. Khóa Firestore rules.
-6. Tạo chính sách quyền riêng tư production.
-7. Sau đó mới làm Zalo production và App Store.
+4. Deploy Cloud Functions và thử `VITE_FUNCTION_WRITE_MODE=auto`.
+5. Khi Functions ổn, đổi sang `VITE_FUNCTION_WRITE_MODE=required`.
+6. Hoàn thiện xác thực khách/Zalo.
+7. Khóa Firestore rules.
+8. Tạo chính sách quyền riêng tư production.
+9. Sau đó mới làm Zalo production và App Store.
+
+## Chế độ ghi dữ liệu
+
+`zalo-mini-app` đang hỗ trợ 3 mức:
+
+- `direct`: test nội bộ, client ghi Firestore trực tiếp.
+- `auto`: gọi Cloud Functions trước, lỗi thì fallback về direct.
+- `required`: production, chỉ dùng Cloud Functions.
+
+Không dùng `required` nếu Functions chưa deploy.
 
 ## Đăng nhập
 

@@ -425,6 +425,8 @@ export const submitPointRequest = onCall(functionOptions, async (request) => {
   const salonId = requireString(request.data?.salonId, "salonId");
   const sessionId = requireString(request.data?.sessionId, "sessionId");
   const note = optionalString(request.data?.note) ?? "";
+  const user = await assertSalonRole(uid, salonId, ["owner", "staff"]);
+  const staffName = optionalString(request.data?.staffName) ?? user.name;
   const pointsRequested = requirePositiveNumber(
     request.data?.pointsRequested ?? 1,
     "pointsRequested",
@@ -432,8 +434,6 @@ export const submitPointRequest = onCall(functionOptions, async (request) => {
   const photoUrls = Array.isArray(request.data?.photoUrls)
     ? request.data.photoUrls.filter((url: unknown) => typeof url === "string")
     : [];
-
-  await assertSalonRole(uid, salonId, ["owner", "staff"]);
 
   const sessionSnap = await db.collection("chair_sessions").doc(sessionId).get();
   if (!sessionSnap.exists || sessionSnap.data()?.salonId !== salonId) {
@@ -449,9 +449,11 @@ export const submitPointRequest = onCall(functionOptions, async (request) => {
     sessionId,
     customerId: session?.customerId,
     staffId: uid,
+    staffName,
     note,
     photoUrls,
     pointsRequested,
+    pointsAdded: pointsRequested,
     status: "pending",
     createdAt: now,
     updatedAt: now,
@@ -490,9 +492,14 @@ export const approvePointRequest = onCall(functionOptions, async (request) => {
     const customerRef = db.collection("customers").doc(pointRequest.customerId);
     const recordRef = db.collection("haircut_records").doc();
     const sessionRef = db.collection("chair_sessions").doc(pointRequest.sessionId);
+    const pointsAdded = Number(pointRequest.pointsRequested ?? pointRequest.pointsAdded ?? 1);
+
+    if (!Number.isFinite(pointsAdded) || pointsAdded <= 0) {
+      throw new HttpsError("failed-precondition", "Số điểm cộng không hợp lệ");
+    }
 
     tx.update(customerRef, {
-      points: FieldValue.increment(pointRequest.pointsRequested),
+      points: FieldValue.increment(pointsAdded),
       lastVisitAt: now,
       updatedAt: now,
     });
@@ -505,10 +512,11 @@ export const approvePointRequest = onCall(functionOptions, async (request) => {
       salonId,
       customerId: pointRequest.customerId,
       staffId: pointRequest.staffId,
+      staffName: pointRequest.staffName ?? "",
       pointRequestId: requestId,
       note: pointRequest.note ?? "",
       photoUrls: pointRequest.photoUrls ?? [],
-      pointsAdded: pointRequest.pointsRequested,
+      pointsAdded,
       approvedBy: uid,
       createdAt: now,
     });

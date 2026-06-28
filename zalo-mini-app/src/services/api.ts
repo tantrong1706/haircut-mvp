@@ -10,7 +10,8 @@ import {
   setDoc,
   where,
 } from "firebase/firestore";
-import { getFirebaseDb, isFirebaseConfigured } from "./firebase";
+import { callWriteFunctionOrFallback } from "./functionWrites";
+import { callFunction, getFirebaseDb, getFunctionWriteMode, isFirebaseConfigured } from "./firebase";
 import {
   AppSession,
   HaircutRecord,
@@ -31,7 +32,39 @@ type RegisterInput = QrContext & {
   allowPhoto: boolean;
 };
 
+type RegisterCustomerFunctionResult = {
+  customerId: string;
+  sessionId: string;
+  points: number;
+};
+
 export async function registerCustomer(input: RegisterInput): Promise<AppSession> {
+  const mode = getFunctionWriteMode();
+
+  if (mode !== "direct") {
+    try {
+      const result = await callFunction<RegisterInput, RegisterCustomerFunctionResult>(
+        "registerCustomerFromZalo",
+        input,
+      );
+
+      return buildSessionFromRegisterResult(input, result);
+    } catch (error) {
+      if (mode === "required") {
+        throw error;
+      }
+
+      console.warn(
+        "Cloud Function registerCustomerFromZalo lỗi, dùng luồng Firestore trực tiếp để test nội bộ.",
+        error,
+      );
+    }
+  }
+
+  return registerCustomerDirect(input);
+}
+
+async function registerCustomerDirect(input: RegisterInput): Promise<AppSession> {
   if (!isFirebaseConfigured()) {
     return mockRegisterCustomer(input);
   }
@@ -96,6 +129,17 @@ export async function registerCustomer(input: RegisterInput): Promise<AppSession
 }
 
 export async function spinWheel(session: AppSession): Promise<SpinResult> {
+  return callWriteFunctionOrFallback(
+    "spinLuckyWheel",
+    {
+      salonId: session.qr.salonId,
+      customerId: session.customer.customerId,
+    },
+    () => spinWheelDirect(session),
+  );
+}
+
+async function spinWheelDirect(session: AppSession): Promise<SpinResult> {
   if (!isFirebaseConfigured()) {
     const pointsAfter = Math.max(
       0,
@@ -323,6 +367,30 @@ function mockRegisterCustomer(input: RegisterInput): AppSession {
       name: input.name,
       phoneLast4: input.phone?.slice(-4) || "1234",
       points,
+      allowPhoto: input.allowPhoto,
+    },
+  };
+}
+
+function buildSessionFromRegisterResult(
+  input: RegisterInput,
+  result: RegisterCustomerFunctionResult,
+): AppSession {
+  const phoneDigits = normalizePhone(input.phone);
+
+  return {
+    qr: {
+      salonId: input.salonId,
+      mirrorId: input.mirrorId,
+      qrToken: input.qrToken,
+    },
+    sessionId: result.sessionId,
+    zaloUserId: input.zaloUserId,
+    customer: {
+      customerId: result.customerId,
+      name: input.name || "Khách hàng",
+      phoneLast4: phoneDigits ? phoneDigits.slice(-4) : input.phone?.slice(-4) || "",
+      points: Number(result.points ?? 0),
       allowPhoto: input.allowPhoto,
     },
   };

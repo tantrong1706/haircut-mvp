@@ -13,6 +13,7 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
+import { callWriteFunctionOrFallback } from "./functionWrites";
 import { getFirebaseDb, isFirebaseConfigured } from "./firebase";
 import { LuckyWheelConfig, defaultLuckyWheelConfig } from "./types";
 import { normalizeLuckyWheelConfig } from "./wheel";
@@ -119,6 +120,26 @@ export async function submitPointRequest(input: {
   staffName: string;
   note: string;
 }) {
+  return callWriteFunctionOrFallback(
+    "submitPointRequest",
+    {
+      salonId: input.salonId,
+      sessionId: input.session.id,
+      staffName: input.staffName,
+      note: input.note,
+      photoUrls: [],
+      pointsRequested: 1,
+    },
+    () => submitPointRequestDirect(input),
+  );
+}
+
+async function submitPointRequestDirect(input: {
+  salonId: string;
+  session: StaffSession;
+  staffName: string;
+  note: string;
+}) {
   const db = getFirebaseDb();
 
   if (!isFirebaseConfigured() || !db) {
@@ -143,6 +164,17 @@ export async function submitPointRequest(input: {
 }
 
 export async function approvePointRequest(request: PointRequest) {
+  return callWriteFunctionOrFallback(
+    "approvePointRequest",
+    {
+      salonId: request.salonId,
+      requestId: request.id,
+    },
+    () => approvePointRequestDirect(request),
+  );
+}
+
+async function approvePointRequestDirect(request: PointRequest) {
   const db = getFirebaseDb();
 
   if (!isFirebaseConfigured() || !db) {
@@ -204,6 +236,18 @@ export async function approvePointRequest(request: PointRequest) {
 }
 
 export async function rejectPointRequest(request: PointRequest) {
+  return callWriteFunctionOrFallback(
+    "rejectPointRequest",
+    {
+      salonId: request.salonId,
+      requestId: request.id,
+      reason: "Chủ salon từ chối",
+    },
+    () => rejectPointRequestDirect(request),
+  );
+}
+
+async function rejectPointRequestDirect(request: PointRequest) {
   const db = getFirebaseDb();
 
   if (!isFirebaseConfigured() || !db) {
@@ -233,21 +277,34 @@ export async function getLuckyWheelConfig(salonId: string): Promise<LuckyWheelCo
 }
 
 export async function saveLuckyWheelConfig(salonId: string, config: LuckyWheelConfig) {
+  const normalized = normalizeLuckyWheelConfig(config);
+
+  return callWriteFunctionOrFallback(
+    "updateLuckyWheel",
+    {
+      salonId,
+      requiredPoints: normalized.requiredPoints,
+      deductPointsAfterSpin: normalized.deductPointsAfterSpin,
+      slots: normalized.slots,
+    },
+    () => saveLuckyWheelConfigDirect(salonId, normalized),
+  );
+}
+
+async function saveLuckyWheelConfigDirect(salonId: string, config: LuckyWheelConfig) {
   const db = getFirebaseDb();
 
   if (!isFirebaseConfigured() || !db) {
     return;
   }
 
-  const normalized = normalizeLuckyWheelConfig(config);
-
   await setDoc(
     doc(db, "lucky_wheel", salonId),
     {
       salonId,
-      requiredPoints: normalized.requiredPoints,
-      deductPointsAfterSpin: normalized.deductPointsAfterSpin,
-      slots: normalized.slots,
+      requiredPoints: config.requiredPoints,
+      deductPointsAfterSpin: config.deductPointsAfterSpin,
+      slots: config.slots,
       updatedAt: serverTimestamp(),
     },
     { merge: true },
@@ -292,7 +349,7 @@ function mapPointRequest(docSnap: QueryDocumentSnapshot<DocumentData>): PointReq
     customerId: String(data.customerId || ""),
     staffName: String(data.staffName || ""),
     note: String(data.note || ""),
-    pointsAdded: Number(data.pointsAdded ?? 1),
+    pointsAdded: Number(data.pointsAdded ?? data.pointsRequested ?? 1),
     status: normalizeRequestStatus(data.status),
     createdAtMs: toMillis(data.createdAt),
   };
