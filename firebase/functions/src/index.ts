@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { initializeApp } from "firebase-admin/app";
 import {
+  AggregateField,
   FieldValue,
   Timestamp,
   getFirestore,
@@ -118,9 +119,12 @@ function randomToken(bytes = 20): string {
   return randomBytes(bytes).toString("hex");
 }
 
-function rewardCode(): string {
-  const value = Math.floor(1000 + Math.random() * 9000);
-  return `HC-${value}`;
+function rewardCode(seed?: string): string {
+  const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  const suffix = seed
+    ? createHash("sha256").update(seed).digest("hex").slice(0, 8).toUpperCase()
+    : randomBytes(4).toString("hex").toUpperCase();
+  return `HC-${date}-${suffix}`;
 }
 
 function miniAppUrl(salonId: string, mirrorId: string, qrToken: string): string {
@@ -131,6 +135,18 @@ function miniAppUrl(salonId: string, mirrorId: string, qrToken: string): string 
 
 function timestampMillis(value: unknown): number | null {
   return value instanceof Timestamp ? value.toMillis() : null;
+}
+
+function startOfTodayBangkokMs(): number {
+  const offsetMs = 7 * 60 * 60 * 1000;
+  const now = new Date();
+  const bangkokNow = new Date(now.getTime() + offsetMs);
+  const startUtcMs = Date.UTC(
+    bangkokNow.getUTCFullYear(),
+    bangkokNow.getUTCMonth(),
+    bangkokNow.getUTCDate(),
+  );
+  return startUtcMs - offsetMs;
 }
 
 async function spinWheelForCustomer(
@@ -175,7 +191,7 @@ async function spinWheelForCustomer(
 
     selectedIndex = Math.floor(Math.random() * activeSlots.length);
     selectedReward = activeSlots[selectedIndex].label;
-    selectedCode = rewardCode();
+    selectedCode = rewardCode(rewardRef.id);
     const deductPoints = Boolean(wheel?.deductPointsAfterSpin);
     pointsAfter = deductPoints ? points - requiredPoints : points;
 
@@ -510,6 +526,7 @@ export const approvePointRequest = onCall(functionOptions, async (request) => {
     tx.update(requestRef, {
       status: "approved",
       approvedBy: uid,
+      approvedAt: now,
       updatedAt: now,
     });
     tx.set(recordRef, {
@@ -556,6 +573,58 @@ export const rejectPointRequest = onCall(functionOptions, async (request) => {
   return { ok: true };
 });
 
+export const getOwnerOverview = onCall(functionOptions, async (request) => {
+  const uid = currentUid(request.auth);
+  const salonId = requireString(request.data?.salonId, "salonId");
+  await assertSalonRole(uid, salonId, ["owner"]);
+
+  const startOfToday = Timestamp.fromMillis(startOfTodayBangkokMs());
+  const [
+    customersTodaySnap,
+    pendingRequestsSnap,
+    approvedPointsSnap,
+    spinsTodaySnap,
+    unusedRewardsSnap,
+  ] = await Promise.all([
+    db.collection("chair_sessions")
+      .where("salonId", "==", salonId)
+      .where("createdAt", ">=", startOfToday)
+      .count()
+      .get(),
+    db.collection("point_requests")
+      .where("salonId", "==", salonId)
+      .where("status", "==", "pending")
+      .count()
+      .get(),
+    db.collection("point_requests")
+      .where("salonId", "==", salonId)
+      .where("status", "==", "approved")
+      .where("approvedAt", ">=", startOfToday)
+      .aggregate({
+        total: AggregateField.sum("pointsAdded"),
+      })
+      .get(),
+    db.collection("reward_history")
+      .where("salonId", "==", salonId)
+      .where("createdAt", ">=", startOfToday)
+      .count()
+      .get(),
+    db.collection("reward_history")
+      .where("salonId", "==", salonId)
+      .where("status", "==", "unused")
+      .count()
+      .get(),
+  ]);
+
+  return {
+    customersToday: customersTodaySnap.data().count,
+    pendingRequests: pendingRequestsSnap.data().count,
+    pointsApprovedToday: Number(approvedPointsSnap.data().total ?? 0),
+    spinsToday: spinsTodaySnap.data().count,
+    unusedRewards: unusedRewardsSnap.data().count,
+  };
+});
+
 export const updateLuckyWheel = onCall(functionOptions, async (request) => {
   const uid = currentUid(request.auth);
   const salonId = requireString(request.data?.salonId, "salonId");
@@ -599,8 +668,10 @@ export const updateLuckyWheel = onCall(functionOptions, async (request) => {
 });
 
 export const spinLuckyWheel = onCall(functionOptions, async (request) => {
+  const uid = currentUid(request.auth);
   const salonId = requireString(request.data?.salonId, "salonId");
   const customerId = requireString(request.data?.customerId, "customerId");
+  await assertSalonRole(uid, salonId, ["owner"]);
 
   return spinWheelForCustomer(salonId, customerId);
 });

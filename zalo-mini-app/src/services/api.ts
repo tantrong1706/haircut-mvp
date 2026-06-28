@@ -151,10 +151,10 @@ async function registerCustomerDirect(input: RegisterInput): Promise<AppSession>
 
 export async function spinWheel(session: AppSession): Promise<SpinResult> {
   return callWriteFunctionOrFallback(
-    "spinLuckyWheel",
+    "spinLuckyWheelFromZalo",
     {
       salonId: session.qr.salonId,
-      customerId: session.customer.customerId,
+      zaloUserId: session.zaloUserId,
     },
     () => spinWheelDirect(session),
   );
@@ -171,7 +171,7 @@ async function spinWheelDirect(session: AppSession): Promise<SpinResult> {
     const reward = {
       rewardId: `reward-${Date.now()}`,
       rewardName: activeSlots[selectedIndex]?.label || "Gội đầu miễn phí",
-      rewardCode: `HC-${Math.floor(1000 + Math.random() * 9000)}`,
+      rewardCode: makeRewardCode(),
       pointsAfter,
       selectedIndex,
     };
@@ -225,7 +225,7 @@ async function spinWheelDirect(session: AppSession): Promise<SpinResult> {
 
     const selectedIndex = Math.floor(Math.random() * activeSlots.length);
     const rewardName = activeSlots[selectedIndex].label;
-    const rewardCode = `HC-${Math.floor(1000 + Math.random() * 9000)}`;
+    const rewardCode = makeRewardCode();
     const pointsAfter = wheelConfig.deductPointsAfterSpin
       ? currentPoints - wheelConfig.requiredPoints
       : currentPoints;
@@ -500,6 +500,12 @@ function getMockRewards(): Reward[] {
 function saveMockReward(reward: Reward) {
   const rewards = getMockRewards();
   localStorage.setItem("haircut_mock_rewards", JSON.stringify([reward, ...rewards]));
+}
+
+function makeRewardCode() {
+  const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  const random = Math.random().toString(16).slice(2, 10).toUpperCase().padEnd(8, "0");
+  return `HC-${date}-${random}`;
 }
 
 function normalizeRewardStatus(status: unknown): Reward["status"] {

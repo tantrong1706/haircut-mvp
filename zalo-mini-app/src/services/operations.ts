@@ -14,7 +14,7 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
-import { callWriteFunctionOrFallback } from "./functionWrites";
+import { callFunctionOrFallback, callWriteFunctionOrFallback } from "./functionWrites";
 import { getFirebaseDb, isFirebaseConfigured } from "./firebase";
 import { LuckyWheelConfig, defaultLuckyWheelConfig } from "./types";
 import { normalizeLuckyWheelConfig } from "./wheel";
@@ -124,6 +124,14 @@ export function listenPendingPointRequests(
 }
 
 export async function getOwnerOverview(salonId: string): Promise<OwnerOverview> {
+  return callFunctionOrFallback<{ salonId: string }, OwnerOverview>(
+    "getOwnerOverview",
+    { salonId },
+    () => getOwnerOverviewDirect(salonId),
+  );
+}
+
+async function getOwnerOverviewDirect(salonId: string): Promise<OwnerOverview> {
   const db = getFirebaseDb();
 
   if (!isFirebaseConfigured() || !db) {
