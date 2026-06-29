@@ -13,6 +13,7 @@ import {
   UsersRound,
   XCircle,
 } from "lucide-react";
+import { RedeemRewardPanel } from "../components/RedeemRewardPanel";
 import {
   OwnerOverview,
   PointRequest,
@@ -27,7 +28,7 @@ import {
 import { AppUser } from "../services/auth";
 import { LuckyWheelConfig, defaultLuckyWheelConfig } from "../services/types";
 
-type OwnerTab = "overview" | "approvals" | "wheel";
+type OwnerTab = "overview" | "approvals" | "wheel" | "redeem";
 
 type Props = {
   currentUser: AppUser;
@@ -184,6 +185,13 @@ export function OwnerPage({ currentUser }: Props) {
           <SlidersHorizontal size={18} aria-hidden="true" />
           Vòng quay
         </button>
+        <button
+          className={activeTab === "redeem" ? "active" : ""}
+          onClick={() => setActiveTab("redeem")}
+        >
+          <TicketCheck size={18} aria-hidden="true" />
+          Đổi quà
+        </button>
       </div>
 
       {activeTab === "overview" ? (
@@ -195,13 +203,15 @@ export function OwnerPage({ currentUser }: Props) {
           onApprove={approve}
           onReject={reject}
         />
-      ) : (
+      ) : activeTab === "wheel" ? (
         <WheelConfigPanel
           config={wheelConfig}
           saving={savingWheel}
           onChange={setWheelConfig}
           onSave={saveWheel}
         />
+      ) : (
+        <RedeemRewardPanel salonId={salonId} />
       )}
 
       {message ? <p className="alert success">{message}</p> : null}

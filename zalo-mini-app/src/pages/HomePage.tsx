@@ -14,6 +14,7 @@ import { AppSession, TabKey } from "../services/types";
 type Props = {
   session: AppSession;
   onTabChange: (tab: TabKey) => void;
+  onResetSession: () => void;
 };
 
 const actions: Array<{
@@ -42,7 +43,7 @@ const actions: Array<{
   },
 ];
 
-export function HomePage({ session, onTabChange }: Props) {
+export function HomePage({ session, onTabChange, onResetSession }: Props) {
   const { customer } = session;
 
   return (
@@ -119,6 +120,10 @@ export function HomePage({ session, onTabChange }: Props) {
           </button>
         ))}
       </div>
+
+      <button className="secondary-button" type="button" onClick={onResetSession}>
+        Tạo lượt cắt mới trên thiết bị này
+      </button>
     </section>
   );
 }

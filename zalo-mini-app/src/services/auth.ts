@@ -15,6 +15,7 @@ export type AppUser = {
   name: string;
   role: AppRole;
   isActive: boolean;
+  canRedeemRewards?: boolean;
 };
 
 export function listenAuthState(onChange: (user: User | null) => void) {
@@ -74,6 +75,6 @@ export async function getAppUser(uid: string): Promise<AppUser | null> {
     name: String(data.name || ""),
     role,
     isActive: Boolean(data.isActive),
+    canRedeemRewards: Boolean(data.canRedeemRewards),
   };
 }
-

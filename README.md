@@ -73,6 +73,7 @@ Kiểm tra sẵn sàng production:
 ```
 
 Chi tiết xem [docs/PRODUCTION_READINESS.md](docs/PRODUCTION_READINESS.md).
+Checklist chạy thử salon thật xem [docs/SALON_PILOT_CHECKLIST.md](docs/SALON_PILOT_CHECKLIST.md).
 
 Triển khai Firebase sau khi đăng nhập. MVP hiện tại chỉ nên triển khai Firestore + Hosting:
 

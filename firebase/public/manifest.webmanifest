@@ -1,0 +1,19 @@
+{
+  "name": "HAIRCUT",
+  "short_name": "HAIRCUT",
+  "description": "Quản lý khách hàng, điểm thưởng và mã quà cho salon tóc.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f3f5f2",
+  "theme_color": "#13795b",
+  "lang": "vi",
+  "icons": [
+    {
+      "src": "/haircut-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

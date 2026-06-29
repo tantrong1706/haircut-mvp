@@ -6,6 +6,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  limit as firestoreLimit,
   onSnapshot,
   query,
   runTransaction,
@@ -57,6 +58,13 @@ export type OwnerOverview = {
   pointsApprovedToday: number;
   spinsToday: number;
   unusedRewards: number;
+};
+
+export type RedeemRewardResult = {
+  rewardId: string;
+  rewardCode: string;
+  rewardName: string;
+  customerName?: string;
 };
 
 export function listenActiveSessions(
@@ -361,6 +369,84 @@ export async function saveLuckyWheelConfig(salonId: string, config: LuckyWheelCo
   );
 }
 
+export async function redeemRewardCode(input: {
+  salonId: string;
+  rewardCode: string;
+}): Promise<RedeemRewardResult> {
+  const rewardCode = normalizeRewardCode(input.rewardCode);
+
+  if (!rewardCode) {
+    throw new Error("Vui lòng nhập mã quà");
+  }
+
+  return callWriteFunctionOrFallback(
+    "redeemRewardCode",
+    {
+      salonId: input.salonId,
+      rewardCode,
+    },
+    () => redeemRewardCodeDirect(input.salonId, rewardCode),
+  ).then((result) => {
+    const maybeResult = result as Partial<RedeemRewardResult> | undefined;
+    return {
+      rewardId: maybeResult?.rewardId || "",
+      rewardCode,
+      rewardName: maybeResult?.rewardName || "",
+      customerName: maybeResult?.customerName || "",
+    };
+  });
+}
+
+async function redeemRewardCodeDirect(
+  salonId: string,
+  rewardCode: string,
+): Promise<RedeemRewardResult> {
+  const db = getFirebaseDb();
+
+  if (!isFirebaseConfigured() || !db) {
+    return {
+      rewardId: "mock-reward",
+      rewardCode,
+      rewardName: "Mã quà demo",
+      customerName: "Khách demo",
+    };
+  }
+
+  const rewardSnap = await getDocs(
+    query(
+      collection(db, "reward_history"),
+      where("salonId", "==", salonId),
+      where("rewardCode", "==", rewardCode),
+      firestoreLimit(1),
+    ),
+  );
+
+  if (rewardSnap.empty) {
+    throw new Error("Không tìm thấy mã quà");
+  }
+
+  const rewardDoc = rewardSnap.docs[0];
+  const reward = rewardDoc.data();
+
+  if (reward.status !== "unused") {
+    throw new Error("Mã quà đã được xử lý");
+  }
+
+  await updateDoc(rewardDoc.ref, {
+    status: "used",
+    usedAt: serverTimestamp(),
+  });
+
+  const customer = await getCustomer(String(reward.customerId || ""));
+
+  return {
+    rewardId: rewardDoc.id,
+    rewardCode,
+    rewardName: String(reward.rewardName || ""),
+    customerName: customer?.name,
+  };
+}
+
 async function saveLuckyWheelConfigDirect(salonId: string, config: LuckyWheelConfig) {
   const db = getFirebaseDb();
 
@@ -511,6 +597,10 @@ function toMillis(value: unknown): number | null {
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Có lỗi xảy ra";
+}
+
+function normalizeRewardCode(value: string) {
+  return value.trim().toUpperCase().replace(/\s+/g, "");
 }
 
 function mockSessions(): StaffSession[] {

@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Gift, History, House, Sparkles, type LucideIcon } from "lucide-react";
+import { InstallAppPrompt } from "./components/InstallAppPrompt";
 import { AuthGate } from "./pages/AuthGate";
 import { HistoryPage } from "./pages/HistoryPage";
 import { HomePage } from "./pages/HomePage";
@@ -9,6 +10,8 @@ import { RewardsPage } from "./pages/RewardsPage";
 import { ScanEntryPage } from "./pages/ScanEntryPage";
 import { StaffPage } from "./pages/StaffPage";
 import { WheelPage } from "./pages/WheelPage";
+import { parseQrContext } from "./services/api";
+import { clearSavedSession, loadSavedSession, saveSession } from "./services/sessionStore";
 import { AppSession, TabKey } from "./services/types";
 
 const tabs: Array<{ key: TabKey; label: string; Icon: LucideIcon }> = [
@@ -19,18 +22,50 @@ const tabs: Array<{ key: TabKey; label: string; Icon: LucideIcon }> = [
 ];
 
 export default function App() {
-  const [session, setSession] = useState<AppSession | null>(null);
+  const currentQr = useMemo(() => parseQrContext(), []);
+  const [session, setSession] = useState<AppSession | null>(() => loadSavedSession(currentQr));
   const [activeTab, setActiveTab] = useState<TabKey>("home");
+  const [isOnline, setIsOnline] = useState(() => navigator.onLine);
   const path = window.location.pathname;
+
+  useEffect(() => {
+    function updateOnlineState() {
+      setIsOnline(navigator.onLine);
+    }
+
+    window.addEventListener("online", updateOnlineState);
+    window.addEventListener("offline", updateOnlineState);
+    return () => {
+      window.removeEventListener("online", updateOnlineState);
+      window.removeEventListener("offline", updateOnlineState);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (session) {
+      saveSession(session);
+    } else {
+      clearSavedSession();
+    }
+  }, [session]);
+
+  function resetSession() {
+    setSession(null);
+    setActiveTab("home");
+  }
 
   if (path.startsWith("/staff")) {
     return (
       <div className="app-shell ops-shell">
+        {!isOnline ? (
+          <p className="offline-banner">Mất kết nối mạng. Dữ liệu mới sẽ gửi lại khi có mạng.</p>
+        ) : null}
         <main className="app-main wide-main">
           <AuthGate allowedRoles={["owner", "staff"]}>
             {(user) => <StaffPage currentUser={user} />}
           </AuthGate>
         </main>
+        <InstallAppPrompt />
       </div>
     );
   }
@@ -38,11 +73,15 @@ export default function App() {
   if (path.startsWith("/owner") || path.startsWith("/admin")) {
     return (
       <div className="app-shell ops-shell">
+        {!isOnline ? (
+          <p className="offline-banner">Mất kết nối mạng. Dữ liệu mới sẽ gửi lại khi có mạng.</p>
+        ) : null}
         <main className="app-main wide-main">
           <AuthGate allowedRoles={["owner"]}>
             {(user) => <OwnerPage currentUser={user} />}
           </AuthGate>
         </main>
+        <InstallAppPrompt />
       </div>
     );
   }
@@ -71,12 +110,16 @@ export default function App() {
     if (activeTab === "rewards") {
       return <RewardsPage session={session} />;
     }
-    return <HomePage session={session} onTabChange={setActiveTab} />;
+    return <HomePage session={session} onTabChange={setActiveTab} onResetSession={resetSession} />;
   }, [activeTab, session]);
 
   return (
     <div className="app-shell">
+      {!isOnline ? (
+        <p className="offline-banner">Mất kết nối mạng. Dữ liệu mới sẽ gửi lại khi có mạng.</p>
+      ) : null}
       <main className="app-main">{content}</main>
+      <InstallAppPrompt />
       {session ? (
         <nav className="bottom-nav" aria-label="Điều hướng">
           {tabs.map(({ key, label, Icon }) => (

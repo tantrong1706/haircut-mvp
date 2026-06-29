@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ClipboardPenLine, Clock3, Send, UserRoundCheck, UsersRound } from "lucide-react";
+import { RedeemRewardPanel } from "../components/RedeemRewardPanel";
 import {
   StaffSession,
   formatDateTime,
@@ -41,6 +42,7 @@ export function StaffPage({ currentUser }: Props) {
   const waitingCount = sessions.filter((session) => session.status === "waiting").length;
   const pendingApprovalCount = sessions.filter((session) => session.status === "serving").length;
   const isPendingApproval = selectedSession?.status === "serving";
+  const canRedeemRewards = currentUser.role === "owner" || currentUser.canRedeemRewards === true;
 
   useEffect(() => {
     return listenActiveSessions(
@@ -242,6 +244,8 @@ export function StaffPage({ currentUser }: Props) {
             </div>
           </div>
         ) : null}
+
+        {canRedeemRewards ? <RedeemRewardPanel salonId={salonId} /> : null}
 
         {message ? <p className="alert success">{message}</p> : null}
         {error ? <p className="alert error">{error}</p> : null}
