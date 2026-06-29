@@ -45,20 +45,18 @@ const actions: Array<{
 
 export function HomePage({ session, onTabChange, onResetSession }: Props) {
   const { customer } = session;
+  const status = session.sessionStatus || "waiting";
 
   return (
     <section className="page customer-home">
-      <header className="customer-hero">
+      <header className="customer-hero premium-hero">
         <div className="hero-topline">
           <BrandLogo />
           <span className="soft-chip">{mirrorLabel(session.qr.mirrorId)}</span>
         </div>
         <p className="eyebrow">Hồ sơ thành viên</p>
         <h1>Chào {customer.name}</h1>
-        <p className="muted">
-          Salon đã nhận hồ sơ của bạn. Sau khi cắt xong, nhân viên sẽ gửi yêu cầu cộng điểm
-          để chủ salon duyệt.
-        </p>
+        <p className="muted">{customerIntroText(status)}</p>
       </header>
 
       <div className="status-banner">
@@ -69,23 +67,23 @@ export function HomePage({ session, onTabChange, onResetSession }: Props) {
             <span>Hồ sơ của bạn đã được tạo cho lượt cắt này.</span>
           </div>
         </div>
-        <div className="status-step">
+        <div className={status === "serving" || status === "completed" ? "status-step done" : "status-step"}>
           <Hourglass size={20} aria-hidden="true" />
           <div>
-            <strong>Vui lòng chờ nhân viên xác nhận sau khi cắt</strong>
-            <span>Nhân viên sẽ ghi chú kiểu tóc và gửi yêu cầu cộng điểm.</span>
+            <strong>{staffStepTitle(status)}</strong>
+            <span>{staffStepDescription(status)}</span>
           </div>
         </div>
-        <div className="status-step">
+        <div className={status === "completed" ? "status-step done" : "status-step"}>
           <Gift size={20} aria-hidden="true" />
           <div>
-            <strong>Điểm được cộng sau khi chủ salon duyệt</strong>
-            <span>Bạn có thể quay thưởng khi đủ điểm tích lũy.</span>
+            <strong>{ownerStepTitle(status)}</strong>
+            <span>{ownerStepDescription(status)}</span>
           </div>
         </div>
       </div>
 
-      <div className="points-panel">
+      <div className="points-panel premium-points">
         <div>
           <span>Điểm tích lũy</span>
           <strong>{customer.points}</strong>
@@ -126,6 +124,47 @@ export function HomePage({ session, onTabChange, onResetSession }: Props) {
       </button>
     </section>
   );
+}
+
+function customerIntroText(status: AppSession["sessionStatus"]) {
+  if (status === "completed") {
+    return "Lượt cắt đã hoàn tất và điểm đã được cập nhật. Bạn có thể xem lịch sử, mã quà hoặc quay thưởng nếu đủ điểm.";
+  }
+  if (status === "serving") {
+    return "Nhân viên đã gửi yêu cầu cộng điểm. Vui lòng chờ chủ salon duyệt để điểm được cập nhật.";
+  }
+  return "Salon đã nhận hồ sơ của bạn. Sau khi cắt xong, nhân viên sẽ gửi yêu cầu cộng điểm để chủ salon duyệt.";
+}
+
+function staffStepTitle(status: AppSession["sessionStatus"]) {
+  if (status === "completed") {
+    return "Nhân viên đã ghi chú kiểu tóc";
+  }
+  if (status === "serving") {
+    return "Nhân viên đã gửi yêu cầu cộng điểm";
+  }
+  return "Vui lòng chờ nhân viên xác nhận sau khi cắt";
+}
+
+function staffStepDescription(status: AppSession["sessionStatus"]) {
+  if (status === "waiting") {
+    return "Nhân viên sẽ ghi chú kiểu tóc và gửi yêu cầu cộng điểm.";
+  }
+  return "Thông tin lượt cắt đã được gửi sang chủ salon để xử lý.";
+}
+
+function ownerStepTitle(status: AppSession["sessionStatus"]) {
+  if (status === "completed") {
+    return "Điểm đã được chủ salon duyệt";
+  }
+  return "Điểm được cộng sau khi chủ salon duyệt";
+}
+
+function ownerStepDescription(status: AppSession["sessionStatus"]) {
+  if (status === "completed") {
+    return "Bạn có thể xem lịch sử cắt tóc và dùng điểm để quay thưởng.";
+  }
+  return "Bạn có thể quay thưởng khi đủ điểm tích lũy.";
 }
 
 function mirrorLabel(mirrorId: string) {

@@ -774,16 +774,44 @@ export const redeemRewardCode = onCall(functionOptions, async (request) => {
   }
 
   const rewardRef = query.docs[0].ref;
-  const reward = query.docs[0].data();
-  if (reward.status !== "unused") {
-    throw new HttpsError("failed-precondition", "Mã quà đã được xử lý");
+  const now = Timestamp.now();
+
+  const result = await db.runTransaction(async (tx) => {
+    const rewardSnap = await tx.get(rewardRef);
+    const reward = rewardSnap.data();
+
+    if (!rewardSnap.exists || reward?.salonId !== salonId) {
+      throw new HttpsError("not-found", "Không tìm thấy mã quà");
+    }
+    if (reward.status !== "unused") {
+      throw new HttpsError("failed-precondition", "Mã quà đã được xử lý");
+    }
+
+    tx.set(rewardRef, {
+      status: "used",
+      usedAt: now,
+      usedBy: uid,
+      updatedAt: now,
+    }, { merge: true });
+
+    return {
+      rewardId: rewardSnap.id,
+      rewardCode: reward.rewardCode ?? rewardCodeInput,
+      rewardName: reward.rewardName ?? "",
+      customerId: reward.customerId ?? "",
+    };
+  });
+
+  let customerName = "";
+  if (result.customerId) {
+    const customerSnap = await db.collection("customers").doc(String(result.customerId)).get();
+    customerName = String(customerSnap.data()?.name ?? "");
   }
 
-  await rewardRef.set({
-    status: "used",
-    usedAt: Timestamp.now(),
-    usedBy: uid,
-  }, { merge: true });
-
-  return { ok: true };
+  return {
+    rewardId: result.rewardId,
+    rewardCode: result.rewardCode,
+    rewardName: result.rewardName,
+    customerName,
+  };
 });

@@ -4,6 +4,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  onSnapshot,
   query,
   runTransaction,
   serverTimestamp,
@@ -14,6 +15,7 @@ import { callFunctionOrFallback, callWriteFunctionOrFallback } from "./functionW
 import { callFunction, getFirebaseDb, getFunctionWriteMode, isFirebaseConfigured } from "./firebase";
 import {
   AppSession,
+  CustomerProfile,
   HaircutRecord,
   LuckyWheelConfig,
   QrContext,
@@ -58,6 +60,64 @@ type CustomerRewardsFunctionResult = {
     createdAtMs: number | null;
   }>;
 };
+
+export function listenSessionLiveUpdates(
+  session: AppSession,
+  onChange: (session: AppSession) => void,
+  onError?: (message: string) => void,
+) {
+  const db = getFirebaseDb();
+
+  if (!isFirebaseConfigured() || !db) {
+    return () => undefined;
+  }
+
+  let currentSession = session;
+
+  function emit(next: AppSession) {
+    currentSession = next;
+    onChange(next);
+  }
+
+  const unsubSession = onSnapshot(
+    doc(db, "chair_sessions", session.sessionId),
+    (snapshot) => {
+      if (!snapshot.exists()) {
+        return;
+      }
+
+      emit({
+        ...currentSession,
+        sessionStatus: normalizeSessionStatus(snapshot.data().status),
+      });
+    },
+    (error) => onError?.(error.message),
+  );
+
+  const unsubCustomer = onSnapshot(
+    doc(db, "customers", session.customer.customerId),
+    (snapshot) => {
+      if (!snapshot.exists()) {
+        return;
+      }
+
+      emit({
+        ...currentSession,
+        customer: mapCustomerProfile(
+          snapshot.id,
+          snapshot.data(),
+          currentSession.customer,
+        ),
+      });
+    },
+    (error) => onError?.(error.message),
+  );
+
+  return () => {
+    unsubSession();
+    unsubCustomer();
+  };
+}
 
 export async function registerCustomer(input: RegisterInput): Promise<AppSession> {
   const mode = getFunctionWriteMode();
@@ -139,6 +199,7 @@ async function registerCustomerDirect(input: RegisterInput): Promise<AppSession>
     },
     sessionId: sessionRef.id,
     zaloUserId: input.zaloUserId,
+    sessionStatus: "waiting",
     customer: {
       customerId,
       name: input.name || "Khách hàng",
@@ -455,6 +516,7 @@ function mockRegisterCustomer(input: RegisterInput): AppSession {
     },
     sessionId: "mock-session",
     zaloUserId: input.zaloUserId,
+    sessionStatus: "waiting",
     customer: {
       customerId: "mock-customer",
       name: input.name,
@@ -479,6 +541,7 @@ function buildSessionFromRegisterResult(
     },
     sessionId: result.sessionId,
     zaloUserId: input.zaloUserId,
+    sessionStatus: "waiting",
     customer: {
       customerId: result.customerId,
       name: input.name || "Khách hàng",
@@ -487,6 +550,28 @@ function buildSessionFromRegisterResult(
       allowPhoto: input.allowPhoto,
     },
   };
+}
+
+function mapCustomerProfile(
+  customerId: string,
+  data: Record<string, unknown>,
+  fallback: CustomerProfile,
+): CustomerProfile {
+  return {
+    customerId,
+    name: String(data.name || fallback.name || "Khách hàng"),
+    phoneLast4: String(data.phoneLast4 || fallback.phoneLast4 || ""),
+    points: Number(data.points ?? fallback.points ?? 0),
+    allowPhoto: Boolean(data.allowPhoto ?? fallback.allowPhoto),
+  };
+}
+
+function normalizeSessionStatus(value: unknown): AppSession["sessionStatus"] {
+  if (value === "serving" || value === "completed" || value === "cancelled") {
+    return value;
+  }
+
+  return "waiting";
 }
 
 function getMockRewards(): Reward[] {

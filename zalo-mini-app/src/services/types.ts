@@ -18,6 +18,7 @@ export type AppSession = {
   qr: QrContext;
   sessionId: string;
   zaloUserId: string;
+  sessionStatus?: "waiting" | "serving" | "completed" | "cancelled";
   customer: CustomerProfile;
 };
 

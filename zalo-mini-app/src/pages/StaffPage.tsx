@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ClipboardPenLine, Clock3, Send, UserRoundCheck, UsersRound } from "lucide-react";
 import { RedeemRewardPanel } from "../components/RedeemRewardPanel";
+import { BrandLogo } from "../components/BrandLogo";
 import {
   StaffSession,
   formatDateTime,
@@ -111,7 +112,11 @@ export function StaffPage({ currentUser }: Props) {
 
   return (
     <section className="ops-page">
-      <header className="page-header">
+      <header className="page-header premium-hero ops-hero">
+        <div className="hero-topline">
+          <BrandLogo />
+          <span className="soft-chip">Ca làm việc</span>
+        </div>
         <p className="eyebrow">Nhân viên</p>
         <h1>Khách đang chờ</h1>
         <p className="muted">Salon: {salonId}</p>
@@ -127,6 +132,24 @@ export function StaffPage({ currentUser }: Props) {
           <UserRoundCheck size={20} aria-hidden="true" />
           <span>Chờ chủ duyệt</span>
           <strong>{pendingApprovalCount}</strong>
+        </div>
+      </div>
+
+      <div className="flow-steps staff-flow">
+        <div className="flow-step">
+          <strong>1</strong>
+          <span>Chọn khách</span>
+          <small>Khách mới quét QR sẽ hiện trong danh sách.</small>
+        </div>
+        <div className="flow-step">
+          <strong>2</strong>
+          <span>Ghi chú kiểu tóc</span>
+          <small>Dùng nút ghi chú nhanh để thao tác nhanh hơn.</small>
+        </div>
+        <div className="flow-step">
+          <strong>3</strong>
+          <span>Gửi cộng điểm</span>
+          <small>Sau khi gửi, khách chuyển sang trạng thái chờ chủ duyệt.</small>
         </div>
       </div>
 

@@ -13,6 +13,7 @@ import {
   UsersRound,
   XCircle,
 } from "lucide-react";
+import { BrandLogo } from "../components/BrandLogo";
 import { RedeemRewardPanel } from "../components/RedeemRewardPanel";
 import {
   OwnerOverview,
@@ -144,7 +145,11 @@ export function OwnerPage({ currentUser }: Props) {
 
   return (
     <section className="ops-page">
-      <header className="page-header">
+      <header className="page-header premium-hero ops-hero">
+        <div className="hero-topline">
+          <BrandLogo />
+          <span className="soft-chip">Bảng điều hành</span>
+        </div>
         <p className="eyebrow">Chủ salon</p>
         <h1>Quản lý salon</h1>
         <p className="muted">Salon: {salonId}</p>
@@ -164,38 +169,39 @@ export function OwnerPage({ currentUser }: Props) {
       </div>
 
       <div className="segmented-control owner-tabs" aria-label="Chọn mục quản lý">
-        <button
-          className={activeTab === "overview" ? "active" : ""}
+        <OwnerTabButton
+          active={activeTab === "overview"}
+          icon={<BarChart3 size={18} />}
+          label="Tổng quan"
           onClick={() => setActiveTab("overview")}
-        >
-          <BarChart3 size={18} aria-hidden="true" />
-          Tổng quan
-        </button>
-        <button
-          className={activeTab === "approvals" ? "active" : ""}
+        />
+        <OwnerTabButton
+          active={activeTab === "approvals"}
+          icon={<ClipboardCheck size={18} />}
+          label="Duyệt điểm"
           onClick={() => setActiveTab("approvals")}
-        >
-          <ClipboardCheck size={18} aria-hidden="true" />
-          Duyệt điểm
-        </button>
-        <button
-          className={activeTab === "wheel" ? "active" : ""}
+        />
+        <OwnerTabButton
+          active={activeTab === "wheel"}
+          icon={<SlidersHorizontal size={18} />}
+          label="Vòng quay"
           onClick={() => setActiveTab("wheel")}
-        >
-          <SlidersHorizontal size={18} aria-hidden="true" />
-          Vòng quay
-        </button>
-        <button
-          className={activeTab === "redeem" ? "active" : ""}
+        />
+        <OwnerTabButton
+          active={activeTab === "redeem"}
+          icon={<TicketCheck size={18} />}
+          label="Đổi quà"
           onClick={() => setActiveTab("redeem")}
-        >
-          <TicketCheck size={18} aria-hidden="true" />
-          Đổi quà
-        </button>
+        />
       </div>
 
       {activeTab === "overview" ? (
-        <OverviewPanel overview={overview} loading={loadingOverview} onRefresh={refreshOverview} />
+        <OverviewPanel
+          overview={overview}
+          loading={loadingOverview}
+          onRefresh={refreshOverview}
+          onOpenTab={setActiveTab}
+        />
       ) : activeTab === "approvals" ? (
         <ApprovalsPanel
           requests={requests}
@@ -220,14 +226,35 @@ export function OwnerPage({ currentUser }: Props) {
   );
 }
 
+function OwnerTabButton({
+  active,
+  icon,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  icon: ReactNode;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button className={active ? "active" : ""} onClick={onClick}>
+      {icon}
+      {label}
+    </button>
+  );
+}
+
 function OverviewPanel({
   overview,
   loading,
   onRefresh,
+  onOpenTab,
 }: {
   overview: OwnerOverview | null;
   loading: boolean;
   onRefresh: () => void;
+  onOpenTab: (tab: OwnerTab) => void;
 }) {
   const data =
     overview ||
@@ -277,6 +304,38 @@ function OverviewPanel({
         <RefreshCcw size={18} aria-hidden="true" />
         {loading ? "Đang tải..." : "Làm mới tổng quan"}
       </button>
+
+      <div className="owner-next-actions">
+        <button type="button" onClick={() => onOpenTab("approvals")}>
+          <ClipboardCheck size={20} aria-hidden="true" />
+          <span>
+            <strong>Duyệt điểm</strong>
+            <small>
+              {data.pendingRequests > 0
+                ? `${data.pendingRequests} yêu cầu đang chờ`
+                : "Chưa có yêu cầu mới"}
+            </small>
+          </span>
+        </button>
+        <button type="button" onClick={() => onOpenTab("redeem")}>
+          <TicketCheck size={20} aria-hidden="true" />
+          <span>
+            <strong>Đổi mã quà</strong>
+            <small>
+              {data.unusedRewards > 0
+                ? `${data.unusedRewards} mã chưa dùng`
+                : "Sẵn sàng xác nhận mã mới"}
+            </small>
+          </span>
+        </button>
+        <button type="button" onClick={() => onOpenTab("wheel")}>
+          <SlidersHorizontal size={20} aria-hidden="true" />
+          <span>
+            <strong>Cấu hình vòng quay</strong>
+            <small>Đổi điểm quay và 6 ô thưởng</small>
+          </span>
+        </button>
+      </div>
     </div>
   );
 }
@@ -320,7 +379,7 @@ function ApprovalsPanel({
         </div>
       ) : (
         requests.map((request) => (
-          <article className="ops-card static-card" key={request.id}>
+          <article className="ops-card static-card approval-card" key={request.id}>
             <span className="ops-card-title">{request.customer?.name || "Khách hàng"}</span>
             <span>
               SĐT:{" "}

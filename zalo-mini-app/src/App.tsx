@@ -10,7 +10,7 @@ import { RewardsPage } from "./pages/RewardsPage";
 import { ScanEntryPage } from "./pages/ScanEntryPage";
 import { StaffPage } from "./pages/StaffPage";
 import { WheelPage } from "./pages/WheelPage";
-import { parseQrContext } from "./services/api";
+import { listenSessionLiveUpdates, parseQrContext } from "./services/api";
 import { clearSavedSession, loadSavedSession, saveSession } from "./services/sessionStore";
 import { AppSession, TabKey } from "./services/types";
 
@@ -48,6 +48,16 @@ export default function App() {
       clearSavedSession();
     }
   }, [session]);
+
+  useEffect(() => {
+    if (!session) {
+      return undefined;
+    }
+
+    return listenSessionLiveUpdates(session, setSession, (message) => {
+      console.warn("Không đồng bộ được phiên khách.", message);
+    });
+  }, [session?.sessionId]);
 
   function resetSession() {
     setSession(null);
