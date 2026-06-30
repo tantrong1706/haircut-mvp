@@ -1,7 +1,6 @@
 import {
   DocumentData,
   QueryDocumentSnapshot,
-  addDoc,
   collection,
   doc,
   getDoc,
@@ -19,6 +18,8 @@ import { callFunctionOrFallback, callWriteFunctionOrFallback } from "./functionW
 import { getFirebaseAuth, getFirebaseDb, isFirebaseConfigured } from "./firebase";
 import { LuckyWheelConfig, defaultLuckyWheelConfig } from "./types";
 import { normalizeLuckyWheelConfig } from "./wheel";
+
+const SESSION_POINT_REQUEST_WINDOW_MS = 12 * 60 * 60 * 1000;
 
 export type CustomerSummary = {
   id: string;
@@ -222,22 +223,58 @@ async function submitPointRequestDirect(input: {
   }
 
   const signedStaff = await getSignedStaffForDirectWrite();
+  const sessionRef = doc(db, "chair_sessions", input.session.id);
+  const requestRef = doc(db, "point_requests", input.session.id);
 
-  await addDoc(collection(db, "point_requests"), {
-    salonId: input.salonId,
-    customerId: input.session.customerId,
-    sessionId: input.session.id,
-    staffId: signedStaff.uid,
-    staffName: signedStaff.name,
-    note: input.note,
-    pointsAdded: 1,
-    status: "pending",
-    createdAt: serverTimestamp(),
-  });
+  await runTransaction(db, async (transaction) => {
+    const [sessionSnap, requestSnap] = await Promise.all([
+      transaction.get(sessionRef),
+      transaction.get(requestRef),
+    ]);
 
-  await updateDoc(doc(db, "chair_sessions", input.session.id), {
-    status: "serving",
-    updatedAt: serverTimestamp(),
+    if (!sessionSnap.exists()) {
+      throw new Error("Không tìm thấy phiên phục vụ");
+    }
+
+    const sessionData = sessionSnap.data();
+    const customerId = String(sessionData.customerId || "");
+    if (sessionData.salonId !== input.salonId || customerId !== input.session.customerId) {
+      throw new Error("Phiên phục vụ không thuộc đúng salon hoặc khách hàng");
+    }
+    if (sessionData.status !== "waiting") {
+      throw new Error("Phiên này đã được gửi yêu cầu điểm hoặc đã xử lý");
+    }
+    if (!isFreshServiceSession(sessionData.createdAt)) {
+      throw new Error("Phiên cắt đã quá thời gian cho phép cộng điểm");
+    }
+    if (requestSnap.exists()) {
+      throw new Error("Phiên này đã có yêu cầu cộng điểm");
+    }
+
+    const customerRef = doc(db, "customers", customerId);
+    const customerSnap = await transaction.get(customerRef);
+    if (!customerSnap.exists() || customerSnap.data().salonId !== input.salonId) {
+      throw new Error("Hồ sơ khách không thuộc salon này");
+    }
+
+    transaction.set(requestRef, {
+      salonId: input.salonId,
+      customerId,
+      sessionId: input.session.id,
+      staffId: signedStaff.uid,
+      staffName: signedStaff.name,
+      note: input.note,
+      pointsRequested: 1,
+      pointsAdded: 1,
+      status: "pending",
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+
+    transaction.set(sessionRef, {
+      status: "serving",
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
   });
 }
 
@@ -257,6 +294,18 @@ async function getSignedStaffForDirectWrite() {
     uid,
     name: name || "Nhân viên",
   };
+}
+
+function isFreshServiceSession(createdAt: unknown) {
+  const createdAtMs = toMillis(createdAt);
+
+  if (!createdAtMs) {
+    return false;
+  }
+
+  const nowMs = Date.now();
+  return createdAtMs <= nowMs + 5 * 60 * 1000 &&
+    nowMs - createdAtMs <= SESSION_POINT_REQUEST_WINDOW_MS;
 }
 
 export async function approvePointRequest(request: PointRequest) {

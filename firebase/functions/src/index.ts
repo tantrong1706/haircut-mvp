@@ -12,6 +12,7 @@ initializeApp();
 
 const db = getFirestore();
 const functionOptions = { region: "asia-southeast1" };
+const SESSION_POINT_REQUEST_WINDOW_MS = 12 * 60 * 60 * 1000;
 
 type UserRole = "owner" | "staff";
 
@@ -135,6 +136,18 @@ function miniAppUrl(salonId: string, mirrorId: string, qrToken: string): string 
 
 function timestampMillis(value: unknown): number | null {
   return value instanceof Timestamp ? value.toMillis() : null;
+}
+
+function isFreshServiceSession(createdAt: unknown, now: Timestamp): boolean {
+  const createdAtMs = timestampMillis(createdAt);
+
+  if (!createdAtMs) {
+    return false;
+  }
+
+  const nowMs = now.toMillis();
+  return createdAtMs <= nowMs + 5 * 60 * 1000 &&
+    nowMs - createdAtMs <= SESSION_POINT_REQUEST_WINDOW_MS;
 }
 
 function startOfTodayBangkokMs(): number {
@@ -447,42 +460,61 @@ export const submitPointRequest = onCall(functionOptions, async (request) => {
   const note = optionalString(request.data?.note) ?? "";
   const user = await assertSalonRole(uid, salonId, ["owner", "staff"]);
   const staffName = user.name || "Nhân viên";
-  const pointsRequested = requirePositiveNumber(
-    request.data?.pointsRequested ?? 1,
-    "pointsRequested",
-  );
+  const pointsRequested = 1;
   const photoUrls = Array.isArray(request.data?.photoUrls)
     ? request.data.photoUrls.filter((url: unknown) => typeof url === "string")
     : [];
-
-  const sessionSnap = await db.collection("chair_sessions").doc(sessionId).get();
-  if (!sessionSnap.exists || sessionSnap.data()?.salonId !== salonId) {
-    throw new HttpsError("not-found", "Không tìm thấy phiên phục vụ");
-  }
-
-  const session = sessionSnap.data();
   const now = Timestamp.now();
-  const requestRef = db.collection("point_requests").doc();
+  const sessionRef = db.collection("chair_sessions").doc(sessionId);
+  const requestRef = db.collection("point_requests").doc(sessionId);
 
-  await requestRef.set({
-    salonId,
-    sessionId,
-    customerId: session?.customerId,
-    staffId: uid,
-    staffName,
-    note,
-    photoUrls,
-    pointsRequested,
-    pointsAdded: pointsRequested,
-    status: "pending",
-    createdAt: now,
-    updatedAt: now,
+  await db.runTransaction(async (tx) => {
+    const [sessionSnap, existingRequestSnap] = await Promise.all([
+      tx.get(sessionRef),
+      tx.get(requestRef),
+    ]);
+
+    if (!sessionSnap.exists || sessionSnap.data()?.salonId !== salonId) {
+      throw new HttpsError("not-found", "Không tìm thấy phiên phục vụ");
+    }
+
+    const session = sessionSnap.data();
+    if (session?.status !== "waiting") {
+      throw new HttpsError("failed-precondition", "Phiên này đã được gửi yêu cầu điểm hoặc đã xử lý");
+    }
+    if (!isFreshServiceSession(session.createdAt, now)) {
+      throw new HttpsError("failed-precondition", "Phiên cắt đã quá thời gian cho phép cộng điểm");
+    }
+    if (existingRequestSnap.exists) {
+      throw new HttpsError("already-exists", "Phiên này đã có yêu cầu cộng điểm");
+    }
+
+    const customerRef = db.collection("customers").doc(String(session.customerId || ""));
+    const customerSnap = await tx.get(customerRef);
+    if (!customerSnap.exists || customerSnap.data()?.salonId !== salonId) {
+      throw new HttpsError("failed-precondition", "Hồ sơ khách không thuộc salon này");
+    }
+
+    tx.set(requestRef, {
+      salonId,
+      sessionId,
+      customerId: session.customerId,
+      staffId: uid,
+      staffName,
+      note,
+      photoUrls,
+      pointsRequested,
+      pointsAdded: pointsRequested,
+      status: "pending",
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    tx.set(sessionRef, {
+      status: "serving",
+      updatedAt: now,
+    }, { merge: true });
   });
-
-  await sessionSnap.ref.set({
-    status: "serving",
-    updatedAt: now,
-  }, { merge: true });
 
   return { requestId: requestRef.id };
 });
