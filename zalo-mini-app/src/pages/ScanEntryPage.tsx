@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Camera,
   CheckCircle2,
@@ -7,11 +7,12 @@ import {
   Scissors,
   ShieldCheck,
   Sparkles,
+  UserRound,
 } from "lucide-react";
 import { BrandLogo } from "../components/BrandLogo";
 import { buildRegisterInput, parseQrContext, registerCustomer } from "../services/api";
 import { AppSession } from "../services/types";
-import { getZaloIdentity } from "../services/zalo";
+import { ZaloIdentity, getZaloIdentity } from "../services/zalo";
 
 type Props = {
   onReady: (session: AppSession) => void;
@@ -20,17 +21,63 @@ type Props = {
 export function ScanEntryPage({ onReady }: Props) {
   const [allowPhoto, setAllowPhoto] = useState(false);
   const [phone, setPhone] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [identity, setIdentity] = useState<ZaloIdentity | null>(null);
+  const [loadingIdentity, setLoadingIdentity] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const nameTouchedRef = useRef(false);
   const qr = parseQrContext();
 
+  useEffect(() => {
+    let mounted = true;
+
+    getZaloIdentity()
+      .then((nextIdentity) => {
+        if (!mounted) {
+          return;
+        }
+
+        setIdentity(nextIdentity);
+        if (!nameTouchedRef.current) {
+          setDisplayName(normalizeDisplayName(nextIdentity.name));
+        }
+      })
+      .catch(() => {
+        if (mounted) {
+          setError("Không lấy được tên Zalo. Bạn có thể nhập tên hiển thị thủ công.");
+        }
+      })
+      .finally(() => {
+        if (mounted) {
+          setLoadingIdentity(false);
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   async function continueWithZalo() {
+    const confirmedName = normalizeDisplayName(displayName);
+
+    if (!confirmedName) {
+      setError("Vui lòng nhập tên hiển thị tại salon để nhân viên dễ nhận khách.");
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
-      const identity = await getZaloIdentity();
+      const confirmedIdentity = identity ?? (await getZaloIdentity());
       const session = await registerCustomer(
-        buildRegisterInput(qr, identity, allowPhoto, phone || undefined),
+        buildRegisterInput(
+          qr,
+          { ...confirmedIdentity, name: confirmedName },
+          allowPhoto,
+          phone || undefined,
+        ),
       );
       onReady(session);
     } catch (err) {
@@ -85,6 +132,23 @@ export function ScanEntryPage({ onReady }: Props) {
       <div className="panel form-panel">
         <label className="field">
           <span>
+            <UserRound size={18} aria-hidden="true" />
+            Tên hiển thị tại salon
+          </span>
+          <input
+            value={displayName}
+            onChange={(event) => {
+              nameTouchedRef.current = true;
+              setDisplayName(event.target.value);
+            }}
+            placeholder={loadingIdentity ? "Đang lấy tên Zalo..." : "Ví dụ: Anh Tân"}
+            disabled={loading}
+          />
+          <small>Mặc định lấy từ Zalo, bạn có thể sửa để nhân viên dễ gọi đúng tên.</small>
+        </label>
+
+        <label className="field">
+          <span>
             <Phone size={18} aria-hidden="true" />
             Số điện thoại
           </span>
@@ -110,7 +174,7 @@ export function ScanEntryPage({ onReady }: Props) {
 
       {error ? <p className="alert error">{error}</p> : null}
 
-      <button className="primary-button" disabled={loading} onClick={continueWithZalo}>
+      <button className="primary-button" disabled={loading || displayName.trim().length === 0} onClick={continueWithZalo}>
         {loading ? (
           "Đang xử lý..."
         ) : (
@@ -131,6 +195,10 @@ export function ScanEntryPage({ onReady }: Props) {
       </p>
     </section>
   );
+}
+
+function normalizeDisplayName(name: string) {
+  return name.replace(/\s+/g, " ").trim();
 }
 
 function Step({ number, title, text }: { number: string; title: string; text: string }) {
