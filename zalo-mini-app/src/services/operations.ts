@@ -68,6 +68,59 @@ export type RedeemRewardResult = {
   customerName?: string;
 };
 
+export type SalonMirror = {
+  id: string;
+  salonId: string;
+  name: string;
+  qrToken: string;
+  qrUrl: string;
+  isActive: boolean;
+  createdAtMs: number | null;
+};
+
+export type StaffProfile = {
+  uid: string;
+  salonId: string;
+  name: string;
+  phone: string;
+  role: "staff";
+  isActive: boolean;
+  canRedeemRewards: boolean;
+};
+
+export type CustomerRecordSummary = {
+  id: string;
+  staffName: string;
+  note: string;
+  pointsAdded: number;
+  createdAtMs: number | null;
+};
+
+export type CustomerRewardSummary = {
+  id: string;
+  rewardName: string;
+  rewardCode: string;
+  status: "unused" | "used" | "expired";
+  createdAtMs: number | null;
+};
+
+export type CustomerLookupResult = CustomerSummary & {
+  lastVisitAtMs: number | null;
+  recentRecords: CustomerRecordSummary[];
+  unusedRewards: CustomerRewardSummary[];
+};
+
+export type RewardCodeInfo = {
+  found: boolean;
+  rewardId?: string;
+  rewardCode: string;
+  rewardName?: string;
+  status: "unused" | "used" | "expired" | "not_found";
+  customerName?: string;
+  createdAtMs?: number | null;
+  usedAtMs?: number | null;
+};
+
 export function listenActiveSessions(
   salonId: string,
   onChange: (sessions: StaffSession[]) => void,
@@ -191,6 +244,139 @@ async function getOwnerOverviewDirect(salonId: string): Promise<OwnerOverview> {
     spinsToday,
     unusedRewards,
   };
+}
+
+export async function getMirrors(salonId: string): Promise<SalonMirror[]> {
+  const db = getFirebaseDb();
+
+  if (!isFirebaseConfigured() || !db) {
+    return mockMirrors(salonId);
+  }
+
+  const snap = await getDocs(query(collection(db, "mirrors"), where("salonId", "==", salonId)));
+  return snap.docs
+    .map(mapMirror)
+    .sort((a, b) => a.name.localeCompare(b.name, "vi"));
+}
+
+export async function createMirror(input: {
+  salonId: string;
+  name: string;
+}): Promise<SalonMirror> {
+  const name = input.name.trim();
+
+  if (!name) {
+    throw new Error("Vui lòng nhập tên gương/ghế");
+  }
+
+  return callWriteFunctionOrFallback(
+    "createMirror",
+    { salonId: input.salonId, name },
+    () => createMirrorDirect(input.salonId, name),
+  ).then((result) => normalizeMirrorResult(input.salonId, result));
+}
+
+export async function updateMirror(input: {
+  salonId: string;
+  mirrorId: string;
+  name?: string;
+  isActive?: boolean;
+  regenerateQr?: boolean;
+}): Promise<SalonMirror> {
+  return callWriteFunctionOrFallback(
+    "updateMirror",
+    input,
+    () => updateMirrorDirect(input),
+  ).then((result) => normalizeMirrorResult(input.salonId, result, input.mirrorId));
+}
+
+export async function getStaffProfiles(salonId: string): Promise<StaffProfile[]> {
+  return callFunctionOrFallback<{ salonId: string }, { staff: StaffProfile[] }>(
+    "listStaffProfiles",
+    { salonId },
+    () => getStaffProfilesDirect(salonId),
+  ).then((result) => result.staff.sort((a, b) => a.name.localeCompare(b.name, "vi")));
+}
+
+export async function createStaffProfile(input: {
+  salonId: string;
+  uid: string;
+  name: string;
+  phone?: string;
+  canRedeemRewards: boolean;
+}) {
+  const uid = input.uid.trim();
+  const name = input.name.trim();
+
+  if (!uid || !name) {
+    throw new Error("Vui lòng nhập UID và tên nhân viên");
+  }
+
+  return callWriteFunctionOrFallback(
+    "createStaffProfile",
+    {
+      salonId: input.salonId,
+      uid,
+      name,
+      phone: input.phone?.trim() || undefined,
+      canRedeemRewards: input.canRedeemRewards,
+    },
+    () => createStaffProfileDirect({
+      ...input,
+      uid,
+      name,
+      phone: input.phone?.trim() || "",
+    }),
+  );
+}
+
+export async function updateStaffProfile(input: {
+  salonId: string;
+  uid: string;
+  name?: string;
+  phone?: string;
+  isActive?: boolean;
+  canRedeemRewards?: boolean;
+}) {
+  return callWriteFunctionOrFallback(
+    "updateStaffProfile",
+    input,
+    () => updateStaffProfileDirect(input),
+  );
+}
+
+export async function searchSalonCustomers(input: {
+  salonId: string;
+  term: string;
+}): Promise<CustomerLookupResult[]> {
+  const term = input.term.trim();
+
+  if (term.length < 2) {
+    return [];
+  }
+
+  return callFunctionOrFallback<{ salonId: string; term: string }, { customers: CustomerLookupResult[] }>(
+    "searchSalonCustomers",
+    { salonId: input.salonId, term },
+    () => searchSalonCustomersDirect(input.salonId, term),
+  ).then((result) => result.customers);
+}
+
+export async function lookupRewardCode(input: {
+  salonId: string;
+  rewardCode: string;
+}): Promise<RewardCodeInfo> {
+  const rewardCode = normalizeRewardCode(input.rewardCode);
+
+  if (!rewardCode) {
+    throw new Error("Vui lòng nhập mã quà");
+  }
+
+  return callFunctionOrFallback<{ salonId: string; rewardCode: string }, RewardCodeInfo>(
+    "lookupRewardCode",
+    { salonId: input.salonId, rewardCode },
+    () => lookupRewardCodeDirect(input.salonId, rewardCode),
+  );
 }
 
 export async function submitPointRequest(input: {
@@ -534,6 +720,300 @@ async function saveLuckyWheelConfigDirect(salonId: string, config: LuckyWheelCon
   );
 }
 
+async function createMirrorDirect(salonId: string, name: string): Promise<SalonMirror> {
+  const db = getFirebaseDb();
+
+  if (!isFirebaseConfigured() || !db) {
+    return mockMirrors(salonId)[0];
+  }
+
+  const mirrorRef = doc(collection(db, "mirrors"));
+  const qrToken = randomToken();
+  const qrUrl = buildQrUrl(salonId, mirrorRef.id, qrToken);
+
+  await setDoc(mirrorRef, {
+    salonId,
+    name,
+    qrToken,
+    qrUrl,
+    isActive: true,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+
+  return {
+    id: mirrorRef.id,
+    salonId,
+    name,
+    qrToken,
+    qrUrl,
+    isActive: true,
+    createdAtMs: Date.now(),
+  };
+}
+
+async function updateMirrorDirect(input: {
+  salonId: string;
+  mirrorId: string;
+  name?: string;
+  isActive?: boolean;
+  regenerateQr?: boolean;
+}): Promise<SalonMirror> {
+  const db = getFirebaseDb();
+
+  if (!isFirebaseConfigured() || !db) {
+    return mockMirrors(input.salonId)[0];
+  }
+
+  const mirrorRef = doc(db, "mirrors", input.mirrorId);
+  const snap = await getDoc(mirrorRef);
+
+  if (!snap.exists() || snap.data().salonId !== input.salonId) {
+    throw new Error("Không tìm thấy gương/ghế");
+  }
+
+  const payload: Record<string, unknown> = {
+    updatedAt: serverTimestamp(),
+  };
+
+  if (input.name?.trim()) {
+    payload.name = input.name.trim();
+  }
+  if (typeof input.isActive === "boolean") {
+    payload.isActive = input.isActive;
+  }
+  if (input.regenerateQr) {
+    const qrToken = randomToken();
+    payload.qrToken = qrToken;
+    payload.qrUrl = buildQrUrl(input.salonId, input.mirrorId, qrToken);
+  }
+
+  await setDoc(mirrorRef, payload, { merge: true });
+  const updatedSnap = await getDoc(mirrorRef);
+  return mapMirror(updatedSnap as QueryDocumentSnapshot<DocumentData>);
+}
+
+async function getStaffProfilesDirect(salonId: string): Promise<{ staff: StaffProfile[] }> {
+  const db = getFirebaseDb();
+
+  if (!isFirebaseConfigured() || !db) {
+    return {
+      staff: [
+        {
+          uid: "demo-staff",
+          salonId,
+          name: "Nhân viên demo",
+          phone: "",
+          role: "staff",
+          isActive: true,
+          canRedeemRewards: true,
+        },
+      ],
+    };
+  }
+
+  const snap = await getDocs(query(collection(db, "users"), where("salonId", "==", salonId)));
+
+  return {
+    staff: snap.docs
+      .map(mapStaffProfile)
+      .filter((staff): staff is StaffProfile => Boolean(staff)),
+  };
+}
+
+async function createStaffProfileDirect(input: {
+  salonId: string;
+  uid: string;
+  name: string;
+  phone?: string;
+  canRedeemRewards: boolean;
+}) {
+  const db = getFirebaseDb();
+
+  if (!isFirebaseConfigured() || !db) {
+    return;
+  }
+
+  await setDoc(doc(db, "users", input.uid), {
+    salonId: input.salonId,
+    name: input.name,
+    phone: input.phone || "",
+    role: "staff",
+    isActive: true,
+    canRedeemRewards: input.canRedeemRewards,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  }, { merge: true });
+}
+
+async function updateStaffProfileDirect(input: {
+  salonId: string;
+  uid: string;
+  name?: string;
+  phone?: string;
+  isActive?: boolean;
+  canRedeemRewards?: boolean;
+}) {
+  const db = getFirebaseDb();
+
+  if (!isFirebaseConfigured() || !db) {
+    return;
+  }
+
+  const staffRef = doc(db, "users", input.uid);
+  const snap = await getDoc(staffRef);
+
+  if (!snap.exists() || snap.data().salonId !== input.salonId || snap.data().role !== "staff") {
+    throw new Error("Không tìm thấy nhân viên");
+  }
+
+  const payload: Record<string, unknown> = {
+    updatedAt: serverTimestamp(),
+  };
+
+  if (input.name?.trim()) {
+    payload.name = input.name.trim();
+  }
+  if (input.phone !== undefined) {
+    payload.phone = input.phone.trim();
+  }
+  if (typeof input.isActive === "boolean") {
+    payload.isActive = input.isActive;
+  }
+  if (typeof input.canRedeemRewards === "boolean") {
+    payload.canRedeemRewards = input.canRedeemRewards;
+  }
+
+  await setDoc(staffRef, payload, { merge: true });
+}
+
+async function searchSalonCustomersDirect(
+  salonId: string,
+  term: string,
+): Promise<{ customers: CustomerLookupResult[] }> {
+  const db = getFirebaseDb();
+
+  if (!isFirebaseConfigured() || !db) {
+    return { customers: [] };
+  }
+
+  const normalized = term.toLowerCase();
+  const snap = await getDocs(query(collection(db, "customers"), where("salonId", "==", salonId)));
+  const customers = snap.docs
+    .map((docSnap) => {
+      const data = docSnap.data();
+      return {
+        id: docSnap.id,
+        name: String(data.name || "Khách hàng"),
+        phoneLast4: String(data.phoneLast4 || ""),
+        points: Number(data.points ?? 0),
+        allowPhoto: Boolean(data.allowPhoto),
+        lastVisitAtMs: toMillis(data.lastVisitAt),
+        recentRecords: [],
+        unusedRewards: [],
+      } satisfies CustomerLookupResult;
+    })
+    .filter((customer) =>
+      customer.name.toLowerCase().includes(normalized) ||
+      customer.phoneLast4.includes(normalized),
+    )
+    .slice(0, 20);
+
+  return {
+    customers: await Promise.all(customers.map((customer) => attachCustomerInsight(salonId, customer))),
+  };
+}
+
+async function attachCustomerInsight(
+  salonId: string,
+  customer: CustomerLookupResult,
+): Promise<CustomerLookupResult> {
+  const db = getFirebaseDb();
+
+  if (!db) {
+    return customer;
+  }
+
+  const [recordsSnap, rewardsSnap] = await Promise.all([
+    getDocs(
+      query(
+        collection(db, "haircut_records"),
+        where("salonId", "==", salonId),
+        where("customerId", "==", customer.id),
+      ),
+    ),
+    getDocs(
+      query(
+        collection(db, "reward_history"),
+        where("salonId", "==", salonId),
+        where("customerId", "==", customer.id),
+      ),
+    ),
+  ]);
+
+  return {
+    ...customer,
+    recentRecords: recordsSnap.docs
+      .map(mapCustomerRecordSummary)
+      .sort((a, b) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0))
+      .slice(0, 5),
+    unusedRewards: rewardsSnap.docs
+      .map(mapCustomerRewardSummary)
+      .filter((reward) => reward.status === "unused")
+      .sort((a, b) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0)),
+  };
+}
+
+async function lookupRewardCodeDirect(
+  salonId: string,
+  rewardCode: string,
+): Promise<RewardCodeInfo> {
+  const db = getFirebaseDb();
+
+  if (!isFirebaseConfigured() || !db) {
+    return {
+      found: true,
+      rewardCode,
+      rewardName: "Mã quà demo",
+      status: "unused",
+      customerName: "Khách demo",
+      createdAtMs: Date.now(),
+    };
+  }
+
+  const snap = await getDocs(
+    query(
+      collection(db, "reward_history"),
+      where("salonId", "==", salonId),
+      where("rewardCode", "==", rewardCode),
+      firestoreLimit(1),
+    ),
+  );
+
+  if (snap.empty) {
+    return {
+      found: false,
+      rewardCode,
+      status: "not_found",
+    };
+  }
+
+  const rewardDoc = snap.docs[0];
+  const reward = rewardDoc.data();
+  const customer = await getCustomer(String(reward.customerId || ""));
+
+  return {
+    found: true,
+    rewardId: rewardDoc.id,
+    rewardCode,
+    rewardName: String(reward.rewardName || ""),
+    status: normalizeRewardStatus(reward.status),
+    customerName: customer?.name,
+    createdAtMs: toMillis(reward.createdAt),
+    usedAtMs: toMillis(reward.usedAt),
+  };
+}
+
 export function formatDateTime(ms: number | null) {
   if (!ms) {
     return "";
@@ -546,6 +1026,86 @@ export function formatDateTime(ms: number | null) {
     month: "2-digit",
     year: "numeric",
   }).format(new Date(ms));
+}
+
+function mapMirror(docSnap: { id: string; data: () => DocumentData }): SalonMirror {
+  const data = docSnap.data();
+
+  return {
+    id: docSnap.id,
+    salonId: String(data.salonId || ""),
+    name: String(data.name || "Gương"),
+    qrToken: String(data.qrToken || ""),
+    qrUrl: String(data.qrUrl || ""),
+    isActive: Boolean(data.isActive),
+    createdAtMs: toMillis(data.createdAt),
+  };
+}
+
+function normalizeMirrorResult(
+  salonId: string,
+  result: unknown,
+  fallbackId = "",
+): SalonMirror {
+  const data = isRecord(result) ? result : {};
+  const mirrorId = String(data.mirrorId || data.id || fallbackId);
+  const qrToken = String(data.qrToken || "");
+
+  return {
+    id: mirrorId,
+    salonId,
+    name: String(data.name || "Gương"),
+    qrToken,
+    qrUrl: String(data.qrUrl || buildQrUrl(salonId, mirrorId, qrToken)),
+    isActive: data.isActive === undefined ? true : Boolean(data.isActive),
+    createdAtMs: null,
+  };
+}
+
+function mapStaffProfile(docSnap: QueryDocumentSnapshot<DocumentData>): StaffProfile | null {
+  const data = docSnap.data();
+
+  if (data.role !== "staff") {
+    return null;
+  }
+
+  return {
+    uid: docSnap.id,
+    salonId: String(data.salonId || ""),
+    name: String(data.name || "Nhân viên"),
+    phone: String(data.phone || ""),
+    role: "staff",
+    isActive: Boolean(data.isActive),
+    canRedeemRewards: Boolean(data.canRedeemRewards),
+  };
+}
+
+function mapCustomerRecordSummary(
+  docSnap: QueryDocumentSnapshot<DocumentData>,
+): CustomerRecordSummary {
+  const data = docSnap.data();
+
+  return {
+    id: docSnap.id,
+    staffName: String(data.staffName || ""),
+    note: String(data.note || ""),
+    pointsAdded: Number(data.pointsAdded ?? 1),
+    createdAtMs: toMillis(data.createdAt),
+  };
+}
+
+function mapCustomerRewardSummary(
+  docSnap: QueryDocumentSnapshot<DocumentData>,
+): CustomerRewardSummary {
+  const data = docSnap.data();
+
+  return {
+    id: docSnap.id,
+    rewardName: String(data.rewardName || ""),
+    rewardCode: String(data.rewardCode || ""),
+    status: normalizeRewardStatus(data.status),
+    createdAtMs: toMillis(data.createdAt),
+  };
 }
 
 function mapSession(docSnap: QueryDocumentSnapshot<DocumentData>): StaffSession {
@@ -640,6 +1200,14 @@ function normalizeRequestStatus(value: unknown): PointRequest["status"] {
   return "pending";
 }
 
+function normalizeRewardStatus(value: unknown): CustomerRewardSummary["status"] {
+  if (value === "used" || value === "expired") {
+    return value;
+  }
+
+  return "unused";
+}
+
 function toMillis(value: unknown): number | null {
   if (!value) {
     return null;
@@ -668,6 +1236,43 @@ function errorMessage(error: unknown) {
 
 function normalizeRewardCode(value: string) {
   return value.trim().toUpperCase().replace(/\s+/g, "");
+}
+
+function buildQrUrl(salonId: string, mirrorId: string, qrToken: string) {
+  const params = new URLSearchParams({ salonId, mirrorId, qrToken });
+  const miniAppId = String(import.meta.env.VITE_ZALO_MINI_APP_ID || "");
+
+  if (miniAppId) {
+    return `https://zalo.me/s/${miniAppId}?${params.toString()}`;
+  }
+
+  return `${window.location.origin}/?${params.toString()}`;
+}
+
+function randomToken() {
+  if (window.crypto?.randomUUID) {
+    return window.crypto.randomUUID().replace(/-/g, "");
+  }
+
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function mockMirrors(salonId: string): SalonMirror[] {
+  return [
+    {
+      id: "demo-mirror-1",
+      salonId,
+      name: "Gương 1",
+      qrToken: "demo-token",
+      qrUrl: buildQrUrl(salonId, "demo-mirror-1", "demo-token"),
+      isActive: true,
+      createdAtMs: Date.now(),
+    },
+  ];
 }
 
 function mockSessions(): StaffSession[] {

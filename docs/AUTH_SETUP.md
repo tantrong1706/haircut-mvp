@@ -47,4 +47,4 @@ Tạo thêm một Firebase Auth user, sao chép UID rồi tạo `users/{uid}`:
 
 ## Lưu ý về Firestore rules
 
-Chưa triển khai `firebase/firestore.rules.production.example` ở thời điểm này. File đó là bản nháp production cho giai đoạn sau khi xác thực khách/Zalo hoàn tất. File rules đang chạy `firebase/firestore.rules` vẫn đang mở để MVP khách có thể tạo `customers` và `chair_sessions` khi test nội bộ.
+`firebase/firestore.rules` trong repo hiện là rules production: client không được ghi trực tiếp các collection nghiệp vụ. Chỉ deploy rules này sau khi Cloud Functions đã deploy và web app đã chuyển sang `VITE_FUNCTION_WRITE_MODE=required`; nếu không, luồng khách/staff sẽ không fallback ghi Firestore trực tiếp được nữa.

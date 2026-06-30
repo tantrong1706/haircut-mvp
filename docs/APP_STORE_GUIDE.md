@@ -20,7 +20,7 @@ Cập nhật ngày 2026-06-29:
 - Firestore indexes đã deploy.
 - Web đã build/deploy ở chế độ chuyển tiếp `VITE_FUNCTION_WRITE_MODE=auto`.
 - Cloud Functions chưa deploy được vì Firebase project cần nâng Blaze để bật `artifactregistry.googleapis.com` và `cloudbuild.googleapis.com`.
-- Firestore rules live vẫn đang mở để test nội bộ, chưa được dùng cho khách thật.
+- Firestore rules trong repo đã là bản production; chỉ deploy lên live sau khi Functions chạy ổn và web dùng `VITE_FUNCTION_WRITE_MODE=required`.
 - GitHub Actions vẫn bị GitHub billing/spending limit chặn, job chưa chạy thật.
 
 Kết luận: chưa đủ điều kiện submit TestFlight/App Store.

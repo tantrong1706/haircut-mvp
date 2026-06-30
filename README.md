@@ -37,7 +37,7 @@ Web app hỗ trợ `VITE_FUNCTION_WRITE_MODE` trong `zalo-mini-app/.env`:
 - `auto`: thử gọi Cloud Functions, nếu lỗi thì fallback về Firestore trực tiếp.
 - `required`: production, bắt buộc gọi Cloud Functions và không fallback.
 
-Khi chuẩn bị khóa Firestore rules, chuyển sang `required` và deploy Functions trước.
+Repo hiện dùng `firebase/firestore.rules` dạng production: client không được ghi trực tiếp các collection nghiệp vụ. Chỉ deploy Firestore rules khi Cloud Functions đã deploy và web đã chuyển sang `VITE_FUNCTION_WRITE_MODE=required`.
 
 ## Thứ tự làm tiếp
 
@@ -75,7 +75,7 @@ Kiểm tra sẵn sàng production:
 Chi tiết xem [docs/PRODUCTION_READINESS.md](docs/PRODUCTION_READINESS.md).
 Checklist chạy thử salon thật xem [docs/SALON_PILOT_CHECKLIST.md](docs/SALON_PILOT_CHECKLIST.md).
 
-Triển khai Firebase sau khi đăng nhập. MVP hiện tại chỉ nên triển khai Firestore + Hosting:
+Triển khai Firebase sau khi đăng nhập. Trong giai đoạn chưa deploy Functions, chỉ nên triển khai Hosting:
 
 ```powershell
 .\scripts\firebase-login.ps1
@@ -89,10 +89,11 @@ Không triển khai Storage nếu Firebase project chưa nâng Blaze:
 .\scripts\deploy-firebase.ps1 -IncludeStorage
 ```
 
-Chỉ triển khai Functions khi chuyển lại logic nghiệp vụ sang callable backend:
+Khi đã bật Blaze và muốn chạy production, triển khai Functions rồi mới triển khai Firestore rules:
 
 ```powershell
 .\scripts\deploy-firebase.ps1 -IncludeFunctions
+.\scripts\deploy-firebase.ps1 -IncludeFirestore
 ```
 
 Triển khai riêng web app sau khi sửa giao diện:
@@ -114,4 +115,4 @@ Trang `/staff` và `/owner` cần Firebase Auth và document phân quyền `user
 
 ## Trạng thái hiện tại
 
-Repo này là MVP test nội bộ. Firestore rules live vẫn đang mở để khách test tạo hồ sơ và phiên ghế. Trước khi dùng cho salon thật, bắt buộc hoàn thiện xác thực khách/Zalo và khóa rules.
+Repo này đã chuyển rules trong mã nguồn sang hướng production. Nếu Firebase live vẫn đang mở từ bản cũ, chỉ deploy rules sau khi Functions đã chạy ổn và app dùng `VITE_FUNCTION_WRITE_MODE=required`.

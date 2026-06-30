@@ -1,6 +1,7 @@
 ﻿param(
   [switch]$OnlyRules,
   [switch]$OnlyHosting,
+  [switch]$IncludeFirestore,
   [switch]$IncludeFunctions,
   [switch]$IncludeStorage
 )
@@ -32,7 +33,8 @@ if ($OnlyRules) {
 } elseif ($OnlyHosting) {
   firebase deploy --only hosting
 } else {
-  $targets = @("firestore:rules", "firestore:indexes", "hosting")
+  $targets = @("hosting")
+  if ($IncludeFirestore) { $targets += "firestore:rules", "firestore:indexes" }
   if ($IncludeFunctions) { $targets += "functions" }
   if ($IncludeStorage) { $targets += "storage" }
   firebase deploy --only ($targets -join ",")

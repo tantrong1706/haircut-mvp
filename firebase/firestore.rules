@@ -2,8 +2,94 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Production rules for VITE_FUNCTION_WRITE_MODE=required.
+    // Business writes must go through Cloud Functions/Admin SDK.
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userPath() {
+      return /databases/$(database)/documents/users/$(request.auth.uid);
+    }
+
+    function hasUserProfile() {
+      return signedIn() && exists(userPath());
+    }
+
+    function appUser() {
+      return get(userPath()).data;
+    }
+
+    function isActiveMember(salonId) {
+      return hasUserProfile()
+        && appUser().salonId == salonId
+        && appUser().isActive == true;
+    }
+
+    function isOwner(salonId) {
+      return isActiveMember(salonId) && appUser().role == "owner";
+    }
+
+    function isStaffOrOwner(salonId) {
+      return isActiveMember(salonId)
+        && (appUser().role == "owner" || appUser().role == "staff");
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn()
+        && (
+          request.auth.uid == uid ||
+          (
+            hasUserProfile()
+            && resource.data.salonId == appUser().salonId
+            && appUser().role == "owner"
+          )
+        );
+      allow create, update, delete: if false;
+    }
+
+    match /salons/{salonId} {
+      allow read: if isStaffOrOwner(salonId);
+      allow create, update, delete: if false;
+    }
+
+    match /mirrors/{mirrorId} {
+      allow read: if isStaffOrOwner(resource.data.salonId);
+      allow create, update, delete: if false;
+    }
+
+    match /customers/{customerId} {
+      allow read: if isStaffOrOwner(resource.data.salonId);
+      allow create, update, delete: if false;
+    }
+
+    match /chair_sessions/{sessionId} {
+      allow read: if isStaffOrOwner(resource.data.salonId);
+      allow create, update, delete: if false;
+    }
+
+    match /point_requests/{requestId} {
+      allow read: if isStaffOrOwner(resource.data.salonId);
+      allow create, update, delete: if false;
+    }
+
+    match /haircut_records/{recordId} {
+      allow read: if isStaffOrOwner(resource.data.salonId);
+      allow create, update, delete: if false;
+    }
+
+    match /lucky_wheel/{salonId} {
+      allow read: if true;
+      allow create, update, delete: if false;
+    }
+
+    match /reward_history/{rewardId} {
+      allow read: if isStaffOrOwner(resource.data.salonId);
+      allow create, update, delete: if false;
+    }
+
     match /{document=**} {
-      allow read, write: if true;
+      allow read, write: if false;
     }
   }
 }

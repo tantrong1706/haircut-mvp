@@ -337,6 +337,123 @@ export const createMirror = onCall(functionOptions, async (request) => {
   return { mirrorId: mirrorRef.id, qrToken, qrUrl };
 });
 
+export const updateMirror = onCall(functionOptions, async (request) => {
+  const uid = currentUid(request.auth);
+  const salonId = requireString(request.data?.salonId, "salonId");
+  const mirrorId = requireString(request.data?.mirrorId, "mirrorId");
+  await assertSalonRole(uid, salonId, ["owner"]);
+
+  const name = optionalString(request.data?.name);
+  const isActive = typeof request.data?.isActive === "boolean"
+    ? request.data.isActive
+    : undefined;
+  const regenerateQr = Boolean(request.data?.regenerateQr);
+  const mirrorRef = db.collection("mirrors").doc(mirrorId);
+  const mirrorSnap = await mirrorRef.get();
+
+  if (!mirrorSnap.exists || mirrorSnap.data()?.salonId !== salonId) {
+    throw new HttpsError("not-found", "Không tìm thấy gương/ghế");
+  }
+
+  const payload: Record<string, unknown> = {
+    updatedAt: Timestamp.now(),
+  };
+
+  if (name) {
+    payload.name = name;
+  }
+  if (isActive !== undefined) {
+    payload.isActive = isActive;
+  }
+  if (regenerateQr) {
+    const qrToken = randomToken();
+    payload.qrToken = qrToken;
+    payload.qrUrl = miniAppUrl(salonId, mirrorId, qrToken);
+  }
+
+  await mirrorRef.set(payload, { merge: true });
+  const updatedSnap = await mirrorRef.get();
+  const mirror = updatedSnap.data();
+
+  return {
+    mirrorId,
+    name: mirror?.name ?? "",
+    qrToken: mirror?.qrToken ?? "",
+    qrUrl: mirror?.qrUrl ?? "",
+    isActive: Boolean(mirror?.isActive),
+  };
+});
+
+export const updateStaffProfile = onCall(functionOptions, async (request) => {
+  const uid = currentUid(request.auth);
+  const salonId = requireString(request.data?.salonId, "salonId");
+  const staffUid = requireString(request.data?.uid, "uid");
+  await assertSalonRole(uid, salonId, ["owner"]);
+
+  const name = optionalString(request.data?.name);
+  const phone = optionalString(request.data?.phone);
+  const isActive = typeof request.data?.isActive === "boolean"
+    ? request.data.isActive
+    : undefined;
+  const canRedeemRewards = typeof request.data?.canRedeemRewards === "boolean"
+    ? request.data.canRedeemRewards
+    : undefined;
+  const staffRef = db.collection("users").doc(staffUid);
+  const staffSnap = await staffRef.get();
+
+  if (!staffSnap.exists || staffSnap.data()?.salonId !== salonId || staffSnap.data()?.role !== "staff") {
+    throw new HttpsError("not-found", "Không tìm thấy nhân viên");
+  }
+
+  const payload: Record<string, unknown> = {
+    updatedAt: Timestamp.now(),
+  };
+
+  if (name) {
+    payload.name = name;
+  }
+  if (phone !== undefined) {
+    payload.phone = phone;
+  }
+  if (isActive !== undefined) {
+    payload.isActive = isActive;
+  }
+  if (canRedeemRewards !== undefined) {
+    payload.canRedeemRewards = canRedeemRewards;
+  }
+
+  await staffRef.set(payload, { merge: true });
+
+  return { uid: staffUid };
+});
+
+export const listStaffProfiles = onCall(functionOptions, async (request) => {
+  const uid = currentUid(request.auth);
+  const salonId = requireString(request.data?.salonId, "salonId");
+  await assertSalonRole(uid, salonId, ["owner"]);
+
+  const snap = await db.collection("users")
+    .where("salonId", "==", salonId)
+    .where("role", "==", "staff")
+    .limit(100)
+    .get();
+
+  return {
+    staff: snap.docs.map((doc) => {
+      const data = doc.data();
+      return {
+        uid: doc.id,
+        salonId,
+        name: data.name ?? "",
+        phone: data.phone ?? "",
+        role: "staff",
+        isActive: Boolean(data.isActive),
+        canRedeemRewards: Boolean(data.canRedeemRewards),
+      };
+    }),
+  };
+});
+
 export const createManualCustomer = onCall(functionOptions, async (request) => {
   const uid = currentUid(request.auth);
   const salonId = requireString(request.data?.salonId, "salonId");
@@ -782,6 +899,131 @@ export const getCustomerRewardsFromZalo = onCall(functionOptions, async (request
         createdAtMs: timestampMillis(data.createdAt),
       };
     }),
+  };
+});
+
+export const searchSalonCustomers = onCall(functionOptions, async (request) => {
+  const uid = currentUid(request.auth);
+  const salonId = requireString(request.data?.salonId, "salonId");
+  const term = optionalString(request.data?.term) ?? "";
+  await assertSalonRole(uid, salonId, ["owner", "staff"]);
+
+  const normalizedTerm = term.toLowerCase();
+  const customersSnap = await db.collection("customers")
+    .where("salonId", "==", salonId)
+    .limit(120)
+    .get();
+
+  const customers = customersSnap.docs
+    .map((doc) => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        name: String(data.name ?? ""),
+        phoneLast4: String(data.phoneLast4 ?? ""),
+        points: Number(data.points ?? 0),
+        allowPhoto: Boolean(data.allowPhoto),
+        lastVisitAtMs: timestampMillis(data.lastVisitAt),
+      };
+    })
+    .filter((customer) => {
+      if (!normalizedTerm) {
+        return true;
+      }
+
+      return customer.name.toLowerCase().includes(normalizedTerm) ||
+        customer.phoneLast4.includes(normalizedTerm);
+    })
+    .slice(0, 20);
+
+  const enriched = await Promise.all(customers.map(async (customer) => {
+    const [recordsSnap, rewardsSnap] = await Promise.all([
+      db.collection("haircut_records")
+        .where("salonId", "==", salonId)
+        .where("customerId", "==", customer.id)
+        .orderBy("createdAt", "desc")
+        .limit(5)
+        .get(),
+      db.collection("reward_history")
+        .where("salonId", "==", salonId)
+        .where("customerId", "==", customer.id)
+        .orderBy("createdAt", "desc")
+        .limit(10)
+        .get(),
+    ]);
+
+    return {
+      ...customer,
+      recentRecords: recordsSnap.docs.map((doc) => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          staffName: data.staffName ?? "",
+          note: data.note ?? "",
+          pointsAdded: Number(data.pointsAdded ?? 1),
+          createdAtMs: timestampMillis(data.createdAt),
+        };
+      }),
+      unusedRewards: rewardsSnap.docs
+        .map((doc) => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            rewardName: data.rewardName ?? "",
+            rewardCode: data.rewardCode ?? "",
+            status: data.status ?? "unused",
+            createdAtMs: timestampMillis(data.createdAt),
+          };
+        })
+        .filter((reward) => reward.status === "unused"),
+    };
+  }));
+
+  return { customers: enriched };
+});
+
+export const lookupRewardCode = onCall(functionOptions, async (request) => {
+  const uid = currentUid(request.auth);
+  const salonId = requireString(request.data?.salonId, "salonId");
+  const rewardCodeInput = requireString(request.data?.rewardCode, "rewardCode");
+  const user = await assertSalonRole(uid, salonId, ["owner", "staff"]);
+
+  if (user.role === "staff" && user.canRedeemRewards !== true) {
+    throw new HttpsError("permission-denied", "Nhân viên chưa được phép kiểm tra mã quà");
+  }
+
+  const query = await db.collection("reward_history")
+    .where("salonId", "==", salonId)
+    .where("rewardCode", "==", rewardCodeInput)
+    .limit(1)
+    .get();
+
+  if (query.empty) {
+    return {
+      found: false,
+      rewardCode: rewardCodeInput,
+      status: "not_found",
+    };
+  }
+
+  const doc = query.docs[0];
+  const reward = doc.data();
+  let customerName = "";
+
+  if (reward.customerId) {
+    const customerSnap = await db.collection("customers").doc(String(reward.customerId)).get();
+    customerName = String(customerSnap.data()?.name ?? "");
+  }
+
+  return {
+    found: true,
+    rewardId: doc.id,
+    rewardCode: reward.rewardCode ?? rewardCodeInput,
+    rewardName: reward.rewardName ?? "",
+    status: reward.status ?? "unused",
+    customerName,
+    createdAtMs: timestampMillis(reward.createdAt),
+    usedAtMs: timestampMillis(reward.usedAt),
   };
 });
 

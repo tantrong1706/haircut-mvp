@@ -32,20 +32,21 @@ cp functions/.env.example functions/.env
 
 Sửa `functions/.env` và đặt `ZALO_MINI_APP_ID`.
 
-Triển khai MVP hiện tại:
+Triển khai web/hosting trong giai đoạn chưa deploy Functions:
 
 ```bash
 cd ..
-firebase deploy --only firestore:rules,firestore:indexes,hosting
+firebase deploy --only hosting
 ```
 
 Không triển khai Storage nếu Firebase project chưa nâng Blaze.
-Không triển khai Functions nếu web app vẫn đang ghi Firestore trực tiếp.
+Không triển khai Firestore rules production nếu web app vẫn đang ghi Firestore trực tiếp.
 
-Khi chuyển web app sang `VITE_FUNCTION_WRITE_MODE=required`, cần deploy Functions:
+Khi chuyển web app sang `VITE_FUNCTION_WRITE_MODE=required`, cần deploy Functions trước rồi mới deploy Firestore rules:
 
 ```powershell
 .\scripts\deploy-firebase.ps1 -IncludeFunctions
+.\scripts\deploy-firebase.ps1 -IncludeFirestore
 ```
 
 ## Demo bằng Emulator

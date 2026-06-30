@@ -2,8 +2,8 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Bản production mục tiêu cho VITE_FUNCTION_WRITE_MODE=required.
-    // Các thao tác ghi nghiệp vụ quan trọng phải đi qua Cloud Functions/Admin SDK.
+    // Production rules for VITE_FUNCTION_WRITE_MODE=required.
+    // Business writes must go through Cloud Functions/Admin SDK.
     function signedIn() {
       return request.auth != null;
     }
@@ -36,9 +36,16 @@ service cloud.firestore {
     }
 
     match /users/{uid} {
-      allow read: if signedIn() && request.auth.uid == uid;
-      allow create: if false;
-      allow update, delete: if false;
+      allow read: if signedIn()
+        && (
+          request.auth.uid == uid ||
+          (
+            hasUserProfile()
+            && resource.data.salonId == appUser().salonId
+            && appUser().role == "owner"
+          )
+        );
+      allow create, update, delete: if false;
     }
 
     match /salons/{salonId} {
