@@ -16,7 +16,7 @@ import {
   where,
 } from "firebase/firestore";
 import { callFunctionOrFallback, callWriteFunctionOrFallback } from "./functionWrites";
-import { getFirebaseDb, isFirebaseConfigured } from "./firebase";
+import { getFirebaseAuth, getFirebaseDb, isFirebaseConfigured } from "./firebase";
 import { LuckyWheelConfig, defaultLuckyWheelConfig } from "./types";
 import { normalizeLuckyWheelConfig } from "./wheel";
 
@@ -195,7 +195,6 @@ async function getOwnerOverviewDirect(salonId: string): Promise<OwnerOverview> {
 export async function submitPointRequest(input: {
   salonId: string;
   session: StaffSession;
-  staffName: string;
   note: string;
 }) {
   return callWriteFunctionOrFallback(
@@ -203,7 +202,6 @@ export async function submitPointRequest(input: {
     {
       salonId: input.salonId,
       sessionId: input.session.id,
-      staffName: input.staffName,
       note: input.note,
       photoUrls: [],
       pointsRequested: 1,
@@ -215,7 +213,6 @@ export async function submitPointRequest(input: {
 async function submitPointRequestDirect(input: {
   salonId: string;
   session: StaffSession;
-  staffName: string;
   note: string;
 }) {
   const db = getFirebaseDb();
@@ -224,11 +221,14 @@ async function submitPointRequestDirect(input: {
     return;
   }
 
+  const signedStaff = await getSignedStaffForDirectWrite();
+
   await addDoc(collection(db, "point_requests"), {
     salonId: input.salonId,
     customerId: input.session.customerId,
     sessionId: input.session.id,
-    staffName: input.staffName,
+    staffId: signedStaff.uid,
+    staffName: signedStaff.name,
     note: input.note,
     pointsAdded: 1,
     status: "pending",
@@ -239,6 +239,24 @@ async function submitPointRequestDirect(input: {
     status: "serving",
     updatedAt: serverTimestamp(),
   });
+}
+
+async function getSignedStaffForDirectWrite() {
+  const auth = getFirebaseAuth();
+  const db = getFirebaseDb();
+  const uid = auth?.currentUser?.uid || "";
+
+  if (!db || !uid) {
+    return { uid, name: "Nhân viên" };
+  }
+
+  const snap = await getDoc(doc(db, "users", uid));
+  const name = snap.exists() ? String(snap.data().name || "") : "";
+
+  return {
+    uid,
+    name: name || "Nhân viên",
+  };
 }
 
 export async function approvePointRequest(request: PointRequest) {

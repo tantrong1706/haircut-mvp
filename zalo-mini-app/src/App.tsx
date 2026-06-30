@@ -106,22 +106,17 @@ export default function App() {
     );
   }
 
-  const content = useMemo(() => {
-    if (!session) {
-      return <ScanEntryPage onReady={setSession} />;
-    }
+  let content = <ScanEntryPage onReady={setSession} />;
 
-    if (activeTab === "history") {
-      return <HistoryPage session={session} />;
-    }
-    if (activeTab === "wheel") {
-      return <WheelPage session={session} onSessionChange={setSession} />;
-    }
-    if (activeTab === "rewards") {
-      return <RewardsPage session={session} />;
-    }
-    return <HomePage session={session} onTabChange={setActiveTab} onResetSession={resetSession} />;
-  }, [activeTab, session]);
+  if (session && activeTab === "history") {
+    content = <HistoryPage session={session} />;
+  } else if (session && activeTab === "wheel") {
+    content = <WheelPage session={session} onSessionChange={setSession} />;
+  } else if (session && activeTab === "rewards") {
+    content = <RewardsPage session={session} />;
+  } else if (session) {
+    content = <HomePage session={session} onTabChange={setActiveTab} onResetSession={resetSession} />;
+  }
 
   return (
     <div className="app-shell">

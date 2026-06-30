@@ -30,9 +30,6 @@ export function StaffPage({ currentUser }: Props) {
   }, [currentUser.salonId]);
   const [sessions, setSessions] = useState<StaffSession[]>([]);
   const [selectedId, setSelectedId] = useState("");
-  const [staffName, setStaffName] = useState(
-    localStorage.getItem("haircut_staff_name") || currentUser.name || "",
-  );
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -76,11 +73,9 @@ export function StaffPage({ currentUser }: Props) {
     setError("");
 
     try {
-      localStorage.setItem("haircut_staff_name", staffName);
       await submitPointRequest({
         salonId,
         session: selectedSession,
-        staffName: staffName || "Nhân viên",
         note,
       });
       setSessions((current) =>
@@ -155,14 +150,11 @@ export function StaffPage({ currentUser }: Props) {
 
       <div className="ops-grid">
         <div className="panel form-panel">
-          <label className="field">
-            <span>Tên nhân viên</span>
-            <input
-              value={staffName}
-              onChange={(event) => setStaffName(event.target.value)}
-              placeholder="Ví dụ: Nam"
-            />
-          </label>
+          <div className="signed-staff">
+            <span>Nhân viên đang đăng nhập</span>
+            <strong>{currentUser.name || "Nhân viên"}</strong>
+            <small>Tên này lấy từ hồ sơ phân quyền, nhân viên không tự sửa trên máy bán hàng.</small>
+          </div>
         </div>
 
         <div className="ops-list">

@@ -446,7 +446,7 @@ export const submitPointRequest = onCall(functionOptions, async (request) => {
   const sessionId = requireString(request.data?.sessionId, "sessionId");
   const note = optionalString(request.data?.note) ?? "";
   const user = await assertSalonRole(uid, salonId, ["owner", "staff"]);
-  const staffName = optionalString(request.data?.staffName) ?? user.name;
+  const staffName = user.name || "Nhân viên";
   const pointsRequested = requirePositiveNumber(
     request.data?.pointsRequested ?? 1,
     "pointsRequested",

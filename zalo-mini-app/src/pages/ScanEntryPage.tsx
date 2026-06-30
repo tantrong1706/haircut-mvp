@@ -18,7 +18,7 @@ type Props = {
 };
 
 export function ScanEntryPage({ onReady }: Props) {
-  const [allowPhoto, setAllowPhoto] = useState(true);
+  const [allowPhoto, setAllowPhoto] = useState(false);
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

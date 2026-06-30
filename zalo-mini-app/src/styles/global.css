@@ -681,6 +681,28 @@ small {
   cursor: not-allowed;
 }
 
+.signed-staff {
+  display: grid;
+  gap: 5px;
+}
+
+.signed-staff span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.signed-staff strong {
+  color: var(--ink);
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.signed-staff small {
+  line-height: 1.4;
+  font-weight: 700;
+}
+
 .list-item p {
   margin-top: 4px;
   color: var(--muted);
