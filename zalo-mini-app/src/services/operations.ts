@@ -2,6 +2,7 @@ import {
   DocumentData,
   QueryDocumentSnapshot,
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -119,6 +120,15 @@ export type RewardCodeInfo = {
   customerName?: string;
   createdAtMs?: number | null;
   usedAtMs?: number | null;
+};
+
+export type DeleteCustomerDataResult = {
+  customerId: string;
+  deletedRecords: number;
+  deletedRewards: number;
+  deletedRequests: number;
+  deletedSessions: number;
+  deletedStorageFiles: number;
 };
 
 export function listenActiveSessions(
@@ -360,6 +370,26 @@ export async function searchSalonCustomers(input: {
     { salonId: input.salonId, term },
     () => searchSalonCustomersDirect(input.salonId, term),
   ).then((result) => result.customers);
+}
+
+export async function deleteCustomerData(input: {
+  salonId: string;
+  customerId: string;
+}): Promise<DeleteCustomerDataResult> {
+  const customerId = input.customerId.trim();
+
+  if (!customerId) {
+    throw new Error("Thiếu hồ sơ khách cần xóa");
+  }
+
+  return callWriteFunctionOrFallback<
+    { salonId: string; customerId: string },
+    DeleteCustomerDataResult
+  >(
+    "deleteCustomerData",
+    { salonId: input.salonId, customerId },
+    () => deleteCustomerDataDirect(input.salonId, customerId),
+  );
 }
 
 export async function lookupRewardCode(input: {
@@ -924,6 +954,69 @@ async function searchSalonCustomersDirect(
   };
 }
 
+async function deleteCustomerDataDirect(
+  salonId: string,
+  customerId: string,
+): Promise<DeleteCustomerDataResult> {
+  const db = getFirebaseDb();
+
+  if (!isFirebaseConfigured() || !db) {
+    return {
+      customerId,
+      deletedRecords: 0,
+      deletedRewards: 0,
+      deletedRequests: 0,
+      deletedSessions: 0,
+      deletedStorageFiles: 0,
+    };
+  }
+
+  const customerRef = doc(db, "customers", customerId);
+  const customerSnap = await getDoc(customerRef);
+
+  if (!customerSnap.exists() || customerSnap.data().salonId !== salonId) {
+    throw new Error("Không tìm thấy hồ sơ khách trong salon này");
+  }
+
+  const deletedRecords = await deleteCustomerDocsDirect("haircut_records", salonId, customerId);
+  const deletedRewards = await deleteCustomerDocsDirect("reward_history", salonId, customerId);
+  const deletedRequests = await deleteCustomerDocsDirect("point_requests", salonId, customerId);
+  const deletedSessions = await deleteCustomerDocsDirect("chair_sessions", salonId, customerId);
+  await deleteDoc(customerRef);
+
+  return {
+    customerId,
+    deletedRecords,
+    deletedRewards,
+    deletedRequests,
+    deletedSessions,
+    deletedStorageFiles: 0,
+  };
+}
+
+async function deleteCustomerDocsDirect(
+  collectionName: string,
+  salonId: string,
+  customerId: string,
+) {
+  const db = getFirebaseDb();
+
+  if (!db) {
+    return 0;
+  }
+
+  const snap = await getDocs(
+    query(
+      collection(db, collectionName),
+      where("salonId", "==", salonId),
+      where("customerId", "==", customerId),
+    ),
+  );
+
+  await Promise.all(snap.docs.map((docSnap) => deleteDoc(docSnap.ref)));
+  return snap.size;
+}
+
 async function attachCustomerInsight(
   salonId: string,
   customer: CustomerLookupResult,
@@ -1282,7 +1375,7 @@ function mockSessions(): StaffSession[] {
       salonId: "demo-salon",
       mirrorId: "demo-mirror-1",
       customerId: "mock-customer",
-      zaloUserId: "mock-zalo-user",
+      zaloUserId: "mock-local-zalo-user",
       status: "waiting",
       createdAtMs: Date.now(),
       customer: {

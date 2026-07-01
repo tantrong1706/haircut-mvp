@@ -1,6 +1,8 @@
 /// <reference types="vite/client" />
 
 declare module "zmp-sdk/apis" {
+  export function getAccessToken(): Promise<string>;
+
   export function getUserInfo(options?: {
     autoRequestPermission?: boolean;
     avatarType?: "small" | "normal" | "large";
@@ -15,4 +17,3 @@ declare module "zmp-sdk/apis" {
 
   export function getPhoneNumber(): Promise<{ token: string }>;
 }
-

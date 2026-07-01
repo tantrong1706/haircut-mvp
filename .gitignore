@@ -5,6 +5,7 @@ node_modules/
 dist/
 lib/
 .firebase/
+firebase/public/
 *.log
 
 # Firebase and local config

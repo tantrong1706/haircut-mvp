@@ -1,26 +1,46 @@
-import { getPhoneNumber, getUserInfo } from "zmp-sdk/apis";
+import { getAccessToken, getPhoneNumber, getUserInfo } from "zmp-sdk/apis";
 
 export type ZaloIdentity = {
-  zaloUserId: string;
+  accessToken: string;
   name: string;
   avatar?: string;
 };
 
+const ZALO_REQUIRED_MESSAGE =
+  "Vui lòng mở HAIRCUT trong Zalo để xác nhận danh tính khách hàng.";
+
+export async function getZaloAccessToken(): Promise<string> {
+  try {
+    const token = String(await getAccessToken()).trim();
+
+    if (!token || token.toUpperCase().includes("DEFAULT ACCESS TOKEN")) {
+      throw new Error("Zalo access token không hợp lệ");
+    }
+
+    return token;
+  } catch {
+    throw new Error(ZALO_REQUIRED_MESSAGE);
+  }
+}
+
 export async function getZaloIdentity(): Promise<ZaloIdentity> {
+  const accessToken = await getZaloAccessToken();
+
   try {
     const { userInfo } = await getUserInfo({
       autoRequestPermission: true,
       avatarType: "normal",
     });
+
     return {
-      zaloUserId: userInfo.id,
-      name: userInfo.name,
+      accessToken,
+      name: userInfo.name || "Khách hàng",
       avatar: userInfo.avatar,
     };
   } catch {
     return {
-      zaloUserId: "mock-zalo-user",
-      name: "Nguyễn Văn A",
+      accessToken,
+      name: "Khách hàng",
     };
   }
 }

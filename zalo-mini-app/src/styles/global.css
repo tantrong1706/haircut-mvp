@@ -363,6 +363,16 @@ small {
   color: var(--ink);
 }
 
+.danger-button {
+  border-color: rgba(185, 28, 28, 0.28);
+  background: #fff5f5;
+  color: #991b1b;
+}
+
+.danger-button:hover:not(:disabled) {
+  background: #fee2e2;
+}
+
 .alert {
   display: flex;
   align-items: flex-start;

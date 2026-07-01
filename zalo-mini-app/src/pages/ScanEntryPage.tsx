@@ -45,7 +45,7 @@ export function ScanEntryPage({ onReady }: Props) {
       })
       .catch(() => {
         if (mounted) {
-          setError("Không lấy được tên Zalo. Bạn có thể nhập tên hiển thị thủ công.");
+          setError("Vui lòng mở HAIRCUT trong Zalo để xác nhận danh tính trước khi tạo lượt cắt.");
         }
       })
       .finally(() => {
@@ -174,7 +174,11 @@ export function ScanEntryPage({ onReady }: Props) {
 
       {error ? <p className="alert error">{error}</p> : null}
 
-      <button className="primary-button" disabled={loading || displayName.trim().length === 0} onClick={continueWithZalo}>
+      <button
+        className="primary-button"
+        disabled={loading || displayName.trim().length === 0}
+        onClick={continueWithZalo}
+      >
         {loading ? (
           "Đang xử lý..."
         ) : (

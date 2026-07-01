@@ -16,9 +16,33 @@ service firebase.storage {
         && userDoc().data.isActive == true;
     }
 
+    function customerExists(customerId) {
+      return firestore.exists(/databases/(default)/documents/customers/$(customerId));
+    }
+
+    function customerDoc(customerId) {
+      return firestore.get(/databases/(default)/documents/customers/$(customerId));
+    }
+
+    function customerAllowsPhoto(salonId, customerId) {
+      return customerExists(customerId)
+        && customerDoc(customerId).data.salonId == salonId
+        && customerDoc(customerId).data.allowPhoto == true;
+    }
+
+    function isAllowedImageUpload() {
+      return request.resource != null
+        && request.resource.size <= 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
     match /salons/{salonId}/customers/{customerId}/{allPaths=**} {
-      allow read, write: if isActiveMember(salonId);
+      allow read: if isActiveMember(salonId)
+        && customerAllowsPhoto(salonId, customerId);
+      allow create, update: if isActiveMember(salonId)
+        && customerAllowsPhoto(salonId, customerId)
+        && isAllowedImageUpload();
+      allow delete: if isActiveMember(salonId);
     }
   }
 }
-

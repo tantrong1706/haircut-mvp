@@ -20,6 +20,29 @@ if (-not (Test-Path -LiteralPath $firebaserc)) {
   throw "Thiếu firebase/.firebaserc. Hãy chạy .\scripts\set-firebase-project.ps1 -ProjectId your-project-id trước."
 }
 
+$deploysHosting = $OnlyHosting -or (-not $OnlyRules)
+
+if ($deploysHosting) {
+  $appDir = Join-Path $root "zalo-mini-app"
+  $publicDir = Join-Path $firebaseDir "public"
+
+  Push-Location $appDir
+  npm install
+  npm run build
+  Pop-Location
+
+  $resolvedFirebaseDir = (Resolve-Path -LiteralPath $firebaseDir).Path
+  $publicParent = Split-Path -Parent $publicDir
+  $resolvedPublicParent = (Resolve-Path -LiteralPath $publicParent).Path
+  if ($resolvedPublicParent -ne $resolvedFirebaseDir -or (Split-Path -Leaf $publicDir) -ne "public") {
+    throw "Đường dẫn public không an toàn: $publicDir"
+  }
+
+  Remove-Item -LiteralPath $publicDir -Recurse -Force -ErrorAction SilentlyContinue
+  New-Item -ItemType Directory -Path $publicDir | Out-Null
+  Copy-Item -Path (Join-Path $appDir "dist\*") -Destination $publicDir -Recurse -Force
+}
+
 if ($IncludeFunctions) {
   Push-Location (Join-Path $firebaseDir "functions")
   npm install

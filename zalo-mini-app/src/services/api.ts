@@ -1,5 +1,4 @@
 import {
-  addDoc,
   collection,
   doc,
   getDoc,
@@ -8,11 +7,9 @@ import {
   query,
   runTransaction,
   serverTimestamp,
-  setDoc,
   where,
 } from "firebase/firestore";
-import { callFunctionOrFallback, callWriteFunctionOrFallback } from "./functionWrites";
-import { callFunction, getFirebaseDb, getFunctionWriteMode, isFirebaseConfigured } from "./firebase";
+import { callFunction, getFirebaseDb, isFirebaseConfigured } from "./firebase";
 import {
   AppSession,
   CustomerProfile,
@@ -24,10 +21,10 @@ import {
   defaultLuckyWheelConfig,
 } from "./types";
 import { activeWheelSlots, normalizeLuckyWheelConfig } from "./wheel";
-import { ZaloIdentity } from "./zalo";
+import { getZaloAccessToken, ZaloIdentity } from "./zalo";
 
 type RegisterInput = QrContext & {
-  zaloUserId: string;
+  zaloAccessToken: string;
   name: string;
   phone?: string;
   birthday?: string;
@@ -38,6 +35,7 @@ type RegisterCustomerFunctionResult = {
   customerId: string;
   sessionId: string;
   points: number;
+  zaloUserId: string;
 };
 
 type CustomerHistoryFunctionResult = {
@@ -120,104 +118,30 @@ export function listenSessionLiveUpdates(
 }
 
 export async function registerCustomer(input: RegisterInput): Promise<AppSession> {
-  const mode = getFunctionWriteMode();
-
-  if (mode !== "direct") {
-    try {
-      const result = await callFunction<RegisterInput, RegisterCustomerFunctionResult>(
-        "registerCustomerFromZalo",
-        input,
-      );
-
-      return buildSessionFromRegisterResult(input, result);
-    } catch (error) {
-      if (mode === "required") {
-        throw error;
-      }
-
-      console.warn(
-        "Cloud Function registerCustomerFromZalo lỗi, dùng luồng Firestore trực tiếp để test nội bộ.",
-        error,
-      );
-    }
-  }
-
-  return registerCustomerDirect(input);
-}
-
-async function registerCustomerDirect(input: RegisterInput): Promise<AppSession> {
   if (!isFirebaseConfigured()) {
     return mockRegisterCustomer(input);
   }
 
-  const db = getFirebaseDb();
-
-  if (!db) {
-    return mockRegisterCustomer(input);
-  }
-
-  const phoneDigits = normalizePhone(input.phone);
-  const customerId = makeCustomerId(input.salonId, input.zaloUserId, phoneDigits);
-  const customerRef = doc(db, "customers", customerId);
-  const customerSnap = await getDoc(customerRef);
-
-  const existingData = customerSnap.exists() ? customerSnap.data() : null;
-  const points = Number(existingData?.points ?? 0);
-
-  await setDoc(
-    customerRef,
-    {
-      salonId: input.salonId,
-      zaloUserId: input.zaloUserId,
-      name: input.name || "Khách hàng",
-      phone: phoneDigits || input.phone || "",
-      phoneLast4: phoneDigits ? phoneDigits.slice(-4) : input.phone?.slice(-4) || "",
-      birthday: input.birthday || "",
-      points,
-      allowPhoto: input.allowPhoto,
-      updatedAt: serverTimestamp(),
-      createdAt: existingData?.createdAt || serverTimestamp(),
-    },
-    { merge: true },
+  const result = await callFunction<RegisterInput, RegisterCustomerFunctionResult>(
+    "registerCustomerFromZalo",
+    input,
   );
 
-  const sessionRef = await addDoc(collection(db, "chair_sessions"), {
-    salonId: input.salonId,
-    mirrorId: input.mirrorId,
-    qrToken: input.qrToken,
-    customerId,
-    zaloUserId: input.zaloUserId,
-    status: "waiting",
-    createdAt: serverTimestamp(),
-  });
-
-  return {
-    qr: {
-      salonId: input.salonId,
-      mirrorId: input.mirrorId,
-      qrToken: input.qrToken,
-    },
-    sessionId: sessionRef.id,
-    zaloUserId: input.zaloUserId,
-    sessionStatus: "waiting",
-    customer: {
-      customerId,
-      name: input.name || "Khách hàng",
-      phoneLast4: phoneDigits ? phoneDigits.slice(-4) : input.phone?.slice(-4) || "",
-      points,
-      allowPhoto: input.allowPhoto,
-    },
-  };
+  return buildSessionFromRegisterResult(input, result);
 }
 
 export async function spinWheel(session: AppSession): Promise<SpinResult> {
-  return callWriteFunctionOrFallback(
+  if (!isFirebaseConfigured()) {
+    return spinWheelDirect(session);
+  }
+
+  const zaloAccessToken = await getZaloAccessToken();
+  return callFunction<{ salonId: string; zaloAccessToken: string }, SpinResult>(
     "spinLuckyWheelFromZalo",
     {
       salonId: session.qr.salonId,
-      zaloUserId: session.zaloUserId,
+      zaloAccessToken,
     },
-    () => spinWheelDirect(session),
   );
 }
 
@@ -321,22 +245,22 @@ async function spinWheelDirect(session: AppSession): Promise<SpinResult> {
 }
 
 export async function getHaircutHistory(session: AppSession): Promise<HaircutRecord[]> {
-  return callFunctionOrFallback<
-    { salonId: string; zaloUserId: string; limit: number },
-    CustomerHistoryFunctionResult | HaircutRecord[]
+  if (!isFirebaseConfigured()) {
+    return getHaircutHistoryDirect(session);
+  }
+
+  const zaloAccessToken = await getZaloAccessToken();
+  return callFunction<
+    { salonId: string; zaloAccessToken: string; limit: number },
+    CustomerHistoryFunctionResult
   >(
     "getCustomerHistoryFromZalo",
     {
       salonId: session.qr.salonId,
-      zaloUserId: session.zaloUserId,
+      zaloAccessToken,
       limit: 20,
     },
-    () => getHaircutHistoryDirect(session),
   ).then((result) => {
-    if (Array.isArray(result)) {
-      return result;
-    }
-
     return result.records.map((record) => ({
       id: record.id,
       createdAt: formatDate(record.createdAtMs),
@@ -414,22 +338,22 @@ export async function getCustomerWheelConfig(salonId: string): Promise<LuckyWhee
 }
 
 export async function getRewards(session: AppSession): Promise<Reward[]> {
-  return callFunctionOrFallback<
-    { salonId: string; zaloUserId: string; limit: number },
-    CustomerRewardsFunctionResult | Reward[]
+  if (!isFirebaseConfigured()) {
+    return getRewardsDirect(session);
+  }
+
+  const zaloAccessToken = await getZaloAccessToken();
+  return callFunction<
+    { salonId: string; zaloAccessToken: string; limit: number },
+    CustomerRewardsFunctionResult
   >(
     "getCustomerRewardsFromZalo",
     {
       salonId: session.qr.salonId,
-      zaloUserId: session.zaloUserId,
+      zaloAccessToken,
       limit: 20,
     },
-    () => getRewardsDirect(session),
   ).then((result) => {
-    if (Array.isArray(result)) {
-      return result;
-    }
-
     return result.rewards.map((reward) => ({
       id: reward.id,
       rewardName: reward.rewardName || "",
@@ -497,7 +421,7 @@ export function buildRegisterInput(
 ): RegisterInput {
   return {
     ...qr,
-    zaloUserId: identity.zaloUserId,
+    zaloAccessToken: identity.accessToken,
     name: identity.name,
     phone,
     allowPhoto,
@@ -515,7 +439,7 @@ function mockRegisterCustomer(input: RegisterInput): AppSession {
       qrToken: input.qrToken,
     },
     sessionId: "mock-session",
-    zaloUserId: input.zaloUserId,
+    zaloUserId: "mock-local-zalo-user",
     sessionStatus: "waiting",
     customer: {
       customerId: "mock-customer",
@@ -540,7 +464,7 @@ function buildSessionFromRegisterResult(
       qrToken: input.qrToken,
     },
     sessionId: result.sessionId,
-    zaloUserId: input.zaloUserId,
+    zaloUserId: result.zaloUserId,
     sessionStatus: "waiting",
     customer: {
       customerId: result.customerId,
@@ -619,16 +543,6 @@ function normalizePhone(phone?: string) {
   }
 
   return phone.replace(/\D/g, "");
-}
-
-function makeCustomerId(salonId: string, zaloUserId: string, phoneDigits: string) {
-  const key = phoneDigits || zaloUserId || `guest-${Date.now()}`;
-
-  return `${safeId(salonId)}_${safeId(key)}`;
-}
-
-function safeId(value: string) {
-  return value.replace(/[^a-zA-Z0-9_-]/g, "_");
 }
 
 function toMillis(value: any): number | null {

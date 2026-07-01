@@ -14,6 +14,7 @@ import {
   Settings2,
   SlidersHorizontal,
   TicketCheck,
+  Trash2,
   UserPlus,
   UsersRound,
   XCircle,
@@ -29,6 +30,7 @@ import {
   approvePointRequest,
   createMirror,
   createStaffProfile,
+  deleteCustomerData,
   formatDateTime,
   getLuckyWheelConfig,
   getMirrors,
@@ -865,6 +867,7 @@ function CustomerSearchPanel({
   const [term, setTerm] = useState("");
   const [results, setResults] = useState<CustomerLookupResult[]>([]);
   const [loading, setLoading] = useState(false);
+  const [busyCustomerId, setBusyCustomerId] = useState("");
 
   async function search() {
     setLoading(true);
@@ -883,6 +886,31 @@ function CustomerSearchPanel({
   async function copyReward(code: string) {
     await navigator.clipboard.writeText(code);
     onMessage("Đã copy mã quà.");
+  }
+
+  async function deleteCustomer(customer: CustomerLookupResult) {
+    const ok = window.confirm(
+      `Xóa toàn bộ dữ liệu của ${customer.name}? Hành động này sẽ xóa hồ sơ, lịch sử, mã quà và ảnh đã lưu.`,
+    );
+    if (!ok) {
+      return;
+    }
+
+    setBusyCustomerId(customer.id);
+    onMessage("");
+    onError("");
+
+    try {
+      const result = await deleteCustomerData({ salonId, customerId: customer.id });
+      setResults((current) => current.filter((item) => item.id !== customer.id));
+      onMessage(
+        `Đã xóa dữ liệu khách: ${result.deletedRecords} lịch sử, ${result.deletedRewards} mã quà, ${result.deletedStorageFiles} ảnh.`,
+      );
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Không xóa được dữ liệu khách");
+    } finally {
+      setBusyCustomerId("");
+    }
   }
 
   return (
@@ -960,6 +988,17 @@ function CustomerSearchPanel({
                     ))
                   )}
                 </div>
+              </div>
+
+              <div className="button-row wrap-row">
+                <button
+                  className="secondary-button danger-button"
+                  disabled={busyCustomerId === customer.id}
+                  onClick={() => deleteCustomer(customer)}
+                >
+                  <Trash2 size={18} aria-hidden="true" />
+                  {busyCustomerId === customer.id ? "Đang xóa..." : "Xóa dữ liệu khách"}
+                </button>
               </div>
             </article>
           ))

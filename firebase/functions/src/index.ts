@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes } from "node:crypto";
 import { initializeApp } from "firebase-admin/app";
 import {
   AggregateField,
@@ -6,11 +6,13 @@ import {
   Timestamp,
   getFirestore,
 } from "firebase-admin/firestore";
+import { getStorage } from "firebase-admin/storage";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 
 initializeApp();
 
 const db = getFirestore();
+const storage = getStorage();
 const functionOptions = { region: "asia-southeast1" };
 const SESSION_POINT_REQUEST_WINDOW_MS = 12 * 60 * 60 * 1000;
 
@@ -36,6 +38,12 @@ type SpinWheelResult = {
   rewardCode: string;
   pointsAfter: number;
   selectedIndex: number;
+};
+
+type ZaloProfile = {
+  zaloUserId: string;
+  name?: string;
+  avatar?: string;
 };
 
 function requireString(value: unknown, field: string): string {
@@ -106,6 +114,66 @@ function customerIdFor(salonId: string, zaloUserId: string): string {
     .update(`${salonId}:${zaloUserId}`)
     .digest("hex")
     .slice(0, 40);
+}
+
+async function verifyZaloAccessToken(accessTokenInput: unknown): Promise<ZaloProfile> {
+  const accessToken = requireString(accessTokenInput, "zaloAccessToken");
+  const appSecret = process.env.ZALO_APP_SECRET || process.env.ZALO_SECRET_KEY || "";
+
+  if (!appSecret || appSecret.includes("your-")) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Thiếu ZALO_APP_SECRET để xác minh danh tính Zalo ở server",
+    );
+  }
+
+  const appsecretProof = createHmac("sha256", appSecret)
+    .update(accessToken)
+    .digest("hex");
+  const endpoint = new URL(process.env.ZALO_PROFILE_ENDPOINT || "https://graph.zalo.me/v2.0/me");
+  endpoint.searchParams.set("fields", "id,name,picture");
+
+  let payload: Record<string, unknown>;
+  try {
+    const response = await fetch(endpoint, {
+      method: "GET",
+      headers: {
+        access_token: accessToken,
+        appsecret_proof: appsecretProof,
+      },
+    });
+
+    payload = await response.json() as Record<string, unknown>;
+    if (!response.ok) {
+      throw new Error(String(payload.message ?? response.statusText));
+    }
+  } catch (error) {
+    throw new HttpsError(
+      "unauthenticated",
+      error instanceof Error ? error.message : "Không xác minh được Zalo access token",
+    );
+  }
+
+  const errorCode = Number(payload.error ?? 0);
+  if (Number.isFinite(errorCode) && errorCode !== 0) {
+    throw new HttpsError(
+      "unauthenticated",
+      String(payload.message ?? "Zalo access token không hợp lệ"),
+    );
+  }
+
+  const zaloUserId = String(payload.id ?? "").trim();
+  if (!zaloUserId) {
+    throw new HttpsError("unauthenticated", "Zalo không trả về user id hợp lệ");
+  }
+
+  const picture = payload.picture as { data?: { url?: unknown } } | undefined;
+
+  return {
+    zaloUserId,
+    name: optionalString(payload.name),
+    avatar: optionalString(picture?.data?.url),
+  };
 }
 
 function last4(phone?: string): string | undefined {
@@ -504,8 +572,9 @@ export const registerCustomerFromZalo = onCall(functionOptions, async (request) 
   const salonId = requireString(request.data?.salonId, "salonId");
   const mirrorId = requireString(request.data?.mirrorId, "mirrorId");
   const qrToken = requireString(request.data?.qrToken, "qrToken");
-  const zaloUserId = requireString(request.data?.zaloUserId, "zaloUserId");
-  const name = requireString(request.data?.name, "name");
+  const zaloProfile = await verifyZaloAccessToken(request.data?.zaloAccessToken);
+  const zaloUserId = zaloProfile.zaloUserId;
+  const name = optionalString(request.data?.name) ?? zaloProfile.name ?? "Khách hàng";
   const phone = optionalString(request.data?.phone);
   const birthday = optionalString(request.data?.birthday);
   const allowPhoto = requireBoolean(request.data?.allowPhoto, "allowPhoto");
@@ -556,6 +625,7 @@ export const registerCustomerFromZalo = onCall(functionOptions, async (request) 
       salonId,
       mirrorId,
       customerId,
+      zaloUserId,
       status: "waiting",
       createdAt: now,
       updatedAt: now,
@@ -567,6 +637,7 @@ export const registerCustomerFromZalo = onCall(functionOptions, async (request) 
     customerId,
     sessionId: sessionRef.id,
     points: customerSnap.data()?.points ?? 0,
+    zaloUserId,
   };
 });
 
@@ -827,16 +898,16 @@ export const spinLuckyWheel = onCall(functionOptions, async (request) => {
 
 export const spinLuckyWheelFromZalo = onCall(functionOptions, async (request) => {
   const salonId = requireString(request.data?.salonId, "salonId");
-  const zaloUserId = requireString(request.data?.zaloUserId, "zaloUserId");
-  const customerId = customerIdFor(salonId, zaloUserId);
+  const zaloProfile = await verifyZaloAccessToken(request.data?.zaloAccessToken);
+  const customerId = customerIdFor(salonId, zaloProfile.zaloUserId);
 
   return spinWheelForCustomer(salonId, customerId);
 });
 
 export const getCustomerHistoryFromZalo = onCall(functionOptions, async (request) => {
   const salonId = requireString(request.data?.salonId, "salonId");
-  const zaloUserId = requireString(request.data?.zaloUserId, "zaloUserId");
-  const customerId = customerIdFor(salonId, zaloUserId);
+  const zaloProfile = await verifyZaloAccessToken(request.data?.zaloAccessToken);
+  const customerId = customerIdFor(salonId, zaloProfile.zaloUserId);
   const limit = Math.min(Number(request.data?.limit ?? 20), 50);
 
   const recordsSnap = await db.collection("haircut_records")
@@ -877,8 +948,8 @@ export const getCustomerHistoryFromZalo = onCall(functionOptions, async (request
 
 export const getCustomerRewardsFromZalo = onCall(functionOptions, async (request) => {
   const salonId = requireString(request.data?.salonId, "salonId");
-  const zaloUserId = requireString(request.data?.zaloUserId, "zaloUserId");
-  const customerId = customerIdFor(salonId, zaloUserId);
+  const zaloProfile = await verifyZaloAccessToken(request.data?.zaloAccessToken);
+  const customerId = customerIdFor(salonId, zaloProfile.zaloUserId);
   const limit = Math.min(Number(request.data?.limit ?? 20), 50);
 
   const rewardsSnap = await db.collection("reward_history")
@@ -981,6 +1052,86 @@ export const searchSalonCustomers = onCall(functionOptions, async (request) => {
 
   return { customers: enriched };
 });
+
+export const deleteCustomerData = onCall(functionOptions, async (request) => {
+  const uid = currentUid(request.auth);
+  const salonId = requireString(request.data?.salonId, "salonId");
+  const customerId = requireString(request.data?.customerId, "customerId");
+  await assertSalonRole(uid, salonId, ["owner"]);
+
+  const customerRef = db.collection("customers").doc(customerId);
+  const customerSnap = await customerRef.get();
+
+  if (!customerSnap.exists || customerSnap.data()?.salonId !== salonId) {
+    throw new HttpsError("not-found", "Không tìm thấy hồ sơ khách trong salon này");
+  }
+
+  const [
+    deletedRecords,
+    deletedRewards,
+    deletedRequests,
+    deletedSessions,
+  ] = await Promise.all([
+    deleteCustomerCollectionDocs("haircut_records", salonId, customerId),
+    deleteCustomerCollectionDocs("reward_history", salonId, customerId),
+    deleteCustomerCollectionDocs("point_requests", salonId, customerId),
+    deleteCustomerCollectionDocs("chair_sessions", salonId, customerId),
+  ]);
+
+  await customerRef.delete();
+  const deletedStorageFiles = await deleteStoragePrefix(
+    `salons/${salonId}/customers/${customerId}/`,
+  );
+
+  return {
+    customerId,
+    deletedRecords,
+    deletedRewards,
+    deletedRequests,
+    deletedSessions,
+    deletedStorageFiles,
+  };
+});
+
+async function deleteCustomerCollectionDocs(
+  collectionName: string,
+  salonId: string,
+  customerId: string,
+): Promise<number> {
+  const snap = await db.collection(collectionName)
+    .where("salonId", "==", salonId)
+    .where("customerId", "==", customerId)
+    .get();
+
+  const docs = snap.docs;
+  for (let start = 0; start < docs.length; start += 450) {
+    const batch = db.batch();
+    docs.slice(start, start + 450).forEach((doc) => batch.delete(doc.ref));
+    await batch.commit();
+  }
+
+  return docs.length;
+}
+
+async function deleteStoragePrefix(prefix: string): Promise<number> {
+  try {
+    const [files] = await storage.bucket().getFiles({ prefix });
+    const deleted = await Promise.all(files.map(async (file) => {
+      try {
+        await file.delete();
+        return 1;
+      } catch (error) {
+        console.warn("Không xóa được file Storage", file.name, error);
+        return 0;
+      }
+    }));
+
+    return deleted.reduce<number>((total, count) => total + count, 0);
+  } catch (error) {
+    console.warn("Không truy cập được Storage bucket để xóa ảnh khách", error);
+    return 0;
+  }
+}
 
 export const lookupRewardCode = onCall(functionOptions, async (request) => {
   const uid = currentUid(request.auth);

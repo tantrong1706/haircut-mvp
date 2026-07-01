@@ -24,7 +24,7 @@ async function main() {
   const salonId = "demo-salon";
   const mirrorId = "demo-mirror-1";
   const qrToken = "demo-token";
-  const zaloUserId = "mock-zalo-user";
+  const zaloUserId = "demo-zalo-user";
   const customerId = customerIdFor(salonId, zaloUserId);
   const recordId = "demo-record-1";
 
@@ -127,4 +127,3 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
-

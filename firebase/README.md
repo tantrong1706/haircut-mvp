@@ -1,6 +1,6 @@
 # Firebase Backend
 
-## Thiết lập
+## Thiết Lập
 
 ```bash
 cd haircut/firebase
@@ -24,32 +24,45 @@ npm install
 npm run build
 ```
 
-Cấu hình Zalo Mini App ID nếu dùng Functions:
+Cấu hình Zalo Mini App ID và App Secret nếu dùng Functions:
 
 ```bash
 cp functions/.env.example functions/.env
 ```
 
-Sửa `functions/.env` và đặt `ZALO_MINI_APP_ID`.
+Sửa `functions/.env`:
 
-Triển khai web/hosting trong giai đoạn chưa deploy Functions:
-
-```bash
-cd ..
-firebase deploy --only hosting
+```env
+ZALO_MINI_APP_ID=your-mini-app-id
+ZALO_APP_SECRET=your-zalo-app-secret
 ```
 
-Không triển khai Storage nếu Firebase project chưa nâng Blaze.
-Không triển khai Firestore rules production nếu web app vẫn đang ghi Firestore trực tiếp.
+`ZALO_APP_SECRET` bắt buộc cho luồng khách thật vì Functions phải xác minh `zaloAccessToken` với Zalo Open API trước khi suy ra `zaloUserId`.
 
-Khi chuyển web app sang `VITE_FUNCTION_WRITE_MODE=required`, cần deploy Functions trước rồi mới deploy Firestore rules:
+## Deploy Khuyến Nghị
+
+Trong giai đoạn chưa deploy Functions, chỉ deploy hosting:
+
+```powershell
+.\scripts\deploy-firebase.ps1 -OnlyHosting
+```
+
+Khi chuyển web app sang `VITE_FUNCTION_WRITE_MODE=required`, cần deploy Functions trước rồi mới deploy rules:
 
 ```powershell
 .\scripts\deploy-firebase.ps1 -IncludeFunctions
 .\scripts\deploy-firebase.ps1 -IncludeFirestore
 ```
 
-## Demo bằng Emulator
+Chỉ deploy Storage khi Firebase project đã bật Storage/Blaze và bạn đã sẵn sàng dùng ảnh kiểu tóc:
+
+```powershell
+.\scripts\deploy-firebase.ps1 -IncludeStorage
+```
+
+Không deploy full mặc định nếu project chưa bật Storage.
+
+## Demo Bằng Emulator
 
 Terminal 1:
 
@@ -63,9 +76,11 @@ Terminal 2:
 .\scripts\seed-demo.ps1
 ```
 
-## Ghi chú production
+## Ghi Chú Production
 
-- Xác minh Zalo identity ở server trước khi tin `zaloUserId`.
-- Thay Mini App URL mẫu trong `miniAppUrl`.
-- Thêm job dọn `chair_sessions` cũ.
-- Bật App Check trước khi public test.
+- Luồng khách Zalo gửi `zaloAccessToken`; Functions xác minh token ở server trước khi suy ra `zaloUserId`.
+- Đặt `VITE_FUNCTION_WRITE_MODE=required` cho bản pilot thật.
+- Deploy Firestore rules production trước khi mở cho khách thật.
+- Storage rules chỉ cho upload ảnh dưới 5MB và chỉ khi khách đã bật `allowPhoto`.
+- Thêm job dọn `chair_sessions` cũ khi salon bắt đầu dùng thường xuyên.
+- Bật App Check trước khi public test rộng.

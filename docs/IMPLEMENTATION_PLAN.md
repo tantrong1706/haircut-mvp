@@ -1,56 +1,40 @@
-# Kế Hoạch Triển Khai
+# Kế Hoạch Triển Khai HAIRCUT
 
-## Giai đoạn 1: Nền tảng
+## Giai Đoạn 1: MVP Nội Bộ
 
-- Tạo Firebase project.
-- Bật Authentication.
-- Bật Firestore.
-- Cấu hình Hosting.
-- Triển khai web MVP.
-- Tạo tài khoản chủ salon/nhân viên.
-- Tạo salon demo.
+- Hoàn thiện luồng khách quét QR tại gương.
+- Nhân viên thấy khách đang chờ, ghi chú kiểu tóc và gửi yêu cầu cộng 1 điểm.
+- Chủ salon duyệt/từ chối điểm.
+- Khách xem điểm, lịch sử, vòng quay và mã quà.
 
-## Giai đoạn 2: Web MVP
+## Giai Đoạn 2: Bảo Mật Nền Tảng
 
-- Khách quét QR và tạo phiên phục vụ.
-- Nhân viên xem khách đang chờ.
-- Nhân viên gửi yêu cầu cộng điểm.
-- Chủ salon duyệt/từ chối.
-- Khách xem lịch sử và quà.
-- Chủ salon cấu hình vòng quay.
+- Firestore rules mặc định deny.
+- Ghi nghiệp vụ qua Cloud Functions, không để client tự ghi database production.
+- Owner/staff đăng nhập Firebase Auth và phân quyền bằng `users/{uid}`.
+- Staff không tự nhập tên để ghi lịch sử; server lấy tên từ hồ sơ nhân viên.
+- Luồng khách Zalo gửi `zaloAccessToken`; server xác minh token rồi mới suy ra `zaloUserId`.
+- Không fallback im lặng sang một user mock cố định khi mở ngoài Zalo.
 
-## Giai đoạn 3: Bảo mật
+## Giai Đoạn 3: Công Cụ Cho Salon Thật
 
-- Hoàn thiện đăng nhập chủ salon/nhân viên.
-- Dùng `users/{uid}` để phân quyền.
-- Chuyển `VITE_FUNCTION_WRITE_MODE` từ `direct` sang `auto`, rồi sang `required`.
-- Hoàn thiện xác thực khách từ Zalo.
-- Chuyển các thao tác nhạy cảm sang Cloud Functions.
-- Khóa Firestore rules.
-- Bật App Check.
+- Owner quản lý danh sách gương/ghế QR.
+- Owner quản lý nhân viên, trạng thái hoạt động và quyền đổi mã quà.
+- Owner/staff tìm khách theo tên hoặc 4 số cuối SĐT.
+- Owner có công cụ xóa dữ liệu khách khi khách yêu cầu.
+- Storage rules chỉ cho lưu ảnh khi khách bật `allowPhoto`.
 
-## Giai đoạn 4: Zalo Mini App production
+## Giai Đoạn 4: Zalo Mini App Production
 
 - Tạo Mini App trong Zalo developer console.
 - Cấu hình quyền cần thiết.
-- Dùng `getUserInfo` để nhận diện khách.
+- Dùng `getAccessToken` để server xác minh khách.
+- Dùng `getUserInfo` chỉ để gợi ý tên/avatar cho khách sửa trước khi check-in.
 - Chỉ xin số điện thoại khi đã giải thích lý do.
-- Xác minh Zalo token ở server.
-- Cấu hình URL QR thật.
+- Cấu hình URL QR thật cho từng gương/ghế.
 
-## Giai đoạn 5: Ảnh, điểm và quà
+## Giai Đoạn 5: Chuẩn Bị iOS Sau
 
-- Upload ảnh kiểu tóc khi khách đồng ý.
-- Giới hạn quyền xem ảnh.
-- Cho chủ salon cấu hình số điểm mỗi lần cắt.
-- Xác nhận mã quà bằng chủ salon/nhân viên được cấp quyền.
-- Ghi lịch sử sử dụng mã quà.
-
-## Giai đoạn 6: iOS
-
-- Tạo Xcode project.
-- Thêm Firebase SDK.
-- Chép mã SwiftUI từ `ios-app/Haircut`.
-- Thêm `GoogleService-Info.plist`.
-- Test phân quyền chủ salon/nhân viên.
-- Chuẩn bị TestFlight sau khi web MVP ổn định.
+- iOS v1 nên dành cho owner/staff trước.
+- Khách vẫn dùng QR/Zalo/web để giảm rào cản cài app.
+- Chưa mua Apple Developer cho tới khi backend, demo account, privacy/support và web pilot đã ổn.

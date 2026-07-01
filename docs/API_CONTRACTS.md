@@ -1,8 +1,15 @@
-# Hợp Đồng API Cloud Functions
+# Hợp đồng API Cloud Functions
 
-Các hàm dưới đây là callable HTTPS Functions, trừ khi có ghi chú khác.
+Các hàm dưới đây là callable HTTPS Functions. Web app nên dùng `VITE_FUNCTION_WRITE_MODE=required` khi chạy pilot thật để mọi thao tác nghiệp vụ đi qua Cloud Functions.
 
-Web app có thể gọi các hàm ghi dữ liệu qua `VITE_FUNCTION_WRITE_MODE=auto|required`. Khi dùng `required`, client không fallback về ghi Firestore trực tiếp.
+Luồng khách Zalo không tin `zaloUserId` do client tự gửi. Client lấy `zaloAccessToken` bằng `getAccessToken()` của `zmp-sdk`, gửi token lên Cloud Functions; server dùng `ZALO_APP_SECRET` để gọi Zalo Open API và tự suy ra user id thật.
+
+## Biến môi trường Functions
+
+```env
+ZALO_MINI_APP_ID=...
+ZALO_APP_SECRET=...
+```
 
 ## createSalon
 
@@ -16,13 +23,11 @@ Input:
 }
 ```
 
-Output:
+Cần đăng nhập Firebase. Output:
 
 ```json
 { "salonId": "..." }
 ```
-
-Cần đăng nhập Firebase.
 
 ## createStaffProfile
 
@@ -40,40 +45,13 @@ Input:
 
 Chỉ chủ salon được gọi.
 
-## createMirror
+## updateStaffProfile / listStaffProfiles
 
-Input:
+Owner quản lý tên, số nội bộ, trạng thái kích hoạt và quyền đổi mã quà của nhân viên.
 
-```json
-{
-  "salonId": "...",
-  "name": "Gương số 1"
-}
-```
+## createMirror / updateMirror
 
-Chỉ chủ salon được gọi.
-
-## createManualCustomer
-
-Input:
-
-```json
-{
-  "salonId": "...",
-  "name": "Nguyễn Văn A",
-  "phone": "0900000000",
-  "birthday": "1998-01-01",
-  "allowPhoto": true
-}
-```
-
-Output:
-
-```json
-{ "customerId": "..." }
-```
-
-Dùng khi khách không quét QR hoặc không dùng Zalo.
+Owner tạo, bật/tắt, đổi tên hoặc tạo lại `qrToken` cho từng gương/ghế.
 
 ## registerCustomerFromZalo
 
@@ -84,11 +62,11 @@ Input:
   "salonId": "...",
   "mirrorId": "...",
   "qrToken": "...",
-  "zaloUserId": "...",
+  "zaloAccessToken": "...",
   "name": "Nguyễn Văn A",
   "phone": "84900000000",
   "birthday": "1998-01-01",
-  "allowPhoto": true
+  "allowPhoto": false
 }
 ```
 
@@ -98,11 +76,12 @@ Output:
 {
   "customerId": "...",
   "sessionId": "...",
-  "points": 0
+  "points": 0,
+  "zaloUserId": "..."
 }
 ```
 
-Production phải xác minh Zalo token ở server trước khi tin dữ liệu khách.
+`name` là tên hiển thị khách xác nhận tại salon. `zaloUserId` trong output là ID đã xác minh từ Zalo.
 
 ## submitPointRequest
 
@@ -118,34 +97,11 @@ Input:
 }
 ```
 
-Chủ salon hoặc nhân viên được gọi.
+Owner hoặc staff được gọi. Server luôn cố định cộng 1 điểm, không tin số điểm do client tự gửi.
 
-## approvePointRequest
+## approvePointRequest / rejectPointRequest
 
-Input:
-
-```json
-{
-  "salonId": "...",
-  "requestId": "..."
-}
-```
-
-Chỉ chủ salon được gọi. Khi duyệt, hệ thống tăng điểm, tạo lịch sử cắt tóc và đóng phiên phục vụ.
-
-## rejectPointRequest
-
-Input:
-
-```json
-{
-  "salonId": "...",
-  "requestId": "...",
-  "reason": "Chủ salon từ chối"
-}
-```
-
-Chỉ chủ salon được gọi.
+Chỉ owner được gọi. Khi duyệt, server tăng điểm, tạo `haircut_records` và đóng phiên phục vụ. Khi từ chối, yêu cầu điểm chuyển sang `rejected`.
 
 ## updateLuckyWheel
 
@@ -167,32 +123,64 @@ Input:
 }
 ```
 
-Chỉ chủ salon được gọi.
+Chỉ owner được gọi.
 
-## spinLuckyWheel / spinLuckyWheelFromZalo
-
-Trả về:
-
-```json
-{
-  "rewardId": "...",
-  "rewardName": "Giảm 10%",
-  "rewardCode": "HC-1234",
-  "pointsAfter": 0
-}
-```
-
-Bản production nên quay thưởng ở server để tránh gian lận.
-
-## redeemRewardCode
+## spinLuckyWheelFromZalo
 
 Input:
 
 ```json
 {
   "salonId": "...",
-  "rewardCode": "HC-1234"
+  "zaloAccessToken": "..."
 }
 ```
 
-Chủ salon hoặc nhân viên có quyền xác nhận mã quà được gọi.
+Output:
+
+```json
+{
+  "rewardId": "...",
+  "rewardName": "Giảm 10%",
+  "rewardCode": "HC-20260701-ABCD1234",
+  "pointsAfter": 0,
+  "selectedIndex": 0
+}
+```
+
+Kết quả quay được tạo trong transaction ở server. `selectedIndex` giúp frontend quay đúng ô.
+
+## getCustomerHistoryFromZalo / getCustomerRewardsFromZalo
+
+Input:
+
+```json
+{
+  "salonId": "...",
+  "zaloAccessToken": "...",
+  "limit": 20
+}
+```
+
+Server xác minh token, tự suy ra `customerId`, rồi chỉ trả lịch sử hoặc mã quà của đúng khách đó.
+
+## searchSalonCustomers
+
+Owner/staff tìm khách theo tên hoặc 4 số cuối SĐT. Output gồm điểm, lịch sử gần đây và mã quà chưa dùng.
+
+## lookupRewardCode / redeemRewardCode
+
+Owner hoặc staff có `canRedeemRewards=true` được kiểm tra và xác nhận mã quà đã sử dụng.
+
+## deleteCustomerData
+
+Input:
+
+```json
+{
+  "salonId": "...",
+  "customerId": "..."
+}
+```
+
+Chỉ owner được gọi. Hàm xóa hồ sơ khách, lịch sử cắt, mã quà, yêu cầu điểm, phiên ghế và ảnh Storage trong thư mục khách.
