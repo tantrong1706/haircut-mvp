@@ -161,47 +161,33 @@ export function OwnerPage({ currentUser }: Props) {
   }
 
   return (
-    <section className="ops-page">
-      <header className="page-header premium-hero ops-hero">
-        <div className="hero-topline">
-          <BrandLogo />
-          <span className="soft-chip">Bảng điều hành</span>
+    <section className="ops-page owner-page">
+      <header className="ops-topbar owner-topbar">
+        <BrandLogo />
+        <div>
+          <p className="eyebrow">Chủ salon</p>
+          <h1>Quản lý salon</h1>
+          <span>{salonId}</span>
         </div>
-        <p className="eyebrow">Chủ salon</p>
-        <h1>Quản lý salon</h1>
-        <p className="muted">Salon: {salonId}</p>
       </header>
 
-      <div className="metrics-row">
-        <div className="metric-card">
-          <ClipboardCheck size={20} aria-hidden="true" />
-          <span>Chờ duyệt</span>
-          <strong>{requests.length}</strong>
-        </div>
-        <div className="metric-card">
-          <Gift size={20} aria-hidden="true" />
-          <span>Ô đang bật</span>
-          <strong>{wheelConfig.slots.filter((slot) => slot.active).length}</strong>
-        </div>
-      </div>
-
-      <div className="segmented-control owner-tabs" aria-label="Chọn mục quản lý">
+      <div className="segmented-control owner-tabs compact-tabs" aria-label="Chọn mục quản lý">
         <OwnerTabButton
           active={activeTab === "overview"}
           icon={<BarChart3 size={18} />}
-          label="Tổng quan"
+          label="Tổng"
           onClick={() => setActiveTab("overview")}
         />
         <OwnerTabButton
           active={activeTab === "approvals"}
           icon={<ClipboardCheck size={18} />}
-          label="Duyệt điểm"
+          label="Duyệt"
           onClick={() => setActiveTab("approvals")}
         />
         <OwnerTabButton
           active={activeTab === "mirrors"}
           icon={<QrCode size={18} />}
-          label="Gương QR"
+          label="QR"
           onClick={() => setActiveTab("mirrors")}
         />
         <OwnerTabButton
@@ -213,7 +199,7 @@ export function OwnerPage({ currentUser }: Props) {
         <OwnerTabButton
           active={activeTab === "customers"}
           icon={<Search size={18} />}
-          label="Tìm khách"
+          label="Khách"
           onClick={() => setActiveTab("customers")}
         />
         <OwnerTabButton
@@ -225,7 +211,7 @@ export function OwnerPage({ currentUser }: Props) {
         <OwnerTabButton
           active={activeTab === "redeem"}
           icon={<TicketCheck size={18} />}
-          label="Đổi quà"
+          label="Quà"
           onClick={() => setActiveTab("redeem")}
         />
       </div>
@@ -309,12 +295,15 @@ function OverviewPanel({
 
   return (
     <div className="panel overview-panel">
-      <div className="section-heading">
-        <BarChart3 size={22} aria-hidden="true" />
+      <div className="dashboard-heading">
         <div>
-          <h2>Tổng quan hôm nay</h2>
-          <p className="muted">Các số liệu nhanh để chủ salon biết việc cần xử lý.</p>
+          <p className="eyebrow">Hôm nay</p>
+          <h2>Tổng quan</h2>
         </div>
+        <button className="icon-text-button" disabled={loading} onClick={onRefresh}>
+          <RefreshCcw size={18} aria-hidden="true" />
+          {loading ? "Đang tải" : "Làm mới"}
+        </button>
       </div>
 
       <div className="overview-grid">
@@ -340,11 +329,6 @@ function OverviewPanel({
           value={data.unusedRewards}
         />
       </div>
-
-      <button className="secondary-button" disabled={loading} onClick={onRefresh}>
-        <RefreshCcw size={18} aria-hidden="true" />
-        {loading ? "Đang tải..." : "Làm mới tổng quan"}
-      </button>
 
       <div className="owner-next-actions">
         <button type="button" onClick={() => onOpenTab("approvals")}>
@@ -677,7 +661,8 @@ function StaffManagementPanel({
   onError: (message: string) => void;
 }) {
   const [staff, setStaff] = useState<StaffProfile[]>([]);
-  const [uid, setUid] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [canRedeemRewards, setCanRedeemRewards] = useState(false);
@@ -706,13 +691,14 @@ function StaffManagementPanel({
     onError("");
 
     try {
-      await createStaffProfile({ salonId, uid, name, phone, canRedeemRewards });
-      setUid("");
+      await createStaffProfile({ salonId, email, password, name, phone, canRedeemRewards });
+      setEmail("");
+      setPassword("");
       setName("");
       setPhone("");
       setCanRedeemRewards(false);
       await refresh();
-      onMessage("Đã thêm nhân viên.");
+      onMessage("Đã tạo tài khoản nhân viên.");
     } catch (err) {
       onError(err instanceof Error ? err.message : "Không thêm được nhân viên");
     } finally {
@@ -749,12 +735,18 @@ function StaffManagementPanel({
         <UserPlus size={22} aria-hidden="true" />
         <div>
           <h2>Quản lý nhân viên</h2>
-          <p className="muted">Thêm nhân viên bằng UID Firebase Auth, bật/tắt tài khoản và quyền đổi mã quà.</p>
+          <p className="muted">Tạo tài khoản nhân viên bằng email và mật khẩu tạm thời.</p>
         </div>
       </div>
 
       <div className="staff-create-grid">
-        <input value={uid} onChange={(event) => setUid(event.target.value)} placeholder="UID nhân viên" />
+        <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Email nhân viên" />
+        <input
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          type="password"
+          placeholder="Mật khẩu tạm thời"
+        />
         <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Tên nhân viên" />
         <input value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="SĐT nội bộ" />
         <label className="toggle-row inline-toggle">
@@ -765,9 +757,13 @@ function StaffManagementPanel({
           />
           <span>Cho đổi mã quà</span>
         </label>
-        <button className="primary-button" disabled={busyId === "new" || !uid.trim() || !name.trim()} onClick={addStaff}>
+        <button
+          className="primary-button"
+          disabled={busyId === "new" || !email.trim() || password.length < 6 || !name.trim()}
+          onClick={addStaff}
+        >
           <UserPlus size={18} aria-hidden="true" />
-          Thêm
+          Tạo
         </button>
       </div>
 
@@ -824,6 +820,7 @@ function StaffCard({
           {staff.isActive ? "Đang hoạt động" : "Đã tắt"}
         </span>
       </div>
+      {staff.email ? <span>{staff.email}</span> : null}
       <small>UID: {staff.uid}</small>
       <div className="staff-edit-grid">
         <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Tên nhân viên" />

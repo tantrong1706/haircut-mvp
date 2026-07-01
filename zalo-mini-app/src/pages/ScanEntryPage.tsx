@@ -1,12 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Camera,
-  CheckCircle2,
   MessageCircle,
   Phone,
   Scissors,
-  ShieldCheck,
-  Sparkles,
   UserRound,
 } from "lucide-react";
 import { BrandLogo } from "../components/BrandLogo";
@@ -94,11 +91,9 @@ export function ScanEntryPage({ onReady }: Props) {
           <BrandLogo />
           <span className="soft-chip">{mirrorLabel(qr.mirrorId)}</span>
         </div>
-        <p className="eyebrow">Check-in tại salon</p>
-        <h1>Xác nhận lượt cắt của bạn</h1>
-        <p className="muted">
-          Quét QR một lần để salon nhận khách, lưu ghi chú kiểu tóc và cộng điểm sau khi chủ salon duyệt.
-        </p>
+        <p className="eyebrow">Check-in</p>
+        <h1>{mirrorLabel(qr.mirrorId)}</h1>
+        <p className="muted">Xác nhận để salon nhận đúng khách và cộng điểm sau khi cắt.</p>
       </header>
 
       <div className="mirror-card">
@@ -110,23 +105,6 @@ export function ScanEntryPage({ onReady }: Props) {
           <strong>{mirrorLabel(qr.mirrorId)}</strong>
           <small>Phiên phục vụ sẽ gắn với đúng gương/ghế này.</small>
         </div>
-      </div>
-
-      <div className="flow-steps">
-        <Step number="1" title="Khách xác nhận" text="Salon nhận đúng khách tại gương." />
-        <Step number="2" title="Nhân viên ghi chú" text="Kiểu tóc và yêu cầu cộng điểm được gửi sau khi cắt." />
-        <Step number="3" title="Chủ salon duyệt" text="Điểm, lịch sử và quà được cập nhật cho khách." />
-      </div>
-
-      <div className="trust-row">
-        <span>
-          <CheckCircle2 size={18} aria-hidden="true" />
-          Cộng điểm sau khi cắt
-        </span>
-        <span>
-          <ShieldCheck size={18} aria-hidden="true" />
-          Khách chủ động đồng ý
-        </span>
       </div>
 
       <div className="panel form-panel">
@@ -170,6 +148,7 @@ export function ScanEntryPage({ onReady }: Props) {
           <Camera size={18} aria-hidden="true" />
           <span>Đồng ý lưu ảnh kiểu tóc cho lần sau</span>
         </label>
+        <p className="field-note">Dữ liệu chỉ dùng cho chăm sóc khách hàng tại salon này.</p>
       </div>
 
       {error ? <p className="alert error">{error}</p> : null}
@@ -188,31 +167,12 @@ export function ScanEntryPage({ onReady }: Props) {
           </>
         )}
       </button>
-
-      <p className="fine-print">
-        Bạn không cần tạo tài khoản. Salon chỉ dùng thông tin này để cộng điểm và lưu lịch sử cắt tóc.
-      </p>
-
-      <p className="fine-print">
-        <Sparkles size={16} aria-hidden="true" />
-        Mỗi lượt quét tạo một phiên phục vụ riêng cho đúng gương/ghế.
-      </p>
     </section>
   );
 }
 
 function normalizeDisplayName(name: string) {
   return name.replace(/\s+/g, " ").trim();
-}
-
-function Step({ number, title, text }: { number: string; title: string; text: string }) {
-  return (
-    <div className="flow-step">
-      <strong>{number}</strong>
-      <span>{title}</span>
-      <small>{text}</small>
-    </div>
-  );
 }
 
 function mirrorLabel(mirrorId: string) {

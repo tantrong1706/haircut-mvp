@@ -18,6 +18,7 @@ Input:
 ```json
 {
   "name": "Salon Nam",
+  "ownerName": "Anh Nam",
   "address": "123 Đường A",
   "phone": "0900000000"
 }
@@ -26,8 +27,14 @@ Input:
 Cần đăng nhập Firebase. Output:
 
 ```json
-{ "salonId": "..." }
+{
+  "salonId": "...",
+  "mirrorId": "...",
+  "qrUrl": "..."
+}
 ```
+
+Hàm này tự tạo hồ sơ owner, vòng quay mặc định và `Gương 1` để chủ salon có QR đầu tiên ngay sau khi đăng ký.
 
 ## createStaffProfile
 
@@ -36,14 +43,15 @@ Input:
 ```json
 {
   "salonId": "...",
-  "uid": "...",
+  "email": "staff@salon.com",
+  "password": "matkhau-tam",
   "name": "Thợ Nam",
   "phone": "0900000001",
   "canRedeemRewards": true
 }
 ```
 
-Chỉ chủ salon được gọi.
+Chỉ chủ salon được gọi. Server tạo tài khoản Firebase Auth cho nhân viên, rồi gắn hồ sơ `users/{uid}` vào salon. Trường `uid` vẫn được hỗ trợ nội bộ nếu cần gắn một tài khoản Auth đã tồn tại.
 
 ## updateStaffProfile / listStaffProfiles
 

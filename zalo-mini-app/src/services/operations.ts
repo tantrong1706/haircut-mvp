@@ -83,6 +83,7 @@ export type StaffProfile = {
   uid: string;
   salonId: string;
   name: string;
+  email: string;
   phone: string;
   role: "staff";
   isActive: boolean;
@@ -310,16 +311,23 @@ export async function getStaffProfiles(salonId: string): Promise<StaffProfile[]>
 
 export async function createStaffProfile(input: {
   salonId: string;
-  uid: string;
+  uid?: string;
+  email: string;
+  password: string;
   name: string;
   phone?: string;
   canRedeemRewards: boolean;
 }) {
-  const uid = input.uid.trim();
+  const uid = input.uid?.trim();
+  const email = input.email.trim().toLowerCase();
+  const password = input.password;
   const name = input.name.trim();
 
-  if (!uid || !name) {
-    throw new Error("Vui lòng nhập UID và tên nhân viên");
+  if (!email || !password || !name) {
+    throw new Error("Vui lòng nhập email, mật khẩu và tên nhân viên");
+  }
+  if (password.length < 6) {
+    throw new Error("Mật khẩu nhân viên phải có ít nhất 6 ký tự");
   }
 
   return callWriteFunctionOrFallback(
@@ -327,6 +335,8 @@ export async function createStaffProfile(input: {
     {
       salonId: input.salonId,
       uid,
+      email,
+      password,
       name,
       phone: input.phone?.trim() || undefined,
       canRedeemRewards: input.canRedeemRewards,
@@ -334,6 +344,8 @@ export async function createStaffProfile(input: {
     () => createStaffProfileDirect({
       ...input,
       uid,
+      email,
+      password,
       name,
       phone: input.phone?.trim() || "",
     }),
@@ -833,6 +845,7 @@ async function getStaffProfilesDirect(salonId: string): Promise<{ staff: StaffPr
           uid: "demo-staff",
           salonId,
           name: "Nhân viên demo",
+          email: "staff@haircut.demo",
           phone: "",
           role: "staff",
           isActive: true,
@@ -853,7 +866,9 @@ async function getStaffProfilesDirect(salonId: string): Promise<{ staff: StaffPr
 
 async function createStaffProfileDirect(input: {
   salonId: string;
-  uid: string;
+  uid?: string;
+  email: string;
+  password: string;
   name: string;
   phone?: string;
   canRedeemRewards: boolean;
@@ -864,9 +879,12 @@ async function createStaffProfileDirect(input: {
     return;
   }
 
-  await setDoc(doc(db, "users", input.uid), {
+  const staffUid = input.uid || staffUidFromEmail(input.email);
+
+  await setDoc(doc(db, "users", staffUid), {
     salonId: input.salonId,
     name: input.name,
+    email: input.email,
     phone: input.phone || "",
     role: "staff",
     isActive: true,
@@ -1166,6 +1184,7 @@ function mapStaffProfile(docSnap: QueryDocumentSnapshot<DocumentData>): StaffPro
     uid: docSnap.id,
     salonId: String(data.salonId || ""),
     name: String(data.name || "Nhân viên"),
+    email: String(data.email || ""),
     phone: String(data.phone || ""),
     role: "staff",
     isActive: Boolean(data.isActive),
@@ -1348,6 +1367,10 @@ function randomToken() {
   }
 
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+function staffUidFromEmail(email: string) {
+  return `staff_${email.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "")}`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

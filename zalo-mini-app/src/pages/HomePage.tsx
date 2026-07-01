@@ -4,10 +4,10 @@ import {
   Gift,
   Hourglass,
   Scissors,
-  ShieldCheck,
   Sparkles,
   type LucideIcon,
 } from "lucide-react";
+import type { ReactNode } from "react";
 import { BrandLogo } from "../components/BrandLogo";
 import { AppSession, TabKey } from "../services/types";
 
@@ -20,27 +20,11 @@ type Props = {
 const actions: Array<{
   tab: TabKey;
   title: string;
-  description: string;
   Icon: LucideIcon;
 }> = [
-  {
-    tab: "history",
-    title: "Lịch sử cắt tóc",
-    description: "Xem ghi chú kiểu tóc các lần trước",
-    Icon: CalendarClock,
-  },
-  {
-    tab: "wheel",
-    title: "Vòng quay may mắn",
-    description: "Đổi điểm lấy ưu đãi tại salon",
-    Icon: Sparkles,
-  },
-  {
-    tab: "rewards",
-    title: "Quà của tôi",
-    description: "Kiểm tra mã quà chưa sử dụng",
-    Icon: Gift,
-  },
+  { tab: "history", title: "Lịch sử", Icon: CalendarClock },
+  { tab: "wheel", title: "Vòng quay", Icon: Sparkles },
+  { tab: "rewards", title: "Quà", Icon: Gift },
 ];
 
 export function HomePage({ session, onTabChange, onResetSession }: Props) {
@@ -49,43 +33,35 @@ export function HomePage({ session, onTabChange, onResetSession }: Props) {
 
   return (
     <section className="page customer-home">
-      <header className="customer-hero premium-hero">
+      <header className="customer-hero premium-hero compact-hero">
         <div className="hero-topline">
           <BrandLogo />
           <span className="soft-chip">{mirrorLabel(session.qr.mirrorId)}</span>
         </div>
-        <p className="eyebrow">Hồ sơ thành viên</p>
-        <h1>Chào {customer.name}</h1>
-        <p className="muted">{customerIntroText(status)}</p>
+        <p className="eyebrow">Thành viên</p>
+        <h1>{customer.name}</h1>
+        <p className="muted">{shortStatusText(status)}</p>
       </header>
 
-      <div className="status-banner">
-        <div className="status-step done">
-          <CheckCircle2 size={20} aria-hidden="true" />
-          <div>
-            <strong>Đã nhận khách tại {mirrorLabel(session.qr.mirrorId)}</strong>
-            <span>Hồ sơ của bạn đã được tạo cho lượt cắt này.</span>
-          </div>
-        </div>
-        <div className={status === "serving" || status === "completed" || status === "cancelled" ? "status-step done" : "status-step"}>
-          <Hourglass size={20} aria-hidden="true" />
-          <div>
-            <strong>{staffStepTitle(status)}</strong>
-            <span>{staffStepDescription(status)}</span>
-          </div>
-        </div>
-        <div className={status === "completed" ? "status-step done" : "status-step"}>
-          <Gift size={20} aria-hidden="true" />
-          <div>
-            <strong>{ownerStepTitle(status)}</strong>
-            <span>{ownerStepDescription(status)}</span>
-          </div>
-        </div>
+      <div className="status-card">
+        <StatusStep done icon={<CheckCircle2 size={20} />} title="Đã check-in" text={mirrorLabel(session.qr.mirrorId)} />
+        <StatusStep
+          done={status === "serving" || status === "completed" || status === "cancelled"}
+          icon={<Hourglass size={20} />}
+          title={staffStepTitle(status)}
+          text={staffStepText(status)}
+        />
+        <StatusStep
+          done={status === "completed"}
+          icon={<Gift size={20} />}
+          title={ownerStepTitle(status)}
+          text={ownerStepText(status)}
+        />
       </div>
 
       <div className="points-panel premium-points">
         <div>
-          <span>Điểm tích lũy</span>
+          <span>Điểm</span>
           <strong>{customer.points}</strong>
         </div>
         <Scissors size={34} strokeWidth={2.1} aria-hidden="true" />
@@ -93,93 +69,109 @@ export function HomePage({ session, onTabChange, onResetSession }: Props) {
 
       <div className="summary-grid">
         <div className="summary-item">
-          <span>Số điện thoại</span>
-          <strong>{customer.phoneLast4 ? `******${customer.phoneLast4}` : "Chưa cung cấp"}</strong>
+          <span>SĐT</span>
+          <strong>{customer.phoneLast4 ? `******${customer.phoneLast4}` : "Chưa có"}</strong>
         </div>
         <div className="summary-item">
-          <span>Ảnh kiểu tóc</span>
+          <span>Ảnh tóc</span>
           <strong>{customer.allowPhoto ? "Đã đồng ý" : "Không lưu"}</strong>
         </div>
       </div>
 
-      <div className="notice-banner">
-        <ShieldCheck size={20} aria-hidden="true" />
-        <span>Dữ liệu chỉ dùng để chăm sóc khách hàng tại salon này.</span>
-      </div>
-
-      <div className="quick-actions">
-        {actions.map(({ tab, title, description, Icon }) => (
+      <div className="quick-actions compact-actions">
+        {actions.map(({ tab, title, Icon }) => (
           <button key={tab} onClick={() => onTabChange(tab)}>
             <Icon size={22} strokeWidth={2.2} aria-hidden="true" />
             <span>
               <strong>{title}</strong>
-              <small>{description}</small>
             </span>
           </button>
         ))}
       </div>
 
       <button className="secondary-button" type="button" onClick={onResetSession}>
-        Tạo lượt cắt mới trên thiết bị này
+        Tạo lượt mới
       </button>
     </section>
   );
 }
 
-function customerIntroText(status: AppSession["sessionStatus"]) {
+function StatusStep({
+  done,
+  icon,
+  title,
+  text,
+}: {
+  done: boolean;
+  icon: ReactNode;
+  title: string;
+  text: string;
+}) {
+  return (
+    <div className={done ? "status-step done" : "status-step"}>
+      {icon}
+      <div>
+        <strong>{title}</strong>
+        <span>{text}</span>
+      </div>
+    </div>
+  );
+}
+
+function shortStatusText(status: AppSession["sessionStatus"]) {
   if (status === "completed") {
-    return "Lượt cắt đã hoàn tất và điểm đã được cập nhật. Bạn có thể xem lịch sử, mã quà hoặc quay thưởng nếu đủ điểm.";
+    return "Điểm đã được cập nhật.";
   }
   if (status === "cancelled") {
-    return "Lượt cắt này không được cộng điểm. Nếu cần hỗ trợ, bạn có thể hỏi trực tiếp nhân viên tại salon.";
+    return "Lượt này không cộng điểm.";
   }
   if (status === "serving") {
-    return "Nhân viên đã gửi yêu cầu cộng điểm. Vui lòng chờ chủ salon duyệt để điểm được cập nhật.";
+    return "Đang chờ chủ salon duyệt điểm.";
   }
-  return "Salon đã nhận hồ sơ của bạn. Sau khi cắt xong, nhân viên sẽ gửi yêu cầu cộng điểm để chủ salon duyệt.";
+  return "Salon đã nhận khách.";
 }
 
 function staffStepTitle(status: AppSession["sessionStatus"]) {
   if (status === "completed") {
-    return "Nhân viên đã ghi chú kiểu tóc";
+    return "Đã ghi chú";
   }
   if (status === "cancelled") {
-    return "Lượt này đã được xử lý nhưng không cộng điểm";
+    return "Đã xử lý";
   }
   if (status === "serving") {
-    return "Nhân viên đã gửi yêu cầu cộng điểm";
+    return "Chờ duyệt";
   }
-  return "Vui lòng chờ nhân viên xác nhận sau khi cắt";
+  return "Chờ nhân viên";
 }
 
-function staffStepDescription(status: AppSession["sessionStatus"]) {
+function staffStepText(status: AppSession["sessionStatus"]) {
   if (status === "cancelled") {
-    return "Bạn có thể tạo lượt cắt mới nếu đang dùng lại thiết bị này cho lần sau.";
+    return "Có thể tạo lượt mới.";
   }
   if (status === "waiting") {
-    return "Nhân viên sẽ ghi chú kiểu tóc và gửi yêu cầu cộng điểm.";
+    return "Sau khi cắt xong.";
   }
-  return "Thông tin lượt cắt đã được gửi sang chủ salon để xử lý.";
+  return "Đã gửi sang chủ.";
 }
 
 function ownerStepTitle(status: AppSession["sessionStatus"]) {
   if (status === "completed") {
-    return "Điểm đã được chủ salon duyệt";
+    return "Đã cộng điểm";
   }
   if (status === "cancelled") {
-    return "Không cộng điểm cho lượt này";
+    return "Không cộng điểm";
   }
-  return "Điểm được cộng sau khi chủ salon duyệt";
+  return "Chờ chủ salon";
 }
 
-function ownerStepDescription(status: AppSession["sessionStatus"]) {
+function ownerStepText(status: AppSession["sessionStatus"]) {
   if (status === "completed") {
-    return "Bạn có thể xem lịch sử cắt tóc và dùng điểm để quay thưởng.";
+    return "Sẵn sàng dùng điểm.";
   }
   if (status === "cancelled") {
-    return "Nếu có nhầm lẫn, hãy hỏi nhân viên hoặc chủ salon để kiểm tra lại.";
+    return "Hỏi salon nếu cần.";
   }
-  return "Bạn có thể quay thưởng khi đủ điểm tích lũy.";
+  return "Duyệt sau khi cắt.";
 }
 
 function mirrorLabel(mirrorId: string) {

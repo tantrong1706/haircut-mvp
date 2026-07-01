@@ -6,6 +6,7 @@ import {
   Timestamp,
   getFirestore,
 } from "firebase-admin/firestore";
+import { getAuth } from "firebase-admin/auth";
 import { getStorage } from "firebase-admin/storage";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 
@@ -315,12 +316,15 @@ async function spinWheelForCustomer(
 export const createSalon = onCall(functionOptions, async (request) => {
   const uid = currentUid(request.auth);
   const name = requireString(request.data?.name, "name");
+  const ownerName = optionalString(request.data?.ownerName) ?? name;
   const address = optionalString(request.data?.address);
   const phone = optionalString(request.data?.phone);
 
   const salonRef = db.collection("salons").doc();
   const userRef = db.collection("users").doc(uid);
   const wheelRef = db.collection("lucky_wheel").doc(salonRef.id);
+  const mirrorRef = db.collection("mirrors").doc();
+  const qrToken = randomToken();
   const now = Timestamp.now();
 
   await db.runTransaction(async (tx) => {
@@ -337,7 +341,7 @@ export const createSalon = onCall(functionOptions, async (request) => {
     });
     tx.set(userRef, {
       salonId: salonRef.id,
-      name,
+      name: ownerName,
       phone: phone ?? null,
       role: "owner",
       isActive: true,
@@ -359,9 +363,22 @@ export const createSalon = onCall(functionOptions, async (request) => {
       ],
       updatedAt: now,
     });
+    tx.set(mirrorRef, {
+      salonId: salonRef.id,
+      name: "Gương 1",
+      qrToken,
+      qrUrl: miniAppUrl(salonRef.id, mirrorRef.id, qrToken),
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    });
   });
 
-  return { salonId: salonRef.id };
+  return {
+    salonId: salonRef.id,
+    mirrorId: mirrorRef.id,
+    qrUrl: miniAppUrl(salonRef.id, mirrorRef.id, qrToken),
+  };
 });
 
 export const createStaffProfile = onCall(functionOptions, async (request) => {
@@ -369,15 +386,46 @@ export const createStaffProfile = onCall(functionOptions, async (request) => {
   const salonId = requireString(request.data?.salonId, "salonId");
   await assertSalonRole(uid, salonId, ["owner"]);
 
-  const staffUid = requireString(request.data?.uid, "uid");
+  const staffUidInput = optionalString(request.data?.uid);
+  const email = optionalString(request.data?.email)?.toLowerCase();
+  const password = optionalString(request.data?.password);
   const name = requireString(request.data?.name, "name");
   const phone = optionalString(request.data?.phone);
   const canRedeemRewards = Boolean(request.data?.canRedeemRewards);
   const now = Timestamp.now();
+  let staffUid = staffUidInput;
+
+  if (!staffUid) {
+    if (!email) {
+      throw new HttpsError("invalid-argument", "Thiếu email nhân viên");
+    }
+    if (!password || password.length < 6) {
+      throw new HttpsError("invalid-argument", "Mật khẩu nhân viên phải có ít nhất 6 ký tự");
+    }
+
+    try {
+      const userRecord = await getAuth().createUser({
+        email,
+        password,
+        displayName: name,
+        disabled: false,
+      });
+      staffUid = userRecord.uid;
+    } catch (error) {
+      const code = typeof error === "object" && error !== null && "code" in error
+        ? String((error as { code?: unknown }).code)
+        : "";
+      if (code === "auth/email-already-exists") {
+        throw new HttpsError("already-exists", "Email nhân viên đã có tài khoản Auth");
+      }
+      throw new HttpsError("internal", "Không tạo được tài khoản nhân viên");
+    }
+  }
 
   await db.collection("users").doc(staffUid).set({
     salonId,
     name,
+    email: email ?? null,
     phone: phone ?? null,
     role: "staff",
     isActive: true,
@@ -386,7 +434,7 @@ export const createStaffProfile = onCall(functionOptions, async (request) => {
     updatedAt: now,
   }, { merge: true });
 
-  return { uid: staffUid };
+  return { uid: staffUid, email: email ?? "" };
 });
 
 export const createMirror = onCall(functionOptions, async (request) => {
@@ -521,6 +569,7 @@ export const listStaffProfiles = onCall(functionOptions, async (request) => {
         uid: doc.id,
         salonId,
         name: data.name ?? "",
+        email: data.email ?? "",
         phone: data.phone ?? "",
         role: "staff",
         isActive: Boolean(data.isActive),
