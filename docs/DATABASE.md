@@ -79,6 +79,22 @@ chair_sessions/{sessionId}
   updatedAt: timestamp?
 ```
 
+## active_service_sessions
+
+Khóa phiên đang hoạt động theo từng khách trong từng salon. Collection này ngăn một khách quét QR nhiều lần để tạo nhiều phiên chờ trong cùng thời gian phục vụ.
+
+```text
+active_service_sessions/{hash(salonId + customerId)}
+  salonId: string
+  customerId: string
+  sessionId: string
+  mirrorId: string
+  qrToken: string?
+  status: waiting | serving
+  createdAt: timestamp
+  updatedAt: timestamp
+```
+
 ## point_requests
 
 ```text

@@ -67,7 +67,7 @@ export function HomePage({ session, onTabChange, onResetSession }: Props) {
             <span>Hồ sơ của bạn đã được tạo cho lượt cắt này.</span>
           </div>
         </div>
-        <div className={status === "serving" || status === "completed" ? "status-step done" : "status-step"}>
+        <div className={status === "serving" || status === "completed" || status === "cancelled" ? "status-step done" : "status-step"}>
           <Hourglass size={20} aria-hidden="true" />
           <div>
             <strong>{staffStepTitle(status)}</strong>
@@ -130,6 +130,9 @@ function customerIntroText(status: AppSession["sessionStatus"]) {
   if (status === "completed") {
     return "Lượt cắt đã hoàn tất và điểm đã được cập nhật. Bạn có thể xem lịch sử, mã quà hoặc quay thưởng nếu đủ điểm.";
   }
+  if (status === "cancelled") {
+    return "Lượt cắt này không được cộng điểm. Nếu cần hỗ trợ, bạn có thể hỏi trực tiếp nhân viên tại salon.";
+  }
   if (status === "serving") {
     return "Nhân viên đã gửi yêu cầu cộng điểm. Vui lòng chờ chủ salon duyệt để điểm được cập nhật.";
   }
@@ -140,6 +143,9 @@ function staffStepTitle(status: AppSession["sessionStatus"]) {
   if (status === "completed") {
     return "Nhân viên đã ghi chú kiểu tóc";
   }
+  if (status === "cancelled") {
+    return "Lượt này đã được xử lý nhưng không cộng điểm";
+  }
   if (status === "serving") {
     return "Nhân viên đã gửi yêu cầu cộng điểm";
   }
@@ -147,6 +153,9 @@ function staffStepTitle(status: AppSession["sessionStatus"]) {
 }
 
 function staffStepDescription(status: AppSession["sessionStatus"]) {
+  if (status === "cancelled") {
+    return "Bạn có thể tạo lượt cắt mới nếu đang dùng lại thiết bị này cho lần sau.";
+  }
   if (status === "waiting") {
     return "Nhân viên sẽ ghi chú kiểu tóc và gửi yêu cầu cộng điểm.";
   }
@@ -157,12 +166,18 @@ function ownerStepTitle(status: AppSession["sessionStatus"]) {
   if (status === "completed") {
     return "Điểm đã được chủ salon duyệt";
   }
+  if (status === "cancelled") {
+    return "Không cộng điểm cho lượt này";
+  }
   return "Điểm được cộng sau khi chủ salon duyệt";
 }
 
 function ownerStepDescription(status: AppSession["sessionStatus"]) {
   if (status === "completed") {
     return "Bạn có thể xem lịch sử cắt tóc và dùng điểm để quay thưởng.";
+  }
+  if (status === "cancelled") {
+    return "Nếu có nhầm lẫn, hãy hỏi nhân viên hoặc chủ salon để kiểm tra lại.";
   }
   return "Bạn có thể quay thưởng khi đủ điểm tích lũy.";
 }

@@ -116,6 +116,14 @@ function customerIdFor(salonId: string, zaloUserId: string): string {
     .slice(0, 40);
 }
 
+function activeSessionRefFor(salonId: string, customerId: string) {
+  const id = createHash("sha256")
+    .update(`${salonId}:${customerId}`)
+    .digest("hex")
+    .slice(0, 40);
+  return db.collection("active_service_sessions").doc(id);
+}
+
 async function verifyZaloAccessToken(accessTokenInput: unknown): Promise<ZaloProfile> {
   const accessToken = requireString(accessTokenInput, "zaloAccessToken");
   const appSecret = process.env.ZALO_APP_SECRET || process.env.ZALO_SECRET_KEY || "";
@@ -595,10 +603,18 @@ export const registerCustomerFromZalo = onCall(functionOptions, async (request) 
   const customerId = customerIdFor(salonId, zaloUserId);
   const customerRef = db.collection("customers").doc(customerId);
   const sessionRef = db.collection("chair_sessions").doc();
+  const activeSessionRef = activeSessionRefFor(salonId, customerId);
   const now = Timestamp.now();
+  let returnedSessionId = sessionRef.id;
+  let returnedMirrorId = mirrorId;
+  let returnedQrToken = qrToken;
+  let returnedStatus = "waiting";
 
   await db.runTransaction(async (tx) => {
-    const customerSnap = await tx.get(customerRef);
+    const [customerSnap, activeSessionSnap] = await Promise.all([
+      tx.get(customerRef),
+      tx.get(activeSessionRef),
+    ]);
     const baseCustomer = {
       salonId,
       zaloUserId,
@@ -621,11 +637,40 @@ export const registerCustomerFromZalo = onCall(functionOptions, async (request) 
       });
     }
 
+    const activeSession = activeSessionSnap.exists ? activeSessionSnap.data() : null;
+    const activeStatus = String(activeSession?.status ?? "");
+    const canReuseActiveSession =
+      activeSession &&
+      (activeStatus === "waiting" || activeStatus === "serving") &&
+      isFreshServiceSession(activeSession.createdAt, now) &&
+      typeof activeSession.sessionId === "string" &&
+      activeSession.sessionId.length > 0;
+
+    if (canReuseActiveSession) {
+      returnedSessionId = String(activeSession.sessionId);
+      returnedMirrorId = String(activeSession.mirrorId || mirrorId);
+      returnedQrToken = String(activeSession.qrToken || qrToken);
+      returnedStatus = activeStatus;
+      tx.set(activeSessionRef, { updatedAt: now }, { merge: true });
+      return;
+    }
+
     tx.set(sessionRef, {
       salonId,
       mirrorId,
+      qrToken,
       customerId,
       zaloUserId,
+      status: "waiting",
+      createdAt: now,
+      updatedAt: now,
+    });
+    tx.set(activeSessionRef, {
+      salonId,
+      customerId,
+      sessionId: sessionRef.id,
+      mirrorId,
+      qrToken,
       status: "waiting",
       createdAt: now,
       updatedAt: now,
@@ -635,7 +680,10 @@ export const registerCustomerFromZalo = onCall(functionOptions, async (request) 
   const customerSnap = await customerRef.get();
   return {
     customerId,
-    sessionId: sessionRef.id,
+    sessionId: returnedSessionId,
+    mirrorId: returnedMirrorId,
+    qrToken: returnedQrToken,
+    sessionStatus: returnedStatus,
     points: customerSnap.data()?.points ?? 0,
     zaloUserId,
   };
@@ -702,6 +750,16 @@ export const submitPointRequest = onCall(functionOptions, async (request) => {
       status: "serving",
       updatedAt: now,
     }, { merge: true });
+    tx.set(activeSessionRefFor(salonId, String(session.customerId || "")), {
+      salonId,
+      customerId: session.customerId,
+      sessionId,
+      mirrorId: session.mirrorId ?? null,
+      qrToken: session.qrToken ?? null,
+      status: "serving",
+      createdAt: session.createdAt ?? now,
+      updatedAt: now,
+    }, { merge: true });
   });
 
   return { requestId: requestRef.id };
@@ -765,6 +823,7 @@ export const approvePointRequest = onCall(functionOptions, async (request) => {
       status: "completed",
       updatedAt: now,
     }, { merge: true });
+    tx.delete(activeSessionRefFor(salonId, String(pointRequest.customerId || "")));
   });
 
   return { ok: true };
@@ -777,18 +836,33 @@ export const rejectPointRequest = onCall(functionOptions, async (request) => {
   const reason = optionalString(request.data?.reason) ?? "";
   await assertSalonRole(uid, salonId, ["owner"]);
 
-  const ref = db.collection("point_requests").doc(requestId);
-  const snap = await ref.get();
-  if (!snap.exists || snap.data()?.salonId !== salonId) {
-    throw new HttpsError("not-found", "Không tìm thấy yêu cầu cộng điểm");
-  }
+  const requestRef = db.collection("point_requests").doc(requestId);
+  const now = Timestamp.now();
 
-  await ref.set({
-    status: "rejected",
-    rejectedBy: uid,
-    rejectionReason: reason,
-    updatedAt: Timestamp.now(),
-  }, { merge: true });
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(requestRef);
+    if (!snap.exists || snap.data()?.salonId !== salonId) {
+      throw new HttpsError("not-found", "Không tìm thấy yêu cầu cộng điểm");
+    }
+
+    const pointRequest = snap.data();
+    if (pointRequest?.status !== "pending") {
+      throw new HttpsError("failed-precondition", "Yêu cầu đã được xử lý");
+    }
+
+    tx.set(requestRef, {
+      status: "rejected",
+      rejectedBy: uid,
+      rejectedAt: now,
+      rejectionReason: reason,
+      updatedAt: now,
+    }, { merge: true });
+    tx.set(db.collection("chair_sessions").doc(String(pointRequest.sessionId || "")), {
+      status: "cancelled",
+      updatedAt: now,
+    }, { merge: true });
+    tx.delete(activeSessionRefFor(salonId, String(pointRequest.customerId || "")));
+  });
 
   return { ok: true };
 });
@@ -1079,6 +1153,7 @@ export const deleteCustomerData = onCall(functionOptions, async (request) => {
   ]);
 
   await customerRef.delete();
+  await activeSessionRefFor(salonId, customerId).delete();
   const deletedStorageFiles = await deleteStoragePrefix(
     `salons/${salonId}/customers/${customerId}/`,
   );

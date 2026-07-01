@@ -34,6 +34,9 @@ type RegisterInput = QrContext & {
 type RegisterCustomerFunctionResult = {
   customerId: string;
   sessionId: string;
+  mirrorId?: string;
+  qrToken?: string;
+  sessionStatus?: AppSession["sessionStatus"];
   points: number;
   zaloUserId: string;
 };
@@ -460,12 +463,12 @@ function buildSessionFromRegisterResult(
   return {
     qr: {
       salonId: input.salonId,
-      mirrorId: input.mirrorId,
-      qrToken: input.qrToken,
+      mirrorId: result.mirrorId || input.mirrorId,
+      qrToken: result.qrToken || input.qrToken,
     },
     sessionId: result.sessionId,
     zaloUserId: result.zaloUserId,
-    sessionStatus: "waiting",
+    sessionStatus: result.sessionStatus || "waiting",
     customer: {
       customerId: result.customerId,
       name: input.name || "Khách hàng",
