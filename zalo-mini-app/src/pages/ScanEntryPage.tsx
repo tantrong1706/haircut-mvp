@@ -3,6 +3,7 @@ import {
   Camera,
   MessageCircle,
   Phone,
+  RefreshCcw,
   Scissors,
   UserRound,
 } from "lucide-react";
@@ -21,17 +22,31 @@ export function ScanEntryPage({ onReady }: Props) {
   const [displayName, setDisplayName] = useState("");
   const [identity, setIdentity] = useState<ZaloIdentity | null>(null);
   const [loadingIdentity, setLoadingIdentity] = useState(true);
+  const [zaloRequired, setZaloRequired] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const nameTouchedRef = useRef(false);
+  const mountedRef = useRef(false);
   const qr = parseQrContext();
 
   useEffect(() => {
-    let mounted = true;
+    mountedRef.current = true;
+
+    loadZaloIdentity();
+
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  function loadZaloIdentity() {
+    setLoadingIdentity(true);
+    setZaloRequired(false);
+    setError(null);
 
     getZaloIdentity()
       .then((nextIdentity) => {
-        if (!mounted) {
+        if (!mountedRef.current) {
           return;
         }
 
@@ -40,21 +55,18 @@ export function ScanEntryPage({ onReady }: Props) {
           setDisplayName(normalizeDisplayName(nextIdentity.name));
         }
       })
-      .catch(() => {
-        if (mounted) {
-          setError("Vui lòng mở HAIRCUT trong Zalo để xác nhận danh tính trước khi tạo lượt cắt.");
+      .catch((err) => {
+        if (mountedRef.current) {
+          setZaloRequired(true);
+          setError(err instanceof Error ? err.message : "Vui lòng mở HAIRCUT trong Zalo để xác nhận danh tính.");
         }
       })
       .finally(() => {
-        if (mounted) {
+        if (mountedRef.current) {
           setLoadingIdentity(false);
         }
       });
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
+  }
 
   async function continueWithZalo() {
     const confirmedName = normalizeDisplayName(displayName);
@@ -95,6 +107,34 @@ export function ScanEntryPage({ onReady }: Props) {
         <h1>{mirrorLabel(qr.mirrorId)}</h1>
         <p className="muted">Xác nhận để salon nhận đúng khách và cộng điểm sau khi cắt.</p>
       </header>
+
+      {zaloRequired ? (
+        <div className="panel zalo-required-card">
+          <MessageCircle size={34} aria-hidden="true" />
+          <div>
+            <h2>Cần mở trong Zalo</h2>
+            <p className="muted">
+              HAIRCUT cần xác nhận danh tính Zalo trước khi tạo lượt cắt. Vui lòng mở link này trong Zalo hoặc quét lại QR tại salon.
+            </p>
+          </div>
+          <div className="button-row wrap-row">
+            {zaloOpenUrl(qr) ? (
+              <button className="primary-button" onClick={() => window.location.assign(zaloOpenUrl(qr))}>
+                <MessageCircle size={20} aria-hidden="true" />
+                Mở trong Zalo
+              </button>
+            ) : null}
+            <button className="secondary-button" onClick={() => loadZaloIdentity()}>
+              <RefreshCcw size={18} aria-hidden="true" />
+              Thử lại
+            </button>
+          </div>
+          {error ? <p className="alert error">{error}</p> : null}
+        </div>
+      ) : null}
+
+      {!zaloRequired ? (
+        <>
 
       <div className="mirror-card">
         <div className="mirror-visual">
@@ -167,6 +207,8 @@ export function ScanEntryPage({ onReady }: Props) {
           </>
         )}
       </button>
+        </>
+      ) : null}
     </section>
   );
 }
@@ -181,4 +223,15 @@ function mirrorLabel(mirrorId: string) {
   }
 
   return mirrorId || "Gương";
+}
+
+function zaloOpenUrl(qr: ReturnType<typeof parseQrContext>) {
+  const miniAppId = String(import.meta.env.VITE_ZALO_MINI_APP_ID || "").trim();
+
+  if (!miniAppId) {
+    return "";
+  }
+
+  const params = new URLSearchParams(qr);
+  return `https://zalo.me/s/${miniAppId}?${params.toString()}`;
 }

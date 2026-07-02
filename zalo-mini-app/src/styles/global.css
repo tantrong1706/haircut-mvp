@@ -591,6 +591,18 @@ small {
   color: var(--green-strong);
 }
 
+.zalo-required-card {
+  justify-items: start;
+}
+
+.zalo-required-card > svg {
+  color: var(--green-strong);
+}
+
+.zalo-required-card h2 {
+  margin: 0 0 4px;
+}
+
 .compact-hero {
   padding: 16px;
   min-height: auto;
