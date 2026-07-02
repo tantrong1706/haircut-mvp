@@ -57,6 +57,19 @@ Chỉ chủ salon được gọi. Server tạo tài khoản Firebase Auth cho nh
 
 Owner quản lý tên, số nội bộ, trạng thái kích hoạt và quyền đổi mã quà của nhân viên.
 
+## updateOwnerAvatar
+
+Input:
+
+```json
+{
+  "salonId": "...",
+  "avatarUrl": "https://example.com/avatar.jpg"
+}
+```
+
+Chỉ owner của đúng salon được gọi. Gửi `avatarUrl` rỗng để xóa avatar. Server cập nhật cả `users/{uid}.avatarUrl` và `photoURL` trong Firebase Auth.
+
 ## createMirror / updateMirror
 
 Owner tạo, bật/tắt, đổi tên hoặc tạo lại `qrToken` cho từng gương/ghế.

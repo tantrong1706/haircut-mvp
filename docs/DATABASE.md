@@ -25,6 +25,7 @@ Firebase Auth user cho chủ salon và nhân viên.
 users/{uid}
   salonId: string
   name: string
+  avatarUrl: string?
   phone: string?
   role: owner | staff
   isActive: boolean

@@ -65,6 +65,36 @@ function optionalString(value: unknown): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
+function avatarUrlString(value: unknown): string {
+  if (value === undefined || value === null) {
+    return "";
+  }
+  if (typeof value !== "string") {
+    throw new HttpsError("invalid-argument", "Avatar phải là đường dẫn ảnh");
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+  if (trimmed.length > 500) {
+    throw new HttpsError("invalid-argument", "Đường dẫn avatar quá dài");
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    throw new HttpsError("invalid-argument", "Đường dẫn avatar không hợp lệ");
+  }
+
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    throw new HttpsError("invalid-argument", "Avatar phải dùng link http hoặc https");
+  }
+
+  return trimmed;
+}
+
 function requireBoolean(value: unknown, field: string): boolean {
   if (typeof value !== "boolean") {
     throw new HttpsError("invalid-argument", `${field} phải là đúng/sai`);
@@ -549,6 +579,26 @@ export const updateStaffProfile = onCall(functionOptions, async (request) => {
   await staffRef.set(payload, { merge: true });
 
   return { uid: staffUid };
+});
+
+export const updateOwnerAvatar = onCall(functionOptions, async (request) => {
+  const uid = currentUid(request.auth);
+  const salonId = requireString(request.data?.salonId, "salonId");
+  await assertSalonRole(uid, salonId, ["owner"]);
+
+  const avatarUrl = avatarUrlString(request.data?.avatarUrl);
+  const now = Timestamp.now();
+
+  await db.collection("users").doc(uid).set({
+    avatarUrl: avatarUrl || null,
+    updatedAt: now,
+  }, { merge: true });
+
+  await getAuth().updateUser(uid, {
+    photoURL: avatarUrl || null,
+  });
+
+  return { avatarUrl };
 });
 
 export const listStaffProfiles = onCall(functionOptions, async (request) => {

@@ -1093,6 +1093,62 @@ small {
   justify-content: flex-start;
 }
 
+.owner-avatar {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  margin-left: auto;
+  overflow: hidden;
+  border: 2px solid #ffffff;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #13795b, #d89a22);
+  color: #ffffff;
+  box-shadow: 0 10px 24px rgba(21, 25, 23, 0.16);
+}
+
+.owner-avatar.large {
+  width: 86px;
+  height: 86px;
+  margin-left: 0;
+  box-shadow: 0 14px 30px rgba(21, 25, 23, 0.14);
+}
+
+.owner-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.owner-avatar svg {
+  grid-area: 1 / 1;
+  opacity: 0.34;
+}
+
+.owner-avatar span {
+  grid-area: 1 / 1;
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 950;
+  letter-spacing: 0;
+}
+
+.owner-avatar.large span {
+  font-size: 24px;
+}
+
+.owner-profile-panel {
+  grid-template-columns: auto 1fr;
+  align-items: center;
+}
+
+.owner-profile-form {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
 .ops-grid {
   display: grid;
   gap: 14px;
@@ -1505,6 +1561,10 @@ small {
   }
 
   .ops-grid.staff-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .owner-profile-panel {
     grid-template-columns: 1fr;
   }
 

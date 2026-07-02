@@ -6,6 +6,7 @@ import {
   ClipboardCheck,
   Copy,
   Gift,
+  Image as ImageIcon,
   Power,
   QrCode,
   RefreshCcw,
@@ -16,6 +17,7 @@ import {
   TicketCheck,
   Trash2,
   UserPlus,
+  UserRound,
   UsersRound,
   XCircle,
 } from "lucide-react";
@@ -43,7 +45,7 @@ import {
   updateMirror,
   updateStaffProfile,
 } from "../services/operations";
-import { AppUser } from "../services/auth";
+import { AppUser, updateOwnerAvatar } from "../services/auth";
 import { LuckyWheelConfig, defaultLuckyWheelConfig } from "../services/types";
 
 type OwnerTab = "overview" | "approvals" | "mirrors" | "staff" | "customers" | "wheel" | "redeem";
@@ -64,6 +66,9 @@ export function OwnerPage({ currentUser }: Props) {
   const [busyId, setBusyId] = useState("");
   const [loadingOverview, setLoadingOverview] = useState(true);
   const [savingWheel, setSavingWheel] = useState(false);
+  const [ownerAvatarUrl, setOwnerAvatarUrl] = useState(currentUser.avatarUrl || "");
+  const [draftAvatarUrl, setDraftAvatarUrl] = useState(currentUser.avatarUrl || "");
+  const [savingAvatar, setSavingAvatar] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -87,6 +92,11 @@ export function OwnerPage({ currentUser }: Props) {
   useEffect(() => {
     refreshOverview();
   }, [salonId]);
+
+  useEffect(() => {
+    setOwnerAvatarUrl(currentUser.avatarUrl || "");
+    setDraftAvatarUrl(currentUser.avatarUrl || "");
+  }, [currentUser.avatarUrl, currentUser.uid]);
 
   async function refreshOverview() {
     setLoadingOverview(true);
@@ -160,6 +170,26 @@ export function OwnerPage({ currentUser }: Props) {
     }
   }
 
+  async function saveOwnerAvatar(nextAvatarUrl = draftAvatarUrl) {
+    setSavingAvatar(true);
+    setMessage("");
+    setError("");
+
+    try {
+      const result = await updateOwnerAvatar({
+        salonId,
+        avatarUrl: nextAvatarUrl,
+      });
+      setOwnerAvatarUrl(result.avatarUrl);
+      setDraftAvatarUrl(result.avatarUrl);
+      setMessage(result.avatarUrl ? "Đã cập nhật avatar chủ salon." : "Đã xóa avatar chủ salon.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không lưu được avatar");
+    } finally {
+      setSavingAvatar(false);
+    }
+  }
+
   return (
     <section className="ops-page owner-page">
       <header className="ops-topbar owner-topbar">
@@ -169,6 +199,7 @@ export function OwnerPage({ currentUser }: Props) {
           <h1>Quản lý salon</h1>
           <span>{salonId}</span>
         </div>
+        <OwnerAvatar avatarUrl={ownerAvatarUrl} name={currentUser.name} />
       </header>
 
       <div className="segmented-control owner-tabs compact-tabs" aria-label="Chọn mục quản lý">
@@ -217,12 +248,23 @@ export function OwnerPage({ currentUser }: Props) {
       </div>
 
       {activeTab === "overview" ? (
-        <OverviewPanel
-          overview={overview}
-          loading={loadingOverview}
-          onRefresh={refreshOverview}
-          onOpenTab={setActiveTab}
-        />
+        <>
+          <OwnerProfilePanel
+            currentUser={currentUser}
+            avatarUrl={ownerAvatarUrl}
+            draftAvatarUrl={draftAvatarUrl}
+            saving={savingAvatar}
+            onDraftChange={setDraftAvatarUrl}
+            onSave={() => saveOwnerAvatar()}
+            onClear={() => saveOwnerAvatar("")}
+          />
+          <OverviewPanel
+            overview={overview}
+            loading={loadingOverview}
+            onRefresh={refreshOverview}
+            onOpenTab={setActiveTab}
+          />
+        </>
       ) : activeTab === "approvals" ? (
         <ApprovalsPanel
           requests={requests}
@@ -270,6 +312,99 @@ function OwnerTabButton({
       {label}
     </button>
   );
+}
+
+function OwnerProfilePanel({
+  currentUser,
+  avatarUrl,
+  draftAvatarUrl,
+  saving,
+  onDraftChange,
+  onSave,
+  onClear,
+}: {
+  currentUser: AppUser;
+  avatarUrl: string;
+  draftAvatarUrl: string;
+  saving: boolean;
+  onDraftChange: (value: string) => void;
+  onSave: () => void;
+  onClear: () => void;
+}) {
+  const trimmedDraft = draftAvatarUrl.trim();
+  const hasChanges = trimmedDraft !== avatarUrl;
+
+  return (
+    <div className="panel owner-profile-panel">
+      <OwnerAvatar avatarUrl={trimmedDraft || avatarUrl} name={currentUser.name} large />
+      <div className="owner-profile-form">
+        <div className="dashboard-heading">
+          <div>
+            <p className="eyebrow">Hồ sơ</p>
+            <h2>Avatar chủ salon</h2>
+          </div>
+          <span className="pill muted-pill">{currentUser.name || "Chủ salon"}</span>
+        </div>
+
+        <label className="field">
+          <span>
+            <ImageIcon size={18} aria-hidden="true" />
+            Link ảnh đại diện
+          </span>
+          <input
+            value={draftAvatarUrl}
+            onChange={(event) => onDraftChange(event.target.value)}
+            inputMode="url"
+            placeholder="https://..."
+          />
+        </label>
+
+        <div className="button-row wrap-row">
+          <button className="primary-button" disabled={saving || !hasChanges} onClick={onSave}>
+            <Save size={18} aria-hidden="true" />
+            {saving ? "Đang lưu..." : "Lưu avatar"}
+          </button>
+          <button className="secondary-button" disabled={saving || (!avatarUrl && !trimmedDraft)} onClick={onClear}>
+            <Trash2 size={18} aria-hidden="true" />
+            Xóa avatar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function OwnerAvatar({
+  avatarUrl,
+  name,
+  large = false,
+}: {
+  avatarUrl: string;
+  name: string;
+  large?: boolean;
+}) {
+  return (
+    <div className={large ? "owner-avatar large" : "owner-avatar"}>
+      {avatarUrl ? (
+        <img src={avatarUrl} alt="" />
+      ) : (
+        <>
+          <UserRound size={large ? 30 : 22} aria-hidden="true" />
+          <span>{ownerInitials(name)}</span>
+        </>
+      )}
+    </div>
+  );
+}
+
+function ownerInitials(name: string) {
+  const words = name.trim().split(/\s+/).filter(Boolean).slice(0, 2);
+
+  if (words.length === 0) {
+    return "HC";
+  }
+
+  return words.map((word) => word[0]?.toUpperCase() || "").join("");
 }
 
 function OverviewPanel({

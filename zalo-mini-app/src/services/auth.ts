@@ -15,6 +15,7 @@ export type AppUser = {
   uid: string;
   salonId: string;
   name: string;
+  avatarUrl: string;
   role: AppRole;
   isActive: boolean;
   canRedeemRewards?: boolean;
@@ -96,6 +97,41 @@ export async function signOutOwnerStaff() {
   await signOut(auth);
 }
 
+export async function updateOwnerAvatar(input: {
+  salonId: string;
+  avatarUrl: string;
+}): Promise<{ avatarUrl: string }> {
+  const avatarUrl = input.avatarUrl.trim();
+
+  if (avatarUrl) {
+    let parsed: URL;
+    try {
+      parsed = new URL(avatarUrl);
+    } catch {
+      throw new Error("Link avatar không hợp lệ");
+    }
+
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+      throw new Error("Avatar phải dùng link http hoặc https");
+    }
+  }
+
+  const result = await callFunction<{ salonId: string; avatarUrl: string }, { avatarUrl: string }>(
+    "updateOwnerAvatar",
+    {
+      salonId: input.salonId,
+      avatarUrl,
+    },
+  );
+  const auth = getFirebaseAuth();
+
+  if (auth?.currentUser) {
+    await updateProfile(auth.currentUser, { photoURL: result.avatarUrl || null });
+  }
+
+  return result;
+}
+
 export async function getAppUser(uid: string): Promise<AppUser | null> {
   const db = getFirebaseDb();
 
@@ -120,6 +156,7 @@ export async function getAppUser(uid: string): Promise<AppUser | null> {
     uid,
     salonId: String(data.salonId || ""),
     name: String(data.name || ""),
+    avatarUrl: String(data.avatarUrl || ""),
     role,
     isActive: Boolean(data.isActive),
     canRedeemRewards: Boolean(data.canRedeemRewards),
