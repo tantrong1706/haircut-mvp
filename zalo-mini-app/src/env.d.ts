@@ -1,5 +1,28 @@
 /// <reference types="vite/client" />
 
+interface ImportMetaEnv {
+  readonly VITE_APP_ENV?: string;
+  readonly VITE_APP_VERSION?: string;
+  readonly VITE_FIREBASE_API_KEY?: string;
+  readonly VITE_FIREBASE_AUTH_DOMAIN?: string;
+  readonly VITE_FIREBASE_PROJECT_ID?: string;
+  readonly VITE_FIREBASE_STORAGE_BUCKET?: string;
+  readonly VITE_FIREBASE_MESSAGING_SENDER_ID?: string;
+  readonly VITE_FIREBASE_APP_ID?: string;
+  readonly VITE_FIREBASE_MEASUREMENT_ID?: string;
+  readonly VITE_FIREBASE_REGION?: string;
+  readonly VITE_FUNCTION_WRITE_MODE?: string;
+  readonly VITE_MONITORING_DISABLED?: string;
+  readonly VITE_SENTRY_DSN?: string;
+  readonly VITE_SENTRY_TRACES_SAMPLE_RATE?: string;
+  readonly VITE_SENTRY_REPLAY_SAMPLE_RATE?: string;
+  readonly VITE_SENTRY_REPLAY_ON_ERROR_SAMPLE_RATE?: string;
+}
+
+interface ImportMeta {
+  readonly env: ImportMetaEnv;
+}
+
 declare module "zmp-sdk/apis" {
   export function getAccessToken(): Promise<string>;
 

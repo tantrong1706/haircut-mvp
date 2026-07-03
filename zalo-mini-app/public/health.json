@@ -1,0 +1,6 @@
+{
+  "status": "ok",
+  "service": "haircut-zalo-mini-app",
+  "environment": "production",
+  "version": "0.1.0"
+}

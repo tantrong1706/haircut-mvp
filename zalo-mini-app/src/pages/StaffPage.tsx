@@ -10,6 +10,7 @@ import {
   submitPointRequest,
 } from "../services/operations";
 import { AppUser } from "../services/auth";
+import { trackEvent, withMonitoringTrace } from "../services/monitoring";
 
 type Props = {
   currentUser: AppUser;
@@ -79,20 +80,36 @@ export function StaffPage({ currentUser }: Props) {
     setLoading(true);
     setMessage("");
     setError("");
+    trackEvent("staff_point_request_started", {
+      salon_id: salonId,
+      session_status: selectedSession.status,
+      points_requested: pointPerVisit,
+    });
 
     try {
-      await submitPointRequest({
-        salonId,
-        session: selectedSession,
-        note,
-        pointsRequested: pointPerVisit,
-      });
+      await withMonitoringTrace(
+        "staff_point_request",
+        () => submitPointRequest({
+          salonId,
+          session: selectedSession,
+          note,
+          pointsRequested: pointPerVisit,
+        }),
+        {
+          salon_id: salonId,
+          session_status: selectedSession.status,
+        },
+      );
       setSessions((current) =>
         current.map((session) =>
           session.id === selectedSession.id ? { ...session, status: "serving" } : session,
         ),
       );
       setNote("");
+      trackEvent("staff_point_request_submitted", {
+        salon_id: salonId,
+        points_requested: pointPerVisit,
+      });
       setMessage(`Đã gửi yêu cầu cộng ${pointPerVisit} điểm.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không gửi được yêu cầu");

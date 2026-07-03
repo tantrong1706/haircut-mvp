@@ -1,5 +1,5 @@
-const CACHE_NAME = "haircut-app-v5";
-const APP_SHELL = ["/", "/index.html", "/haircut-icon.svg", "/manifest.webmanifest", "/assets/salon-hero.webp"];
+const CACHE_NAME = "haircut-app-v6";
+const APP_SHELL = ["/", "/index.html", "/haircut-icon.svg", "/manifest.webmanifest", "/assets/salon-hero.webp", "/health.json"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

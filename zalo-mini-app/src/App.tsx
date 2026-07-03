@@ -11,6 +11,7 @@ import { ScanEntryPage } from "./pages/ScanEntryPage";
 import { StaffPage } from "./pages/StaffPage";
 import { WheelPage } from "./pages/WheelPage";
 import { listenSessionLiveUpdates, parseQrContext } from "./services/api";
+import { trackEvent } from "./services/monitoring";
 import { clearSavedSession, loadSavedSession, saveSession } from "./services/sessionStore";
 import { AppSession, TabKey } from "./services/types";
 
@@ -29,8 +30,19 @@ export default function App() {
   const path = window.location.pathname;
 
   useEffect(() => {
+    trackEvent("page_view", {
+      page_path: path,
+      has_customer_session: Boolean(session),
+      salon_id: session?.qr.salonId || currentQr.salonId,
+    });
+  }, [currentQr.salonId, path, session?.sessionId]);
+
+  useEffect(() => {
     function updateOnlineState() {
       setIsOnline(navigator.onLine);
+      trackEvent(navigator.onLine ? "app_online" : "app_offline", {
+        page_path: path,
+      });
     }
 
     window.addEventListener("online", updateOnlineState);
@@ -39,7 +51,7 @@ export default function App() {
       window.removeEventListener("online", updateOnlineState);
       window.removeEventListener("offline", updateOnlineState);
     };
-  }, []);
+  }, [path]);
 
   useEffect(() => {
     if (session) {
@@ -60,8 +72,19 @@ export default function App() {
   }, [session?.sessionId]);
 
   function resetSession() {
+    trackEvent("customer_session_reset", {
+      salon_id: session?.qr.salonId || currentQr.salonId,
+    });
     setSession(null);
     setActiveTab("home");
+  }
+
+  function changeCustomerTab(nextTab: TabKey) {
+    setActiveTab(nextTab);
+    trackEvent("customer_tab_opened", {
+      tab: nextTab,
+      salon_id: session?.qr.salonId || currentQr.salonId,
+    });
   }
 
   if (path.startsWith("/staff")) {
@@ -115,7 +138,7 @@ export default function App() {
   } else if (session && activeTab === "rewards") {
     content = <RewardsPage session={session} />;
   } else if (session) {
-    content = <HomePage session={session} onTabChange={setActiveTab} onResetSession={resetSession} />;
+    content = <HomePage session={session} onTabChange={changeCustomerTab} onResetSession={resetSession} />;
   }
 
   return (
@@ -131,7 +154,7 @@ export default function App() {
             <button
               key={key}
               className={activeTab === key ? "active" : ""}
-              onClick={() => setActiveTab(key)}
+              onClick={() => changeCustomerTab(key)}
             >
               <Icon size={20} strokeWidth={2.3} aria-hidden="true" />
               <span>{label}</span>

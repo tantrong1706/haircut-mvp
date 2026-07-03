@@ -7,6 +7,7 @@ import {
   lookupRewardCode,
   redeemRewardCode,
 } from "../services/operations";
+import { trackEvent, withMonitoringTrace } from "../services/monitoring";
 
 type Props = {
   salonId: string;
@@ -29,7 +30,19 @@ export function RedeemRewardPanel({ salonId, disabled, note }: Props) {
     setError("");
 
     try {
-      setInfo(await lookupRewardCode({ salonId, rewardCode }));
+      const nextInfo = await withMonitoringTrace(
+        "reward_code_lookup",
+        () => lookupRewardCode({ salonId, rewardCode }),
+        {
+          salon_id: salonId,
+        },
+      );
+      setInfo(nextInfo);
+      trackEvent("reward_code_lookup_completed", {
+        salon_id: salonId,
+        found: Boolean(nextInfo.found),
+        status: nextInfo.status || "unknown",
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không kiểm tra được mã quà");
     } finally {
@@ -43,7 +56,13 @@ export function RedeemRewardPanel({ salonId, disabled, note }: Props) {
     setError("");
 
     try {
-      const nextResult = await redeemRewardCode({ salonId, rewardCode });
+      const nextResult = await withMonitoringTrace(
+        "reward_code_redeem",
+        () => redeemRewardCode({ salonId, rewardCode }),
+        {
+          salon_id: salonId,
+        },
+      );
       setResult(nextResult);
       setInfo({
         found: true,
@@ -55,6 +74,10 @@ export function RedeemRewardPanel({ salonId, disabled, note }: Props) {
         usedAtMs: Date.now(),
       });
       setRewardCode("");
+      trackEvent("reward_code_redeemed", {
+        salon_id: salonId,
+        reward_status: "used",
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không đổi được mã quà");
     } finally {

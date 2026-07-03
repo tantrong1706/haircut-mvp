@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Gift, LockKeyhole, Sparkles, Ticket } from "lucide-react";
 import { BrandLogo } from "../components/BrandLogo";
 import { getCustomerWheelConfig, spinWheel } from "../services/api";
+import { trackEvent, withMonitoringTrace } from "../services/monitoring";
 import {
   AppSession,
   LuckyWheelConfig,
@@ -50,8 +51,19 @@ export function WheelPage({ session, onSessionChange }: Props) {
     setSpinning(true);
     setResult(null);
     setError(null);
+    trackEvent("lucky_wheel_spin_started", {
+      salon_id: session.qr.salonId,
+      points_before: session.customer.points,
+      required_points: wheelConfig.requiredPoints,
+    });
     try {
-      const spinResult = await spinWheel(session);
+      const spinResult = await withMonitoringTrace(
+        "lucky_wheel_spin",
+        () => spinWheel(session),
+        {
+          salon_id: session.qr.salonId,
+        },
+      );
       const selectedIndex = selectedIndexFromResult(spinResult, slots);
       setRotationDeg((current) => nextRotation(current, selectedIndex, slots.length));
       await wait(1300);
@@ -62,6 +74,11 @@ export function WheelPage({ session, onSessionChange }: Props) {
           ...session.customer,
           points: spinResult.pointsAfter,
         },
+      });
+      trackEvent("lucky_wheel_spin_completed", {
+        salon_id: session.qr.salonId,
+        selected_index: selectedIndex,
+        points_after: spinResult.pointsAfter,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Bạn chưa đủ điểm để quay");

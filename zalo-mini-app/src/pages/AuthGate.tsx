@@ -20,6 +20,11 @@ import {
   signInOwnerStaff,
   signOutOwnerStaff,
 } from "../services/auth";
+import {
+  clearMonitoringUser,
+  setMonitoringUser,
+  trackEvent,
+} from "../services/monitoring";
 
 type Props = {
   allowedRoles: AppRole[];
@@ -74,9 +79,29 @@ export function AuthGate({ allowedRoles, children }: Props) {
     });
   }, []);
 
+  useEffect(() => {
+    if (!appUser) {
+      clearMonitoringUser();
+      return;
+    }
+
+    setMonitoringUser({
+      uid: appUser.uid,
+      role: appUser.role,
+      salonId: appUser.salonId,
+    });
+    trackEvent("ops_user_authenticated", {
+      role: appUser.role,
+      salon_id: appUser.salonId,
+    });
+  }, [appUser?.uid, appUser?.role, appUser?.salonId]);
+
   async function handleSubmit() {
     setSubmitting(true);
     setError("");
+    trackEvent(mode === "signup" ? "owner_signup_started" : "ops_signin_started", {
+      auth_mode: mode,
+    });
 
     try {
       if (mode === "signup") {
@@ -88,10 +113,16 @@ export function AuthGate({ allowedRoles, children }: Props) {
           phone,
         });
         setAppUser(profile);
+        trackEvent("owner_signup_completed", {
+          salon_id: profile.salonId,
+        });
         return;
       }
 
       await signInOwnerStaff(email.trim(), password);
+      trackEvent("ops_signin_completed", {
+        auth_mode: mode,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không xử lý được tài khoản");
     } finally {
@@ -100,7 +131,12 @@ export function AuthGate({ allowedRoles, children }: Props) {
   }
 
   async function handleSignOut() {
+    trackEvent("ops_signout", {
+      role: appUser?.role || "unknown",
+      salon_id: appUser?.salonId || "unknown",
+    });
     await signOutOwnerStaff();
+    clearMonitoringUser();
     setAppUser(null);
   }
 

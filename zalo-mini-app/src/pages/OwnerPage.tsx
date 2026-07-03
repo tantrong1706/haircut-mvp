@@ -49,6 +49,7 @@ import {
   updateStaffProfile,
 } from "../services/operations";
 import { AppUser, updateOwnerAvatar } from "../services/auth";
+import { trackEvent, withMonitoringTrace } from "../services/monitoring";
 import { LuckyWheelConfig, defaultLuckyWheelConfig } from "../services/types";
 
 type OwnerTab = "overview" | "approvals" | "mirrors" | "staff" | "customers" | "wheel" | "redeem";
@@ -107,6 +108,13 @@ export function OwnerPage({ currentUser }: Props) {
     setDraftAvatarUrl(currentUser.avatarUrl || "");
   }, [currentUser.avatarUrl, currentUser.uid]);
 
+  useEffect(() => {
+    trackEvent("owner_tab_opened", {
+      salon_id: salonId,
+      tab: activeTab,
+    });
+  }, [activeTab, salonId]);
+
   async function refreshOverview() {
     setLoadingOverview(true);
     try {
@@ -137,11 +145,20 @@ export function OwnerPage({ currentUser }: Props) {
     setError("");
 
     try {
-      const nextProfile = await updateSalonProfile({
-        salonId,
-        ...input,
-      });
+      const nextProfile = await withMonitoringTrace(
+        "owner_save_salon_profile",
+        () => updateSalonProfile({
+          salonId,
+          ...input,
+        }),
+        {
+          salon_id: salonId,
+        },
+      );
       setSalonProfile(nextProfile);
+      trackEvent("owner_salon_profile_saved", {
+        salon_id: salonId,
+      });
       setMessage("Đã cập nhật thông tin salon.");
       refreshOverview();
     } catch (err) {
@@ -164,8 +181,19 @@ export function OwnerPage({ currentUser }: Props) {
     setError("");
 
     try {
-      await approvePointRequest(request);
+      await withMonitoringTrace(
+        "owner_approve_point_request",
+        () => approvePointRequest(request),
+        {
+          salon_id: salonId,
+          points_added: request.pointsAdded,
+        },
+      );
       refreshOverview();
+      trackEvent("owner_point_request_approved", {
+        salon_id: salonId,
+        points_added: request.pointsAdded,
+      });
       setMessage("Đã duyệt cộng điểm và lưu lịch sử cắt tóc.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không duyệt được yêu cầu");
@@ -187,8 +215,17 @@ export function OwnerPage({ currentUser }: Props) {
     setError("");
 
     try {
-      await rejectPointRequest(request);
+      await withMonitoringTrace(
+        "owner_reject_point_request",
+        () => rejectPointRequest(request),
+        {
+          salon_id: salonId,
+        },
+      );
       refreshOverview();
+      trackEvent("owner_point_request_rejected", {
+        salon_id: salonId,
+      });
       setMessage("Đã từ chối yêu cầu.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không từ chối được yêu cầu");
@@ -203,7 +240,18 @@ export function OwnerPage({ currentUser }: Props) {
     setError("");
 
     try {
-      await saveLuckyWheelConfig(salonId, wheelConfig);
+      await withMonitoringTrace(
+        "owner_save_wheel_config",
+        () => saveLuckyWheelConfig(salonId, wheelConfig),
+        {
+          salon_id: salonId,
+          active_slots: wheelConfig.slots.filter((slot) => slot.active).length,
+        },
+      );
+      trackEvent("owner_wheel_config_saved", {
+        salon_id: salonId,
+        required_points: wheelConfig.requiredPoints,
+      });
       setMessage("Đã lưu cấu hình vòng quay.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không lưu được vòng quay");
@@ -218,12 +266,23 @@ export function OwnerPage({ currentUser }: Props) {
     setError("");
 
     try {
-      const result = await updateOwnerAvatar({
-        salonId,
-        avatarUrl: nextAvatarUrl,
-      });
+      const result = await withMonitoringTrace(
+        "owner_save_avatar",
+        () => updateOwnerAvatar({
+          salonId,
+          avatarUrl: nextAvatarUrl,
+        }),
+        {
+          salon_id: salonId,
+          has_avatar: Boolean(nextAvatarUrl.trim()),
+        },
+      );
       setOwnerAvatarUrl(result.avatarUrl);
       setDraftAvatarUrl(result.avatarUrl);
+      trackEvent("owner_avatar_saved", {
+        salon_id: salonId,
+        has_avatar: Boolean(result.avatarUrl),
+      });
       setMessage(result.avatarUrl ? "Đã cập nhật avatar chủ salon." : "Đã xóa avatar chủ salon.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không lưu được avatar");

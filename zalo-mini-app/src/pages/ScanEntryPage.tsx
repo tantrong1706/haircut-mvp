@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { BrandLogo } from "../components/BrandLogo";
 import { buildRegisterInput, parseQrContext, registerCustomer } from "../services/api";
+import { captureError, trackEvent, withMonitoringTrace } from "../services/monitoring";
 import { AppSession } from "../services/types";
 import { ZaloIdentity, getZaloIdentity } from "../services/zalo";
 
@@ -56,6 +57,11 @@ export function ScanEntryPage({ onReady }: Props) {
         }
       })
       .catch((err) => {
+        captureError(err, {
+          area: "zalo_identity",
+          salon_id: qr.salonId,
+          mirror_id: qr.mirrorId,
+        });
         if (mountedRef.current) {
           setZaloRequired(true);
           setError(err instanceof Error ? err.message : "Vui lòng mở HAIRCUT trong Zalo để xác nhận danh tính.");
@@ -78,16 +84,34 @@ export function ScanEntryPage({ onReady }: Props) {
 
     setLoading(true);
     setError(null);
+    trackEvent("customer_checkin_started", {
+      salon_id: qr.salonId,
+      mirror_id: qr.mirrorId,
+      has_phone: Boolean(phone.trim()),
+      allow_photo: allowPhoto,
+    });
     try {
       const confirmedIdentity = identity ?? (await getZaloIdentity());
-      const session = await registerCustomer(
-        buildRegisterInput(
-          qr,
-          { ...confirmedIdentity, name: confirmedName },
-          allowPhoto,
-          phone || undefined,
+      const session = await withMonitoringTrace(
+        "customer_checkin",
+        () => registerCustomer(
+          buildRegisterInput(
+            qr,
+            { ...confirmedIdentity, name: confirmedName },
+            allowPhoto,
+            phone || undefined,
+          ),
         ),
+        {
+          salon_id: qr.salonId,
+          mirror_id: qr.mirrorId,
+        },
       );
+      trackEvent("customer_checkin_created", {
+        salon_id: qr.salonId,
+        mirror_id: qr.mirrorId,
+        session_status: session.sessionStatus,
+      });
       onReady(session);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không thể tạo hồ sơ khách");
