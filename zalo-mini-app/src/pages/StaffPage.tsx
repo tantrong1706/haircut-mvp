@@ -5,6 +5,7 @@ import { BrandLogo } from "../components/BrandLogo";
 import {
   StaffSession,
   formatDateTime,
+  getSalonProfile,
   listenActiveSessions,
   submitPointRequest,
 } from "../services/operations";
@@ -33,6 +34,7 @@ export function StaffPage({ currentUser }: Props) {
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [pointPerVisit, setPointPerVisit] = useState(1);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -58,6 +60,12 @@ export function StaffPage({ currentUser }: Props) {
   }, [salonId]);
 
   useEffect(() => {
+    getSalonProfile(salonId)
+      .then((profile) => setPointPerVisit(Math.max(1, Math.floor(profile.pointPerVisit || 1))))
+      .catch(() => setPointPerVisit(1));
+  }, [salonId]);
+
+  useEffect(() => {
     if (!selectedId && sessions.length > 0) {
       setSelectedId(sessions[0].id);
     }
@@ -77,6 +85,7 @@ export function StaffPage({ currentUser }: Props) {
         salonId,
         session: selectedSession,
         note,
+        pointsRequested: pointPerVisit,
       });
       setSessions((current) =>
         current.map((session) =>
@@ -84,7 +93,7 @@ export function StaffPage({ currentUser }: Props) {
         ),
       );
       setNote("");
-      setMessage("Đã gửi yêu cầu cộng điểm.");
+      setMessage(`Đã gửi yêu cầu cộng ${pointPerVisit} điểm.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không gửi được yêu cầu");
     } finally {
@@ -119,6 +128,7 @@ export function StaffPage({ currentUser }: Props) {
       <div className="metrics-row compact-metrics">
         <Metric icon={<UsersRound size={20} />} label="Đang chờ" value={waitingCount} />
         <Metric icon={<UserRoundCheck size={20} />} label="Chờ duyệt" value={pendingApprovalCount} />
+        <Metric icon={<ClipboardPenLine size={20} />} label="Điểm/lượt" value={pointPerVisit} />
         {canRedeemRewards ? <Metric icon={<TicketCheck size={20} />} label="Đổi quà" value="Bật" /> : null}
       </div>
 
@@ -221,7 +231,7 @@ export function StaffPage({ currentUser }: Props) {
               ) : (
                 <>
                   <Send size={20} aria-hidden="true" />
-                  Gửi cộng 1 điểm
+                  Gửi cộng {pointPerVisit} điểm
                 </>
               )}
             </button>

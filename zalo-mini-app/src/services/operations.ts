@@ -595,7 +595,12 @@ export async function submitPointRequest(input: {
   salonId: string;
   session: StaffSession;
   note: string;
+  pointsRequested?: number;
 }) {
+  const pointsRequested = input.pointsRequested && input.pointsRequested > 0
+    ? Math.floor(input.pointsRequested)
+    : await getSalonPointPerVisit(input.salonId);
+
   return callWriteFunctionOrFallback(
     "submitPointRequest",
     {
@@ -603,9 +608,9 @@ export async function submitPointRequest(input: {
       sessionId: input.session.id,
       note: input.note,
       photoUrls: [],
-      pointsRequested: 1,
+      pointsRequested,
     },
-    () => submitPointRequestDirect(input),
+    () => submitPointRequestDirect({ ...input, pointsRequested }),
   );
 }
 
@@ -613,6 +618,7 @@ async function submitPointRequestDirect(input: {
   salonId: string;
   session: StaffSession;
   note: string;
+  pointsRequested: number;
 }) {
   const db = getFirebaseDb();
 
@@ -623,6 +629,8 @@ async function submitPointRequestDirect(input: {
   const signedStaff = await getSignedStaffForDirectWrite();
   const sessionRef = doc(db, "chair_sessions", input.session.id);
   const requestRef = doc(db, "point_requests", input.session.id);
+
+  const pointsRequested = Math.max(1, Math.floor(input.pointsRequested));
 
   await runTransaction(db, async (transaction) => {
     const [sessionSnap, requestSnap] = await Promise.all([
@@ -662,8 +670,9 @@ async function submitPointRequestDirect(input: {
       staffId: signedStaff.uid,
       staffName: signedStaff.name,
       note: input.note,
-      pointsRequested: 1,
-      pointsAdded: 1,
+      photoUrls: [],
+      pointsRequested,
+      pointsAdded: pointsRequested,
       status: "pending",
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
@@ -674,6 +683,15 @@ async function submitPointRequestDirect(input: {
       updatedAt: serverTimestamp(),
     }, { merge: true });
   });
+}
+
+async function getSalonPointPerVisit(salonId: string) {
+  try {
+    const profile = await getSalonProfileDirect(salonId);
+    return Math.max(1, Math.floor(profile.pointPerVisit || 1));
+  } catch {
+    return 1;
+  }
 }
 
 async function getSignedStaffForDirectWrite() {
@@ -753,22 +771,28 @@ async function approvePointRequestDirect(request: PointRequest) {
 
     transaction.update(customerRef, {
       points: currentPoints + pointsAdded,
+      lastVisitAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
 
     transaction.set(recordRef, {
       salonId: requestData.salonId,
       customerId: requestData.customerId,
+      staffId: requestData.staffId || "",
       staffName: requestData.staffName || "",
+      pointRequestId: request.id,
       note: requestData.note || "",
       photoUrls: [],
       pointsAdded,
+      approvedBy: getFirebaseAuth()?.currentUser?.uid || "",
       createdAt: serverTimestamp(),
     });
 
     transaction.update(requestRef, {
       status: "approved",
       approvedAt: serverTimestamp(),
+      approvedBy: getFirebaseAuth()?.currentUser?.uid || null,
+      updatedAt: serverTimestamp(),
     });
 
     transaction.update(sessionRef, {
@@ -797,9 +821,19 @@ async function rejectPointRequestDirect(request: PointRequest) {
     return;
   }
 
-  await updateDoc(doc(db, "point_requests", request.id), {
-    status: "rejected",
-    rejectedAt: serverTimestamp(),
+  const requestRef = doc(db, "point_requests", request.id);
+  const sessionRef = doc(db, "chair_sessions", request.sessionId);
+
+  await runTransaction(db, async (transaction) => {
+    transaction.update(requestRef, {
+      status: "rejected",
+      rejectedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    transaction.update(sessionRef, {
+      status: "cancelled",
+      updatedAt: serverTimestamp(),
+    });
   });
 }
 
@@ -900,6 +934,8 @@ async function redeemRewardCodeDirect(
   await updateDoc(rewardDoc.ref, {
     status: "used",
     usedAt: serverTimestamp(),
+    usedBy: getFirebaseAuth()?.currentUser?.uid || null,
+    updatedAt: serverTimestamp(),
   });
 
   const customer = await getCustomer(String(reward.customerId || ""));

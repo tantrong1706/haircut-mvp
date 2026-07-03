@@ -2,6 +2,7 @@ import { getAccessToken, getPhoneNumber, getUserInfo } from "zmp-sdk/apis";
 
 export type ZaloIdentity = {
   accessToken: string;
+  zaloUserId?: string;
   name: string;
   avatar?: string;
 };
@@ -31,9 +32,11 @@ export async function getZaloIdentity(): Promise<ZaloIdentity> {
       autoRequestPermission: true,
       avatarType: "normal",
     });
+    const rawUserInfo = userInfo as { id?: unknown; userId?: unknown };
 
     return {
       accessToken,
+      zaloUserId: String(rawUserInfo.id || rawUserInfo.userId || "").trim() || undefined,
       name: userInfo.name || "Khách hàng",
       avatar: userInfo.avatar,
     };

@@ -498,7 +498,7 @@ function SalonProfilePanel({
             value={pointPerVisit}
             onChange={(event) => setPointPerVisit(Math.max(1, Number(event.target.value || 1)))}
           />
-          <small>Hiện luồng duyệt đang cộng 1 điểm/lượt. Mục này chuẩn bị cho cấu hình điểm theo salon.</small>
+          <small>Nhân viên sẽ gửi yêu cầu cộng đúng số điểm này cho mỗi lượt cắt.</small>
         </label>
       </div>
 

@@ -3,13 +3,14 @@ import {
   doc,
   getDoc,
   getDocs,
+  limit as firestoreLimit,
   onSnapshot,
   query,
   runTransaction,
   serverTimestamp,
   where,
 } from "firebase/firestore";
-import { callFunction, getFirebaseDb, isFirebaseConfigured } from "./firebase";
+import { callFunction, getFirebaseDb, getFunctionWriteMode, isFirebaseConfigured } from "./firebase";
 import {
   AppSession,
   CustomerProfile,
@@ -25,6 +26,7 @@ import { getZaloAccessToken, ZaloIdentity } from "./zalo";
 
 type RegisterInput = QrContext & {
   zaloAccessToken: string;
+  zaloUserId?: string;
   name: string;
   phone?: string;
   birthday?: string;
@@ -120,17 +122,140 @@ export function listenSessionLiveUpdates(
   };
 }
 
+async function callCustomerFunctionOrDirect<TInput, TOutput>(
+  name: string,
+  payload: TInput,
+  direct: () => Promise<TOutput>,
+): Promise<TOutput> {
+  const mode = getFunctionWriteMode();
+
+  if (mode === "direct" || !isFirebaseConfigured()) {
+    return direct();
+  }
+
+  try {
+    return await callFunction<TInput, TOutput>(name, payload);
+  } catch (error) {
+    if (mode === "required") {
+      throw error;
+    }
+
+    console.warn(`Cloud Function ${name} chưa sẵn sàng, dùng direct mode.`, error);
+    return direct();
+  }
+}
+
 export async function registerCustomer(input: RegisterInput): Promise<AppSession> {
   if (!isFirebaseConfigured()) {
     return mockRegisterCustomer(input);
   }
 
-  const result = await callFunction<RegisterInput, RegisterCustomerFunctionResult>(
+  const result = await callCustomerFunctionOrDirect<RegisterInput, RegisterCustomerFunctionResult>(
     "registerCustomerFromZalo",
     input,
+    () => registerCustomerDirect(input),
   );
 
   return buildSessionFromRegisterResult(input, result);
+}
+
+async function registerCustomerDirect(input: RegisterInput): Promise<RegisterCustomerFunctionResult> {
+  const db = getFirebaseDb();
+
+  if (!db) {
+    throw new Error("Firebase chưa được cấu hình");
+  }
+
+  const phoneDigits = normalizePhone(input.phone);
+  const zaloUserId = input.zaloUserId || `direct-${(await sha256Hex(input.zaloAccessToken)).slice(0, 24)}`;
+  const customerId = await stableDocumentId(`${input.salonId}:${zaloUserId}`);
+  const dailySessionId = await stableDocumentId(`${input.salonId}:${input.mirrorId}:${customerId}:${localDateKey()}`);
+  const customerRef = doc(db, "customers", customerId);
+  const dailySessionRef = doc(db, "chair_sessions", dailySessionId);
+  const fallbackSessionRef = doc(collection(db, "chair_sessions"));
+  const name = input.name.trim() || "Khách hàng";
+
+  const directResult = await runTransaction(db, async (transaction) => {
+    const [customerSnap, dailySessionSnap] = await Promise.all([
+      transaction.get(customerRef),
+      transaction.get(dailySessionRef),
+    ]);
+    let sessionRef = dailySessionRef;
+    let sessionStatus: AppSession["sessionStatus"] = "waiting";
+
+    if (dailySessionSnap.exists()) {
+      const currentStatus = normalizeSessionStatus(dailySessionSnap.data().status);
+      if (currentStatus === "waiting" || currentStatus === "serving") {
+        sessionStatus = currentStatus;
+        transaction.set(dailySessionRef, { updatedAt: serverTimestamp() }, { merge: true });
+      } else {
+        sessionRef = fallbackSessionRef;
+        transaction.set(sessionRef, {
+          salonId: input.salonId,
+          mirrorId: input.mirrorId,
+          qrToken: input.qrToken,
+          customerId,
+          zaloUserId,
+          status: "waiting",
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      }
+    } else {
+      transaction.set(sessionRef, {
+        salonId: input.salonId,
+        mirrorId: input.mirrorId,
+        qrToken: input.qrToken,
+        customerId,
+        zaloUserId,
+        status: "waiting",
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    }
+
+    const baseCustomer = {
+      salonId: input.salonId,
+      zaloUserId,
+      source: "zalo_direct",
+      name,
+      phone: phoneDigits || null,
+      phoneLast4: phoneDigits ? phoneDigits.slice(-4) : null,
+      birthday: input.birthday || null,
+      allowPhoto: input.allowPhoto,
+      activeSessionId: sessionRef.id,
+      lastMirrorId: input.mirrorId,
+      updatedAt: serverTimestamp(),
+      lastVisitAt: serverTimestamp(),
+    };
+    const points = customerSnap.exists() ? Number(customerSnap.data().points ?? 0) : 0;
+
+    if (customerSnap.exists()) {
+      transaction.set(customerRef, baseCustomer, { merge: true });
+    } else {
+      transaction.set(customerRef, {
+        ...baseCustomer,
+        points: 0,
+        createdAt: serverTimestamp(),
+      });
+    }
+
+    return {
+      sessionId: sessionRef.id,
+      sessionStatus,
+      points,
+    };
+  });
+
+  return {
+    customerId,
+    sessionId: directResult.sessionId,
+    mirrorId: input.mirrorId,
+    qrToken: input.qrToken,
+    sessionStatus: directResult.sessionStatus,
+    points: directResult.points,
+    zaloUserId,
+  };
 }
 
 export async function spinWheel(session: AppSession): Promise<SpinResult> {
@@ -139,12 +264,13 @@ export async function spinWheel(session: AppSession): Promise<SpinResult> {
   }
 
   const zaloAccessToken = await getZaloAccessToken();
-  return callFunction<{ salonId: string; zaloAccessToken: string }, SpinResult>(
+  return callCustomerFunctionOrDirect<{ salonId: string; zaloAccessToken: string }, SpinResult>(
     "spinLuckyWheelFromZalo",
     {
       salonId: session.qr.salonId,
       zaloAccessToken,
     },
+    () => spinWheelDirect(session),
   );
 }
 
@@ -248,22 +374,24 @@ async function spinWheelDirect(session: AppSession): Promise<SpinResult> {
 }
 
 export async function getHaircutHistory(session: AppSession): Promise<HaircutRecord[]> {
-  if (!isFirebaseConfigured()) {
+  if (!isFirebaseConfigured() || getFunctionWriteMode() === "direct") {
     return getHaircutHistoryDirect(session);
   }
 
   const zaloAccessToken = await getZaloAccessToken();
-  return callFunction<
-    { salonId: string; zaloAccessToken: string; limit: number },
-    CustomerHistoryFunctionResult
-  >(
-    "getCustomerHistoryFromZalo",
-    {
-      salonId: session.qr.salonId,
-      zaloAccessToken,
-      limit: 20,
-    },
-  ).then((result) => {
+  try {
+    const result = await callFunction<
+      { salonId: string; zaloAccessToken: string; limit: number },
+      CustomerHistoryFunctionResult
+    >(
+      "getCustomerHistoryFromZalo",
+      {
+        salonId: session.qr.salonId,
+        zaloAccessToken,
+        limit: 20,
+      },
+    );
+
     return result.records.map((record) => ({
       id: record.id,
       createdAt: formatDate(record.createdAtMs),
@@ -272,7 +400,14 @@ export async function getHaircutHistory(session: AppSession): Promise<HaircutRec
       photoUrls: Array.isArray(record.photoUrls) ? record.photoUrls : [],
       pointsAdded: Number(record.pointsAdded ?? 0),
     }));
-  });
+  } catch (error) {
+    if (getFunctionWriteMode() === "required") {
+      throw error;
+    }
+
+    console.warn("Không tải được lịch sử qua Functions, dùng direct mode.", error);
+    return getHaircutHistoryDirect(session);
+  }
 }
 
 async function getHaircutHistoryDirect(session: AppSession): Promise<HaircutRecord[]> {
@@ -298,6 +433,7 @@ async function getHaircutHistoryDirect(session: AppSession): Promise<HaircutReco
   const q = query(
     collection(db, "haircut_records"),
     where("customerId", "==", session.customer.customerId),
+    firestoreLimit(20),
   );
 
   const snap = await getDocs(q);
@@ -341,22 +477,24 @@ export async function getCustomerWheelConfig(salonId: string): Promise<LuckyWhee
 }
 
 export async function getRewards(session: AppSession): Promise<Reward[]> {
-  if (!isFirebaseConfigured()) {
+  if (!isFirebaseConfigured() || getFunctionWriteMode() === "direct") {
     return getRewardsDirect(session);
   }
 
   const zaloAccessToken = await getZaloAccessToken();
-  return callFunction<
-    { salonId: string; zaloAccessToken: string; limit: number },
-    CustomerRewardsFunctionResult
-  >(
-    "getCustomerRewardsFromZalo",
-    {
-      salonId: session.qr.salonId,
-      zaloAccessToken,
-      limit: 20,
-    },
-  ).then((result) => {
+  try {
+    const result = await callFunction<
+      { salonId: string; zaloAccessToken: string; limit: number },
+      CustomerRewardsFunctionResult
+    >(
+      "getCustomerRewardsFromZalo",
+      {
+        salonId: session.qr.salonId,
+        zaloAccessToken,
+        limit: 20,
+      },
+    );
+
     return result.rewards.map((reward) => ({
       id: reward.id,
       rewardName: reward.rewardName || "",
@@ -364,7 +502,14 @@ export async function getRewards(session: AppSession): Promise<Reward[]> {
       status: normalizeRewardStatus(reward.status),
       createdAt: formatDate(reward.createdAtMs),
     }));
-  });
+  } catch (error) {
+    if (getFunctionWriteMode() === "required") {
+      throw error;
+    }
+
+    console.warn("Không tải được quà qua Functions, dùng direct mode.", error);
+    return getRewardsDirect(session);
+  }
 }
 
 async function getRewardsDirect(session: AppSession): Promise<Reward[]> {
@@ -381,6 +526,7 @@ async function getRewardsDirect(session: AppSession): Promise<Reward[]> {
   const q = query(
     collection(db, "reward_history"),
     where("customerId", "==", session.customer.customerId),
+    firestoreLimit(20),
   );
 
   const snap = await getDocs(q);
@@ -425,6 +571,7 @@ export function buildRegisterInput(
   return {
     ...qr,
     zaloAccessToken: identity.accessToken,
+    zaloUserId: identity.zaloUserId,
     name: identity.name,
     phone,
     allowPhoto,
@@ -546,6 +693,33 @@ function normalizePhone(phone?: string) {
   }
 
   return phone.replace(/\D/g, "");
+}
+
+async function stableDocumentId(value: string) {
+  return (await sha256Hex(value)).slice(0, 40);
+}
+
+async function sha256Hex(value: string) {
+  if (window.crypto?.subtle) {
+    const bytes = new TextEncoder().encode(value);
+    const digest = await window.crypto.subtle.digest("SHA-256", bytes);
+    return Array.from(new Uint8Array(digest))
+      .map((byte) => byte.toString(16).padStart(2, "0"))
+      .join("");
+  }
+
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = Math.imul(31, hash) + value.charCodeAt(index) | 0;
+  }
+
+  return Math.abs(hash).toString(16).padStart(40, "0");
+}
+
+function localDateKey() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Bangkok",
+  }).format(new Date());
 }
 
 function toMillis(value: any): number | null {

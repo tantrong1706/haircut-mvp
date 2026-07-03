@@ -850,7 +850,8 @@ export const submitPointRequest = onCall(functionOptions, async (request) => {
   const note = optionalString(request.data?.note) ?? "";
   const user = await assertSalonRole(uid, salonId, ["owner", "staff"]);
   const staffName = user.name || "Nhân viên";
-  const pointsRequested = 1;
+  const salonSnap = await db.collection("salons").doc(salonId).get();
+  const pointsRequested = Math.max(1, Math.floor(Number(salonSnap.data()?.pointPerVisit ?? 1)));
   const photoUrls = Array.isArray(request.data?.photoUrls)
     ? request.data.photoUrls.filter((url: unknown) => typeof url === "string")
     : [];
