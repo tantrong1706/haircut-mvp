@@ -879,7 +879,7 @@ async function createStaffProfileDirect(input: {
     return;
   }
 
-  const staffUid = input.uid || staffUidFromEmail(input.email);
+  const staffUid = input.uid || await createStaffAuthUser(input.email, input.password, input.name);
 
   await setDoc(doc(db, "users", staffUid), {
     salonId: input.salonId,
@@ -1369,8 +1369,50 @@ function randomToken() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
-function staffUidFromEmail(email: string) {
-  return `staff_${email.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "")}`;
+async function createStaffAuthUser(email: string, password: string, name: string) {
+  const apiKey = String(import.meta.env.VITE_FIREBASE_API_KEY || "");
+
+  if (!apiKey) {
+    throw new Error("Firebase Auth chưa được cấu hình");
+  }
+
+  const response = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${apiKey}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      email,
+      password,
+      displayName: name,
+      returnSecureToken: false,
+    }),
+  });
+  const payload = await response.json() as {
+    localId?: string;
+    error?: { message?: string };
+  };
+
+  if (!response.ok || !payload.localId) {
+    throw new Error(friendlyIdentityToolkitError(payload.error?.message));
+  }
+
+  return payload.localId;
+}
+
+function friendlyIdentityToolkitError(message?: string) {
+  if (message === "OPERATION_NOT_ALLOWED") {
+    return "Firebase Auth chưa bật Email/Password. Vào Firebase Console > Authentication > Sign-in method để bật.";
+  }
+  if (message === "EMAIL_EXISTS") {
+    return "Email nhân viên đã có tài khoản. Hãy dùng email khác hoặc tạo hồ sơ bằng UID sau khi bật Cloud Functions.";
+  }
+  if (message === "INVALID_EMAIL") {
+    return "Email nhân viên không hợp lệ.";
+  }
+  if (message === "WEAK_PASSWORD : Password should be at least 6 characters") {
+    return "Mật khẩu nhân viên phải có ít nhất 6 ký tự.";
+  }
+
+  return message || "Không tạo được tài khoản nhân viên";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

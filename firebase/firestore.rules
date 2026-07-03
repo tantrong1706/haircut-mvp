@@ -35,6 +35,149 @@ service cloud.firestore {
         && (appUser().role == "owner" || appUser().role == "staff");
     }
 
+    function salonPath(salonId) {
+      return /databases/$(database)/documents/salons/$(salonId);
+    }
+
+    function ownsSalonAfter(salonId) {
+      return signedIn()
+        && existsAfter(salonPath(salonId))
+        && getAfter(salonPath(salonId)).data.ownerId == request.auth.uid;
+    }
+
+    function optionalString(data, field) {
+      return !data.keys().hasAny([field])
+        || data[field] == null
+        || data[field] is string;
+    }
+
+    function validOwnerProfile(uid, data) {
+      return request.auth.uid == uid
+        && data.keys().hasOnly([
+          "salonId",
+          "name",
+          "avatarUrl",
+          "phone",
+          "role",
+          "isActive",
+          "canRedeemRewards",
+          "createdAt",
+          "updatedAt"
+        ])
+        && data.salonId is string
+        && data.name is string
+        && optionalString(data, "avatarUrl")
+        && optionalString(data, "phone")
+        && data.role == "owner"
+        && data.isActive == true
+        && data.canRedeemRewards == true
+        && ownsSalonAfter(data.salonId);
+    }
+
+    function validStaffProfile(data) {
+      return data.keys().hasOnly([
+          "salonId",
+          "name",
+          "email",
+          "phone",
+          "role",
+          "isActive",
+          "canRedeemRewards",
+          "createdAt",
+          "updatedAt"
+        ])
+        && data.salonId is string
+        && data.name is string
+        && optionalString(data, "email")
+        && optionalString(data, "phone")
+        && data.role == "staff"
+        && data.isActive == true
+        && data.canRedeemRewards is bool
+        && isOwner(data.salonId);
+    }
+
+    function validOwnerAvatarUpdate(uid) {
+      return signedIn()
+        && request.auth.uid == uid
+        && resource.data.role == "owner"
+        && isOwner(resource.data.salonId)
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly(["avatarUrl", "updatedAt"])
+        && optionalString(request.resource.data, "avatarUrl");
+    }
+
+    function validStaffOwnerUpdate() {
+      return resource.data.role == "staff"
+        && isOwner(resource.data.salonId)
+        && request.resource.data.salonId == resource.data.salonId
+        && request.resource.data.role == "staff"
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          "name",
+          "phone",
+          "isActive",
+          "canRedeemRewards",
+          "updatedAt"
+        ])
+        && optionalString(request.resource.data, "name")
+        && optionalString(request.resource.data, "phone")
+        && request.resource.data.isActive is bool
+        && request.resource.data.canRedeemRewards is bool;
+    }
+
+    function validNewSalon(data) {
+      return signedIn()
+        && data.keys().hasOnly([
+          "name",
+          "address",
+          "phone",
+          "ownerId",
+          "plan",
+          "freeCustomerLimit",
+          "pointPerVisit",
+          "createdAt",
+          "updatedAt"
+        ])
+        && data.name is string
+        && optionalString(data, "address")
+        && optionalString(data, "phone")
+        && data.ownerId == request.auth.uid
+        && data.plan == "free"
+        && data.freeCustomerLimit is int
+        && data.pointPerVisit is int;
+    }
+
+    function validLuckyWheel(data, salonId) {
+      return data.keys().hasOnly([
+          "salonId",
+          "requiredPoints",
+          "deductPointsAfterSpin",
+          "slots",
+          "updatedAt"
+        ])
+        && data.salonId == salonId
+        && data.requiredPoints is int
+        && data.requiredPoints > 0
+        && data.deductPointsAfterSpin is bool
+        && data.slots is list
+        && data.slots.size() == 6;
+    }
+
+    function validMirror(data) {
+      return data.keys().hasOnly([
+          "salonId",
+          "name",
+          "qrToken",
+          "qrUrl",
+          "isActive",
+          "createdAt",
+          "updatedAt"
+        ])
+        && data.salonId is string
+        && data.name is string
+        && data.qrToken is string
+        && data.qrUrl is string
+        && data.isActive is bool;
+    }
+
     match /users/{uid} {
       allow read: if signedIn()
         && (
@@ -45,17 +188,25 @@ service cloud.firestore {
             && appUser().role == "owner"
           )
         );
-      allow create, update, delete: if false;
+      allow create: if validOwnerProfile(uid, request.resource.data)
+        || validStaffProfile(request.resource.data);
+      allow update: if validOwnerAvatarUpdate(uid)
+        || validStaffOwnerUpdate();
+      allow delete: if false;
     }
 
     match /salons/{salonId} {
       allow read: if isStaffOrOwner(salonId);
-      allow create, update, delete: if false;
+      allow create: if validNewSalon(request.resource.data);
+      allow update, delete: if false;
     }
 
     match /mirrors/{mirrorId} {
       allow read: if isStaffOrOwner(resource.data.salonId);
-      allow create, update, delete: if false;
+      allow create: if validMirror(request.resource.data)
+        && (isOwner(request.resource.data.salonId) || ownsSalonAfter(request.resource.data.salonId));
+      allow update: if isOwner(resource.data.salonId);
+      allow delete: if false;
     }
 
     match /customers/{customerId} {
@@ -80,7 +231,11 @@ service cloud.firestore {
 
     match /lucky_wheel/{salonId} {
       allow read: if true;
-      allow create, update, delete: if false;
+      allow create: if validLuckyWheel(request.resource.data, salonId)
+        && (isOwner(salonId) || ownsSalonAfter(salonId));
+      allow update: if validLuckyWheel(request.resource.data, salonId)
+        && isOwner(salonId);
+      allow delete: if false;
     }
 
     match /reward_history/{rewardId} {
