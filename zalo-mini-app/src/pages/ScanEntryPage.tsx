@@ -98,7 +98,7 @@ export function ScanEntryPage({ onReady }: Props) {
 
   return (
     <section className="entry-page">
-      <header className="entry-hero premium-hero">
+      <header className="entry-hero premium-hero visual-hero">
         <div className="hero-topline">
           <BrandLogo />
           <span className="soft-chip">{mirrorLabel(qr.mirrorId)}</span>

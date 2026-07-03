@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Gift, LockKeyhole, Sparkles, Ticket } from "lucide-react";
+import { BrandLogo } from "../components/BrandLogo";
 import { getCustomerWheelConfig, spinWheel } from "../services/api";
 import {
   AppSession,
@@ -71,7 +72,11 @@ export function WheelPage({ session, onSessionChange }: Props) {
 
   return (
     <section className="page">
-      <header className="page-header">
+      <header className="page-header premium-hero visual-hero wheel-hero">
+        <div className="hero-topline">
+          <BrandLogo />
+          <span className="soft-chip">{session.customer.points} điểm</span>
+        </div>
         <p className="eyebrow">Cần {wheelConfig.requiredPoints} điểm để quay</p>
         <h1>Vòng quay may mắn</h1>
         <p className="muted">

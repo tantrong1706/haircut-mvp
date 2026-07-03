@@ -33,7 +33,7 @@ export function HomePage({ session, onTabChange, onResetSession }: Props) {
 
   return (
     <section className="page customer-home">
-      <header className="customer-hero premium-hero compact-hero">
+      <header className="customer-hero premium-hero visual-hero compact-hero">
         <div className="hero-topline">
           <BrandLogo />
           <span className="soft-chip">{mirrorLabel(session.qr.mirrorId)}</span>
@@ -59,12 +59,14 @@ export function HomePage({ session, onTabChange, onResetSession }: Props) {
         />
       </div>
 
-      <div className="points-panel premium-points">
+      <div className="points-panel premium-points member-card">
         <div>
           <span>Điểm</span>
           <strong>{customer.points}</strong>
         </div>
-        <Scissors size={34} strokeWidth={2.1} aria-hidden="true" />
+        <div className="member-card-mark" aria-hidden="true">
+          <Scissors size={34} strokeWidth={2.1} />
+        </div>
       </div>
 
       <div className="summary-grid">

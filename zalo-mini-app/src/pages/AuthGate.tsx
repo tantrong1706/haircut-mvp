@@ -121,7 +121,7 @@ export function AuthGate({ allowedRoles, children }: Props) {
 
     return (
       <section className="entry-page auth-entry">
-        <header className="entry-hero auth-hero">
+        <header className="entry-hero auth-hero premium-hero visual-hero">
           <BrandLogo />
           <p className="eyebrow">Chủ salon / Nhân viên</p>
           <h1>{isSignup ? "Đăng ký salon mới" : "Đăng nhập quản lý"}</h1>
