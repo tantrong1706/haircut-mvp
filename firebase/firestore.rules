@@ -145,6 +145,32 @@ service cloud.firestore {
         && data.pointPerVisit is int;
     }
 
+    function validSalonOwnerUpdate(data, oldData) {
+      return data.keys().hasOnly([
+          "name",
+          "address",
+          "phone",
+          "ownerId",
+          "plan",
+          "freeCustomerLimit",
+          "pointPerVisit",
+          "createdAt",
+          "updatedAt"
+        ])
+        && data.diff(oldData).affectedKeys().hasOnly([
+          "name",
+          "address",
+          "phone",
+          "pointPerVisit",
+          "updatedAt"
+        ])
+        && data.name is string
+        && optionalString(data, "address")
+        && optionalString(data, "phone")
+        && data.pointPerVisit is int
+        && data.pointPerVisit > 0;
+    }
+
     function validLuckyWheel(data, salonId) {
       return data.keys().hasOnly([
           "salonId",
@@ -198,7 +224,9 @@ service cloud.firestore {
     match /salons/{salonId} {
       allow read: if isStaffOrOwner(salonId);
       allow create: if validNewSalon(request.resource.data);
-      allow update, delete: if false;
+      allow update: if isOwner(salonId)
+        && validSalonOwnerUpdate(request.resource.data, resource.data);
+      allow delete: if false;
     }
 
     match /mirrors/{mirrorId} {

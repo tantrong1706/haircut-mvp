@@ -1161,6 +1161,20 @@ small {
   min-width: 0;
 }
 
+.salon-profile-panel {
+  gap: 14px;
+}
+
+.salon-profile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.salon-profile-grid .wide-field {
+  grid-column: 1 / -1;
+}
+
 .ops-grid {
   display: grid;
   gap: 14px;
@@ -1395,7 +1409,7 @@ small {
 
 .overview-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(138px, 1fr));
   gap: 10px;
 }
 
@@ -1425,6 +1439,59 @@ small {
   color: var(--ink);
   font-size: 28px;
   line-height: 1;
+}
+
+.retention-panel {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--paper-soft);
+  padding: 12px;
+}
+
+.retention-list {
+  display: grid;
+  gap: 8px;
+}
+
+.retention-card {
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #ffffff;
+  padding: 12px;
+}
+
+.retention-card strong,
+.retention-card span {
+  display: block;
+}
+
+.retention-card strong {
+  color: var(--ink);
+  line-height: 1.25;
+}
+
+.retention-card span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.3;
+}
+
+.retention-card > div:last-child {
+  min-width: 120px;
+  text-align: right;
+}
+
+.soft-empty {
+  box-shadow: none;
 }
 
 .owner-next-actions {
@@ -1586,6 +1653,7 @@ small {
 
   .staff-create-grid,
   .inline-form,
+  .salon-profile-grid,
   .customer-insight-grid {
     grid-template-columns: 1fr;
   }
@@ -1630,6 +1698,16 @@ small {
 
   .overview-grid {
     grid-template-columns: 1fr;
+  }
+
+  .retention-card {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .retention-card > div:last-child {
+    min-width: 0;
+    text-align: left;
   }
 
   .install-prompt {

@@ -56,10 +56,31 @@ export type PointRequest = {
 
 export type OwnerOverview = {
   customersToday: number;
+  customers7Days: number;
+  customers30Days: number;
   pendingRequests: number;
   pointsApprovedToday: number;
   spinsToday: number;
   unusedRewards: number;
+  inactiveCustomers: InactiveCustomer[];
+};
+
+export type InactiveCustomer = {
+  id: string;
+  name: string;
+  phoneLast4: string;
+  points: number;
+  lastVisitAtMs: number | null;
+  daysSinceLastVisit: number;
+};
+
+export type SalonProfile = {
+  id: string;
+  name: string;
+  address: string;
+  phone: string;
+  pointPerVisit: number;
+  freeCustomerLimit: number;
 };
 
 export type RedeemRewardResult = {
@@ -204,30 +225,106 @@ export async function getOwnerOverview(salonId: string): Promise<OwnerOverview> 
   );
 }
 
+export async function getSalonProfile(salonId: string): Promise<SalonProfile> {
+  return callFunctionOrFallback<{ salonId: string }, SalonProfile>(
+    "getSalonProfile",
+    { salonId },
+    () => getSalonProfileDirect(salonId),
+  );
+}
+
+export async function updateSalonProfile(input: {
+  salonId: string;
+  name: string;
+  address?: string;
+  phone?: string;
+  pointPerVisit: number;
+}): Promise<SalonProfile> {
+  const name = input.name.trim();
+  const address = input.address?.trim() || "";
+  const phone = input.phone?.trim() || "";
+  const pointPerVisit = Math.max(1, Math.floor(Number(input.pointPerVisit || 1)));
+
+  if (!name) {
+    throw new Error("Vui lòng nhập tên salon");
+  }
+
+  return callWriteFunctionOrFallback(
+    "updateSalonProfile",
+    {
+      salonId: input.salonId,
+      name,
+      address,
+      phone,
+      pointPerVisit,
+    },
+    () => updateSalonProfileDirect({
+      salonId: input.salonId,
+      name,
+      address,
+      phone,
+      pointPerVisit,
+    }),
+  );
+}
+
 async function getOwnerOverviewDirect(salonId: string): Promise<OwnerOverview> {
   const db = getFirebaseDb();
 
   if (!isFirebaseConfigured() || !db) {
     return {
       customersToday: 0,
+      customers7Days: 0,
+      customers30Days: 0,
       pendingRequests: 0,
       pointsApprovedToday: 0,
       spinsToday: 0,
       unusedRewards: 0,
+      inactiveCustomers: [],
     };
   }
 
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
   const startMs = startOfToday.getTime();
+  const nowMs = Date.now();
+  const start7Ms = nowMs - 7 * 24 * 60 * 60 * 1000;
+  const start30Ms = nowMs - 30 * 24 * 60 * 60 * 1000;
+  const inactiveCutoffMs = nowMs - 30 * 24 * 60 * 60 * 1000;
 
-  const [sessionsSnap, requestsSnap, rewardsSnap] = await Promise.all([
+  const [sessionsSnap, requestsSnap, rewardsSnap, customersSnap] = await Promise.all([
     getDocs(query(collection(db, "chair_sessions"), where("salonId", "==", salonId))),
     getDocs(query(collection(db, "point_requests"), where("salonId", "==", salonId))),
     getDocs(query(collection(db, "reward_history"), where("salonId", "==", salonId))),
+    getDocs(query(collection(db, "customers"), where("salonId", "==", salonId))),
   ]);
 
-  const customersToday = sessionsSnap.docs.filter((item) => {
+  const sessionTimes = sessionsSnap.docs.map((item) => toMillis(item.data().createdAt) ?? 0);
+  const customersToday = sessionTimes.filter((createdAt) => createdAt >= startMs).length;
+  const customers7Days = sessionTimes.filter((createdAt) => createdAt >= start7Ms).length;
+  const customers30Days = sessionTimes.filter((createdAt) => createdAt >= start30Ms).length;
+  const inactiveCustomers = customersSnap.docs
+    .map((item): InactiveCustomer => {
+      const data = item.data();
+      const lastVisitAtMs = toMillis(data.lastVisitAt);
+      const daysSinceLastVisit = lastVisitAtMs
+        ? Math.max(0, Math.floor((nowMs - lastVisitAtMs) / (24 * 60 * 60 * 1000)))
+        : 999;
+
+      return {
+        id: item.id,
+        name: String(data.name || "Khách hàng"),
+        phoneLast4: String(data.phoneLast4 || ""),
+        points: Number(data.points ?? 0),
+        lastVisitAtMs,
+        daysSinceLastVisit,
+      };
+    })
+    .filter((customer) => !customer.lastVisitAtMs || customer.lastVisitAtMs < inactiveCutoffMs)
+    .sort((a, b) => b.daysSinceLastVisit - a.daysSinceLastVisit)
+    .slice(0, 5);
+
+  const customersTodayLegacy = sessionsSnap.docs.filter((item) => {
     const createdAt = toMillis(item.data().createdAt);
     return Number(createdAt ?? 0) >= startMs;
   }).length;
@@ -249,12 +346,85 @@ async function getOwnerOverviewDirect(salonId: string): Promise<OwnerOverview> {
   const unusedRewards = rewards.filter((reward) => reward.status === "unused").length;
 
   return {
-    customersToday,
+    customersToday: customersToday || customersTodayLegacy,
+    customers7Days,
+    customers30Days,
     pendingRequests,
     pointsApprovedToday,
     spinsToday,
     unusedRewards,
+    inactiveCustomers,
   };
+}
+
+async function getSalonProfileDirect(salonId: string): Promise<SalonProfile> {
+  const db = getFirebaseDb();
+
+  if (!isFirebaseConfigured() || !db) {
+    return {
+      id: salonId,
+      name: "HAIRCUT Studio",
+      address: "",
+      phone: "",
+      pointPerVisit: 1,
+      freeCustomerLimit: 50,
+    };
+  }
+
+  const snap = await getDoc(doc(db, "salons", salonId));
+
+  if (!snap.exists()) {
+    return {
+      id: salonId,
+      name: "Salon",
+      address: "",
+      phone: "",
+      pointPerVisit: 1,
+      freeCustomerLimit: 50,
+    };
+  }
+
+  const data = snap.data();
+  return {
+    id: snap.id,
+    name: String(data.name || "Salon"),
+    address: String(data.address || ""),
+    phone: String(data.phone || ""),
+    pointPerVisit: Number(data.pointPerVisit ?? 1),
+    freeCustomerLimit: Number(data.freeCustomerLimit ?? 50),
+  };
+}
+
+async function updateSalonProfileDirect(input: {
+  salonId: string;
+  name: string;
+  address: string;
+  phone: string;
+  pointPerVisit: number;
+}): Promise<SalonProfile> {
+  const db = getFirebaseDb();
+
+  if (!isFirebaseConfigured() || !db) {
+    return {
+      id: input.salonId,
+      name: input.name,
+      address: input.address,
+      phone: input.phone,
+      pointPerVisit: input.pointPerVisit,
+      freeCustomerLimit: 50,
+    };
+  }
+
+  const salonRef = doc(db, "salons", input.salonId);
+  await setDoc(salonRef, {
+    name: input.name,
+    address: input.address || null,
+    phone: input.phone || null,
+    pointPerVisit: input.pointPerVisit,
+    updatedAt: serverTimestamp(),
+  }, { merge: true });
+
+  return getSalonProfileDirect(input.salonId);
 }
 
 export async function getMirrors(salonId: string): Promise<SalonMirror[]> {

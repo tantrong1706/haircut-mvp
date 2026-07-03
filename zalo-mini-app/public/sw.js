@@ -1,4 +1,4 @@
-const CACHE_NAME = "haircut-app-v2";
+const CACHE_NAME = "haircut-app-v3";
 const APP_SHELL = ["/", "/index.html", "/haircut-icon.svg", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {

@@ -11,6 +11,7 @@ import {
   doc,
   getDoc,
   serverTimestamp,
+  setDoc,
   writeBatch,
 } from "firebase/firestore";
 import {
@@ -20,6 +21,7 @@ import {
   getFunctionWriteMode,
   isFirebaseConfigured,
 } from "./firebase";
+import { callWriteFunctionOrFallback } from "./functionWrites";
 import { defaultLuckyWheelConfig } from "./types";
 
 export type AppRole = "owner" | "staff";
@@ -227,12 +229,13 @@ export async function updateOwnerAvatar(input: {
     }
   }
 
-  const result = await callFunction<{ salonId: string; avatarUrl: string }, { avatarUrl: string }>(
+  const result = await callWriteFunctionOrFallback<{ salonId: string; avatarUrl: string }, { avatarUrl: string }>(
     "updateOwnerAvatar",
     {
       salonId: input.salonId,
       avatarUrl,
     },
+    () => updateOwnerAvatarDirect(avatarUrl),
   );
   const auth = getFirebaseAuth();
 
@@ -241,6 +244,22 @@ export async function updateOwnerAvatar(input: {
   }
 
   return result;
+}
+
+async function updateOwnerAvatarDirect(avatarUrl: string): Promise<{ avatarUrl: string }> {
+  const auth = getFirebaseAuth();
+  const db = getFirebaseDb();
+
+  if (!auth?.currentUser || !db) {
+    throw new Error("Bạn cần đăng nhập chủ salon để đổi avatar");
+  }
+
+  await setDoc(doc(db, "users", auth.currentUser.uid), {
+    avatarUrl: avatarUrl || null,
+    updatedAt: serverTimestamp(),
+  }, { merge: true });
+
+  return { avatarUrl };
 }
 
 export async function getAppUser(uid: string): Promise<AppUser | null> {

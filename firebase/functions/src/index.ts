@@ -601,6 +601,61 @@ export const updateOwnerAvatar = onCall(functionOptions, async (request) => {
   return { avatarUrl };
 });
 
+export const getSalonProfile = onCall(functionOptions, async (request) => {
+  const uid = currentUid(request.auth);
+  const salonId = requireString(request.data?.salonId, "salonId");
+  await assertSalonRole(uid, salonId, ["owner"]);
+
+  const salonSnap = await db.collection("salons").doc(salonId).get();
+  if (!salonSnap.exists) {
+    throw new HttpsError("not-found", "Không tìm thấy salon");
+  }
+
+  const salon = salonSnap.data();
+  return {
+    id: salonSnap.id,
+    name: salon?.name ?? "Salon",
+    address: salon?.address ?? "",
+    phone: salon?.phone ?? "",
+    pointPerVisit: Number(salon?.pointPerVisit ?? 1),
+    freeCustomerLimit: Number(salon?.freeCustomerLimit ?? 50),
+  };
+});
+
+export const updateSalonProfile = onCall(functionOptions, async (request) => {
+  const uid = currentUid(request.auth);
+  const salonId = requireString(request.data?.salonId, "salonId");
+  await assertSalonRole(uid, salonId, ["owner"]);
+
+  const name = requireString(request.data?.name, "name");
+  const address = optionalString(request.data?.address);
+  const phone = optionalString(request.data?.phone);
+  const pointPerVisit = requirePositiveNumber(request.data?.pointPerVisit, "pointPerVisit");
+  const salonRef = db.collection("salons").doc(salonId);
+  const salonSnap = await salonRef.get();
+
+  if (!salonSnap.exists) {
+    throw new HttpsError("not-found", "Không tìm thấy salon");
+  }
+
+  await salonRef.set({
+    name,
+    address: address ?? null,
+    phone: phone ?? null,
+    pointPerVisit,
+    updatedAt: Timestamp.now(),
+  }, { merge: true });
+
+  return {
+    id: salonId,
+    name,
+    address: address ?? "",
+    phone: phone ?? "",
+    pointPerVisit,
+    freeCustomerLimit: Number(salonSnap.data()?.freeCustomerLimit ?? 50),
+  };
+});
+
 export const listStaffProfiles = onCall(functionOptions, async (request) => {
   const uid = currentUid(request.auth);
   const salonId = requireString(request.data?.salonId, "salonId");
@@ -972,16 +1027,33 @@ export const getOwnerOverview = onCall(functionOptions, async (request) => {
   await assertSalonRole(uid, salonId, ["owner"]);
 
   const startOfToday = Timestamp.fromMillis(startOfTodayBangkokMs());
+  const nowMs = Date.now();
+  const start7Days = Timestamp.fromMillis(nowMs - 7 * 24 * 60 * 60 * 1000);
+  const start30Days = Timestamp.fromMillis(nowMs - 30 * 24 * 60 * 60 * 1000);
+  const inactiveCutoffMs = nowMs - 30 * 24 * 60 * 60 * 1000;
   const [
     customersTodaySnap,
+    customers7DaysSnap,
+    customers30DaysSnap,
     pendingRequestsSnap,
     approvedPointsSnap,
     spinsTodaySnap,
     unusedRewardsSnap,
+    customersSnap,
   ] = await Promise.all([
     db.collection("chair_sessions")
       .where("salonId", "==", salonId)
       .where("createdAt", ">=", startOfToday)
+      .count()
+      .get(),
+    db.collection("chair_sessions")
+      .where("salonId", "==", salonId)
+      .where("createdAt", ">=", start7Days)
+      .count()
+      .get(),
+    db.collection("chair_sessions")
+      .where("salonId", "==", salonId)
+      .where("createdAt", ">=", start30Days)
       .count()
       .get(),
     db.collection("point_requests")
@@ -1007,14 +1079,42 @@ export const getOwnerOverview = onCall(functionOptions, async (request) => {
       .where("status", "==", "unused")
       .count()
       .get(),
+    db.collection("customers")
+      .where("salonId", "==", salonId)
+      .limit(100)
+      .get(),
   ]);
+
+  const inactiveCustomers = customersSnap.docs
+    .map((doc) => {
+      const customer = doc.data();
+      const lastVisitAtMs = timestampMillis(customer.lastVisitAt);
+      const daysSinceLastVisit = lastVisitAtMs
+        ? Math.max(0, Math.floor((nowMs - lastVisitAtMs) / (24 * 60 * 60 * 1000)))
+        : 999;
+
+      return {
+        id: doc.id,
+        name: String(customer.name ?? "Khách hàng"),
+        phoneLast4: String(customer.phoneLast4 ?? ""),
+        points: Number(customer.points ?? 0),
+        lastVisitAtMs,
+        daysSinceLastVisit,
+      };
+    })
+    .filter((customer) => !customer.lastVisitAtMs || customer.lastVisitAtMs < inactiveCutoffMs)
+    .sort((a, b) => b.daysSinceLastVisit - a.daysSinceLastVisit)
+    .slice(0, 5);
 
   return {
     customersToday: customersTodaySnap.data().count,
+    customers7Days: customers7DaysSnap.data().count,
+    customers30Days: customers30DaysSnap.data().count,
     pendingRequests: pendingRequestsSnap.data().count,
     pointsApprovedToday: Number(approvedPointsSnap.data().total ?? 0),
     spinsToday: spinsTodaySnap.data().count,
     unusedRewards: unusedRewardsSnap.data().count,
+    inactiveCustomers,
   };
 });
 

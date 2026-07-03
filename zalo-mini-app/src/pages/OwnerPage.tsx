@@ -28,6 +28,7 @@ import {
   SalonMirror,
   OwnerOverview,
   PointRequest,
+  SalonProfile,
   StaffProfile,
   approvePointRequest,
   createMirror,
@@ -37,12 +38,14 @@ import {
   getLuckyWheelConfig,
   getMirrors,
   getOwnerOverview,
+  getSalonProfile,
   getStaffProfiles,
   listenPendingPointRequests,
   rejectPointRequest,
   saveLuckyWheelConfig,
   searchSalonCustomers,
   updateMirror,
+  updateSalonProfile,
   updateStaffProfile,
 } from "../services/operations";
 import { AppUser, updateOwnerAvatar } from "../services/auth";
@@ -62,9 +65,11 @@ export function OwnerPage({ currentUser }: Props) {
   const [activeTab, setActiveTab] = useState<OwnerTab>("overview");
   const [requests, setRequests] = useState<PointRequest[]>([]);
   const [overview, setOverview] = useState<OwnerOverview | null>(null);
+  const [salonProfile, setSalonProfile] = useState<SalonProfile | null>(null);
   const [wheelConfig, setWheelConfig] = useState<LuckyWheelConfig>(defaultLuckyWheelConfig);
   const [busyId, setBusyId] = useState("");
   const [loadingOverview, setLoadingOverview] = useState(true);
+  const [savingSalonProfile, setSavingSalonProfile] = useState(false);
   const [savingWheel, setSavingWheel] = useState(false);
   const [ownerAvatarUrl, setOwnerAvatarUrl] = useState(currentUser.avatarUrl || "");
   const [draftAvatarUrl, setDraftAvatarUrl] = useState(currentUser.avatarUrl || "");
@@ -94,6 +99,10 @@ export function OwnerPage({ currentUser }: Props) {
   }, [salonId]);
 
   useEffect(() => {
+    refreshSalonProfile();
+  }, [salonId]);
+
+  useEffect(() => {
     setOwnerAvatarUrl(currentUser.avatarUrl || "");
     setDraftAvatarUrl(currentUser.avatarUrl || "");
   }, [currentUser.avatarUrl, currentUser.uid]);
@@ -106,6 +115,39 @@ export function OwnerPage({ currentUser }: Props) {
       setError(err instanceof Error ? err.message : "Không tải được tổng quan");
     } finally {
       setLoadingOverview(false);
+    }
+  }
+
+  async function refreshSalonProfile() {
+    try {
+      setSalonProfile(await getSalonProfile(salonId));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không tải được thông tin salon");
+    }
+  }
+
+  async function saveSalonProfile(input: {
+    name: string;
+    address: string;
+    phone: string;
+    pointPerVisit: number;
+  }) {
+    setSavingSalonProfile(true);
+    setMessage("");
+    setError("");
+
+    try {
+      const nextProfile = await updateSalonProfile({
+        salonId,
+        ...input,
+      });
+      setSalonProfile(nextProfile);
+      setMessage("Đã cập nhật thông tin salon.");
+      refreshOverview();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không lưu được thông tin salon");
+    } finally {
+      setSavingSalonProfile(false);
     }
   }
 
@@ -196,7 +238,7 @@ export function OwnerPage({ currentUser }: Props) {
         <BrandLogo />
         <div>
           <p className="eyebrow">Chủ salon</p>
-          <h1>Quản lý salon</h1>
+          <h1>{salonProfile?.name || "Quản lý salon"}</h1>
           <span>{salonId}</span>
         </div>
         <OwnerAvatar avatarUrl={ownerAvatarUrl} name={currentUser.name} />
@@ -257,6 +299,11 @@ export function OwnerPage({ currentUser }: Props) {
             onDraftChange={setDraftAvatarUrl}
             onSave={() => saveOwnerAvatar()}
             onClear={() => saveOwnerAvatar("")}
+          />
+          <SalonProfilePanel
+            profile={salonProfile}
+            saving={savingSalonProfile}
+            onSave={saveSalonProfile}
           />
           <OverviewPanel
             overview={overview}
@@ -374,6 +421,106 @@ function OwnerProfilePanel({
   );
 }
 
+function SalonProfilePanel({
+  profile,
+  saving,
+  onSave,
+}: {
+  profile: SalonProfile | null;
+  saving: boolean;
+  onSave: (input: {
+    name: string;
+    address: string;
+    phone: string;
+    pointPerVisit: number;
+  }) => void;
+}) {
+  const [name, setName] = useState(profile?.name || "");
+  const [address, setAddress] = useState(profile?.address || "");
+  const [phone, setPhone] = useState(profile?.phone || "");
+  const [pointPerVisit, setPointPerVisit] = useState(profile?.pointPerVisit || 1);
+
+  useEffect(() => {
+    setName(profile?.name || "");
+    setAddress(profile?.address || "");
+    setPhone(profile?.phone || "");
+    setPointPerVisit(profile?.pointPerVisit || 1);
+  }, [profile?.id, profile?.name, profile?.address, profile?.phone, profile?.pointPerVisit]);
+
+  const changed = profile ? (
+    name.trim() !== profile.name ||
+    address.trim() !== profile.address ||
+    phone.trim() !== profile.phone ||
+    Number(pointPerVisit) !== profile.pointPerVisit
+  ) : false;
+
+  return (
+    <div className="panel salon-profile-panel">
+      <div className="dashboard-heading">
+        <div>
+          <p className="eyebrow">Thiết lập salon</p>
+          <h2>Thông tin vận hành</h2>
+        </div>
+        <span className="pill muted-pill">{profile ? `${profile.freeCustomerLimit} khách miễn phí` : "Đang tải"}</span>
+      </div>
+
+      <div className="salon-profile-grid">
+        <label className="field">
+          <span>Tên salon</span>
+          <input
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="Ví dụ: HAIRCUT Studio"
+          />
+        </label>
+        <label className="field">
+          <span>Số điện thoại salon</span>
+          <input
+            value={phone}
+            onChange={(event) => setPhone(event.target.value)}
+            inputMode="tel"
+            placeholder="Số hotline hoặc Zalo"
+          />
+        </label>
+        <label className="field wide-field">
+          <span>Địa chỉ</span>
+          <input
+            value={address}
+            onChange={(event) => setAddress(event.target.value)}
+            placeholder="Địa chỉ để khách nhận diện đúng salon"
+          />
+        </label>
+        <label className="field">
+          <span>Điểm cộng mỗi lượt cắt</span>
+          <input
+            type="number"
+            min={1}
+            value={pointPerVisit}
+            onChange={(event) => setPointPerVisit(Math.max(1, Number(event.target.value || 1)))}
+          />
+          <small>Hiện luồng duyệt đang cộng 1 điểm/lượt. Mục này chuẩn bị cho cấu hình điểm theo salon.</small>
+        </label>
+      </div>
+
+      <div className="button-row wrap-row">
+        <button
+          className="primary-button"
+          disabled={saving || !profile || !name.trim() || !changed}
+          onClick={() => onSave({
+            name,
+            address,
+            phone,
+            pointPerVisit,
+          })}
+        >
+          <Save size={18} aria-hidden="true" />
+          {saving ? "Đang lưu..." : "Lưu thông tin salon"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function OwnerAvatar({
   avatarUrl,
   name,
@@ -422,10 +569,13 @@ function OverviewPanel({
     overview ||
     ({
       customersToday: 0,
+      customers7Days: 0,
+      customers30Days: 0,
       pendingRequests: 0,
       pointsApprovedToday: 0,
       spinsToday: 0,
       unusedRewards: 0,
+      inactiveCustomers: [],
     } satisfies OwnerOverview);
 
   return (
@@ -448,6 +598,16 @@ function OverviewPanel({
           value={data.customersToday}
         />
         <OverviewMetric
+          icon={<BarChart3 size={21} />}
+          label="Khách 7 ngày"
+          value={data.customers7Days}
+        />
+        <OverviewMetric
+          icon={<BarChart3 size={21} />}
+          label="Khách 30 ngày"
+          value={data.customers30Days}
+        />
+        <OverviewMetric
           icon={<ClipboardCheck size={21} />}
           label="Chờ duyệt"
           value={data.pendingRequests}
@@ -463,6 +623,44 @@ function OverviewPanel({
           label="Mã quà chưa dùng"
           value={data.unusedRewards}
         />
+      </div>
+
+      <div className="retention-panel">
+        <div className="dashboard-heading">
+          <div>
+            <p className="eyebrow">Giữ chân khách</p>
+            <h2>Khách lâu chưa quay lại</h2>
+          </div>
+          <button className="secondary-button compact" type="button" onClick={() => onOpenTab("customers")}>
+            <Search size={18} aria-hidden="true" />
+            Tìm khách
+          </button>
+        </div>
+
+        {data.inactiveCustomers.length === 0 ? (
+          <div className="empty-state compact-empty soft-empty">
+            <UsersRound size={28} aria-hidden="true" />
+            <strong>Chưa có khách cần nhắc lại</strong>
+            <p>Khi có khách hơn 30 ngày chưa quay lại, danh sách sẽ hiện ở đây.</p>
+          </div>
+        ) : (
+          <div className="retention-list">
+            {data.inactiveCustomers.map((customer) => (
+              <article className="retention-card" key={customer.id}>
+                <div>
+                  <strong>{customer.name}</strong>
+                  <span>
+                    {customer.phoneLast4 ? `******${customer.phoneLast4}` : "Chưa có SĐT"} · {customer.points} điểm
+                  </span>
+                </div>
+                <div>
+                  <strong>{formatInactiveDays(customer.daysSinceLastVisit)}</strong>
+                  <span>{formatDateTime(customer.lastVisitAtMs) || "Chưa có lịch sử"}</span>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="owner-next-actions">
@@ -537,6 +735,14 @@ function OverviewMetric({
       <strong>{value}</strong>
     </div>
   );
+}
+
+function formatInactiveDays(days: number) {
+  if (days >= 999) {
+    return "Chưa quay lại";
+  }
+
+  return `${days} ngày`;
 }
 
 function ApprovalsPanel({
