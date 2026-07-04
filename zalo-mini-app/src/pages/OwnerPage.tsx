@@ -5,9 +5,11 @@ import {
   CheckCircle2,
   ClipboardCheck,
   Copy,
+  Download,
   Gift,
   Image as ImageIcon,
   Power,
+  Printer,
   QrCode,
   RefreshCcw,
   Save,
@@ -21,6 +23,7 @@ import {
   UsersRound,
   XCircle,
 } from "lucide-react";
+import QRCode from "qrcode";
 import { BrandLogo } from "../components/BrandLogo";
 import { RedeemRewardPanel } from "../components/RedeemRewardPanel";
 import {
@@ -999,10 +1002,75 @@ function MirrorCard({
   onSave: (mirror: SalonMirror, payload: Partial<SalonMirror> & { regenerateQr?: boolean }) => void;
 }) {
   const [name, setName] = useState(mirror.name);
+  const [qrImageUrl, setQrImageUrl] = useState("");
 
   useEffect(() => {
     setName(mirror.name);
   }, [mirror.name]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    QRCode.toDataURL(mirror.qrUrl, {
+      width: 256,
+      margin: 2,
+      color: {
+        dark: "#0b1712",
+        light: "#ffffff",
+      },
+    })
+      .then((imageUrl) => {
+        if (!cancelled) {
+          setQrImageUrl(imageUrl);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setQrImageUrl("");
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [mirror.qrUrl]);
+
+  function printQr() {
+    if (!qrImageUrl) {
+      return;
+    }
+
+    const printWindow = window.open("", "_blank", "width=420,height=620");
+
+    if (!printWindow) {
+      return;
+    }
+
+    printWindow.document.write(`
+      <!doctype html>
+      <html lang="vi">
+        <head>
+          <meta charset="utf-8" />
+          <title>${escapeHtml(mirror.name)} - HAIRCUT QR</title>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 28px; color: #0b1712; text-align: center; }
+            h1 { margin: 0 0 8px; font-size: 28px; }
+            p { margin: 0 0 18px; color: #4c5a53; font-weight: 700; }
+            img { width: 280px; height: 280px; }
+            small { display: block; margin-top: 18px; overflow-wrap: anywhere; color: #66736d; }
+          </style>
+        </head>
+        <body>
+          <h1>${escapeHtml(mirror.name)}</h1>
+          <p>Quet QR de check-in HAIRCUT</p>
+          <img src="${qrImageUrl}" alt="" />
+          <small>${escapeHtml(mirror.qrUrl)}</small>
+          <script>window.onload = () => window.print();</script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  }
 
   return (
     <article className="ops-card static-card management-card">
@@ -1011,6 +1079,19 @@ function MirrorCard({
         <span className={mirror.isActive ? "pill" : "pill muted-pill"}>
           {mirror.isActive ? "Đang bật" : "Đã tắt"}
         </span>
+      </div>
+      <div className="qr-preview-card">
+        {qrImageUrl ? (
+          <img className="qr-preview-image" src={qrImageUrl} alt="" />
+        ) : (
+          <div className="qr-preview-image qr-preview-loading">
+            <QrCode size={42} aria-hidden="true" />
+          </div>
+        )}
+        <div className="qr-print-meta">
+          <strong>{mirror.name}</strong>
+          <span>QR check-in cho khach tai guong/ghe nay</span>
+        </div>
       </div>
       <label className="field compact-field">
         <span>Tên gương/ghế</span>
@@ -1021,6 +1102,16 @@ function MirrorCard({
         <button className="secondary-button" onClick={() => onCopy(mirror.qrUrl)}>
           <Copy size={18} aria-hidden="true" />
           Copy link
+        </button>
+        {qrImageUrl ? (
+          <a className="secondary-button" href={qrImageUrl} download={`${safeFileName(mirror.name)}-qr.png`}>
+            <Download size={18} aria-hidden="true" />
+            Tai QR
+          </a>
+        ) : null}
+        <button className="secondary-button" disabled={!qrImageUrl} onClick={printQr}>
+          <Printer size={18} aria-hidden="true" />
+          In QR
         </button>
         <button className="secondary-button" disabled={busy} onClick={() => onSave(mirror, { name })}>
           <Save size={18} aria-hidden="true" />
@@ -1049,6 +1140,23 @@ function MirrorCard({
       </div>
     </article>
   );
+}
+
+function safeFileName(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .toLowerCase() || "haircut";
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 function StaffManagementPanel({

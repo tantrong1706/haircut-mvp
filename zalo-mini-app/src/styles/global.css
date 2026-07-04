@@ -419,6 +419,7 @@ small {
   background: #f4f6f4;
   border: 1px solid var(--line);
   color: var(--ink);
+  text-decoration: none;
 }
 
 .danger-button {
@@ -792,6 +793,15 @@ small {
 .account-notice span {
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.missing-qr-panel {
+  grid-template-columns: auto 1fr;
+  align-items: center;
+}
+
+.missing-qr-panel svg {
+  color: var(--green-strong);
 }
 
 .quick-actions {
@@ -1461,6 +1471,50 @@ small {
   gap: 12px;
 }
 
+.qr-preview-card {
+  display: grid;
+  grid-template-columns: 132px 1fr;
+  align-items: center;
+  gap: 14px;
+  padding: 12px;
+  border-radius: 16px;
+  background: #f8faf8;
+  border: 1px solid var(--line);
+}
+
+.qr-preview-image {
+  width: 132px;
+  aspect-ratio: 1;
+  border-radius: 14px;
+  background: #ffffff;
+  border: 1px solid var(--line);
+}
+
+.qr-preview-loading {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+}
+
+.qr-print-meta {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.qr-print-meta strong {
+  color: var(--ink);
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.qr-print-meta span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
 .management-card-header {
   display: flex;
   align-items: center;
@@ -1790,8 +1844,14 @@ small {
   .staff-create-grid,
   .inline-form,
   .salon-profile-grid,
+  .qr-preview-card,
   .customer-insight-grid {
     grid-template-columns: 1fr;
+  }
+
+  .qr-preview-image {
+    width: min(100%, 220px);
+    justify-self: center;
   }
 }
 

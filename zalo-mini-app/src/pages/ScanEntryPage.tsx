@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  ArrowRight,
   Camera,
   MessageCircle,
   Phone,
+  QrCode,
   RefreshCcw,
   Scissors,
   UserRound,
@@ -29,16 +31,24 @@ export function ScanEntryPage({ onReady }: Props) {
   const nameTouchedRef = useRef(false);
   const mountedRef = useRef(false);
   const qr = parseQrContext();
+  const hasQr = hasQrContext();
 
   useEffect(() => {
     mountedRef.current = true;
+
+    if (!hasQr) {
+      setLoadingIdentity(false);
+      return () => {
+        mountedRef.current = false;
+      };
+    }
 
     loadZaloIdentity();
 
     return () => {
       mountedRef.current = false;
     };
-  }, []);
+  }, [hasQr]);
 
   function loadZaloIdentity() {
     setLoadingIdentity(true);
@@ -118,6 +128,53 @@ export function ScanEntryPage({ onReady }: Props) {
     } finally {
       setLoading(false);
     }
+  }
+
+  if (!hasQr) {
+    return (
+      <section className="entry-page">
+        <header className="entry-hero premium-hero visual-hero">
+          <div className="hero-topline">
+            <BrandLogo />
+            <span className="soft-chip">HAIRCUT</span>
+          </div>
+          <p className="eyebrow">Check-in</p>
+          <h1>Quét QR tại salon</h1>
+          <p className="muted">Khách cần quét đúng QR ở gương/ghế để tạo lượt cắt.</p>
+        </header>
+
+        <div className="panel missing-qr-panel">
+          <QrCode size={38} aria-hidden="true" />
+          <div>
+            <h2>Chưa có QR gương</h2>
+            <p className="muted">
+              Nếu bạn là chủ salon, vào trang quản lý để tạo QR cho từng gương rồi đưa link đó cho khách.
+            </p>
+          </div>
+        </div>
+
+        <div className="quick-actions">
+          <button type="button" onClick={() => window.location.assign("/owner")}>
+            <span>
+              <ArrowRight size={20} aria-hidden="true" />
+            </span>
+            <div>
+              <strong>Trang chủ salon</strong>
+              <small>Tạo QR, nhân viên, vòng quay</small>
+            </div>
+          </button>
+          <button type="button" onClick={() => window.location.assign("/staff")}>
+            <span>
+              <Scissors size={20} aria-hidden="true" />
+            </span>
+            <div>
+              <strong>Trang nhân viên</strong>
+              <small>Xem khách đang chờ và đổi mã quà</small>
+            </div>
+          </button>
+        </div>
+      </section>
+    );
   }
 
   return (
@@ -239,6 +296,11 @@ export function ScanEntryPage({ onReady }: Props) {
 
 function normalizeDisplayName(name: string) {
   return name.replace(/\s+/g, " ").trim();
+}
+
+function hasQrContext() {
+  const params = new URLSearchParams(window.location.search);
+  return Boolean(params.get("salonId") && params.get("mirrorId") && params.get("qrToken"));
 }
 
 function mirrorLabel(mirrorId: string) {
