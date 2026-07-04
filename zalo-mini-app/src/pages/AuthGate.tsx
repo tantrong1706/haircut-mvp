@@ -14,6 +14,7 @@ import { BrandLogo } from "../components/BrandLogo";
 import {
   AppRole,
   AppUser,
+  completeOwnerSalonProfile,
   getAppUser,
   listenAuthState,
   registerOwnerSalon,
@@ -33,8 +34,15 @@ type Props = {
 
 type AuthMode = "signin" | "signup";
 
+type UnlinkedUser = {
+  uid: string;
+  email: string;
+  displayName: string;
+};
+
 export function AuthGate({ allowedRoles, children }: Props) {
   const [appUser, setAppUser] = useState<AppUser | null>(null);
+  const [unlinkedUser, setUnlinkedUser] = useState<UnlinkedUser | null>(null);
   const [mode, setMode] = useState<AuthMode>("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -43,6 +51,7 @@ export function AuthGate({ allowedRoles, children }: Props) {
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [profileCompletionAttempted, setProfileCompletionAttempted] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -53,6 +62,7 @@ export function AuthGate({ allowedRoles, children }: Props) {
       try {
         if (!firebaseUser) {
           setAppUser(null);
+          setUnlinkedUser(null);
           return;
         }
 
@@ -60,16 +70,27 @@ export function AuthGate({ allowedRoles, children }: Props) {
 
         if (!profile) {
           setAppUser(null);
+          setUnlinkedUser({
+            uid: firebaseUser.uid,
+            email: firebaseUser.email || "",
+            displayName: firebaseUser.displayName || "",
+          });
+          setOwnerName((current) => current || firebaseUser.displayName || "");
+          setEmail(firebaseUser.email || "");
+          setMode("signin");
+          setProfileCompletionAttempted(false);
           setError("Tài khoản này chưa được gắn vào salon. Chủ salon cần tạo hoặc kích hoạt tài khoản.");
           return;
         }
 
         if (!profile.isActive) {
           setAppUser(null);
+          setUnlinkedUser(null);
           setError("Tài khoản này đang bị tắt. Vui lòng liên hệ chủ salon.");
           return;
         }
 
+        setUnlinkedUser(null);
         setAppUser(profile);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Không tải được tài khoản");
@@ -130,6 +151,33 @@ export function AuthGate({ allowedRoles, children }: Props) {
     }
   }
 
+  async function handleCompleteOwnerProfile() {
+    setSubmitting(true);
+    setProfileCompletionAttempted(true);
+    setError("");
+    trackEvent("owner_profile_completion_started", {
+      has_console_user: Boolean(unlinkedUser?.uid),
+    });
+
+    try {
+      const profile = await completeOwnerSalonProfile({
+        ownerName,
+        salonName,
+        phone,
+      });
+      setUnlinkedUser(null);
+      setProfileCompletionAttempted(false);
+      setAppUser(profile);
+      trackEvent("owner_profile_completion_completed", {
+        salon_id: profile.salonId,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không hoàn tất được hồ sơ salon");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   async function handleSignOut() {
     trackEvent("ops_signout", {
       role: appUser?.role || "unknown",
@@ -137,6 +185,7 @@ export function AuthGate({ allowedRoles, children }: Props) {
     });
     await signOutOwnerStaff();
     clearMonitoringUser();
+    setUnlinkedUser(null);
     setAppUser(null);
   }
 
@@ -148,6 +197,91 @@ export function AuthGate({ allowedRoles, children }: Props) {
           <strong>Đang kiểm tra tài khoản</strong>
           <p>Hệ thống đang xác nhận quyền truy cập.</p>
         </div>
+      </section>
+    );
+  }
+
+  if (!appUser && unlinkedUser) {
+    return (
+      <section className="entry-page auth-entry">
+        <header className="entry-hero auth-hero premium-hero visual-hero">
+          <BrandLogo />
+          <p className="eyebrow">Thiết lập tài khoản</p>
+          <h1>Hoàn tất hồ sơ salon</h1>
+          <p className="muted">
+            Tài khoản này đã có trong Firebase Auth nhưng chưa được gắn với salon.
+          </p>
+        </header>
+
+        <div className="panel form-panel auth-panel">
+          <div className="notice-banner account-notice">
+            <ShieldCheck size={20} aria-hidden="true" />
+            <span>{unlinkedUser.email || unlinkedUser.uid}</span>
+          </div>
+
+          <label className="field">
+            <span>
+              <UserRound size={18} aria-hidden="true" />
+              Tên chủ salon
+            </span>
+            <input
+              value={ownerName}
+              onChange={(event) => setOwnerName(event.target.value)}
+              autoComplete="name"
+              placeholder="Ví dụ: Anh Trọng"
+            />
+          </label>
+
+          <label className="field">
+            <span>
+              <Building2 size={18} aria-hidden="true" />
+              Tên salon
+            </span>
+            <input
+              value={salonName}
+              onChange={(event) => setSalonName(event.target.value)}
+              placeholder="Ví dụ: HAIRCUT Studio"
+            />
+          </label>
+
+          <label className="field">
+            <span>
+              <Phone size={18} aria-hidden="true" />
+              SĐT salon
+            </span>
+            <input
+              value={phone}
+              onChange={(event) => setPhone(event.target.value)}
+              inputMode="tel"
+              placeholder="Không bắt buộc"
+            />
+          </label>
+        </div>
+
+        <button
+          className="primary-button"
+          disabled={submitting || !ownerName.trim() || !salonName.trim()}
+          onClick={handleCompleteOwnerProfile}
+        >
+          {submitting ? (
+            "Đang tạo hồ sơ..."
+          ) : (
+            <>
+              <UserPlus size={20} aria-hidden="true" />
+              Tạo hồ sơ chủ salon
+            </>
+          )}
+        </button>
+
+        <button className="secondary-button" disabled={submitting} onClick={handleSignOut}>
+          <LogOut size={18} aria-hidden="true" />
+          Đăng xuất tài khoản này
+        </button>
+
+        <p className="field-note">
+          Nếu đây là tài khoản nhân viên, hãy đăng xuất và để chủ salon tạo nhân viên trong mục Nhân viên.
+        </p>
+        {profileCompletionAttempted && error ? <p className="alert error">{error}</p> : null}
       </section>
     );
   }

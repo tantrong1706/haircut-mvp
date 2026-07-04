@@ -135,6 +135,63 @@ export async function registerOwnerSalon(input: {
   return profile;
 }
 
+export async function completeOwnerSalonProfile(input: {
+  ownerName: string;
+  salonName: string;
+  phone?: string;
+}): Promise<AppUser> {
+  const auth = getFirebaseAuth();
+  const currentUser = auth?.currentUser;
+
+  if (!currentUser) {
+    throw new Error("Bạn cần đăng nhập trước khi hoàn tất hồ sơ salon");
+  }
+
+  const ownerName = input.ownerName.trim();
+  const salonName = input.salonName.trim();
+  const phone = input.phone?.trim() || undefined;
+
+  if (!ownerName || !salonName) {
+    throw new Error("Vui lòng nhập tên chủ salon và tên salon");
+  }
+
+  await updateProfile(currentUser, { displayName: ownerName });
+  const existingProfile = await getAppUser(currentUser.uid);
+
+  if (existingProfile) {
+    return existingProfile;
+  }
+
+  try {
+    await callFunction(
+      "createSalon",
+      {
+        name: salonName,
+        ownerName,
+        phone,
+      },
+    );
+  } catch (err) {
+    if (getFunctionWriteMode() === "required") {
+      throw err;
+    }
+
+    await createOwnerSalonDirect({
+      uid: currentUser.uid,
+      ownerName,
+      salonName,
+      phone,
+    });
+  }
+
+  const profile = await getAppUser(currentUser.uid);
+  if (!profile) {
+    throw new Error("Đã tạo salon nhưng chưa tải được hồ sơ chủ salon");
+  }
+
+  return profile;
+}
+
 async function createOwnerSalonDirect(input: {
   uid: string;
   ownerName: string;
