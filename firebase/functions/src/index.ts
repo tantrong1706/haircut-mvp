@@ -8,6 +8,7 @@ import {
 } from "firebase-admin/firestore";
 import { getAuth } from "firebase-admin/auth";
 import { getStorage } from "firebase-admin/storage";
+import { defineSecret } from "firebase-functions/params";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 
 initializeApp();
@@ -15,6 +16,11 @@ initializeApp();
 const db = getFirestore();
 const storage = getStorage();
 const functionOptions = { region: "asia-southeast1" };
+const zaloAppSecret = defineSecret("ZALO_APP_SECRET");
+const zaloFunctionOptions = {
+  ...functionOptions,
+  secrets: [zaloAppSecret],
+};
 const SESSION_POINT_REQUEST_WINDOW_MS = 12 * 60 * 60 * 1000;
 
 type UserRole = "owner" | "staff";
@@ -157,7 +163,7 @@ function activeSessionRefFor(salonId: string, customerId: string) {
 
 async function verifyZaloAccessToken(accessTokenInput: unknown): Promise<ZaloProfile> {
   const accessToken = requireString(accessTokenInput, "zaloAccessToken");
-  const appSecret = process.env.ZALO_APP_SECRET || process.env.ZALO_SECRET_KEY || "";
+  const appSecret = zaloAppSecret.value() || process.env.ZALO_APP_SECRET || process.env.ZALO_SECRET_KEY || "";
 
   if (!appSecret || appSecret.includes("your-")) {
     throw new HttpsError(
@@ -730,7 +736,7 @@ export const createManualCustomer = onCall(functionOptions, async (request) => {
   return { customerId };
 });
 
-export const registerCustomerFromZalo = onCall(functionOptions, async (request) => {
+export const registerCustomerFromZalo = onCall(zaloFunctionOptions, async (request) => {
   const salonId = requireString(request.data?.salonId, "salonId");
   const mirrorId = requireString(request.data?.mirrorId, "mirrorId");
   const qrToken = requireString(request.data?.qrToken, "qrToken");
@@ -1170,7 +1176,7 @@ export const spinLuckyWheel = onCall(functionOptions, async (request) => {
   return spinWheelForCustomer(salonId, customerId);
 });
 
-export const spinLuckyWheelFromZalo = onCall(functionOptions, async (request) => {
+export const spinLuckyWheelFromZalo = onCall(zaloFunctionOptions, async (request) => {
   const salonId = requireString(request.data?.salonId, "salonId");
   const zaloProfile = await verifyZaloAccessToken(request.data?.zaloAccessToken);
   const customerId = customerIdFor(salonId, zaloProfile.zaloUserId);
@@ -1178,7 +1184,7 @@ export const spinLuckyWheelFromZalo = onCall(functionOptions, async (request) =>
   return spinWheelForCustomer(salonId, customerId);
 });
 
-export const getCustomerHistoryFromZalo = onCall(functionOptions, async (request) => {
+export const getCustomerHistoryFromZalo = onCall(zaloFunctionOptions, async (request) => {
   const salonId = requireString(request.data?.salonId, "salonId");
   const zaloProfile = await verifyZaloAccessToken(request.data?.zaloAccessToken);
   const customerId = customerIdFor(salonId, zaloProfile.zaloUserId);
@@ -1220,7 +1226,7 @@ export const getCustomerHistoryFromZalo = onCall(functionOptions, async (request
   };
 });
 
-export const getCustomerRewardsFromZalo = onCall(functionOptions, async (request) => {
+export const getCustomerRewardsFromZalo = onCall(zaloFunctionOptions, async (request) => {
   const salonId = requireString(request.data?.salonId, "salonId");
   const zaloProfile = await verifyZaloAccessToken(request.data?.zaloAccessToken);
   const customerId = customerIdFor(salonId, zaloProfile.zaloUserId);
