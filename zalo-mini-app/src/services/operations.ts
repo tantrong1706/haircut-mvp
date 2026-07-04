@@ -1347,13 +1347,15 @@ export function formatDateTime(ms: number | null) {
 
 function mapMirror(docSnap: { id: string; data: () => DocumentData }): SalonMirror {
   const data = docSnap.data();
+  const salonId = String(data.salonId || "");
+  const qrToken = String(data.qrToken || "");
 
   return {
     id: docSnap.id,
-    salonId: String(data.salonId || ""),
+    salonId,
     name: String(data.name || "Gương"),
-    qrToken: String(data.qrToken || ""),
-    qrUrl: String(data.qrUrl || ""),
+    qrToken,
+    qrUrl: qrToken ? buildQrUrl(salonId, docSnap.id, qrToken) : String(data.qrUrl || ""),
     isActive: Boolean(data.isActive),
     createdAtMs: toMillis(data.createdAt),
   };
