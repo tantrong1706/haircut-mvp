@@ -364,6 +364,19 @@ export const createSalon = onCall(functionOptions, async (request) => {
   const now = Timestamp.now();
 
   await db.runTransaction(async (tx) => {
+    const existingUser = await tx.get(userRef);
+    const existingUserData = existingUser.exists ? existingUser.data() : null;
+    const existingSalonId = typeof existingUserData?.salonId === "string"
+      ? existingUserData.salonId.trim()
+      : "";
+
+    if (existingSalonId) {
+      throw new HttpsError("failed-precondition", "Tài khoản này đã thuộc một salon");
+    }
+    if (existingUserData?.role && existingUserData.role !== "owner") {
+      throw new HttpsError("permission-denied", "Tài khoản này không thể tạo salon");
+    }
+
     tx.set(salonRef, {
       name,
       address: address ?? null,

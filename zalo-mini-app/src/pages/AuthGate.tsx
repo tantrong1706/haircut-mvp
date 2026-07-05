@@ -46,6 +46,7 @@ export function AuthGate({ allowedRoles, children }: Props) {
   const [mode, setMode] = useState<AuthMode>("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [ownerName, setOwnerName] = useState("");
   const [salonName, setSalonName] = useState("");
   const [phone, setPhone] = useState("");
@@ -68,7 +69,7 @@ export function AuthGate({ allowedRoles, children }: Props) {
 
         const profile = await getAppUser(firebaseUser.uid);
 
-        if (!profile) {
+        if (!profile || !profile.salonId) {
           setAppUser(null);
           setUnlinkedUser({
             uid: firebaseUser.uid,
@@ -79,7 +80,7 @@ export function AuthGate({ allowedRoles, children }: Props) {
           setEmail(firebaseUser.email || "");
           setMode("signin");
           setProfileCompletionAttempted(false);
-          setError("Tài khoản này chưa được gắn vào salon. Chủ salon cần tạo hoặc kích hoạt tài khoản.");
+          setError("Tài khoản này chưa có salon. Hoàn tất hồ sơ để tạo salon thật.");
           return;
         }
 
@@ -126,6 +127,10 @@ export function AuthGate({ allowedRoles, children }: Props) {
 
     try {
       if (mode === "signup") {
+        if (password !== confirmPassword) {
+          throw new Error("Mật khẩu nhập lại chưa khớp");
+        }
+
         const profile = await registerOwnerSalon({
           email,
           password,
@@ -303,11 +308,23 @@ export function AuthGate({ allowedRoles, children }: Props) {
         </header>
 
         <div className="segmented-control auth-tabs" aria-label="Chọn luồng tài khoản">
-          <button className={!isSignup ? "active" : ""} onClick={() => setMode("signin")}>
+          <button
+            className={!isSignup ? "active" : ""}
+            onClick={() => {
+              setMode("signin");
+              setError("");
+            }}
+          >
             <LockKeyhole size={18} aria-hidden="true" />
             Đăng nhập
           </button>
-          <button className={isSignup ? "active" : ""} onClick={() => setMode("signup")}>
+          <button
+            className={isSignup ? "active" : ""}
+            onClick={() => {
+              setMode("signup");
+              setError("");
+            }}
+          >
             <UserPlus size={18} aria-hidden="true" />
             Đăng ký
           </button>
@@ -367,23 +384,46 @@ export function AuthGate({ allowedRoles, children }: Props) {
               onChange={(event) => setPassword(event.target.value)}
               type="password"
               autoComplete={isSignup ? "new-password" : "current-password"}
-              placeholder="Tối thiểu 6 ký tự"
+              placeholder={isSignup ? "Tối thiểu 8 ký tự" : "Mật khẩu"}
             />
           </label>
 
           {isSignup ? (
-            <label className="field">
-              <span>
-                <Phone size={18} aria-hidden="true" />
-                SĐT salon
-              </span>
-              <input
-                value={phone}
-                onChange={(event) => setPhone(event.target.value)}
-                inputMode="tel"
-                placeholder="Không bắt buộc"
-              />
-            </label>
+            <>
+              <label className="field">
+                <span>
+                  <KeyRound size={18} aria-hidden="true" />
+                  Nhập lại mật khẩu
+                </span>
+                <input
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  type="password"
+                  autoComplete="new-password"
+                  placeholder="Nhập lại mật khẩu"
+                />
+              </label>
+
+              <div className="password-checklist" aria-label="Độ an toàn mật khẩu">
+                <span className={password.length >= 8 ? "ok" : ""}>8+ ký tự</span>
+                <span className={/[A-Z]/.test(password) && /[a-z]/.test(password) ? "ok" : ""}>Chữ hoa/thường</span>
+                <span className={/\d/.test(password) ? "ok" : ""}>Có số</span>
+                <span className={password && password === confirmPassword ? "ok" : ""}>Khớp</span>
+              </div>
+
+              <label className="field">
+                <span>
+                  <Phone size={18} aria-hidden="true" />
+                  SĐT salon
+                </span>
+                <input
+                  value={phone}
+                  onChange={(event) => setPhone(event.target.value)}
+                  inputMode="tel"
+                  placeholder="Không bắt buộc"
+                />
+              </label>
+            </>
           ) : null}
         </div>
 
@@ -392,8 +432,8 @@ export function AuthGate({ allowedRoles, children }: Props) {
           disabled={
             submitting ||
             !email.trim() ||
-            password.length < 6 ||
-            (isSignup && (!ownerName.trim() || !salonName.trim()))
+            password.length < (isSignup ? 8 : 6) ||
+            (isSignup && (!ownerName.trim() || !salonName.trim() || password !== confirmPassword))
           }
           onClick={handleSubmit}
         >

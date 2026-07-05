@@ -328,6 +328,29 @@ small {
   gap: 14px;
 }
 
+.password-checklist {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.password-checklist span {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #f1f3f1;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.password-checklist span.ok {
+  background: #eaf7ef;
+  color: var(--green-strong);
+}
+
 .field {
   display: grid;
   gap: 8px;

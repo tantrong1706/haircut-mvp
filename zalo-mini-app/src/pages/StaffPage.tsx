@@ -27,8 +27,7 @@ const quickNotes = [
 
 export function StaffPage({ currentUser }: Props) {
   const salonId = useMemo(() => {
-    const params = new URLSearchParams(window.location.search);
-    return currentUser.salonId || params.get("salonId") || "demo-salon";
+    return currentUser.salonId.trim();
   }, [currentUser.salonId]);
   const [sessions, setSessions] = useState<StaffSession[]>([]);
   const [selectedId, setSelectedId] = useState("");
@@ -46,6 +45,12 @@ export function StaffPage({ currentUser }: Props) {
   const canRedeemRewards = currentUser.role === "owner" || currentUser.canRedeemRewards === true;
 
   useEffect(() => {
+    if (!salonId) {
+      setLoaded(true);
+      setError("Tài khoản chưa được gắn với salon.");
+      return undefined;
+    }
+
     return listenActiveSessions(
       salonId,
       (nextSessions) => {
@@ -61,6 +66,10 @@ export function StaffPage({ currentUser }: Props) {
   }, [salonId]);
 
   useEffect(() => {
+    if (!salonId) {
+      return;
+    }
+
     getSalonProfile(salonId)
       .then((profile) => setPointPerVisit(Math.max(1, Math.floor(profile.pointPerVisit || 1))))
       .catch(() => setPointPerVisit(1));

@@ -487,7 +487,7 @@ export async function createStaffProfile(input: {
   name: string;
   phone?: string;
   canRedeemRewards: boolean;
-}) {
+}): Promise<{ uid?: string; email?: string } | void> {
   const uid = input.uid?.trim();
   const email = input.email.trim().toLowerCase();
   const password = input.password;
@@ -1098,6 +1098,8 @@ async function createStaffProfileDirect(input: {
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   }, { merge: true });
+
+  return { uid: staffUid, email: input.email };
 }
 
 async function updateStaffProfileDirect(input: {

@@ -2,6 +2,7 @@ import {
   User,
   createUserWithEmailAndPassword,
   onAuthStateChanged,
+  sendEmailVerification,
   signInWithEmailAndPassword,
   signOut,
   updateProfile,
@@ -89,13 +90,15 @@ export async function registerOwnerSalon(input: {
   if (!email || !password || !ownerName || !salonName) {
     throw new Error("Vui lòng nhập đủ thông tin đăng ký");
   }
-  if (password.length < 6) {
-    throw new Error("Mật khẩu phải có ít nhất 6 ký tự");
+  if (password.length < 8) {
+    throw new Error("Mật khẩu chủ salon phải có ít nhất 8 ký tự");
   }
 
   let credential;
+  let isNewAccount = false;
   try {
     credential = await createUserWithEmailAndPassword(auth, email, password);
+    isNewAccount = true;
   } catch (err) {
     if (authErrorCode(err) !== "auth/email-already-in-use") {
       throw new Error(friendlyAuthError(err));
@@ -105,9 +108,12 @@ export async function registerOwnerSalon(input: {
   }
 
   await updateProfile(credential.user, { displayName: ownerName });
+  if (isNewAccount && !credential.user.emailVerified) {
+    sendEmailVerification(credential.user).catch(() => undefined);
+  }
   const existingProfile = await getAppUser(credential.user.uid);
 
-  if (existingProfile) {
+  if (existingProfile?.salonId) {
     return existingProfile;
   }
 
@@ -164,7 +170,7 @@ export async function completeOwnerSalonProfile(input: {
   await updateProfile(currentUser, { displayName: ownerName });
   const existingProfile = await getAppUser(currentUser.uid);
 
-  if (existingProfile) {
+  if (existingProfile?.salonId) {
     return existingProfile;
   }
 

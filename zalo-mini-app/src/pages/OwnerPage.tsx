@@ -16,6 +16,7 @@ import {
   Save,
   Search,
   Settings2,
+  ShieldCheck,
   SlidersHorizontal,
   TicketCheck,
   Trash2,
@@ -73,8 +74,7 @@ type Props = {
 
 export function OwnerPage({ currentUser }: Props) {
   const salonId = useMemo(() => {
-    const params = new URLSearchParams(window.location.search);
-    return currentUser.salonId || params.get("salonId") || "demo-salon";
+    return currentUser.salonId.trim();
   }, [currentUser.salonId]);
   const [activeTab, setActiveTab] = useState<OwnerTab>("overview");
   const [requests, setRequests] = useState<PointRequest[]>([]);
@@ -93,6 +93,10 @@ export function OwnerPage({ currentUser }: Props) {
   const [error, setError] = useState("");
 
   useEffect(() => {
+    if (!salonId) {
+      return undefined;
+    }
+
     return listenPendingPointRequests(
       salonId,
       (nextRequests) => {
@@ -104,6 +108,10 @@ export function OwnerPage({ currentUser }: Props) {
   }, [salonId]);
 
   useEffect(() => {
+    if (!salonId) {
+      return;
+    }
+
     getLuckyWheelConfig(salonId)
       .then(setWheelConfig)
       .catch((err) => setError(err instanceof Error ? err.message : "Không tải được vòng quay"));
@@ -129,6 +137,10 @@ export function OwnerPage({ currentUser }: Props) {
   }, [activeTab, salonId]);
 
   async function refreshOverview() {
+    if (!salonId) {
+      return;
+    }
+
     setLoadingOverview(true);
     try {
       setOverview(await getOwnerOverview(salonId));
@@ -140,6 +152,10 @@ export function OwnerPage({ currentUser }: Props) {
   }
 
   async function refreshSalonProfile() {
+    if (!salonId) {
+      return;
+    }
+
     try {
       setSalonProfile(await getSalonProfile(salonId));
     } catch (err) {
@@ -362,6 +378,18 @@ export function OwnerPage({ currentUser }: Props) {
     if (!confirming) {
       setConfirmRequest(null);
     }
+  }
+
+  if (!salonId) {
+    return (
+      <section className="ops-page owner-page">
+        <div className="empty-state">
+          <ShieldCheck size={32} aria-hidden="true" />
+          <strong>Tài khoản chưa có salon</strong>
+          <p>Đăng xuất rồi đăng nhập lại để hoàn tất hồ sơ salon.</p>
+        </div>
+      </section>
+    );
   }
 
   return (
@@ -1078,9 +1106,12 @@ function MirrorsPanel({
     onError("");
 
     try {
-      await createMirror({ salonId, name });
+      const createdMirror = await createMirror({ salonId, name });
       setName("");
-      await refresh();
+      setMirrors((current) =>
+        [...current, createdMirror].sort((a, b) => a.name.localeCompare(b.name, "vi")),
+      );
+      refresh();
       onMessage("Đã tạo QR gương mới.");
     } catch (err) {
       onError(err instanceof Error ? err.message : "Không tạo được QR gương");
@@ -1095,14 +1126,19 @@ function MirrorsPanel({
     onError("");
 
     try {
-      await updateMirror({
+      const updatedMirror = await updateMirror({
         salonId,
         mirrorId: mirror.id,
         name: payload.name,
         isActive: payload.isActive,
         regenerateQr: payload.regenerateQr,
       });
-      await refresh();
+      setMirrors((current) =>
+        current
+          .map((item) => (item.id === mirror.id ? updatedMirror : item))
+          .sort((a, b) => a.name.localeCompare(b.name, "vi")),
+      );
+      refresh();
       onMessage(payload.regenerateQr ? "Đã tạo lại QR mới cho gương." : "Đã cập nhật gương.");
     } catch (err) {
       onError(err instanceof Error ? err.message : "Không cập nhật được gương");
@@ -1383,13 +1419,32 @@ function StaffManagementPanel({
     onError("");
 
     try {
-      await createStaffProfile({ salonId, email, password, name, phone, canRedeemRewards });
+      const createdStaff = await createStaffProfile({ salonId, email, password, name, phone, canRedeemRewards });
+      const createdUid = createdStaff && "uid" in createdStaff ? createdStaff.uid : "";
+      if (createdUid) {
+        const nextStaff: StaffProfile = {
+          uid: createdUid,
+          salonId,
+          email,
+          name,
+          phone,
+          role: "staff",
+          isActive: true,
+          canRedeemRewards,
+        };
+        setStaff((current) =>
+          [
+            ...current.filter((item) => item.uid !== createdUid),
+            nextStaff,
+          ].sort((a, b) => a.name.localeCompare(b.name, "vi")),
+        );
+      }
       setEmail("");
       setPassword("");
       setName("");
       setPhone("");
       setCanRedeemRewards(false);
-      await refresh();
+      refresh();
       onMessage("Đã tạo tài khoản nhân viên.");
     } catch (err) {
       onError(err instanceof Error ? err.message : "Không thêm được nhân viên");
@@ -1412,7 +1467,12 @@ function StaffManagementPanel({
         isActive: payload.isActive,
         canRedeemRewards: payload.canRedeemRewards,
       });
-      await refresh();
+      setStaff((current) =>
+        current
+          .map((item) => (item.uid === staffMember.uid ? { ...item, ...payload } : item))
+          .sort((a, b) => a.name.localeCompare(b.name, "vi")),
+      );
+      refresh();
       onMessage("Đã cập nhật nhân viên.");
     } catch (err) {
       onError(err instanceof Error ? err.message : "Không cập nhật được nhân viên");
