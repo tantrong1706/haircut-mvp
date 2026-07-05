@@ -67,10 +67,21 @@ export function StaffPage({ currentUser }: Props) {
   }, [salonId]);
 
   useEffect(() => {
-    if (!selectedId && sessions.length > 0) {
+    if (sessions.length === 0) {
+      if (selectedId) {
+        setSelectedId("");
+      }
+      return;
+    }
+
+    if (!selectedId || !sessions.some((session) => session.id === selectedId)) {
       setSelectedId(sessions[0].id);
     }
   }, [selectedId, sessions]);
+
+  useEffect(() => {
+    setNote("");
+  }, [selectedId]);
 
   async function handleSubmit() {
     if (!selectedSession) {
@@ -175,16 +186,19 @@ export function StaffPage({ currentUser }: Props) {
                   .join(" ")}
                 onClick={() => setSelectedId(session.id)}
               >
-                <span className="ops-card-title">{session.customer?.name || "Khách hàng"}</span>
+                <div className="ops-card-row">
+                  <span className="ops-card-title">{session.customer?.name || "Khách hàng"}</span>
+                  <span className={statusPillClass(session.status)}>{statusLabel(session.status)}</span>
+                </div>
                 <span>{customerLine(session)}</span>
-                <small>{statusLabel(session.status)} · {mirrorLabel(session.mirrorId)} · {formatDateTime(session.createdAtMs)}</small>
+                <small>{mirrorLabel(session.mirrorId)} · {formatDateTime(session.createdAtMs)}</small>
               </button>
             ))
           )}
         </div>
 
         {selectedSession ? (
-          <div className="panel detail-panel">
+          <div className={isPendingApproval ? "panel detail-panel pending-detail-panel" : "panel detail-panel"}>
             <div className="detail-heading">
               <div>
                 <p className="eyebrow">{mirrorLabel(selectedSession.mirrorId)}</p>
@@ -201,6 +215,14 @@ export function StaffPage({ currentUser }: Props) {
               <div className="summary-item">
                 <span>Trạng thái</span>
                 <strong>{statusLabel(selectedSession.status)}</strong>
+              </div>
+            </div>
+
+            <div className={isPendingApproval ? "service-state-card warning" : "service-state-card"}>
+              <Clock3 size={20} aria-hidden="true" />
+              <div>
+                <strong>{detailStatusTitle(selectedSession.status)}</strong>
+                <span>{detailStatusText(selectedSession.status)}</span>
               </div>
             </div>
 
@@ -228,13 +250,6 @@ export function StaffPage({ currentUser }: Props) {
                 disabled={isPendingApproval}
               />
             </label>
-
-            {isPendingApproval ? (
-              <div className="notice-banner compact-notice">
-                <Clock3 size={20} aria-hidden="true" />
-                <span>Đang chờ chủ salon duyệt.</span>
-              </div>
-            ) : null}
 
             <button
               className="primary-button"
@@ -313,4 +328,46 @@ function statusLabel(status: StaffSession["status"]) {
   }
 
   return "Đang chờ";
+}
+
+function statusPillClass(status: StaffSession["status"]) {
+  if (status === "serving") {
+    return "session-status warning";
+  }
+  if (status === "completed") {
+    return "session-status success";
+  }
+  if (status === "cancelled") {
+    return "session-status muted";
+  }
+
+  return "session-status";
+}
+
+function detailStatusTitle(status: StaffSession["status"]) {
+  if (status === "serving") {
+    return "Đã gửi yêu cầu điểm";
+  }
+  if (status === "completed") {
+    return "Lượt cắt đã hoàn tất";
+  }
+  if (status === "cancelled") {
+    return "Lượt cắt đã hủy";
+  }
+
+  return "Sẵn sàng ghi nhận lượt cắt";
+}
+
+function detailStatusText(status: StaffSession["status"]) {
+  if (status === "serving") {
+    return "Chờ chủ salon duyệt, không gửi lại để tránh cộng trùng điểm.";
+  }
+  if (status === "completed") {
+    return "Điểm và lịch sử đã được cập nhật cho khách.";
+  }
+  if (status === "cancelled") {
+    return "Khách cần tạo lượt mới nếu tiếp tục sử dụng dịch vụ.";
+  }
+
+  return "Chưa gửi yêu cầu điểm cho lượt này. Ghi chú giúp chủ salon kiểm tra chính xác hơn.";
 }

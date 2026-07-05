@@ -19,6 +19,7 @@
   --coral: #d95e45;
   --red: #b83232;
   --shadow: 0 16px 38px rgba(21, 25, 23, 0.08);
+  --shadow-strong: 0 24px 58px rgba(21, 25, 23, 0.15);
 }
 
 * {
@@ -29,6 +30,9 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  background:
+    linear-gradient(180deg, #f6f8f5 0%, #eef3ef 42%, #f8faf7 100%),
+    #f3f5f2;
 }
 
 button,
@@ -408,6 +412,20 @@ small {
   background: var(--green-strong);
 }
 
+.primary-button,
+.secondary-button,
+.icon-text-button,
+.quick-actions button,
+.owner-next-actions button,
+.ops-card {
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.16s ease,
+    border-color 0.16s ease,
+    background 0.16s ease,
+    color 0.16s ease;
+}
+
 .primary-button:disabled {
   background: #a8b7af;
   cursor: not-allowed;
@@ -432,6 +450,14 @@ small {
   background: #fee2e2;
 }
 
+.danger-primary {
+  background: var(--red);
+}
+
+.danger-primary:hover:not(:disabled) {
+  background: #8f2424;
+}
+
 .alert {
   display: flex;
   align-items: flex-start;
@@ -440,6 +466,54 @@ small {
   padding: 12px 14px;
   font-weight: 800;
   line-height: 1.45;
+}
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(11, 18, 15, 0.52);
+  backdrop-filter: blur(10px);
+}
+
+.confirm-dialog {
+  width: min(100%, 460px);
+  display: grid;
+  gap: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 20px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(246, 250, 247, 0.96)),
+    #ffffff;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.28);
+  padding: 18px;
+}
+
+.confirm-icon {
+  width: 48px;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  background: #fff6df;
+  color: #8a5b00;
+}
+
+.confirm-dialog.danger .confirm-icon {
+  background: #fff2ef;
+  color: var(--red);
+}
+
+.confirm-copy {
+  display: grid;
+  gap: 6px;
+}
+
+.confirm-copy h2 {
+  font-size: 22px;
 }
 
 .error {
@@ -467,9 +541,11 @@ small {
   gap: 14px;
   padding: 14px;
   border-radius: 18px;
-  background: #ffffff;
-  border: 1px solid var(--line);
-  box-shadow: var(--shadow);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(238, 247, 243, 0.9)),
+    #ffffff;
+  border: 1px solid rgba(19, 121, 91, 0.14);
+  box-shadow: 0 18px 42px rgba(21, 25, 23, 0.1);
 }
 
 .mirror-card span,
@@ -697,10 +773,12 @@ small {
   display: grid;
   gap: 8px;
   padding: 12px;
-  background: var(--paper);
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  box-shadow: var(--shadow);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(255, 250, 240, 0.72)),
+    var(--paper);
+  border: 1px solid rgba(19, 121, 91, 0.13);
+  border-radius: 18px;
+  box-shadow: 0 18px 40px rgba(21, 25, 23, 0.1);
 }
 
 .status-step {
@@ -773,6 +851,10 @@ small {
 .metric-card {
   grid-template-columns: auto 1fr;
   align-items: center;
+  border-color: rgba(19, 121, 91, 0.13);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(244, 248, 246, 0.96)),
+    #ffffff;
 }
 
 .metric-card strong {
@@ -1217,6 +1299,11 @@ small {
   color: var(--ink);
 }
 
+.owner-page,
+.compact-ops-page {
+  isolation: isolate;
+}
+
 .ops-page {
   gap: 18px;
 }
@@ -1225,14 +1312,15 @@ small {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
+  min-height: 112px;
+  padding: 16px;
+  border: 1px solid rgba(21, 25, 23, 0.1);
+  border-radius: 20px;
   background:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.98), rgba(255, 255, 255, 0.9) 58%, rgba(238, 247, 243, 0.72)),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.98), rgba(255, 255, 255, 0.9) 54%, rgba(238, 247, 243, 0.7)),
     url("/assets/salon-hero.webp") right center / 46% auto no-repeat,
     rgba(255, 255, 255, 0.92);
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-strong);
 }
 
 .ops-topbar h1 {
@@ -1331,11 +1419,18 @@ small {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
   padding: 6px;
-  box-shadow: none;
+  border-color: rgba(21, 25, 23, 0.08);
+  background: rgba(255, 255, 255, 0.74);
+  box-shadow: 0 14px 34px rgba(21, 25, 23, 0.07);
+  backdrop-filter: blur(16px);
 }
 
 .owner-tabs {
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  display: flex;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scroll-snap-type: x proximity;
+  overscroll-behavior-x: contain;
 }
 
 .compact-tabs {
@@ -1354,11 +1449,21 @@ small {
   background: transparent;
   color: var(--muted);
   font-weight: 850;
+  white-space: nowrap;
 }
 
 .segmented-control button.active {
-  background: #edf7f2;
+  background:
+    linear-gradient(135deg, #edf7f2, #fff7e4),
+    #edf7f2;
   color: var(--green-strong);
+  box-shadow: 0 8px 18px rgba(19, 121, 91, 0.1);
+}
+
+.owner-tabs button {
+  flex: 0 0 auto;
+  min-width: 116px;
+  scroll-snap-align: start;
 }
 
 .ops-card {
@@ -1368,6 +1473,16 @@ small {
   padding: 14px;
   color: var(--ink);
   text-align: left;
+  border-color: rgba(21, 25, 23, 0.08);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.99), rgba(248, 250, 247, 0.96)),
+    #ffffff;
+}
+
+.ops-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(19, 121, 91, 0.22);
+  box-shadow: 0 18px 38px rgba(21, 25, 23, 0.11);
 }
 
 .ops-card.active {
@@ -1377,12 +1492,49 @@ small {
 
 .ops-card.pending-card {
   border-color: #ead39b;
-  background: #fffaf0;
+  background:
+    linear-gradient(135deg, #fffaf0, #ffffff),
+    #fffaf0;
 }
 
 .ops-card-title {
   font-weight: 900;
   font-size: 17px;
+}
+
+.ops-card-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.session-status {
+  flex: 0 0 auto;
+  min-height: 26px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: #eef7f3;
+  color: var(--green-strong);
+  padding: 0 9px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.session-status.warning {
+  background: #fff3cf;
+  color: #7a5200;
+}
+
+.session-status.success {
+  background: #eaf7ef;
+  color: var(--green-strong);
+}
+
+.session-status.muted {
+  background: #eef0ef;
+  color: var(--muted);
 }
 
 .compact-ops-page {
@@ -1400,6 +1552,49 @@ small {
 
 .detail-panel {
   align-self: start;
+  position: sticky;
+  top: 82px;
+  border-color: rgba(19, 121, 91, 0.13);
+  box-shadow: var(--shadow-strong);
+}
+
+.pending-detail-panel {
+  border-color: rgba(216, 154, 34, 0.38);
+}
+
+.service-state-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid rgba(19, 121, 91, 0.14);
+  border-radius: 16px;
+  background: #f1faf5;
+  color: var(--green-strong);
+  padding: 12px;
+}
+
+.service-state-card.warning {
+  border-color: #ead39b;
+  background: #fffaf0;
+  color: #7a5200;
+}
+
+.service-state-card strong,
+.service-state-card span {
+  display: block;
+}
+
+.service-state-card strong {
+  color: var(--ink);
+  line-height: 1.25;
+}
+
+.service-state-card span {
+  margin-top: 2px;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.35;
 }
 
 .detail-heading,
@@ -1608,10 +1803,13 @@ small {
   display: grid;
   gap: 6px;
   align-content: center;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--paper-soft);
+  border: 1px solid rgba(19, 121, 91, 0.13);
+  border-radius: 16px;
+  background:
+    linear-gradient(135deg, #ffffff, #f5faf7),
+    var(--paper-soft);
   padding: 12px;
+  box-shadow: 0 10px 24px rgba(21, 25, 23, 0.05);
 }
 
 .overview-metric svg {
@@ -1702,6 +1900,12 @@ small {
   color: var(--ink);
   text-align: left;
   padding: 12px;
+}
+
+.owner-next-actions button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(19, 121, 91, 0.24);
+  box-shadow: 0 16px 34px rgba(21, 25, 23, 0.1);
 }
 
 .owner-next-actions svg {
@@ -1833,12 +2037,17 @@ small {
     grid-template-columns: 1fr;
   }
 
+  .detail-panel {
+    position: static;
+  }
+
   .owner-profile-panel {
     grid-template-columns: 1fr;
   }
 
   .owner-tabs {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin-inline: -4px;
+    padding-inline: 6px;
   }
 
   .staff-create-grid,
@@ -1885,7 +2094,11 @@ small {
   }
 
   .owner-tabs {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    top: 6px;
+  }
+
+  .owner-tabs button {
+    min-width: 106px;
   }
 
   .staff-edit-grid {

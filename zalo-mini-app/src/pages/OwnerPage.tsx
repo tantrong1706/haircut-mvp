@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import {
+  AlertTriangle,
   BarChart3,
   CheckCircle2,
   ClipboardCheck,
@@ -57,6 +58,15 @@ import { LuckyWheelConfig, defaultLuckyWheelConfig } from "../services/types";
 
 type OwnerTab = "overview" | "approvals" | "mirrors" | "staff" | "customers" | "wheel" | "redeem";
 
+type ConfirmRequest = {
+  title: string;
+  description: string;
+  confirmLabel: string;
+  cancelLabel?: string;
+  tone?: "default" | "danger";
+  onConfirm: () => Promise<void> | void;
+};
+
 type Props = {
   currentUser: AppUser;
 };
@@ -78,6 +88,8 @@ export function OwnerPage({ currentUser }: Props) {
   const [ownerAvatarUrl, setOwnerAvatarUrl] = useState(currentUser.avatarUrl || "");
   const [draftAvatarUrl, setDraftAvatarUrl] = useState(currentUser.avatarUrl || "");
   const [savingAvatar, setSavingAvatar] = useState(false);
+  const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest | null>(null);
+  const [confirming, setConfirming] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -171,14 +183,16 @@ export function OwnerPage({ currentUser }: Props) {
     }
   }
 
-  async function approve(request: PointRequest) {
-    const ok = window.confirm(
-      `Duyệt cộng ${request.pointsAdded} điểm cho ${request.customer?.name || "khách hàng"}?`,
-    );
-    if (!ok) {
-      return;
-    }
+  function approve(request: PointRequest) {
+    setConfirmRequest({
+      title: "Duyệt cộng điểm?",
+      description: `Cộng ${request.pointsAdded} điểm cho ${request.customer?.name || "khách hàng"} và lưu lịch sử cắt tóc.`,
+      confirmLabel: "Duyệt điểm",
+      onConfirm: () => approveAfterConfirm(request),
+    });
+  }
 
+  async function approveAfterConfirm(request: PointRequest) {
     setBusyId(request.id);
     setMessage("");
     setError("");
@@ -205,14 +219,17 @@ export function OwnerPage({ currentUser }: Props) {
     }
   }
 
-  async function reject(request: PointRequest) {
-    const ok = window.confirm(
-      `Từ chối yêu cầu cộng điểm của ${request.customer?.name || "khách hàng"}?`,
-    );
-    if (!ok) {
-      return;
-    }
+  function reject(request: PointRequest) {
+    setConfirmRequest({
+      title: "Từ chối yêu cầu?",
+      description: `Yêu cầu cộng điểm của ${request.customer?.name || "khách hàng"} sẽ bị hủy, điểm khách không thay đổi.`,
+      confirmLabel: "Từ chối",
+      tone: "danger",
+      onConfirm: () => rejectAfterConfirm(request),
+    });
+  }
 
+  async function rejectAfterConfirm(request: PointRequest) {
     setBusyId(request.id);
     setMessage("");
     setError("");
@@ -291,6 +308,30 @@ export function OwnerPage({ currentUser }: Props) {
       setError(err instanceof Error ? err.message : "Không lưu được avatar");
     } finally {
       setSavingAvatar(false);
+    }
+  }
+
+  async function runConfirmRequest() {
+    const request = confirmRequest;
+
+    if (!request || confirming) {
+      return;
+    }
+
+    setConfirming(true);
+    try {
+      await request.onConfirm();
+      setConfirmRequest(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không xử lý được thao tác");
+    } finally {
+      setConfirming(false);
+    }
+  }
+
+  function cancelConfirmRequest() {
+    if (!confirming) {
+      setConfirmRequest(null);
     }
   }
 
@@ -382,11 +423,21 @@ export function OwnerPage({ currentUser }: Props) {
           onReject={reject}
         />
       ) : activeTab === "mirrors" ? (
-        <MirrorsPanel salonId={salonId} onMessage={setMessage} onError={setError} />
+        <MirrorsPanel
+          salonId={salonId}
+          onMessage={setMessage}
+          onError={setError}
+          onConfirm={setConfirmRequest}
+        />
       ) : activeTab === "staff" ? (
         <StaffManagementPanel salonId={salonId} onMessage={setMessage} onError={setError} />
       ) : activeTab === "customers" ? (
-        <CustomerSearchPanel salonId={salonId} onMessage={setMessage} onError={setError} />
+        <CustomerSearchPanel
+          salonId={salonId}
+          onMessage={setMessage}
+          onError={setError}
+          onConfirm={setConfirmRequest}
+        />
       ) : activeTab === "wheel" ? (
         <WheelConfigPanel
           config={wheelConfig}
@@ -400,6 +451,12 @@ export function OwnerPage({ currentUser }: Props) {
 
       {message ? <p className="alert success">{message}</p> : null}
       {error ? <p className="alert error">{error}</p> : null}
+      <ConfirmDialog
+        request={confirmRequest}
+        busy={confirming}
+        onCancel={cancelConfirmRequest}
+        onConfirm={runConfirmRequest}
+      />
     </section>
   );
 }
@@ -420,6 +477,53 @@ function OwnerTabButton({
       {icon}
       {label}
     </button>
+  );
+}
+
+function ConfirmDialog({
+  request,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  request: ConfirmRequest | null;
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  if (!request) {
+    return null;
+  }
+
+  return (
+    <div className="dialog-backdrop" role="presentation">
+      <div
+        className={request.tone === "danger" ? "confirm-dialog danger" : "confirm-dialog"}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="owner-confirm-title"
+      >
+        <div className="confirm-icon">
+          <AlertTriangle size={24} aria-hidden="true" />
+        </div>
+        <div className="confirm-copy">
+          <h2 id="owner-confirm-title">{request.title}</h2>
+          <p className="muted">{request.description}</p>
+        </div>
+        <div className="button-row wrap-row">
+          <button className="secondary-button" disabled={busy} onClick={onCancel}>
+            {request.cancelLabel || "Hủy"}
+          </button>
+          <button
+            className={request.tone === "danger" ? "primary-button danger-primary" : "primary-button"}
+            disabled={busy}
+            onClick={onConfirm}
+          >
+            {busy ? "Đang xử lý..." : request.confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -869,10 +973,12 @@ function MirrorsPanel({
   salonId,
   onMessage,
   onError,
+  onConfirm,
 }: {
   salonId: string;
   onMessage: (message: string) => void;
   onError: (message: string) => void;
+  onConfirm: (request: ConfirmRequest) => void;
 }) {
   const [mirrors, setMirrors] = useState<SalonMirror[]>([]);
   const [name, setName] = useState("");
@@ -982,6 +1088,15 @@ function MirrorsPanel({
               busy={busyId === mirror.id}
               onCopy={copyQr}
               onSave={saveMirror}
+              onRegenerate={(selectedMirror) =>
+                onConfirm({
+                  title: "Tạo lại QR mới?",
+                  description: `QR cũ của ${selectedMirror.name} sẽ ngừng dùng ngay. Khách cần quét QR mới để check-in.`,
+                  confirmLabel: "Tạo QR mới",
+                  tone: "danger",
+                  onConfirm: () => saveMirror(selectedMirror, { regenerateQr: true }),
+                })
+              }
             />
           ))
         )}
@@ -995,11 +1110,13 @@ function MirrorCard({
   busy,
   onCopy,
   onSave,
+  onRegenerate,
 }: {
   mirror: SalonMirror;
   busy: boolean;
   onCopy: (url: string) => void;
   onSave: (mirror: SalonMirror, payload: Partial<SalonMirror> & { regenerateQr?: boolean }) => void;
+  onRegenerate: (mirror: SalonMirror) => void;
 }) {
   const [name, setName] = useState(mirror.name);
   const [qrImageUrl, setQrImageUrl] = useState("");
@@ -1128,11 +1245,7 @@ function MirrorCard({
         <button
           className="secondary-button"
           disabled={busy}
-          onClick={() => {
-            if (window.confirm("Tạo lại QR mới? QR cũ sẽ không còn dùng được.")) {
-              onSave(mirror, { regenerateQr: true });
-            }
-          }}
+          onClick={() => onRegenerate(mirror)}
         >
           <RefreshCcw size={18} aria-hidden="true" />
           Tạo QR mới
@@ -1364,10 +1477,12 @@ function CustomerSearchPanel({
   salonId,
   onMessage,
   onError,
+  onConfirm,
 }: {
   salonId: string;
   onMessage: (message: string) => void;
   onError: (message: string) => void;
+  onConfirm: (request: ConfirmRequest) => void;
 }) {
   const [term, setTerm] = useState("");
   const [results, setResults] = useState<CustomerLookupResult[]>([]);
@@ -1393,14 +1508,17 @@ function CustomerSearchPanel({
     onMessage("Đã copy mã quà.");
   }
 
-  async function deleteCustomer(customer: CustomerLookupResult) {
-    const ok = window.confirm(
-      `Xóa toàn bộ dữ liệu của ${customer.name}? Hành động này sẽ xóa hồ sơ, lịch sử, mã quà và ảnh đã lưu.`,
-    );
-    if (!ok) {
-      return;
-    }
+  function deleteCustomer(customer: CustomerLookupResult) {
+    onConfirm({
+      title: "Xóa dữ liệu khách?",
+      description: `Xóa toàn bộ hồ sơ, lịch sử, mã quà và ảnh đã lưu của ${customer.name}. Thao tác này không thể hoàn tác trong app.`,
+      confirmLabel: "Xóa dữ liệu",
+      tone: "danger",
+      onConfirm: () => deleteCustomerAfterConfirm(customer),
+    });
+  }
 
+  async function deleteCustomerAfterConfirm(customer: CustomerLookupResult) {
     setBusyCustomerId(customer.id);
     onMessage("");
     onError("");
