@@ -116,6 +116,81 @@ export async function callFunction<TInput, TOutput>(
   }
 
   const fn = httpsCallable<TInput, TOutput>(fns, name);
-  const result = await fn(payload);
-  return result.data;
+  try {
+    const result = await fn(payload);
+    return result.data;
+  } catch (error) {
+    throw new Error(friendlyFirebaseFunctionError(error));
+  }
+}
+
+export function friendlyFirebaseFunctionError(error: unknown) {
+  const code = normalizeErrorCode(readErrorField(error, "code"));
+  const rawMessage = readErrorMessage(error);
+  const message = normalizeRawErrorMessage(rawMessage);
+
+  if (code === "unauthenticated") {
+    return "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.";
+  }
+  if (code === "permission-denied") {
+    return "Tài khoản này không có quyền với salon này.";
+  }
+  if (code === "not-found") {
+    return "Không tìm thấy dữ liệu cần xử lý.";
+  }
+  if (code === "already-exists") {
+    return "Dữ liệu này đã tồn tại.";
+  }
+  if (code === "invalid-argument") {
+    return message || "Thông tin gửi lên chưa hợp lệ.";
+  }
+  if (code === "failed-precondition") {
+    if (message.toLowerCase().includes("index")) {
+      return "Firebase đang thiếu hoặc đang tạo chỉ mục dữ liệu. Vui lòng thử lại sau vài phút.";
+    }
+
+    return message || "Điều kiện xử lý chưa hợp lệ.";
+  }
+  if (code === "deadline-exceeded" || code === "unavailable") {
+    return "Kết nối hệ thống đang chậm. Vui lòng thử lại.";
+  }
+  if (code === "internal") {
+    if (message.toLowerCase().includes("index")) {
+      return "Firebase đang thiếu hoặc đang tạo chỉ mục dữ liệu. Vui lòng thử lại sau vài phút.";
+    }
+
+    return "Hệ thống chưa xử lý được thao tác này. Vui lòng thử lại.";
+  }
+
+  return message || "Không xử lý được thao tác. Vui lòng thử lại.";
+}
+
+function normalizeErrorCode(value: string) {
+  return value.replace(/^functions\//, "").toLowerCase();
+}
+
+function readErrorMessage(error: unknown) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return readErrorField(error, "message");
+}
+
+function readErrorField(error: unknown, field: "code" | "message") {
+  if (typeof error !== "object" || error === null || !(field in error)) {
+    return "";
+  }
+
+  const value = (error as Record<string, unknown>)[field];
+  return typeof value === "string" ? value : "";
+}
+
+function normalizeRawErrorMessage(message: string) {
+  const trimmed = message.trim();
+  if (!trimmed || trimmed === "INTERNAL") {
+    return "";
+  }
+
+  return trimmed;
 }

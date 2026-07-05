@@ -1,118 +1,100 @@
-# HAIRCUT MVP
+# HAIRCUT
 
-HAIRCUT là sản phẩm chăm sóc và giữ chân khách hàng cho salon tóc. Bản hiện tại là MVP chạy trên Firebase Hosting, dùng chung cho luồng khách quét QR, nhân viên ghi nhận khách và chủ salon duyệt điểm.
+HAIRCUT là app chăm sóc và giữ chân khách hàng cho salon tóc. Bản hiện tại đã chuyển sang hướng production: khách check-in bằng QR, nhân viên xác nhận lượt cắt, chủ salon duyệt điểm, quản lý QR/gương, nhân viên, khách, vòng quay và mã quà.
 
-## Luồng chính
+## Luồng sản phẩm
 
-1. Chủ salon tạo salon.
-2. Chủ salon tạo QR cho từng gương hoặc ghế.
-3. Khách quét QR bằng Zalo.
-4. Ứng dụng tạo hoặc tìm hồ sơ khách.
-5. Nhân viên thấy khách đang chờ.
-6. Nhân viên ghi chú kiểu tóc và gửi yêu cầu cộng điểm.
-7. Chủ salon duyệt điểm.
-8. Khách xem lịch sử, tích điểm và quay vòng may mắn.
+1. Chủ salon đăng ký tài khoản tại `/owner`.
+2. Hệ thống tạo salon thật và gắn `users/{uid}.salonId` cho chủ.
+3. Chủ tạo QR riêng cho từng gương/ghế.
+4. Khách quét QR, xác nhận tên hiển thị tại salon và tạo lượt cắt.
+5. Nhân viên đăng nhập `/staff`, thấy khách đang chờ, ghi chú kiểu tóc và gửi yêu cầu cộng điểm.
+6. Chủ salon duyệt hoặc từ chối yêu cầu.
+7. Điểm, lịch sử cắt tóc, vòng quay và mã quà được cập nhật cho khách.
 
-## Cấu trúc thư mục
+`/owner` và `/staff` không nhận `salonId` từ URL trong bản production. Salon luôn lấy từ tài khoản đăng nhập để tránh truy cập nhầm hoặc vượt quyền.
+
+## URL đang dùng
+
+```text
+Khách:        https://haircut-c7d12.web.app
+Chủ salon:    https://haircut-c7d12.web.app/owner
+Nhân viên:    https://haircut-c7d12.web.app/staff
+Quyền riêng tư: https://haircut-c7d12.web.app/privacy
+```
+
+## Cấu trúc repo
 
 ```text
 haircut-mvp/
-  docs/                 Tài liệu sản phẩm, dữ liệu, bảo mật và lộ trình
-  firebase/             Firestore rules, Hosting, Functions/Storage tùy chọn
-  ios-app/              Mã SwiftUI cho app iOS chủ salon/nhân viên sau này
-  zalo-mini-app/        Web app React/TypeScript cho khách, nhân viên, chủ salon
+  firebase/          Firebase Hosting, Firestore rules/indexes, Storage rules, Cloud Functions
+  zalo-mini-app/     React + TypeScript app cho khách, chủ salon và nhân viên
+  scripts/           Script build, deploy và kiểm tra production readiness
+  docs/              Tài liệu phụ trợ
+  ios-app/           Source iOS chuẩn bị cho giai đoạn sau
 ```
 
-## Thành phần MVP
+## Môi trường production
 
-- `firebase`: cấu hình Firestore, Hosting và bản build public. Storage chưa deploy nếu dự án Firebase chưa nâng Blaze.
-- `zalo-mini-app`: app web hiện tại cho khách quét QR, nhân viên gửi yêu cầu, chủ salon duyệt điểm, cấu hình vòng quay và trang quyền riêng tư.
-- `ios-app`: mã nguồn SwiftUI cho app iOS tương lai. Muốn build thật cần Mac, Xcode và file `GoogleService-Info.plist`.
+Web app cần `zalo-mini-app/.env` có Firebase config và:
 
-## Chế độ ghi dữ liệu
-
-Web app hỗ trợ `VITE_FUNCTION_WRITE_MODE` trong `zalo-mini-app/.env`:
-
-- `direct`: MVP test nội bộ, client ghi Firestore trực tiếp.
-- `auto`: thử gọi Cloud Functions, nếu lỗi thì fallback về Firestore trực tiếp.
-- `required`: production, bắt buộc gọi Cloud Functions và không fallback.
-
-Repo hiện dùng `firebase/firestore.rules` dạng production: client không được ghi trực tiếp các collection nghiệp vụ. Chỉ deploy Firestore rules khi Cloud Functions đã deploy và web đã chuyển sang `VITE_FUNCTION_WRITE_MODE=required`.
-
-## Thứ tự làm tiếp
-
-1. Test trọn luồng web MVP.
-2. Cấu hình vòng quay trong `/owner`.
-3. Tạo tài khoản Firebase Auth cho chủ salon/nhân viên và tạo document `users/{uid}`.
-4. Deploy Cloud Functions và thử `VITE_FUNCTION_WRITE_MODE=auto`.
-5. Khi Functions ổn, đổi sang `VITE_FUNCTION_WRITE_MODE=required`.
-6. Hoàn thiện xác thực khách/Zalo rồi mới khóa Firestore rules.
-7. Tạo Zalo Mini App production.
-8. Build app iOS chủ salon/nhân viên trên Mac/Xcode sau.
-
-## Chạy trên Windows
-
-Chạy từ thư mục `haircut-mvp`:
-
-```powershell
-.\scripts\setup.ps1 -InstallFirebaseCli
-.\scripts\start-miniapp.ps1
+```env
+VITE_FUNCTION_WRITE_MODE=required
+VITE_ZALO_MINI_APP_ID=2038116772828167300
 ```
 
-Chạy demo với Firebase Emulator:
+Cloud Functions dùng Secret Manager cho Zalo:
 
 ```powershell
-.\scripts\start-emulators.ps1
-.\scripts\seed-demo.ps1
+firebase functions:secrets:set ZALO_APP_SECRET
 ```
 
-Kiểm tra sẵn sàng production:
+Firestore rules hiện khóa ghi trực tiếp các collection nghiệp vụ. Các thao tác quan trọng phải đi qua Cloud Functions.
+
+## Lệnh kiểm tra
 
 ```powershell
+cd C:\tantrong\haircut-mvp
 .\scripts\check-production-readiness.ps1 -RunBuild -CheckLiveUrls
 ```
 
-Chi tiết xem [docs/PRODUCTION_READINESS.md](docs/PRODUCTION_READINESS.md).
-Checklist chạy thử salon thật xem [docs/SALON_PILOT_CHECKLIST.md](docs/SALON_PILOT_CHECKLIST.md).
+## Lệnh deploy
 
-Triển khai Firebase sau khi đăng nhập. Trong giai đoạn chưa deploy Functions, chỉ nên triển khai Hosting:
-
-```powershell
-.\scripts\firebase-login.ps1
-.\scripts\set-firebase-project.ps1 -ProjectId your-firebase-project-id
-.\scripts\deploy-firebase.ps1
-```
-
-Không triển khai Storage nếu Firebase project chưa nâng Blaze:
-
-```powershell
-.\scripts\deploy-firebase.ps1 -IncludeStorage
-```
-
-Khi đã bật Blaze và muốn chạy production, triển khai Functions rồi mới triển khai Firestore rules:
-
-```powershell
-.\scripts\deploy-firebase.ps1 -IncludeFunctions
-.\scripts\deploy-firebase.ps1 -IncludeFirestore
-```
-
-Triển khai riêng web app sau khi sửa giao diện:
+Deploy web:
 
 ```powershell
 .\scripts\deploy-hosting.ps1
 ```
 
-## URL test
+Deploy Functions:
 
-```text
-https://haircut-c7d12.web.app
-https://haircut-c7d12.web.app/staff?salonId=demo-salon
-https://haircut-c7d12.web.app/owner?salonId=demo-salon
-https://haircut-c7d12.web.app/privacy
+```powershell
+cd C:\tantrong\haircut-mvp\firebase
+$env:FUNCTIONS_DISCOVERY_TIMEOUT='60000'
+firebase deploy --only functions
 ```
 
-Trang `/staff` và `/owner` cần Firebase Auth và document phân quyền `users/{uid}`. Xem [docs/AUTH_SETUP.md](docs/AUTH_SETUP.md).
+Deploy rules và indexes:
+
+```powershell
+cd C:\tantrong\haircut-mvp\firebase
+firebase deploy --only firestore,storage
+```
 
 ## Trạng thái hiện tại
 
-Repo này đã chuyển rules trong mã nguồn sang hướng production. Nếu Firebase live vẫn đang mở từ bản cũ, chỉ deploy rules sau khi Functions đã chạy ổn và app dùng `VITE_FUNCTION_WRITE_MODE=required`.
+Đã có:
+
+- Đăng ký/đăng nhập chủ salon và nhân viên.
+- Tạo salon thật qua Cloud Functions.
+- Quản lý avatar chủ salon bằng upload ảnh lên Firebase Storage.
+- Quản lý QR/gương, nhân viên, khách, vòng quay và mã quà.
+- Duyệt điểm, từ chối điểm, lịch sử cắt tóc, tìm khách và đổi mã quà.
+- Firestore rules, Storage rules và Firestore indexes theo hướng production.
+
+Cần kiểm tra kỹ trước khi mở cho salon thật:
+
+- Tạo ít nhất 1 salon thật, 2 nhân viên thật và vài QR gương thật.
+- Test đủ luồng khách → nhân viên → chủ duyệt → khách nhận điểm.
+- Kiểm tra logo, ảnh salon, nội dung hỗ trợ và Privacy Policy.
+- Theo dõi Cloud Functions log trong Firebase Console sau khi có người dùng thật.

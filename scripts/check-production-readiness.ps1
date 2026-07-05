@@ -152,8 +152,8 @@ if ($RunBuild) {
 if ($CheckLiveUrls) {
   $urls = @(
     "https://haircut-c7d12.web.app",
-    "https://haircut-c7d12.web.app/staff?salonId=demo-salon",
-    "https://haircut-c7d12.web.app/owner?salonId=demo-salon",
+    "https://haircut-c7d12.web.app/staff",
+    "https://haircut-c7d12.web.app/owner",
     "https://haircut-c7d12.web.app/privacy"
   )
 
@@ -167,22 +167,6 @@ if ($CheckLiveUrls) {
   }
 } else {
   Add-Result "Live URLs" "WARN" "Chưa kiểm tra trong lần này. Dùng -CheckLiveUrls để kiểm tra."
-}
-
-if (Test-CommandExists "gh") {
-  try {
-    $runJson = gh run list --limit 1 --json status,conclusion,workflowName,url | ConvertFrom-Json
-    if ($runJson.Count -gt 0) {
-      $run = $runJson[0]
-      if ($run.conclusion -eq "success") {
-        Add-Result "GitHub Actions" "OK" "$($run.workflowName) success"
-      } else {
-        Add-Result "GitHub Actions" "WARN" "$($run.workflowName): status=$($run.status), conclusion=$($run.conclusion), $($run.url)"
-      }
-    }
-  } catch {
-    Add-Result "GitHub Actions" "WARN" "Không đọc được GitHub Actions: $($_.Exception.Message)"
-  }
 }
 
 $colors = @{
@@ -199,7 +183,6 @@ foreach ($item in $results) {
 Write-Host ""
 Write-Host "Thông tin cần có trước khi mở salon thật:" -ForegroundColor Cyan
 Write-Host "- Firebase Blaze đã bật nếu deploy Functions/Storage."
-Write-Host "- GitHub billing/spending limit đã xử lý để Actions chạy."
 Write-Host "- Email owner, email staff và UID tương ứng trong Firebase Auth."
 Write-Host "- Tên salon, số gương/ghế, tên từng gương/ghế."
 Write-Host "- Email hoặc số điện thoại hỗ trợ để đưa vào Privacy Policy."

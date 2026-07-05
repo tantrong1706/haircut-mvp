@@ -1,7 +1,6 @@
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import { initializeApp } from "firebase-admin/app";
 import {
-  AggregateField,
   FieldValue,
   Timestamp,
   getFirestore,
@@ -1056,7 +1055,7 @@ export const getOwnerOverview = onCall(functionOptions, async (request) => {
     customers7DaysSnap,
     customers30DaysSnap,
     pendingRequestsSnap,
-    approvedPointsSnap,
+    approvedRequestsTodaySnap,
     spinsTodaySnap,
     unusedRewardsSnap,
     customersSnap,
@@ -1085,9 +1084,6 @@ export const getOwnerOverview = onCall(functionOptions, async (request) => {
       .where("salonId", "==", salonId)
       .where("status", "==", "approved")
       .where("approvedAt", ">=", startOfToday)
-      .aggregate({
-        total: AggregateField.sum("pointsAdded"),
-      })
       .get(),
     db.collection("reward_history")
       .where("salonId", "==", salonId)
@@ -1131,7 +1127,9 @@ export const getOwnerOverview = onCall(functionOptions, async (request) => {
     customers7Days: customers7DaysSnap.data().count,
     customers30Days: customers30DaysSnap.data().count,
     pendingRequests: pendingRequestsSnap.data().count,
-    pointsApprovedToday: Number(approvedPointsSnap.data().total ?? 0),
+    pointsApprovedToday: approvedRequestsTodaySnap.docs.reduce((total, doc) => (
+      total + Number(doc.data().pointsAdded ?? 0)
+    ), 0),
     spinsToday: spinsTodaySnap.data().count,
     unusedRewards: unusedRewardsSnap.data().count,
     inactiveCustomers,

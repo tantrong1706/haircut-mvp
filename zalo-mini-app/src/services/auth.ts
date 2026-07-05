@@ -504,7 +504,7 @@ function friendlyAuthError(error: unknown) {
     return "Không tìm thấy tài khoản với email này.";
   }
   if (code === "auth/weak-password") {
-    return "Mật khẩu phải có ít nhất 6 ký tự.";
+    return "Mật khẩu phải có ít nhất 8 ký tự.";
   }
   if (code === "auth/invalid-email") {
     return "Email không hợp lệ.";
