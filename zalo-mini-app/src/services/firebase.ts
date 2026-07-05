@@ -2,11 +2,13 @@ import { FirebaseApp, initializeApp } from "firebase/app";
 import { Auth, getAuth } from "firebase/auth";
 import { Firestore, getFirestore } from "firebase/firestore";
 import { Functions, getFunctions, httpsCallable } from "firebase/functions";
+import { FirebaseStorage, getStorage } from "firebase/storage";
 
 let app: FirebaseApp | null = null;
 let auth: Auth | null = null;
 let db: Firestore | null = null;
 let functions: Functions | null = null;
+let storage: FirebaseStorage | null = null;
 
 export type FunctionWriteMode = "direct" | "auto" | "required";
 
@@ -87,6 +89,20 @@ export function getFirebaseFunctions() {
   }
 
   return functions;
+}
+
+export function getFirebaseStorage() {
+  const firebaseApp = getFirebaseApp();
+
+  if (!firebaseApp) {
+    return null;
+  }
+
+  if (!storage) {
+    storage = getStorage(firebaseApp);
+  }
+
+  return storage;
 }
 
 export async function callFunction<TInput, TOutput>(

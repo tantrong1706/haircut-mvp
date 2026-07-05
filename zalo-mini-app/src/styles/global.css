@@ -1395,6 +1395,72 @@ small {
   min-width: 0;
 }
 
+.avatar-upload-zone {
+  position: relative;
+  min-height: 78px;
+  display: grid;
+  grid-template-columns: 46px 1fr;
+  align-items: center;
+  gap: 12px;
+  border: 1px dashed rgba(19, 121, 91, 0.34);
+  border-radius: 16px;
+  background:
+    linear-gradient(135deg, rgba(237, 247, 242, 0.9), rgba(255, 250, 240, 0.72)),
+    #f8faf7;
+  color: var(--ink);
+  padding: 12px;
+  cursor: pointer;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.avatar-upload-zone:hover {
+  transform: translateY(-1px);
+  border-color: var(--green);
+  box-shadow: 0 14px 28px rgba(21, 25, 23, 0.08);
+}
+
+.avatar-upload-zone.disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.avatar-upload-zone input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: inherit;
+}
+
+.avatar-upload-icon {
+  width: 46px;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: #ffffff;
+  color: var(--green-strong);
+  box-shadow: 0 8px 18px rgba(21, 25, 23, 0.08);
+}
+
+.avatar-upload-zone strong,
+.avatar-upload-zone small {
+  display: block;
+}
+
+.avatar-upload-zone strong {
+  color: var(--ink);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.avatar-upload-zone small {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
 .salon-profile-panel {
   gap: 14px;
 }

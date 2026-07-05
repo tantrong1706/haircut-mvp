@@ -16,6 +16,11 @@ service firebase.storage {
         && userDoc().data.isActive == true;
     }
 
+    function isOwner(salonId) {
+      return isActiveMember(salonId)
+        && userDoc().data.role == "owner";
+    }
+
     function customerExists(customerId) {
       return firestore.exists(/databases/(default)/documents/customers/$(customerId));
     }
@@ -36,6 +41,12 @@ service firebase.storage {
         && request.resource.contentType.matches('image/.*');
     }
 
+    function isAllowedAvatarUpload() {
+      return request.resource != null
+        && request.resource.size <= 3 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp)');
+    }
+
     match /salons/{salonId}/customers/{customerId}/{allPaths=**} {
       allow read: if isActiveMember(salonId)
         && customerAllowsPhoto(salonId, customerId);
@@ -43,6 +54,15 @@ service firebase.storage {
         && customerAllowsPhoto(salonId, customerId)
         && isAllowedImageUpload();
       allow delete: if isActiveMember(salonId);
+    }
+
+    match /salons/{salonId}/owner_avatars/{ownerUid}/{fileName} {
+      allow read: if isActiveMember(salonId);
+      allow create, update: if isOwner(salonId)
+        && request.auth.uid == ownerUid
+        && isAllowedAvatarUpload();
+      allow delete: if isOwner(salonId)
+        && request.auth.uid == ownerUid;
     }
   }
 }

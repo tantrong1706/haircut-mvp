@@ -52,7 +52,7 @@ import {
   updateSalonProfile,
   updateStaffProfile,
 } from "../services/operations";
-import { AppUser, updateOwnerAvatar } from "../services/auth";
+import { AppUser, updateOwnerAvatar, uploadOwnerAvatarFile } from "../services/auth";
 import { trackEvent, withMonitoringTrace } from "../services/monitoring";
 import { LuckyWheelConfig, defaultLuckyWheelConfig } from "../services/types";
 
@@ -86,7 +86,6 @@ export function OwnerPage({ currentUser }: Props) {
   const [savingSalonProfile, setSavingSalonProfile] = useState(false);
   const [savingWheel, setSavingWheel] = useState(false);
   const [ownerAvatarUrl, setOwnerAvatarUrl] = useState(currentUser.avatarUrl || "");
-  const [draftAvatarUrl, setDraftAvatarUrl] = useState(currentUser.avatarUrl || "");
   const [savingAvatar, setSavingAvatar] = useState(false);
   const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest | null>(null);
   const [confirming, setConfirming] = useState(false);
@@ -120,7 +119,6 @@ export function OwnerPage({ currentUser }: Props) {
 
   useEffect(() => {
     setOwnerAvatarUrl(currentUser.avatarUrl || "");
-    setDraftAvatarUrl(currentUser.avatarUrl || "");
   }, [currentUser.avatarUrl, currentUser.uid]);
 
   useEffect(() => {
@@ -280,7 +278,7 @@ export function OwnerPage({ currentUser }: Props) {
     }
   }
 
-  async function saveOwnerAvatar(nextAvatarUrl = draftAvatarUrl) {
+  async function saveOwnerAvatar(nextAvatarUrl = "") {
     setSavingAvatar(true);
     setMessage("");
     setError("");
@@ -298,7 +296,6 @@ export function OwnerPage({ currentUser }: Props) {
         },
       );
       setOwnerAvatarUrl(result.avatarUrl);
-      setDraftAvatarUrl(result.avatarUrl);
       trackEvent("owner_avatar_saved", {
         salon_id: salonId,
         has_avatar: Boolean(result.avatarUrl),
@@ -306,6 +303,38 @@ export function OwnerPage({ currentUser }: Props) {
       setMessage(result.avatarUrl ? "Đã cập nhật avatar chủ salon." : "Đã xóa avatar chủ salon.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không lưu được avatar");
+    } finally {
+      setSavingAvatar(false);
+    }
+  }
+
+  async function uploadOwnerAvatar(file: File) {
+    setSavingAvatar(true);
+    setMessage("");
+    setError("");
+
+    try {
+      const result = await withMonitoringTrace(
+        "owner_upload_avatar",
+        () => uploadOwnerAvatarFile({
+          salonId,
+          file,
+        }),
+        {
+          salon_id: salonId,
+          file_size: file.size,
+          file_type: file.type,
+        },
+      );
+      setOwnerAvatarUrl(result.avatarUrl);
+      trackEvent("owner_avatar_uploaded", {
+        salon_id: salonId,
+        file_size: file.size,
+        file_type: file.type,
+      });
+      setMessage("Đã tải avatar chủ salon lên.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không tải được avatar");
     } finally {
       setSavingAvatar(false);
     }
@@ -397,10 +426,8 @@ export function OwnerPage({ currentUser }: Props) {
           <OwnerProfilePanel
             currentUser={currentUser}
             avatarUrl={ownerAvatarUrl}
-            draftAvatarUrl={draftAvatarUrl}
             saving={savingAvatar}
-            onDraftChange={setDraftAvatarUrl}
-            onSave={() => saveOwnerAvatar()}
+            onUpload={uploadOwnerAvatar}
             onClear={() => saveOwnerAvatar("")}
           />
           <SalonProfilePanel
@@ -530,26 +557,37 @@ function ConfirmDialog({
 function OwnerProfilePanel({
   currentUser,
   avatarUrl,
-  draftAvatarUrl,
   saving,
-  onDraftChange,
-  onSave,
+  onUpload,
   onClear,
 }: {
   currentUser: AppUser;
   avatarUrl: string;
-  draftAvatarUrl: string;
   saving: boolean;
-  onDraftChange: (value: string) => void;
-  onSave: () => void;
+  onUpload: (file: File) => void;
   onClear: () => void;
 }) {
-  const trimmedDraft = draftAvatarUrl.trim();
-  const hasChanges = trimmedDraft !== avatarUrl;
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState("");
+
+  useEffect(() => {
+    if (!selectedFile) {
+      setPreviewUrl("");
+      return undefined;
+    }
+
+    const nextPreviewUrl = URL.createObjectURL(selectedFile);
+    setPreviewUrl(nextPreviewUrl);
+    return () => URL.revokeObjectURL(nextPreviewUrl);
+  }, [selectedFile]);
+
+  useEffect(() => {
+    setSelectedFile(null);
+  }, [avatarUrl]);
 
   return (
     <div className="panel owner-profile-panel">
-      <OwnerAvatar avatarUrl={trimmedDraft || avatarUrl} name={currentUser.name} large />
+      <OwnerAvatar avatarUrl={previewUrl || avatarUrl} name={currentUser.name} large />
       <div className="owner-profile-form">
         <div className="dashboard-heading">
           <div>
@@ -559,25 +597,50 @@ function OwnerProfilePanel({
           <span className="pill muted-pill">{currentUser.name || "Chủ salon"}</span>
         </div>
 
-        <label className="field">
-          <span>
-            <ImageIcon size={18} aria-hidden="true" />
-            Link ảnh đại diện
-          </span>
+        <label className={saving ? "avatar-upload-zone disabled" : "avatar-upload-zone"}>
           <input
-            value={draftAvatarUrl}
-            onChange={(event) => onDraftChange(event.target.value)}
-            inputMode="url"
-            placeholder="https://..."
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            disabled={saving}
+            onChange={(event) => {
+              const file = event.target.files?.[0] || null;
+              setSelectedFile(file);
+              event.currentTarget.value = "";
+            }}
           />
+          <span className="avatar-upload-icon">
+            <ImageIcon size={18} aria-hidden="true" />
+          </span>
+          <span>
+            <strong>{selectedFile ? selectedFile.name : "Chọn ảnh avatar"}</strong>
+            <small>
+              {selectedFile
+                ? `${formatUploadSize(selectedFile.size)} · bấm Lưu để tải lên`
+                : "JPG, PNG hoặc WebP. App sẽ tự cắt vuông và nén ảnh cho nhẹ."}
+            </small>
+          </span>
         </label>
 
         <div className="button-row wrap-row">
-          <button className="primary-button" disabled={saving || !hasChanges} onClick={onSave}>
+          <button
+            className="primary-button"
+            disabled={saving || !selectedFile}
+            onClick={() => {
+              if (selectedFile) {
+                onUpload(selectedFile);
+              }
+            }}
+          >
             <Save size={18} aria-hidden="true" />
-            {saving ? "Đang lưu..." : "Lưu avatar"}
+            {saving ? "Đang tải lên..." : "Lưu avatar"}
           </button>
-          <button className="secondary-button" disabled={saving || (!avatarUrl && !trimmedDraft)} onClick={onClear}>
+          {selectedFile ? (
+            <button className="secondary-button" disabled={saving} onClick={() => setSelectedFile(null)}>
+              <XCircle size={18} aria-hidden="true" />
+              Bỏ chọn
+            </button>
+          ) : null}
+          <button className="secondary-button" disabled={saving || !avatarUrl} onClick={onClear}>
             <Trash2 size={18} aria-hidden="true" />
             Xóa avatar
           </button>
@@ -585,6 +648,14 @@ function OwnerProfilePanel({
       </div>
     </div>
   );
+}
+
+function formatUploadSize(size: number) {
+  if (size >= 1024 * 1024) {
+    return `${(size / 1024 / 1024).toFixed(1)}MB`;
+  }
+
+  return `${Math.max(1, Math.round(size / 1024))}KB`;
 }
 
 function SalonProfilePanel({
