@@ -1,19 +1,20 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { Gift, History, House, Sparkles, type LucideIcon } from "lucide-react";
 import { InstallAppPrompt } from "./components/InstallAppPrompt";
-import { AuthGate } from "./pages/AuthGate";
-import { HistoryPage } from "./pages/HistoryPage";
-import { HomePage } from "./pages/HomePage";
-import { OwnerPage } from "./pages/OwnerPage";
-import { PrivacyPage } from "./pages/PrivacyPage";
-import { RewardsPage } from "./pages/RewardsPage";
-import { ScanEntryPage } from "./pages/ScanEntryPage";
-import { StaffPage } from "./pages/StaffPage";
-import { WheelPage } from "./pages/WheelPage";
-import { listenSessionLiveUpdates, parseQrContext } from "./services/api";
 import { trackEvent } from "./services/monitoring";
+import { parseQrContext } from "./services/qr";
 import { clearSavedSession, loadSavedSession, saveSession } from "./services/sessionStore";
-import { AppSession, TabKey } from "./services/types";
+import type { AppSession, TabKey } from "./services/types";
+
+const AuthGate = lazy(() => import("./pages/AuthGate").then((module) => ({ default: module.AuthGate })));
+const HistoryPage = lazy(() => import("./pages/HistoryPage").then((module) => ({ default: module.HistoryPage })));
+const HomePage = lazy(() => import("./pages/HomePage").then((module) => ({ default: module.HomePage })));
+const OwnerPage = lazy(() => import("./pages/OwnerPage").then((module) => ({ default: module.OwnerPage })));
+const PrivacyPage = lazy(() => import("./pages/PrivacyPage").then((module) => ({ default: module.PrivacyPage })));
+const RewardsPage = lazy(() => import("./pages/RewardsPage").then((module) => ({ default: module.RewardsPage })));
+const ScanEntryPage = lazy(() => import("./pages/ScanEntryPage").then((module) => ({ default: module.ScanEntryPage })));
+const StaffPage = lazy(() => import("./pages/StaffPage").then((module) => ({ default: module.StaffPage })));
+const WheelPage = lazy(() => import("./pages/WheelPage").then((module) => ({ default: module.WheelPage })));
 
 const tabs: Array<{ key: TabKey; label: string; Icon: LucideIcon }> = [
   { key: "home", label: "Điểm", Icon: House },
@@ -21,6 +22,16 @@ const tabs: Array<{ key: TabKey; label: string; Icon: LucideIcon }> = [
   { key: "wheel", label: "Vòng quay", Icon: Sparkles },
   { key: "rewards", label: "Quà", Icon: Gift },
 ];
+
+function PageLoading() {
+  return (
+    <section className="panel loading-panel" aria-live="polite">
+      <div className="skeleton-line wide" />
+      <div className="skeleton-line" />
+      <div className="skeleton-line short" />
+    </section>
+  );
+}
 
 export default function App() {
   const currentQr = useMemo(() => parseQrContext(), []);
@@ -66,9 +77,23 @@ export default function App() {
       return undefined;
     }
 
-    return listenSessionLiveUpdates(session, setSession, (message) => {
-      console.warn("Không đồng bộ được phiên khách.", message);
+    let unsubscribe: (() => void) | undefined;
+    let isActive = true;
+
+    void import("./services/api").then(({ listenSessionLiveUpdates }) => {
+      if (!isActive) {
+        return;
+      }
+
+      unsubscribe = listenSessionLiveUpdates(session, setSession, (message) => {
+        console.warn("Không đồng bộ được phiên khách.", message);
+      });
     });
+
+    return () => {
+      isActive = false;
+      unsubscribe?.();
+    };
   }, [session?.sessionId]);
 
   function resetSession() {
@@ -94,9 +119,11 @@ export default function App() {
           <p className="offline-banner">Mất kết nối mạng. Dữ liệu mới sẽ gửi lại khi có mạng.</p>
         ) : null}
         <main className="app-main wide-main">
-          <AuthGate allowedRoles={["owner", "staff"]}>
-            {(user) => <StaffPage currentUser={user} />}
-          </AuthGate>
+          <Suspense fallback={<PageLoading />}>
+            <AuthGate allowedRoles={["owner", "staff"]}>
+              {(user) => <StaffPage currentUser={user} />}
+            </AuthGate>
+          </Suspense>
         </main>
         <InstallAppPrompt />
       </div>
@@ -110,9 +137,11 @@ export default function App() {
           <p className="offline-banner">Mất kết nối mạng. Dữ liệu mới sẽ gửi lại khi có mạng.</p>
         ) : null}
         <main className="app-main wide-main">
-          <AuthGate allowedRoles={["owner"]}>
-            {(user) => <OwnerPage currentUser={user} />}
-          </AuthGate>
+          <Suspense fallback={<PageLoading />}>
+            <AuthGate allowedRoles={["owner"]}>
+              {(user) => <OwnerPage currentUser={user} />}
+            </AuthGate>
+          </Suspense>
         </main>
         <InstallAppPrompt />
       </div>
@@ -123,7 +152,9 @@ export default function App() {
     return (
       <div className="app-shell ops-shell">
         <main className="app-main wide-main">
-          <PrivacyPage />
+          <Suspense fallback={<PageLoading />}>
+            <PrivacyPage />
+          </Suspense>
         </main>
       </div>
     );
@@ -146,7 +177,9 @@ export default function App() {
       {!isOnline ? (
         <p className="offline-banner">Mất kết nối mạng. Dữ liệu mới sẽ gửi lại khi có mạng.</p>
       ) : null}
-      <main className="app-main">{content}</main>
+      <main className="app-main">
+        <Suspense fallback={<PageLoading />}>{content}</Suspense>
+      </main>
       <InstallAppPrompt />
       {session ? (
         <nav className="bottom-nav" aria-label="Điều hướng">

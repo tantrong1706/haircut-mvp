@@ -10,8 +10,9 @@ import {
   UserRound,
 } from "lucide-react";
 import { BrandLogo } from "../components/BrandLogo";
-import { buildRegisterInput, parseQrContext, registerCustomer } from "../services/api";
+import { buildRegisterInput, registerCustomer } from "../services/api";
 import { captureError, trackEvent, withMonitoringTrace } from "../services/monitoring";
+import { parseQrContext } from "../services/qr";
 import { AppSession } from "../services/types";
 import { ZaloIdentity, getZaloIdentity } from "../services/zalo";
 

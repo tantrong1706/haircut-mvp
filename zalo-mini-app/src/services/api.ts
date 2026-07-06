@@ -23,6 +23,7 @@ import {
 } from "./types";
 import { activeWheelSlots, normalizeLuckyWheelConfig } from "./wheel";
 import { getZaloAccessToken, ZaloIdentity } from "./zalo";
+export { parseQrContext } from "./qr";
 
 type RegisterInput = QrContext & {
   zaloAccessToken: string;
@@ -550,16 +551,6 @@ async function getRewardsDirect(session: AppSession): Promise<Reward[]> {
     .sort((a, b) => Number(b.createdAtMs ?? 0) - Number(a.createdAtMs ?? 0))
     .slice(0, 20)
     .map((item) => item.reward);
-}
-
-export function parseQrContext(): QrContext {
-  const params = new URLSearchParams(window.location.search);
-
-  return {
-    salonId: params.get("salonId") || "demo-salon",
-    mirrorId: params.get("mirrorId") || "demo-mirror-1",
-    qrToken: params.get("qrToken") || "demo-token",
-  };
 }
 
 export function buildRegisterInput(
