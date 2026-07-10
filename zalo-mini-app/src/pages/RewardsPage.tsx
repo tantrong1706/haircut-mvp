@@ -41,7 +41,7 @@ export function RewardsPage({ session }: Props) {
   }, [session]);
 
   return (
-    <section className="page">
+    <section className="page rewards-page">
       <header className="page-header">
         <p className="eyebrow">Ưu đãi</p>
         <h1>Quà của tôi</h1>

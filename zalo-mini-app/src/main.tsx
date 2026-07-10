@@ -8,7 +8,13 @@ import "./styles/global.css";
 
 initMonitoring();
 
-ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+const rootElement = document.getElementById("root") ?? document.getElementById("app");
+
+if (!rootElement) {
+  throw new Error("Không tìm thấy phần tử gốc để khởi động HAIRCUT.");
+}
+
+ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     <AppErrorBoundary>
       <App />

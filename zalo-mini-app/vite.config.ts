@@ -2,10 +2,17 @@ import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
 export default defineConfig({
+  base: "./",
   plugins: [react()],
   build: {
+    modulePreload: {
+      polyfill: false,
+    },
     rollupOptions: {
       output: {
+        entryFileNames: "assets/[name].[hash].module.js",
+        chunkFileNames: "assets/[name].[hash].module.js",
+        assetFileNames: "assets/[name].[hash][extname]",
         manualChunks(id) {
           if (!id.includes("node_modules")) {
             return undefined;

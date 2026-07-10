@@ -1,0 +1,20 @@
+{
+  "app": {
+    "title": "HAIRCUT",
+    "headerTitle": "HAIRCUT",
+    "headerColor": "#151917",
+    "textColor": "white",
+    "leftButton": "back",
+    "statusBar": "normal",
+    "actionBarHidden": false,
+    "hideAndroidBottomNavigationBar": false,
+    "hideIOSSafeAreaBottom": false
+  },
+  "listCSS": [
+    "./assets/index.C_2iqX7o.css"
+  ],
+  "listSyncJS": [
+    "./assets/index.GdEaXEHd.module.js"
+  ],
+  "listAsyncJS": []
+}
