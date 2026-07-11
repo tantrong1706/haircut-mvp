@@ -4,6 +4,10 @@ const SESSION_KEY = "haircut_app_session_v1";
 
 export function loadSavedSession(currentQr: QrContext): AppSession | null {
   try {
+    if (!isProductionQr(currentQr)) {
+      return null;
+    }
+
     const raw = localStorage.getItem(SESSION_KEY);
     if (!raw) {
       return null;
@@ -18,6 +22,15 @@ export function loadSavedSession(currentQr: QrContext): AppSession | null {
   } catch {
     return null;
   }
+}
+
+function isProductionQr(qr: QrContext) {
+  return (
+    Boolean(qr.salonId && qr.mirrorId && qr.qrToken) &&
+    qr.salonId !== "demo-salon" &&
+    qr.mirrorId !== "demo-mirror-1" &&
+    qr.qrToken !== "demo-token"
+  );
 }
 
 export function saveSession(session: AppSession) {
@@ -39,9 +52,9 @@ function sameQr(left: QrContext, right: QrContext) {
 function isValidSession(value: AppSession | null): value is AppSession {
   return Boolean(
     value?.sessionId &&
-      value?.zaloUserId &&
-      value?.qr?.salonId &&
-      value?.qr?.mirrorId &&
-      value?.customer?.customerId,
+    value?.zaloUserId &&
+    value?.qr?.salonId &&
+    value?.qr?.mirrorId &&
+    value?.customer?.customerId,
   );
 }

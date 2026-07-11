@@ -92,17 +92,17 @@ if (Test-Path -LiteralPath $firebaserc) {
 $envPath = Join-Path $root "zalo-mini-app\.env"
 $env = Read-EnvFile $envPath
 if ($env.Count -eq 0) {
-  Add-Result "Zalo web .env" "WARN" "Thiếu zalo-mini-app\.env, app có thể chạy bằng mock/direct tùy môi trường"
+  Add-Result "Zalo web .env" "FAIL" "Thiếu zalo-mini-app\.env cho bản production"
 } else {
   $mode = $env["VITE_FUNCTION_WRITE_MODE"]
   if (-not $mode) {
-    Add-Result "VITE_FUNCTION_WRITE_MODE" "WARN" "Chưa đặt, app mặc định dùng direct"
+    Add-Result "VITE_FUNCTION_WRITE_MODE" "FAIL" "Chưa đặt required"
   } elseif ($mode -eq "required") {
     Add-Result "VITE_FUNCTION_WRITE_MODE" "OK" "required - phù hợp production nếu Functions đã deploy"
   } elseif ($mode -eq "auto") {
-    Add-Result "VITE_FUNCTION_WRITE_MODE" "WARN" "auto - phù hợp giai đoạn chuyển tiếp, chưa phải khóa production"
+    Add-Result "VITE_FUNCTION_WRITE_MODE" "FAIL" "auto có fallback direct, không dùng cho production"
   } else {
-    Add-Result "VITE_FUNCTION_WRITE_MODE" "WARN" "$mode - đang là chế độ test nội bộ"
+    Add-Result "VITE_FUNCTION_WRITE_MODE" "FAIL" "$mode không được phép trong production"
   }
 }
 
@@ -111,25 +111,67 @@ $liveRulesText = ""
 if (Test-Path -LiteralPath $liveRules) {
   $liveRulesText = Get-Content -Raw -LiteralPath $liveRules
 }
-if ($liveRulesText -match "allow\s+read\s*,\s*write\s*:\s*if\s+true") {
-  Add-Result "Firestore rules live" "WARN" "Rules live trong repo vẫn mở để test nội bộ"
+$riskyRulePatterns = @(
+  "allow\s+read\s*,\s*write\s*:\s*if\s+true",
+  "allow\s+get\s*:\s*if\s+true",
+  "request\.query\.limit\s*!=\s*null",
+  "validDirectCustomer",
+  "validDirectSession",
+  "validCustomerSpinPointUpdate"
+)
+$matchedRisk = $riskyRulePatterns | Where-Object { $liveRulesText -match $_ } | Select-Object -First 1
+if (-not $liveRulesText) {
+  Add-Result "Firestore rules live" "FAIL" "Thiếu firebase/firestore.rules"
+} elseif ($matchedRisk) {
+  Add-Result "Firestore rules live" "FAIL" "Phát hiện rule public/direct không an toàn: $matchedRisk"
+} elseif ($liveRulesText -notmatch "allow\s+create,\s*update,\s*delete\s*:\s*if\s+false") {
+  Add-Result "Firestore rules live" "FAIL" "Chưa thấy chính sách khóa business writes từ client"
 } else {
-  Add-Result "Firestore rules live" "OK" "Không thấy allow read/write true trong file live"
+  Add-Result "Firestore rules live" "OK" "Đã khóa public reads và business writes từ client"
 }
 
-$prodRules = Join-Path $root "firebase\firestore.rules.production.example"
-$prodRulesText = ""
-if (Test-Path -LiteralPath $prodRules) {
-  $prodRulesText = Get-Content -Raw -LiteralPath $prodRules
-}
-if (-not $prodRulesText) {
-  Add-Result "Rules production mẫu" "FAIL" "Thiếu firestore.rules.production.example"
-} elseif ($prodRulesText -match "allow\s+read\s*,\s*write\s*:\s*if\s+true") {
-  Add-Result "Rules production mẫu" "FAIL" "Còn allow read/write true"
-} elseif ($prodRulesText -match "allow\s+create,\s+update,\s+delete:\s+if\s+false") {
-  Add-Result "Rules production mẫu" "OK" "Đã khóa ghi client cho các collection nghiệp vụ"
+$appConfigPath = Join-Path $root "zalo-mini-app\app-config.json"
+$manifestPath = Join-Path $root "zalo-mini-app\www\.vite\manifest.json"
+if (-not (Test-Path -LiteralPath $appConfigPath)) {
+  Add-Result "ZMP app-config" "FAIL" "Thiếu app-config.json"
+} elseif (-not (Test-Path -LiteralPath $manifestPath)) {
+  Add-Result "ZMP app-config" "WARN" "Chưa có www manifest; chạy npm run build:zmp để kiểm tra asset"
 } else {
-  Add-Result "Rules production mẫu" "WARN" "Cần rà lại rules production"
+  try {
+    $appConfig = Get-Content -Raw -LiteralPath $appConfigPath | ConvertFrom-Json
+    $assets = @($appConfig.listCSS) + @($appConfig.listSyncJS) + @($appConfig.listAsyncJS)
+    $missingAssets = @($assets | Where-Object {
+      $relative = ([string]$_) -replace '^\./', ''
+      -not (Test-Path -LiteralPath (Join-Path $root "zalo-mini-app\www\$relative"))
+    })
+    if ($missingAssets.Count -gt 0) {
+      Add-Result "ZMP app-config" "FAIL" "Có asset không tồn tại: $($missingAssets -join ', ')"
+    } else {
+      Add-Result "ZMP app-config" "OK" "Mọi JS/CSS trong app-config đều tồn tại"
+    }
+  } catch {
+    Add-Result "ZMP app-config" "FAIL" $_.Exception.Message
+  }
+}
+
+if (Test-CommandExists "zmp") {
+  Add-Result "ZMP CLI" "OK" ((zmp --version 2>$null | Select-Object -First 1) -join " ")
+} else {
+  Add-Result "ZMP CLI" "WARN" "Chưa cài ZMP CLI trên máy này"
+}
+
+$functionsEnv = Read-EnvFile (Join-Path $root "firebase\functions\.env")
+if ($functionsEnv["ZALO_MINI_APP_ID"]) {
+  Add-Result "Functions Zalo App ID" "OK" "Đã cấu hình"
+} else {
+  Add-Result "Functions Zalo App ID" "FAIL" "Thiếu ZALO_MINI_APP_ID trong firebase/functions/.env"
+}
+
+$functionsPackage = Get-Content -Raw -LiteralPath (Join-Path $root "firebase\functions\package.json") | ConvertFrom-Json
+if ([string]$functionsPackage.engines.node -eq "22") {
+  Add-Result "Functions runtime" "OK" "Node.js 22"
+} else {
+  Add-Result "Functions runtime" "WARN" "Nên dùng Node.js 22 cho production"
 }
 
 if (Test-Path -LiteralPath (Join-Path $root "firebase\functions\package-lock.json")) {

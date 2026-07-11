@@ -1,5 +1,13 @@
+import { isZaloMiniAppRuntime } from "./runtime";
+
 export function registerServiceWorker() {
-  if (!("serviceWorker" in navigator) || import.meta.env.DEV) {
+  if (
+    !("serviceWorker" in navigator) ||
+    import.meta.env.DEV ||
+    import.meta.env.VITE_APP_ENV === "test" ||
+    isZaloMiniAppRuntime() ||
+    !["http:", "https:"].includes(window.location.protocol)
+  ) {
     return;
   }
 

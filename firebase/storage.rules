@@ -10,8 +10,13 @@ service firebase.storage {
       return firestore.get(/databases/(default)/documents/users/$(request.auth.uid));
     }
 
-    function isActiveMember(salonId) {
+    function userExists() {
       return signedIn()
+        && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid));
+    }
+
+    function isActiveMember(salonId) {
+      return userExists()
         && userDoc().data.salonId == salonId
         && userDoc().data.isActive == true;
     }

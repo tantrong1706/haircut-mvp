@@ -1,0 +1,260 @@
+/* ================================
+   StaffPage UI Upgrade - Barber Premium
+   Scope: staff compact ops page only
+================================ */
+
+.compact-ops-page {
+  gap: 14px;
+  padding-bottom: 24px;
+}
+
+.compact-ops-page .ops-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 26px;
+  background:
+    linear-gradient(90deg, rgba(10, 10, 10, 0.94), rgba(18, 18, 18, 0.82)),
+    url("/assets/salon-hero.webp") center / cover no-repeat;
+  border: 1px solid rgba(246, 199, 108, 0.34);
+  color: #ffffff;
+  box-shadow: 0 24px 58px rgba(0, 0, 0, 0.22);
+}
+
+.compact-ops-page .ops-topbar .eyebrow {
+  color: rgba(246, 199, 108, 0.9);
+  font-weight: 900;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.compact-ops-page .ops-topbar h1 {
+  margin: 2px 0 0;
+  font-size: clamp(28px, 7vw, 38px);
+  line-height: 1.05;
+  letter-spacing: -0.045em;
+  color: #ffffff;
+}
+
+.compact-ops-page .compact-metrics {
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.compact-ops-page .metric-card {
+  border-radius: 20px;
+  padding: 16px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(255, 249, 238, 0.9)), #ffffff;
+  border: 1px solid rgba(21, 25, 23, 0.08);
+  box-shadow: 0 14px 30px rgba(21, 25, 23, 0.08);
+}
+
+.compact-ops-page .metric-card svg {
+  color: #d69b2d;
+}
+
+.compact-ops-page .metric-card span {
+  color: rgba(21, 25, 23, 0.58);
+  font-weight: 850;
+}
+
+.compact-ops-page .metric-card strong {
+  color: #151917;
+  font-size: 26px;
+  letter-spacing: -0.04em;
+}
+
+.compact-ops-page .staff-workspace {
+  gap: 14px;
+}
+
+.compact-ops-page .ops-list {
+  display: grid;
+  gap: 10px;
+}
+
+.compact-ops-page .ops-card {
+  border-radius: 20px;
+  padding: 15px;
+  background: linear-gradient(180deg, #ffffff, #f8f7f3);
+  border: 1px solid rgba(21, 25, 23, 0.08);
+  box-shadow: 0 12px 26px rgba(21, 25, 23, 0.06);
+}
+
+.compact-ops-page .ops-card:hover,
+.compact-ops-page .ops-card.active {
+  transform: translateY(-1px);
+  border-color: rgba(246, 199, 108, 0.36);
+  box-shadow: 0 18px 36px rgba(21, 25, 23, 0.12);
+}
+
+.compact-ops-page .ops-card.active {
+  background:
+    linear-gradient(135deg, rgba(255, 250, 240, 0.98), rgba(255, 255, 255, 0.96)), #ffffff;
+}
+
+.compact-ops-page .ops-card-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.compact-ops-page .ops-card-title {
+  color: #151917;
+  font-size: 15px;
+  font-weight: 950;
+}
+
+.compact-ops-page .pill,
+.compact-ops-page [class*="status-pill"] {
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.compact-ops-page .detail-panel {
+  border-radius: 24px;
+  padding: 18px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(255, 249, 238, 0.88)), #ffffff;
+  border: 1px solid rgba(21, 25, 23, 0.08);
+  box-shadow: 0 18px 42px rgba(21, 25, 23, 0.1);
+}
+
+.compact-ops-page .pending-detail-panel {
+  border-color: rgba(246, 199, 108, 0.36);
+  background:
+    linear-gradient(135deg, rgba(255, 250, 240, 0.98), rgba(255, 255, 255, 0.96)), #ffffff;
+}
+
+.compact-ops-page .detail-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.compact-ops-page .detail-heading h2 {
+  margin: 2px 0 0;
+  color: #151917;
+  font-size: 24px;
+  line-height: 1.1;
+  letter-spacing: -0.04em;
+}
+
+.compact-ops-page .compact-summary {
+  gap: 10px;
+}
+
+.compact-ops-page .summary-item {
+  border-radius: 18px;
+  padding: 14px;
+  background: #ffffff;
+  border: 1px solid rgba(21, 25, 23, 0.08);
+  box-shadow: 0 10px 22px rgba(21, 25, 23, 0.05);
+}
+
+.compact-ops-page .summary-item span {
+  color: rgba(21, 25, 23, 0.58);
+  font-weight: 850;
+}
+
+.compact-ops-page .summary-item strong {
+  color: #151917;
+  font-weight: 950;
+}
+
+.compact-ops-page .service-state-card {
+  border-radius: 20px;
+  padding: 14px;
+  background: #f8faf8;
+  border: 1px solid rgba(21, 25, 23, 0.08);
+}
+
+.compact-ops-page .service-state-card.warning {
+  background: #fffaf0;
+  border-color: rgba(246, 199, 108, 0.32);
+}
+
+.compact-ops-page .service-state-card svg {
+  color: #d69b2d;
+}
+
+.compact-ops-page .field textarea,
+.compact-ops-page textarea {
+  min-height: 112px;
+  border-radius: 18px;
+  border: 1px solid rgba(21, 25, 23, 0.1);
+  background: #ffffff;
+  padding: 14px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.compact-ops-page .field textarea:focus,
+.compact-ops-page textarea:focus {
+  border-color: rgba(216, 154, 34, 0.55);
+  box-shadow: 0 0 0 4px rgba(246, 199, 108, 0.16);
+  outline: none;
+}
+
+.compact-ops-page .quick-note-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.compact-ops-page .quick-note-row button {
+  border-radius: 999px;
+  padding: 8px 11px;
+  background: #fffaf0;
+  border: 1px solid rgba(246, 199, 108, 0.26);
+  color: #151917;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.compact-ops-page .primary-button {
+  min-height: 54px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #151917, #2b2b2b);
+  color: #ffffff;
+  border: 1px solid rgba(246, 199, 108, 0.28);
+  box-shadow: 0 16px 34px rgba(21, 25, 23, 0.22);
+}
+
+.compact-ops-page .empty-state {
+  border-radius: 22px;
+  padding: 22px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(255, 249, 238, 0.88)), #ffffff;
+  border: 1px solid rgba(21, 25, 23, 0.08);
+  box-shadow: 0 14px 30px rgba(21, 25, 23, 0.08);
+}
+
+.compact-ops-page .empty-state svg {
+  color: #d69b2d;
+}
+
+@media (max-width: 390px) {
+  .compact-ops-page {
+    gap: 12px;
+  }
+
+  .compact-ops-page .ops-topbar {
+    padding: 16px;
+    border-radius: 24px;
+  }
+
+  .compact-ops-page .detail-panel {
+    padding: 16px;
+  }
+
+  .compact-ops-page .detail-heading h2 {
+    font-size: 22px;
+  }
+}

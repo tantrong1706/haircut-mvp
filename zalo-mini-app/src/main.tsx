@@ -5,6 +5,11 @@ import { AppErrorBoundary } from "./components/AppErrorBoundary";
 import { initMonitoring } from "./services/monitoring";
 import { registerServiceWorker } from "./services/pwa";
 import "./styles/global.css";
+import "./styles/home.css";
+import "./styles/scan-entry.css";
+import "./styles/staff.css";
+import "./styles/owner.css";
+import "./styles/rewards.css";
 
 initMonitoring();
 

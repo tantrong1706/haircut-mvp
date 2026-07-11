@@ -5,8 +5,26 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "build": "tsc && vite build",
-    "preview": "vite preview --host 0.0.0.0"
+    "lint": "eslint src e2e vite.config.ts vitest.config.ts playwright.config.ts --max-warnings=0",
+    "lint:fix": "npm run lint -- --fix",
+    "format": "prettier . --ignore-path ../.prettierignore --write",
+    "format:check": "prettier . --ignore-path ../.prettierignore --check",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "npm run build:test && npm run test:e2e:run",
+    "test:e2e:run": "playwright test",
+    "test:lighthouse": "lhci autorun",
+    "build:test": "tsc && vite build --mode test",
+    "preview:test": "vite preview --host 127.0.0.1 --port 4173",
+    "build:web": "tsc && vite build",
+    "build": "npm run build:web && npm run sync:zmp",
+    "sync:zmp": "node scripts/sync-zmp-config.mjs --write",
+    "validate:zmp": "node scripts/sync-zmp-config.mjs --check",
+    "build:zmp": "npm run build && npm run validate:zmp",
+    "deploy:zmp:test": "npm run build:zmp && zmp deploy -p -e -t -o www -m \"HAIRCUT production test\"",
+    "preview": "vite preview --host 0.0.0.0",
+    "check": "npm run lint && npm run format:check && npm run test:run && npm run build:zmp"
   },
   "dependencies": {
     "@sentry/react": "^10.63.0",
@@ -16,10 +34,17 @@
     "qrcode": "^1.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "vite": "^6.0.7",
-    "zmp-sdk": "^2.43.0"
+    "zmp-sdk": "^2.43.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@lhci/cli": "^0.15.1",
+    "@playwright/test": "^1.61.1",
+    "@sentry/vite-plugin": "^5.4.0",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/babel__generator": "^7.27.0",
     "@types/babel__template": "^7.4.4",
     "@types/babel__traverse": "^7.20.6",
@@ -27,6 +52,18 @@
     "@types/qrcode": "^1.5.6",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
-    "typescript": "^5.7.2"
+    "@vitest/coverage-v8": "^4.1.10",
+    "eslint": "^9.39.4",
+    "eslint-plugin-promise": "^7.3.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.3",
+    "globals": "^17.7.0",
+    "jsdom": "^29.1.1",
+    "prettier": "^3.9.5",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.63.0",
+    "vite": "5.4.14",
+    "vitest": "^4.1.10",
+    "zmp-vite-plugin": "1.1.6"
   }
 }

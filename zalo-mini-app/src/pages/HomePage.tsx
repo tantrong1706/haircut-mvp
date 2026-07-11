@@ -44,7 +44,12 @@ export function HomePage({ session, onTabChange, onResetSession }: Props) {
       </header>
 
       <div className="status-card">
-        <StatusStep done icon={<CheckCircle2 size={20} />} title="Đã check-in" text={mirrorLabel(session.qr.mirrorId)} />
+        <StatusStep
+          done
+          icon={<CheckCircle2 size={20} />}
+          title="Đã check-in"
+          text={mirrorLabel(session.qr.mirrorId)}
+        />
         <StatusStep
           done={status === "serving" || status === "completed" || status === "cancelled"}
           icon={<Hourglass size={20} />}

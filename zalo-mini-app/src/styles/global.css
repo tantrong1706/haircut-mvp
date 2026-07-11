@@ -1,6 +1,11 @@
 :root {
   font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
     sans-serif;
   color: #151917;
   background: #f3f5f2;
@@ -30,9 +35,7 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background:
-    linear-gradient(180deg, #f6f8f5 0%, #eef3ef 42%, #f8faf7 100%),
-    #f3f5f2;
+  background: linear-gradient(180deg, #f6f8f5 0%, #eef3ef 42%, #f8faf7 100%), #f3f5f2;
 }
 
 button,
@@ -77,16 +80,12 @@ textarea:focus-visible {
   position: fixed;
   inset: 0 0 auto;
   height: 220px;
-  background:
-    linear-gradient(135deg, rgba(19, 121, 91, 0.14), rgba(216, 154, 34, 0.12)),
-    #eef2ee;
+  background: linear-gradient(135deg, rgba(19, 121, 91, 0.14), rgba(216, 154, 34, 0.12)), #eef2ee;
   z-index: -1;
 }
 
 .ops-shell::before {
-  background:
-    linear-gradient(135deg, rgba(21, 25, 23, 0.09), rgba(66, 103, 201, 0.11)),
-    #eef1f4;
+  background: linear-gradient(135deg, rgba(21, 25, 23, 0.09), rgba(66, 103, 201, 0.11)), #eef1f4;
 }
 
 .app-main {
@@ -124,9 +123,7 @@ textarea:focus-visible {
   padding: 0 12px 0 8px;
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 14px;
-  background:
-    linear-gradient(135deg, rgba(21, 25, 23, 0.98), rgba(11, 58, 45, 0.98)),
-    #151917;
+  background: linear-gradient(135deg, rgba(21, 25, 23, 0.98), rgba(11, 58, 45, 0.98)), #151917;
   color: #ffffff;
   font-weight: 920;
   box-shadow: 0 10px 24px rgba(21, 25, 23, 0.18);
@@ -191,9 +188,7 @@ small {
   border: 1px solid rgba(21, 25, 23, 0.12);
   border-radius: 20px;
   padding: 20px;
-  background:
-    linear-gradient(135deg, rgba(21, 25, 23, 0.94), rgba(18, 89, 71, 0.92)),
-    #151917;
+  background: linear-gradient(135deg, rgba(21, 25, 23, 0.94), rgba(18, 89, 71, 0.92)), #151917;
   color: #ffffff;
   box-shadow: 0 18px 44px rgba(21, 25, 23, 0.16);
 }
@@ -202,7 +197,12 @@ small {
   min-height: 198px;
   align-content: end;
   background:
-    linear-gradient(90deg, rgba(8, 18, 14, 0.9) 0%, rgba(10, 31, 24, 0.7) 46%, rgba(8, 18, 14, 0.28) 100%),
+    linear-gradient(
+      90deg,
+      rgba(8, 18, 14, 0.9) 0%,
+      rgba(10, 31, 24, 0.7) 46%,
+      rgba(8, 18, 14, 0.28) 100%
+    ),
     linear-gradient(180deg, rgba(8, 18, 14, 0.1), rgba(8, 18, 14, 0.82)),
     url("/assets/salon-hero.webp") center / cover no-repeat;
   border-color: rgba(246, 199, 108, 0.24);
@@ -216,13 +216,12 @@ small {
   width: 180px;
   height: 180px;
   transform: rotate(-18deg);
-  background:
-    repeating-linear-gradient(
-      90deg,
-      rgba(242, 184, 75, 0.42) 0 10px,
-      rgba(255, 255, 255, 0.12) 10px 20px,
-      rgba(19, 121, 91, 0.3) 20px 30px
-    );
+  background: repeating-linear-gradient(
+    90deg,
+    rgba(242, 184, 75, 0.42) 0 10px,
+    rgba(255, 255, 255, 0.12) 10px 20px,
+    rgba(19, 121, 91, 0.3) 20px 30px
+  );
   opacity: 0.2;
 }
 
@@ -509,8 +508,7 @@ small {
   border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 20px;
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(246, 250, 247, 0.96)),
-    #ffffff;
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(246, 250, 247, 0.96)), #ffffff;
   box-shadow: 0 28px 80px rgba(0, 0, 0, 0.28);
   padding: 18px;
 }
@@ -564,9 +562,7 @@ small {
   gap: 14px;
   padding: 14px;
   border-radius: 18px;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(238, 247, 243, 0.9)),
-    #ffffff;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(238, 247, 243, 0.9)), #ffffff;
   border: 1px solid rgba(19, 121, 91, 0.14);
   box-shadow: 0 18px 42px rgba(21, 25, 23, 0.1);
 }
@@ -594,13 +590,12 @@ small {
   place-items: center;
   border-radius: 18px;
   color: #ffffff;
-  background:
-    repeating-linear-gradient(
-      135deg,
-      #13795b 0 12px,
-      #f2b84b 12px 20px,
-      #151917 20px 32px
-    );
+  background: repeating-linear-gradient(
+    135deg,
+    #13795b 0 12px,
+    #f2b84b 12px 20px,
+    #151917 20px 32px
+  );
 }
 
 .flow-steps {
@@ -669,8 +664,7 @@ small {
 
 .premium-points {
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(238, 247, 243, 0.96)),
-    #ffffff;
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(238, 247, 243, 0.96)), #ffffff;
 }
 
 .member-card {
@@ -679,7 +673,12 @@ small {
   min-height: 142px;
   border-color: rgba(14, 92, 68, 0.18);
   background:
-    linear-gradient(110deg, rgba(255, 255, 255, 0.98) 0%, rgba(238, 247, 243, 0.94) 48%, rgba(21, 25, 23, 0.18) 100%),
+    linear-gradient(
+      110deg,
+      rgba(255, 255, 255, 0.98) 0%,
+      rgba(238, 247, 243, 0.94) 48%,
+      rgba(21, 25, 23, 0.18) 100%
+    ),
     url("/assets/salon-hero.webp") 72% 52% / cover no-repeat;
 }
 
@@ -704,9 +703,7 @@ small {
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background:
-    linear-gradient(135deg, rgba(21, 25, 23, 0.94), rgba(14, 92, 68, 0.9)),
-    #151917;
+  background: linear-gradient(135deg, rgba(21, 25, 23, 0.94), rgba(14, 92, 68, 0.9)), #151917;
   color: #f6c76c;
   box-shadow: 0 16px 30px rgba(21, 25, 23, 0.2);
 }
@@ -797,8 +794,7 @@ small {
   gap: 8px;
   padding: 12px;
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(255, 250, 240, 0.72)),
-    var(--paper);
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(255, 250, 240, 0.72)), var(--paper);
   border: 1px solid rgba(19, 121, 91, 0.13);
   border-radius: 18px;
   box-shadow: 0 18px 40px rgba(21, 25, 23, 0.1);
@@ -821,8 +817,7 @@ small {
 
 .status-step.done {
   background:
-    linear-gradient(135deg, rgba(237, 247, 242, 0.96), rgba(255, 250, 240, 0.78)),
-    #edf7f2;
+    linear-gradient(135deg, rgba(237, 247, 242, 0.96), rgba(255, 250, 240, 0.78)), #edf7f2;
   color: var(--green-strong);
   border: 1px solid rgba(19, 121, 91, 0.12);
 }
@@ -876,8 +871,7 @@ small {
   align-items: center;
   border-color: rgba(19, 121, 91, 0.13);
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(244, 248, 246, 0.96)),
-    #ffffff;
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(244, 248, 246, 0.96)), #ffffff;
 }
 
 .metric-card strong {
@@ -927,7 +921,10 @@ small {
   text-align: left;
   padding: 10px 14px;
   box-shadow: 0 10px 24px rgba(21, 25, 23, 0.05);
-  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.16s ease,
+    border-color 0.16s ease;
 }
 
 .quick-actions button:hover {
@@ -1071,8 +1068,7 @@ small {
   border-radius: 20px;
   background:
     radial-gradient(circle at 50% 48%, rgba(246, 199, 108, 0.24), rgba(246, 199, 108, 0) 38%),
-    linear-gradient(135deg, rgba(21, 25, 23, 0.96), rgba(14, 92, 68, 0.9)),
-    #151917;
+    linear-gradient(135deg, rgba(21, 25, 23, 0.96), rgba(14, 92, 68, 0.9)), #151917;
   box-shadow: 0 22px 54px rgba(21, 25, 23, 0.18);
 }
 
@@ -1114,9 +1110,7 @@ small {
   place-items: center;
   gap: 3px;
   border-radius: 50%;
-  background:
-    linear-gradient(135deg, #fff8e7, #ffffff),
-    #ffffff;
+  background: linear-gradient(135deg, #fff8e7, #ffffff), #ffffff;
   color: var(--ink);
   border: 6px solid rgba(21, 25, 23, 0.88);
   font-size: 12px;
@@ -1170,9 +1164,7 @@ small {
   align-items: center;
   gap: 6px;
   border-radius: 999px;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(255, 250, 240, 0.9)),
-    #ffffff;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(255, 250, 240, 0.9)), #ffffff;
   border: 1px solid var(--line);
   color: var(--ink);
   padding: 0 10px;
@@ -1188,8 +1180,7 @@ small {
   text-align: center;
   border-color: rgba(216, 154, 34, 0.32);
   background:
-    linear-gradient(135deg, rgba(255, 250, 240, 0.96), rgba(238, 247, 243, 0.94)),
-    #ffffff;
+    linear-gradient(135deg, rgba(255, 250, 240, 0.96), rgba(238, 247, 243, 0.94)), #ffffff;
 }
 
 .reward-result strong {
@@ -1233,9 +1224,7 @@ small {
 }
 
 .bottom-nav button.active {
-  background:
-    linear-gradient(135deg, #edf7f2, #fff6df),
-    #edf7f2;
+  background: linear-gradient(135deg, #edf7f2, #fff6df), #edf7f2;
   color: var(--green-strong);
 }
 
@@ -1340,7 +1329,12 @@ small {
   border: 1px solid rgba(21, 25, 23, 0.1);
   border-radius: 20px;
   background:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.98), rgba(255, 255, 255, 0.9) 54%, rgba(238, 247, 243, 0.7)),
+    linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.98),
+      rgba(255, 255, 255, 0.9) 54%,
+      rgba(238, 247, 243, 0.7)
+    ),
     url("/assets/salon-hero.webp") right center / 46% auto no-repeat,
     rgba(255, 255, 255, 0.92);
   box-shadow: var(--shadow-strong);
@@ -1427,13 +1421,14 @@ small {
   gap: 12px;
   border: 1px dashed rgba(19, 121, 91, 0.34);
   border-radius: 16px;
-  background:
-    linear-gradient(135deg, rgba(237, 247, 242, 0.9), rgba(255, 250, 240, 0.72)),
-    #f8faf7;
+  background: linear-gradient(135deg, rgba(237, 247, 242, 0.9), rgba(255, 250, 240, 0.72)), #f8faf7;
   color: var(--ink);
   padding: 12px;
   cursor: pointer;
-  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease,
+    transform 0.16s ease;
 }
 
 .avatar-upload-zone:hover {
@@ -1542,9 +1537,7 @@ small {
 }
 
 .segmented-control button.active {
-  background:
-    linear-gradient(135deg, #edf7f2, #fff7e4),
-    #edf7f2;
+  background: linear-gradient(135deg, #edf7f2, #fff7e4), #edf7f2;
   color: var(--green-strong);
   box-shadow: 0 8px 18px rgba(19, 121, 91, 0.1);
 }
@@ -1564,8 +1557,7 @@ small {
   text-align: left;
   border-color: rgba(21, 25, 23, 0.08);
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.99), rgba(248, 250, 247, 0.96)),
-    #ffffff;
+    linear-gradient(135deg, rgba(255, 255, 255, 0.99), rgba(248, 250, 247, 0.96)), #ffffff;
 }
 
 .ops-card:hover {
@@ -1576,14 +1568,14 @@ small {
 
 .ops-card.active {
   border-color: var(--green);
-  box-shadow: 0 0 0 2px rgba(19, 121, 91, 0.12), var(--shadow);
+  box-shadow:
+    0 0 0 2px rgba(19, 121, 91, 0.12),
+    var(--shadow);
 }
 
 .ops-card.pending-card {
   border-color: #ead39b;
-  background:
-    linear-gradient(135deg, #fffaf0, #ffffff),
-    #fffaf0;
+  background: linear-gradient(135deg, #fffaf0, #ffffff), #fffaf0;
 }
 
 .ops-card-title {
@@ -1894,9 +1886,7 @@ small {
   align-content: center;
   border: 1px solid rgba(19, 121, 91, 0.13);
   border-radius: 16px;
-  background:
-    linear-gradient(135deg, #ffffff, #f5faf7),
-    var(--paper-soft);
+  background: linear-gradient(135deg, #ffffff, #f5faf7), var(--paper-soft);
   padding: 12px;
   box-shadow: 0 10px 24px rgba(21, 25, 23, 0.05);
 }
@@ -2211,1370 +2201,5 @@ small {
   .install-prompt {
     grid-template-columns: 1fr;
     bottom: 84px;
-  }
-}
-/* ================================
-   HomePage UI Upgrade - Barber Premium
-   Scope: customer home only
-================================ */
-
-.customer-home {
-  gap: 14px;
-  padding-bottom: 22px;
-}
-
-.customer-home .customer-hero {
-  border-radius: 26px;
-}
-
-.customer-home .visual-hero {
-  min-height: 186px;
-  padding: 18px;
-  background:
-    linear-gradient(90deg, rgba(10, 10, 10, 0.92) 0%, rgba(20, 20, 20, 0.78) 48%, rgba(10, 10, 10, 0.18) 100%),
-    linear-gradient(180deg, rgba(10, 10, 10, 0.1), rgba(10, 10, 10, 0.86)),
-    url("/assets/salon-hero.webp") center / cover no-repeat;
-  border: 1px solid rgba(246, 199, 108, 0.36);
-  box-shadow: 0 24px 58px rgba(0, 0, 0, 0.24);
-}
-
-.customer-home .hero-topline {
-  align-items: center;
-}
-
-.customer-home .soft-chip {
-  border-radius: 999px;
-  padding: 7px 11px;
-  font-size: 12px;
-  font-weight: 850;
-  letter-spacing: 0.02em;
-  background: rgba(246, 199, 108, 0.16);
-  color: #f6c76c;
-  border: 1px solid rgba(246, 199, 108, 0.34);
-  backdrop-filter: blur(10px);
-}
-
-.customer-home .eyebrow {
-  margin-top: auto;
-  color: rgba(246, 199, 108, 0.88);
-  font-weight: 900;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.customer-home .customer-hero h1 {
-  margin: 0;
-  font-size: clamp(30px, 8vw, 42px);
-  line-height: 1.02;
-  letter-spacing: -0.04em;
-  color: #ffffff;
-}
-
-.customer-home .customer-hero .muted {
-  max-width: 250px;
-  color: rgba(255, 255, 255, 0.82);
-  font-weight: 750;
-}
-
-.customer-home .status-card {
-  gap: 10px;
-  padding: 12px;
-  border-radius: 22px;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(255, 248, 235, 0.86)),
-    #ffffff;
-  border: 1px solid rgba(246, 199, 108, 0.24);
-  box-shadow: 0 18px 42px rgba(21, 25, 23, 0.1);
-}
-
-.customer-home .status-step {
-  min-height: 58px;
-  grid-template-columns: 34px 1fr;
-  padding: 12px;
-  border-radius: 16px;
-  background: #f8faf8;
-  border: 1px solid rgba(21, 25, 23, 0.06);
-}
-
-.customer-home .status-step.done {
-  background:
-    linear-gradient(135deg, rgba(237, 247, 242, 0.98), rgba(255, 250, 240, 0.9)),
-    #edf7f2;
-  border-color: rgba(19, 121, 91, 0.16);
-}
-
-.customer-home .status-step svg {
-  width: 28px;
-  height: 28px;
-  padding: 5px;
-  border-radius: 999px;
-  background: rgba(21, 25, 23, 0.06);
-}
-
-.customer-home .status-step.done svg {
-  background: rgba(19, 121, 91, 0.12);
-}
-
-.customer-home .status-step strong {
-  font-size: 14px;
-  font-weight: 900;
-}
-
-.customer-home .status-step span {
-  font-size: 12.5px;
-  font-weight: 700;
-}
-
-.customer-home .member-card {
-  min-height: 154px;
-  border-radius: 24px;
-  padding: 22px;
-  border: 1px solid rgba(21, 25, 23, 0.1);
-  background:
-    linear-gradient(112deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 250, 240, 0.9) 46%, rgba(18, 18, 18, 0.32) 100%),
-    url("/assets/salon-hero.webp") 70% 50% / cover no-repeat;
-  box-shadow: 0 20px 44px rgba(21, 25, 23, 0.12);
-}
-
-.customer-home .points-panel span {
-  color: rgba(21, 25, 23, 0.62);
-  font-size: 13px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.customer-home .points-panel strong {
-  margin-top: 6px;
-  font-size: clamp(58px, 18vw, 76px);
-  color: #151917;
-  letter-spacing: -0.08em;
-}
-
-.customer-home .member-card-mark {
-  width: 78px;
-  background:
-    linear-gradient(135deg, #151917, #2a2a2a),
-    #151917;
-  color: #f6c76c;
-  box-shadow: 0 18px 34px rgba(0, 0, 0, 0.24);
-}
-
-.customer-home .summary-grid {
-  gap: 12px;
-}
-
-.customer-home .summary-item {
-  border-radius: 18px;
-  padding: 15px;
-  background: #ffffff;
-  border: 1px solid rgba(21, 25, 23, 0.08);
-  box-shadow: 0 12px 26px rgba(21, 25, 23, 0.06);
-}
-
-.customer-home .summary-item span {
-  color: rgba(21, 25, 23, 0.58);
-  font-size: 12px;
-  font-weight: 850;
-}
-
-.customer-home .summary-item strong {
-  font-size: 15px;
-  color: #151917;
-}
-
-.customer-home .compact-actions {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.customer-home .compact-actions button {
-  min-height: 74px;
-  padding: 12px 8px;
-  border-radius: 18px;
-  background:
-    linear-gradient(180deg, #ffffff, #f8f7f3);
-  border: 1px solid rgba(21, 25, 23, 0.08);
-  box-shadow: 0 12px 26px rgba(21, 25, 23, 0.06);
-}
-
-.customer-home .compact-actions button svg {
-  color: #d69b2d;
-}
-
-.customer-home .compact-actions button strong {
-  font-size: 13px;
-  font-weight: 900;
-}
-
-.customer-home > .secondary-button {
-  width: 100%;
-  min-height: 50px;
-  border-radius: 18px;
-  background: #151917;
-  color: #ffffff;
-  border: 1px solid rgba(246, 199, 108, 0.28);
-  box-shadow: 0 14px 30px rgba(21, 25, 23, 0.18);
-}
-
-@media (max-width: 390px) {
-  .customer-home {
-    gap: 12px;
-  }
-
-  .customer-home .visual-hero {
-    min-height: 172px;
-    padding: 16px;
-  }
-
-  .customer-home .compact-actions button {
-    min-height: 68px;
-  }
-
-  .customer-home .points-panel strong {
-    font-size: 58px;
-  }
-}
-/* ================================
-   ScanEntryPage UI Upgrade - Barber Premium
-   Scope: QR entry / customer check-in only
-================================ */
-
-.entry-page {
-  gap: 14px;
-  padding-bottom: 22px;
-}
-
-.entry-page .entry-hero {
-  border-radius: 26px;
-}
-
-.entry-page .visual-hero {
-  min-height: 210px;
-  padding: 20px;
-  background:
-    linear-gradient(90deg, rgba(10, 10, 10, 0.94) 0%, rgba(18, 18, 18, 0.8) 50%, rgba(10, 10, 10, 0.16) 100%),
-    linear-gradient(180deg, rgba(10, 10, 10, 0.08), rgba(10, 10, 10, 0.88)),
-    url("/assets/salon-hero.webp") center / cover no-repeat;
-  border: 1px solid rgba(246, 199, 108, 0.38);
-  box-shadow: 0 24px 58px rgba(0, 0, 0, 0.24);
-}
-
-.entry-page .hero-topline {
-  align-items: center;
-}
-
-.entry-page .soft-chip {
-  border-radius: 999px;
-  padding: 7px 11px;
-  font-size: 12px;
-  font-weight: 900;
-  letter-spacing: 0.04em;
-  background: rgba(246, 199, 108, 0.16);
-  color: #f6c76c;
-  border: 1px solid rgba(246, 199, 108, 0.34);
-  backdrop-filter: blur(10px);
-}
-
-.entry-page .eyebrow {
-  margin-top: auto;
-  color: rgba(246, 199, 108, 0.9);
-  font-weight: 900;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.entry-page .entry-hero h1 {
-  margin: 0;
-  max-width: 310px;
-  font-size: clamp(31px, 8vw, 44px);
-  line-height: 1.02;
-  letter-spacing: -0.045em;
-  color: #ffffff;
-  text-shadow: 0 14px 32px rgba(0, 0, 0, 0.36);
-}
-
-.entry-page .entry-hero .muted {
-  max-width: 300px;
-  color: rgba(255, 255, 255, 0.82);
-  font-weight: 750;
-}
-
-.entry-page .panel,
-.entry-page .missing-qr-panel,
-.entry-page .zalo-required-card {
-  border-radius: 24px;
-  border: 1px solid rgba(21, 25, 23, 0.08);
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(255, 249, 238, 0.9)),
-    #ffffff;
-  box-shadow: 0 18px 42px rgba(21, 25, 23, 0.1);
-}
-
-.entry-page .missing-qr-panel {
-  display: grid;
-  grid-template-columns: 48px 1fr;
-  gap: 14px;
-  align-items: start;
-  padding: 18px;
-}
-
-.entry-page .missing-qr-panel > svg,
-.entry-page .zalo-required-card > svg {
-  color: #d69b2d;
-  background: rgba(246, 199, 108, 0.14);
-  border-radius: 16px;
-  padding: 9px;
-}
-
-.entry-page .panel h2,
-.entry-page .missing-qr-panel h2 {
-  margin: 0 0 6px;
-  font-size: 18px;
-  line-height: 1.25;
-  color: #151917;
-}
-
-.entry-page .panel .muted,
-.entry-page .missing-qr-panel .muted {
-  line-height: 1.55;
-  font-weight: 700;
-}
-
-.entry-page .quick-actions {
-  gap: 10px;
-}
-
-.entry-page .quick-actions button {
-  min-height: 72px;
-  border-radius: 20px;
-  background:
-    linear-gradient(180deg, #ffffff, #f8f7f3);
-  border: 1px solid rgba(21, 25, 23, 0.08);
-  box-shadow: 0 12px 26px rgba(21, 25, 23, 0.06);
-}
-
-.entry-page .quick-actions button > span {
-  width: 40px;
-  height: 40px;
-  display: grid;
-  place-items: center;
-  border-radius: 14px;
-  background: rgba(246, 199, 108, 0.14);
-  color: #d69b2d;
-}
-
-.entry-page .quick-actions button svg {
-  color: #d69b2d;
-}
-
-.entry-page .quick-actions strong {
-  font-size: 14px;
-  font-weight: 900;
-  color: #151917;
-}
-
-.entry-page .quick-actions small {
-  color: rgba(21, 25, 23, 0.58);
-  font-weight: 700;
-}
-
-.entry-page .field {
-  gap: 8px;
-}
-
-.entry-page .field > span {
-  color: #151917;
-  font-weight: 900;
-}
-
-.entry-page input {
-  min-height: 50px;
-  border-radius: 16px;
-  border: 1px solid rgba(21, 25, 23, 0.1);
-  background: #ffffff;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
-}
-
-.entry-page input:focus {
-  border-color: rgba(216, 154, 34, 0.55);
-  box-shadow: 0 0 0 4px rgba(246, 199, 108, 0.16);
-  outline: none;
-}
-
-.entry-page .toggle-row,
-.entry-page .photo-consent {
-  border-radius: 18px;
-  background: #fffaf0;
-  border: 1px solid rgba(246, 199, 108, 0.22);
-  padding: 13px;
-}
-
-.entry-page .primary-button {
-  min-height: 54px;
-  border-radius: 18px;
-  background:
-    linear-gradient(135deg, #151917, #2b2b2b);
-  color: #ffffff;
-  border: 1px solid rgba(246, 199, 108, 0.28);
-  box-shadow: 0 16px 34px rgba(21, 25, 23, 0.22);
-}
-
-.entry-page .primary-button:not(:disabled):hover {
-  transform: translateY(-1px);
-  box-shadow: 0 20px 40px rgba(21, 25, 23, 0.26);
-}
-
-.entry-page .alert.error {
-  border-radius: 18px;
-  border: 1px solid rgba(185, 28, 28, 0.2);
-  background: #fff5f5;
-  color: #991b1b;
-  font-weight: 750;
-}
-
-@media (max-width: 390px) {
-  .entry-page {
-    gap: 12px;
-  }
-
-  .entry-page .visual-hero {
-    min-height: 190px;
-    padding: 18px;
-  }
-
-  .entry-page .entry-hero h1 {
-    font-size: 32px;
-  }
-
-  .entry-page .missing-qr-panel {
-    grid-template-columns: 42px 1fr;
-    padding: 16px;
-  }
-
-  .entry-page .quick-actions button {
-    min-height: 68px;
-  }
-}
-/* ================================
-   StaffPage UI Upgrade - Barber Premium
-   Scope: staff compact ops page only
-================================ */
-
-.compact-ops-page {
-  gap: 14px;
-  padding-bottom: 24px;
-}
-
-.compact-ops-page .ops-topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 18px;
-  border-radius: 26px;
-  background:
-    linear-gradient(90deg, rgba(10, 10, 10, 0.94), rgba(18, 18, 18, 0.82)),
-    url("/assets/salon-hero.webp") center / cover no-repeat;
-  border: 1px solid rgba(246, 199, 108, 0.34);
-  color: #ffffff;
-  box-shadow: 0 24px 58px rgba(0, 0, 0, 0.22);
-}
-
-.compact-ops-page .ops-topbar .eyebrow {
-  color: rgba(246, 199, 108, 0.9);
-  font-weight: 900;
-  letter-spacing: 0.13em;
-  text-transform: uppercase;
-}
-
-.compact-ops-page .ops-topbar h1 {
-  margin: 2px 0 0;
-  font-size: clamp(28px, 7vw, 38px);
-  line-height: 1.05;
-  letter-spacing: -0.045em;
-  color: #ffffff;
-}
-
-.compact-ops-page .compact-metrics {
-  gap: 10px;
-}
-
-.compact-ops-page .metric-card {
-  border-radius: 20px;
-  padding: 16px;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(255, 249, 238, 0.9)),
-    #ffffff;
-  border: 1px solid rgba(21, 25, 23, 0.08);
-  box-shadow: 0 14px 30px rgba(21, 25, 23, 0.08);
-}
-
-.compact-ops-page .metric-card svg {
-  color: #d69b2d;
-}
-
-.compact-ops-page .metric-card span {
-  color: rgba(21, 25, 23, 0.58);
-  font-weight: 850;
-}
-
-.compact-ops-page .metric-card strong {
-  color: #151917;
-  font-size: 26px;
-  letter-spacing: -0.04em;
-}
-
-.compact-ops-page .staff-workspace {
-  gap: 14px;
-}
-
-.compact-ops-page .ops-list {
-  display: grid;
-  gap: 10px;
-}
-
-.compact-ops-page .ops-card {
-  border-radius: 20px;
-  padding: 15px;
-  background:
-    linear-gradient(180deg, #ffffff, #f8f7f3);
-  border: 1px solid rgba(21, 25, 23, 0.08);
-  box-shadow: 0 12px 26px rgba(21, 25, 23, 0.06);
-}
-
-.compact-ops-page .ops-card:hover,
-.compact-ops-page .ops-card.active {
-  transform: translateY(-1px);
-  border-color: rgba(246, 199, 108, 0.36);
-  box-shadow: 0 18px 36px rgba(21, 25, 23, 0.12);
-}
-
-.compact-ops-page .ops-card.active {
-  background:
-    linear-gradient(135deg, rgba(255, 250, 240, 0.98), rgba(255, 255, 255, 0.96)),
-    #ffffff;
-}
-
-.compact-ops-page .ops-card-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.compact-ops-page .ops-card-title {
-  color: #151917;
-  font-size: 15px;
-  font-weight: 950;
-}
-
-.compact-ops-page .pill,
-.compact-ops-page [class*="status-pill"] {
-  border-radius: 999px;
-  padding: 6px 10px;
-  font-size: 12px;
-  font-weight: 900;
-}
-
-.compact-ops-page .detail-panel {
-  border-radius: 24px;
-  padding: 18px;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(255, 249, 238, 0.88)),
-    #ffffff;
-  border: 1px solid rgba(21, 25, 23, 0.08);
-  box-shadow: 0 18px 42px rgba(21, 25, 23, 0.1);
-}
-
-.compact-ops-page .pending-detail-panel {
-  border-color: rgba(246, 199, 108, 0.36);
-  background:
-    linear-gradient(135deg, rgba(255, 250, 240, 0.98), rgba(255, 255, 255, 0.96)),
-    #ffffff;
-}
-
-.compact-ops-page .detail-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.compact-ops-page .detail-heading h2 {
-  margin: 2px 0 0;
-  color: #151917;
-  font-size: 24px;
-  line-height: 1.1;
-  letter-spacing: -0.04em;
-}
-
-.compact-ops-page .compact-summary {
-  gap: 10px;
-}
-
-.compact-ops-page .summary-item {
-  border-radius: 18px;
-  padding: 14px;
-  background: #ffffff;
-  border: 1px solid rgba(21, 25, 23, 0.08);
-  box-shadow: 0 10px 22px rgba(21, 25, 23, 0.05);
-}
-
-.compact-ops-page .summary-item span {
-  color: rgba(21, 25, 23, 0.58);
-  font-weight: 850;
-}
-
-.compact-ops-page .summary-item strong {
-  color: #151917;
-  font-weight: 950;
-}
-
-.compact-ops-page .service-state-card {
-  border-radius: 20px;
-  padding: 14px;
-  background: #f8faf8;
-  border: 1px solid rgba(21, 25, 23, 0.08);
-}
-
-.compact-ops-page .service-state-card.warning {
-  background: #fffaf0;
-  border-color: rgba(246, 199, 108, 0.32);
-}
-
-.compact-ops-page .service-state-card svg {
-  color: #d69b2d;
-}
-
-.compact-ops-page .field textarea,
-.compact-ops-page textarea {
-  min-height: 112px;
-  border-radius: 18px;
-  border: 1px solid rgba(21, 25, 23, 0.1);
-  background: #ffffff;
-  padding: 14px;
-  font-weight: 700;
-  line-height: 1.45;
-}
-
-.compact-ops-page .field textarea:focus,
-.compact-ops-page textarea:focus {
-  border-color: rgba(216, 154, 34, 0.55);
-  box-shadow: 0 0 0 4px rgba(246, 199, 108, 0.16);
-  outline: none;
-}
-
-.compact-ops-page .quick-note-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.compact-ops-page .quick-note-row button {
-  border-radius: 999px;
-  padding: 8px 11px;
-  background: #fffaf0;
-  border: 1px solid rgba(246, 199, 108, 0.26);
-  color: #151917;
-  font-size: 12px;
-  font-weight: 850;
-}
-
-.compact-ops-page .primary-button {
-  min-height: 54px;
-  border-radius: 18px;
-  background:
-    linear-gradient(135deg, #151917, #2b2b2b);
-  color: #ffffff;
-  border: 1px solid rgba(246, 199, 108, 0.28);
-  box-shadow: 0 16px 34px rgba(21, 25, 23, 0.22);
-}
-
-.compact-ops-page .empty-state {
-  border-radius: 22px;
-  padding: 22px;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(255, 249, 238, 0.88)),
-    #ffffff;
-  border: 1px solid rgba(21, 25, 23, 0.08);
-  box-shadow: 0 14px 30px rgba(21, 25, 23, 0.08);
-}
-
-.compact-ops-page .empty-state svg {
-  color: #d69b2d;
-}
-
-@media (max-width: 390px) {
-  .compact-ops-page {
-    gap: 12px;
-  }
-
-  .compact-ops-page .ops-topbar {
-    padding: 16px;
-    border-radius: 24px;
-  }
-
-  .compact-ops-page .detail-panel {
-    padding: 16px;
-  }
-
-  .compact-ops-page .detail-heading h2 {
-    font-size: 22px;
-  }
-}
-/* ================================
-   OwnerPage UI Upgrade - Barber Premium
-   Scope: owner / salon management only
-================================ */
-
-.owner-page {
-  gap: 14px;
-  padding-bottom: 26px;
-}
-
-.owner-page .owner-topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  min-height: 150px;
-  padding: 20px;
-  border-radius: 28px;
-  background:
-    linear-gradient(90deg, rgba(10, 10, 10, 0.94), rgba(18, 18, 18, 0.84) 52%, rgba(10, 10, 10, 0.35)),
-    url("/assets/salon-hero.webp") center / cover no-repeat;
-  border: 1px solid rgba(246, 199, 108, 0.36);
-  color: #ffffff;
-  box-shadow: 0 24px 58px rgba(0, 0, 0, 0.23);
-}
-
-.owner-page .owner-topbar .eyebrow {
-  color: rgba(246, 199, 108, 0.92);
-  font-weight: 950;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.owner-page .owner-topbar h1 {
-  margin: 2px 0 0;
-  max-width: 520px;
-  font-size: clamp(30px, 7vw, 44px);
-  line-height: 1.03;
-  letter-spacing: -0.05em;
-  color: #ffffff;
-  text-shadow: 0 14px 32px rgba(0, 0, 0, 0.36);
-}
-
-.owner-page .owner-tabs {
-  position: sticky;
-  top: 10px;
-  z-index: 5;
-  gap: 6px;
-  padding: 6px;
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgba(21, 25, 23, 0.08);
-  box-shadow: 0 16px 36px rgba(21, 25, 23, 0.1);
-  backdrop-filter: blur(14px);
-}
-
-.owner-page .owner-tabs button {
-  min-height: 46px;
-  border-radius: 16px;
-  font-weight: 900;
-  color: rgba(21, 25, 23, 0.62);
-}
-
-.owner-page .owner-tabs button.active {
-  background:
-    linear-gradient(135deg, rgba(255, 250, 240, 0.98), rgba(246, 199, 108, 0.18)),
-    #fffaf0;
-  color: #151917;
-  box-shadow: inset 0 0 0 1px rgba(246, 199, 108, 0.28);
-}
-
-.owner-page .panel,
-.owner-page .overview-panel,
-.owner-page .retention-panel,
-.owner-page .owner-profile-panel,
-.owner-page .salon-profile-panel {
-  border-radius: 24px;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(255, 249, 238, 0.88)),
-    #ffffff;
-  border: 1px solid rgba(21, 25, 23, 0.08);
-  box-shadow: 0 18px 42px rgba(21, 25, 23, 0.1);
-}
-
-.owner-page .dashboard-heading,
-.owner-page .section-heading {
-  gap: 12px;
-}
-
-.owner-page .dashboard-heading h2,
-.owner-page .section-heading h2 {
-  margin: 2px 0 0;
-  color: #151917;
-  font-size: 23px;
-  line-height: 1.1;
-  letter-spacing: -0.035em;
-}
-
-.owner-page .dashboard-heading .eyebrow,
-.owner-page .section-heading .eyebrow {
-  color: #d69b2d;
-  font-weight: 950;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.owner-page .pill,
-.owner-page .muted-pill {
-  border-radius: 999px;
-  padding: 7px 11px;
-  font-size: 12px;
-  font-weight: 900;
-}
-
-.owner-page .pill {
-  background: rgba(246, 199, 108, 0.16);
-  border: 1px solid rgba(246, 199, 108, 0.28);
-  color: #151917;
-}
-
-.owner-page .muted-pill {
-  background: rgba(21, 25, 23, 0.06);
-  color: rgba(21, 25, 23, 0.62);
-}
-
-.owner-page .overview-grid {
-  gap: 12px;
-}
-
-.owner-page .overview-metric,
-.owner-page .metric-card {
-  border-radius: 20px;
-  padding: 16px;
-  background:
-    linear-gradient(180deg, #ffffff, #f8f7f3);
-  border: 1px solid rgba(21, 25, 23, 0.08);
-  box-shadow: 0 12px 26px rgba(21, 25, 23, 0.06);
-}
-
-.owner-page .overview-metric svg,
-.owner-page .metric-card svg,
-.owner-page .section-heading > svg {
-  color: #d69b2d;
-}
-
-.owner-page .overview-metric span,
-.owner-page .metric-card span {
-  color: rgba(21, 25, 23, 0.58);
-  font-weight: 850;
-}
-
-.owner-page .overview-metric strong,
-.owner-page .metric-card strong {
-  color: #151917;
-  font-size: 26px;
-  letter-spacing: -0.04em;
-}
-
-.owner-page .owner-next-actions {
-  gap: 10px;
-}
-
-.owner-page .owner-next-actions button {
-  min-height: 72px;
-  border-radius: 20px;
-  background:
-    linear-gradient(180deg, #ffffff, #f8f7f3);
-  border: 1px solid rgba(21, 25, 23, 0.08);
-  box-shadow: 0 12px 26px rgba(21, 25, 23, 0.06);
-}
-
-.owner-page .owner-next-actions button:hover {
-  transform: translateY(-1px);
-  border-color: rgba(246, 199, 108, 0.36);
-  box-shadow: 0 18px 36px rgba(21, 25, 23, 0.12);
-}
-
-.owner-page .ops-list {
-  display: grid;
-  gap: 12px;
-}
-
-.owner-page .ops-card,
-.owner-page .management-card,
-.owner-page .approval-card,
-.owner-page .customer-result-card,
-.owner-page .retention-card {
-  border-radius: 22px;
-  padding: 16px;
-  background:
-    linear-gradient(180deg, #ffffff, #f8f7f3);
-  border: 1px solid rgba(21, 25, 23, 0.08);
-  box-shadow: 0 12px 26px rgba(21, 25, 23, 0.06);
-}
-
-.owner-page .ops-card:hover,
-.owner-page .management-card:hover,
-.owner-page .retention-card:hover {
-  transform: translateY(-1px);
-  border-color: rgba(246, 199, 108, 0.34);
-  box-shadow: 0 18px 36px rgba(21, 25, 23, 0.12);
-}
-
-.owner-page .ops-card-title {
-  color: #151917;
-  font-size: 15px;
-  font-weight: 950;
-}
-
-.owner-page .management-card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.owner-page .qr-preview-card {
-  border-radius: 22px;
-  padding: 14px;
-  background:
-    linear-gradient(135deg, rgba(255, 250, 240, 0.98), rgba(255, 255, 255, 0.96)),
-    #ffffff;
-  border: 1px dashed rgba(216, 154, 34, 0.34);
-}
-
-.owner-page .qr-preview-image {
-  border-radius: 18px;
-  background: #ffffff;
-  box-shadow: 0 12px 26px rgba(21, 25, 23, 0.08);
-}
-
-.owner-page .qr-preview-loading {
-  display: grid;
-  place-items: center;
-  color: #d69b2d;
-}
-
-.owner-page .qr-print-meta strong {
-  color: #151917;
-  font-weight: 950;
-}
-
-.owner-page .qr-url {
-  border-radius: 16px;
-  padding: 12px;
-  background: #f8faf8;
-  border: 1px solid rgba(21, 25, 23, 0.08);
-  color: rgba(21, 25, 23, 0.72);
-  font-size: 12px;
-  font-weight: 700;
-  word-break: break-all;
-}
-
-.owner-page .inline-form,
-.owner-page .staff-create-grid,
-.owner-page .staff-edit-grid,
-.owner-page .salon-profile-grid {
-  gap: 10px;
-}
-
-.owner-page input,
-.owner-page textarea,
-.owner-page select {
-  min-height: 50px;
-  border-radius: 16px;
-  border: 1px solid rgba(21, 25, 23, 0.1);
-  background: #ffffff;
-  color: #151917;
-  font-weight: 750;
-}
-
-.owner-page textarea {
-  min-height: 112px;
-  padding: 14px;
-  line-height: 1.45;
-}
-
-.owner-page input:focus,
-.owner-page textarea:focus,
-.owner-page select:focus {
-  border-color: rgba(216, 154, 34, 0.55);
-  box-shadow: 0 0 0 4px rgba(246, 199, 108, 0.16);
-  outline: none;
-}
-
-.owner-page .field > span {
-  color: #151917;
-  font-weight: 900;
-}
-
-.owner-page .wide-field {
-  grid-column: 1 / -1;
-}
-
-.owner-page .toggle-row,
-.owner-page .inline-toggle {
-  border-radius: 18px;
-  background: #fffaf0;
-  border: 1px solid rgba(246, 199, 108, 0.22);
-  padding: 13px;
-}
-
-.owner-page .primary-button {
-  min-height: 52px;
-  border-radius: 18px;
-  background:
-    linear-gradient(135deg, #151917, #2b2b2b);
-  color: #ffffff;
-  border: 1px solid rgba(246, 199, 108, 0.28);
-  box-shadow: 0 16px 34px rgba(21, 25, 23, 0.22);
-}
-
-.owner-page .primary-button.compact,
-.owner-page .secondary-button.compact {
-  min-height: 42px;
-  border-radius: 14px;
-}
-
-.owner-page .secondary-button,
-.owner-page .icon-text-button {
-  border-radius: 16px;
-  background:
-    linear-gradient(180deg, #ffffff, #f8f7f3);
-  border: 1px solid rgba(21, 25, 23, 0.1);
-  color: #151917;
-  font-weight: 900;
-}
-
-.owner-page .secondary-button:hover,
-.owner-page .icon-text-button:hover {
-  transform: translateY(-1px);
-  border-color: rgba(246, 199, 108, 0.32);
-  box-shadow: 0 12px 26px rgba(21, 25, 23, 0.08);
-}
-
-.owner-page .danger-button,
-.owner-page .danger-primary {
-  border-color: rgba(185, 28, 28, 0.24);
-}
-
-.owner-page .danger-button {
-  background: #fff5f5;
-  color: #991b1b;
-}
-
-.owner-page .danger-primary {
-  background:
-    linear-gradient(135deg, #991b1b, #7f1d1d);
-  color: #ffffff;
-}
-
-.owner-page .button-row {
-  gap: 10px;
-}
-
-.owner-page .wrap-row {
-  flex-wrap: wrap;
-}
-
-.owner-page .empty-state {
-  border-radius: 22px;
-  padding: 24px;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(255, 249, 238, 0.88)),
-    #ffffff;
-  border: 1px solid rgba(21, 25, 23, 0.08);
-  box-shadow: 0 14px 30px rgba(21, 25, 23, 0.08);
-}
-
-.owner-page .empty-state svg {
-  color: #d69b2d;
-}
-
-.owner-page .soft-empty {
-  background:
-    linear-gradient(135deg, rgba(255, 250, 240, 0.98), rgba(255, 255, 255, 0.96)),
-    #ffffff;
-}
-
-.owner-page .retention-list {
-  display: grid;
-  gap: 10px;
-}
-
-.owner-page .customer-insight-grid {
-  gap: 10px;
-}
-
-.owner-page .reward-code-button {
-  border-radius: 999px;
-  padding: 8px 11px;
-  background: #fffaf0;
-  border: 1px solid rgba(246, 199, 108, 0.26);
-  color: #151917;
-  font-size: 12px;
-  font-weight: 850;
-}
-
-.owner-page .wheel-config-list {
-  display: grid;
-  gap: 10px;
-}
-
-.owner-page .wheel-slot-row {
-  border-radius: 18px;
-  padding: 12px;
-  background: #ffffff;
-  border: 1px solid rgba(21, 25, 23, 0.08);
-  box-shadow: 0 10px 22px rgba(21, 25, 23, 0.05);
-}
-
-.owner-page .wheel-slot-row > span {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 999px;
-  background: rgba(246, 199, 108, 0.16);
-  color: #151917;
-  font-weight: 950;
-}
-
-.owner-page .owner-avatar {
-  border: 3px solid rgba(246, 199, 108, 0.34);
-  box-shadow: 0 16px 34px rgba(21, 25, 23, 0.14);
-}
-
-.owner-page .avatar-upload-zone {
-  border-radius: 22px;
-  border: 1px dashed rgba(216, 154, 34, 0.4);
-  background: #fffaf0;
-}
-
-.owner-page .avatar-upload-icon {
-  border-radius: 14px;
-  background: rgba(246, 199, 108, 0.16);
-  color: #d69b2d;
-}
-
-.owner-page .alert.success,
-.owner-page .alert.error {
-  border-radius: 18px;
-  font-weight: 750;
-}
-
-.owner-page .dialog-backdrop {
-  backdrop-filter: blur(8px);
-}
-
-.owner-page .confirm-dialog {
-  border-radius: 26px;
-  border: 1px solid rgba(21, 25, 23, 0.1);
-  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.28);
-}
-
-.owner-page .confirm-icon {
-  border-radius: 18px;
-  background: rgba(246, 199, 108, 0.16);
-  color: #d69b2d;
-}
-
-.owner-page .confirm-dialog.danger .confirm-icon {
-  background: #fff5f5;
-  color: #991b1b;
-}
-
-@media (max-width: 760px) {
-  .owner-page .owner-topbar {
-    align-items: flex-start;
-    min-height: 148px;
-  }
-
-  .owner-page .owner-tabs {
-    overflow-x: auto;
-    justify-content: start;
-  }
-
-  .owner-page .owner-tabs button {
-    min-width: max-content;
-    padding: 0 12px;
-  }
-
-  .owner-page .owner-topbar h1 {
-    font-size: 32px;
-  }
-}
-
-@media (max-width: 390px) {
-  .owner-page {
-    gap: 12px;
-  }
-
-  .owner-page .owner-topbar {
-    padding: 16px;
-    border-radius: 24px;
-  }
-
-  .owner-page .panel,
-  .owner-page .overview-panel,
-  .owner-page .retention-panel,
-  .owner-page .owner-profile-panel,
-  .owner-page .salon-profile-panel {
-    border-radius: 22px;
-  }
-
-  .owner-page .dashboard-heading h2,
-  .owner-page .section-heading h2 {
-    font-size: 21px;
-  }
-}
-/* ================================
-   RewardsPage UI Upgrade - Barber Premium
-   Scope: customer rewards page only
-================================ */
-
-.rewards-page {
-  gap: 14px;
-  padding-bottom: 24px;
-}
-
-.rewards-page .page-header {
-  padding: 18px;
-  border-radius: 26px;
-  background:
-    linear-gradient(90deg, rgba(10, 10, 10, 0.94), rgba(18, 18, 18, 0.82)),
-    url("/assets/salon-hero.webp") center / cover no-repeat;
-  border: 1px solid rgba(246, 199, 108, 0.34);
-  color: #ffffff;
-  box-shadow: 0 24px 58px rgba(0, 0, 0, 0.22);
-}
-
-.rewards-page .page-header .eyebrow {
-  color: rgba(246, 199, 108, 0.92);
-  font-weight: 950;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.rewards-page .page-header h1 {
-  margin: 2px 0 0;
-  font-size: clamp(30px, 8vw, 42px);
-  line-height: 1.04;
-  letter-spacing: -0.05em;
-  color: #ffffff;
-}
-
-.rewards-page .page-header .muted {
-  color: rgba(255, 255, 255, 0.82);
-  font-weight: 750;
-}
-
-.rewards-page .list {
-  display: grid;
-  gap: 12px;
-}
-
-.rewards-page .list-item {
-  display: grid;
-  grid-template-columns: 34px 1fr auto;
-  align-items: center;
-  gap: 12px;
-  padding: 16px;
-  border-radius: 22px;
-  background:
-    linear-gradient(180deg, #ffffff, #f8f7f3);
-  border: 1px solid rgba(21, 25, 23, 0.08);
-  box-shadow: 0 12px 26px rgba(21, 25, 23, 0.06);
-}
-
-.rewards-page .list-item > svg {
-  color: #d69b2d;
-  background: rgba(246, 199, 108, 0.14);
-  border-radius: 999px;
-  padding: 6px;
-  width: 34px;
-  height: 34px;
-}
-
-.rewards-page .list-item strong {
-  color: #151917;
-  font-size: 15px;
-  font-weight: 950;
-}
-
-.rewards-page .list-item span,
-.rewards-page .list-item small {
-  font-weight: 750;
-}
-
-.rewards-page .pill,
-.rewards-page .muted-pill {
-  border-radius: 999px;
-  padding: 7px 11px;
-  font-size: 12px;
-  font-weight: 900;
-  white-space: nowrap;
-}
-
-.rewards-page .pill {
-  background: rgba(246, 199, 108, 0.16);
-  border: 1px solid rgba(246, 199, 108, 0.28);
-  color: #151917;
-}
-
-.rewards-page .muted-pill {
-  background: rgba(21, 25, 23, 0.06);
-  color: rgba(21, 25, 23, 0.62);
-}
-
-.rewards-page .empty-state {
-  border-radius: 24px;
-  padding: 24px;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(255, 249, 238, 0.9)),
-    #ffffff;
-  border: 1px solid rgba(21, 25, 23, 0.08);
-  box-shadow: 0 18px 42px rgba(21, 25, 23, 0.1);
-}
-
-.rewards-page .empty-state svg {
-  color: #d69b2d;
-}
-
-.rewards-page .empty-state h2,
-.rewards-page .empty-state strong {
-  color: #151917;
-}
-
-.rewards-page .alert.error {
-  border-radius: 18px;
-  border: 1px solid rgba(185, 28, 28, 0.2);
-  background: #fff5f5;
-  color: #991b1b;
-  font-weight: 750;
-}
-
-@media (max-width: 390px) {
-  .rewards-page {
-    gap: 12px;
-  }
-
-  .rewards-page .page-header {
-    padding: 16px;
-    border-radius: 24px;
-  }
-
-  .rewards-page .list-item {
-    grid-template-columns: 32px 1fr;
-  }
-
-  .rewards-page .list-item .pill,
-  .rewards-page .list-item .muted-pill {
-    grid-column: 2;
-    width: fit-content;
   }
 }

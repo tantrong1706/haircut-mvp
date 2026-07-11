@@ -1,0 +1,143 @@
+/* ================================
+   RewardsPage UI Upgrade - Barber Premium
+   Scope: customer rewards page only
+================================ */
+
+.rewards-page {
+  gap: 14px;
+  padding-bottom: 24px;
+}
+
+.rewards-page .page-header {
+  padding: 18px;
+  border-radius: 26px;
+  background:
+    linear-gradient(90deg, rgba(10, 10, 10, 0.94), rgba(18, 18, 18, 0.82)),
+    url("/assets/salon-hero.webp") center / cover no-repeat;
+  border: 1px solid rgba(246, 199, 108, 0.34);
+  color: #ffffff;
+  box-shadow: 0 24px 58px rgba(0, 0, 0, 0.22);
+}
+
+.rewards-page .page-header .eyebrow {
+  color: rgba(246, 199, 108, 0.92);
+  font-weight: 950;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.rewards-page .page-header h1 {
+  margin: 2px 0 0;
+  font-size: clamp(30px, 8vw, 42px);
+  line-height: 1.04;
+  letter-spacing: -0.05em;
+  color: #ffffff;
+}
+
+.rewards-page .page-header .muted {
+  color: rgba(255, 255, 255, 0.82);
+  font-weight: 750;
+}
+
+.rewards-page .list {
+  display: grid;
+  gap: 12px;
+}
+
+.rewards-page .list-item {
+  display: grid;
+  grid-template-columns: 34px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 22px;
+  background: linear-gradient(180deg, #ffffff, #f8f7f3);
+  border: 1px solid rgba(21, 25, 23, 0.08);
+  box-shadow: 0 12px 26px rgba(21, 25, 23, 0.06);
+}
+
+.rewards-page .list-item > svg {
+  color: #d69b2d;
+  background: rgba(246, 199, 108, 0.14);
+  border-radius: 999px;
+  padding: 6px;
+  width: 34px;
+  height: 34px;
+}
+
+.rewards-page .list-item strong {
+  color: #151917;
+  font-size: 15px;
+  font-weight: 950;
+}
+
+.rewards-page .list-item span,
+.rewards-page .list-item small {
+  font-weight: 750;
+}
+
+.rewards-page .pill,
+.rewards-page .muted-pill {
+  border-radius: 999px;
+  padding: 7px 11px;
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.rewards-page .pill {
+  background: rgba(246, 199, 108, 0.16);
+  border: 1px solid rgba(246, 199, 108, 0.28);
+  color: #151917;
+}
+
+.rewards-page .muted-pill {
+  background: rgba(21, 25, 23, 0.06);
+  color: rgba(21, 25, 23, 0.62);
+}
+
+.rewards-page .empty-state {
+  border-radius: 24px;
+  padding: 24px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(255, 249, 238, 0.9)), #ffffff;
+  border: 1px solid rgba(21, 25, 23, 0.08);
+  box-shadow: 0 18px 42px rgba(21, 25, 23, 0.1);
+}
+
+.rewards-page .empty-state svg {
+  color: #d69b2d;
+}
+
+.rewards-page .empty-state h2,
+.rewards-page .empty-state strong {
+  color: #151917;
+}
+
+.rewards-page .alert.error {
+  border-radius: 18px;
+  border: 1px solid rgba(185, 28, 28, 0.2);
+  background: #fff5f5;
+  color: #991b1b;
+  font-weight: 750;
+}
+
+@media (max-width: 390px) {
+  .rewards-page {
+    gap: 12px;
+  }
+
+  .rewards-page .page-header {
+    padding: 16px;
+    border-radius: 24px;
+  }
+
+  .rewards-page .list-item {
+    grid-template-columns: 32px 1fr;
+  }
+
+  .rewards-page .list-item .pill,
+  .rewards-page .list-item .muted-pill {
+    grid-column: 2;
+    width: fit-content;
+  }
+}

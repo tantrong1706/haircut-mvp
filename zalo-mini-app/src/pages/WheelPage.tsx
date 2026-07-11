@@ -36,7 +36,7 @@ export function WheelPage({ session, onSessionChange }: Props) {
 
   useEffect(() => {
     setLoadingConfig(true);
-    getCustomerWheelConfig(session.qr.salonId)
+    getCustomerWheelConfig(session)
       .then((config) => {
         setWheelConfig(config);
         setError(null);
@@ -45,7 +45,7 @@ export function WheelPage({ session, onSessionChange }: Props) {
         setError(err instanceof Error ? err.message : "Không tải được cấu hình vòng quay"),
       )
       .finally(() => setLoadingConfig(false));
-  }, [session.qr.salonId]);
+  }, [session.sessionId]);
 
   async function handleSpin() {
     setSpinning(true);
@@ -57,13 +57,9 @@ export function WheelPage({ session, onSessionChange }: Props) {
       required_points: wheelConfig.requiredPoints,
     });
     try {
-      const spinResult = await withMonitoringTrace(
-        "lucky_wheel_spin",
-        () => spinWheel(session),
-        {
-          salon_id: session.qr.salonId,
-        },
-      );
+      const spinResult = await withMonitoringTrace("lucky_wheel_spin", () => spinWheel(session), {
+        salon_id: session.qr.salonId,
+      });
       const selectedIndex = selectedIndexFromResult(spinResult, slots);
       setRotationDeg((current) => nextRotation(current, selectedIndex, slots.length));
       await wait(1300);
@@ -106,7 +102,8 @@ export function WheelPage({ session, onSessionChange }: Props) {
         <div className="wheel-pointer" aria-hidden="true" />
         <div className={spinning ? "wheel spinning" : "wheel"} style={wheelStyle}>
           {slots.map((slot, index) => {
-            const angle = index * (360 / Math.max(slots.length, 1)) + 360 / Math.max(slots.length, 1) / 2;
+            const angle =
+              index * (360 / Math.max(slots.length, 1)) + 360 / Math.max(slots.length, 1) / 2;
 
             return (
               <span
@@ -136,11 +133,7 @@ export function WheelPage({ session, onSessionChange }: Props) {
         ))}
       </div>
 
-      <button
-        className="primary-button"
-        disabled={!canSpin}
-        onClick={handleSpin}
-      >
+      <button className="primary-button" disabled={!canSpin} onClick={handleSpin}>
         {loadingConfig ? (
           "Đang tải vòng quay..."
         ) : spinning ? (

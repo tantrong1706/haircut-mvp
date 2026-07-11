@@ -38,10 +38,14 @@ export class AppErrorBoundary extends Component<Props, State> {
             <ShieldAlert size={34} aria-hidden="true" />
             <strong>Ứng dụng đang gặp lỗi hiển thị</strong>
             <p>
-              Vui lòng tải lại trang. Nếu lỗi vẫn còn, chủ salon có thể kiểm tra
-              cảnh báo trong Sentry/Firebase.
+              Vui lòng tải lại trang. Nếu lỗi vẫn còn, chủ salon có thể kiểm tra cảnh báo trong
+              Sentry/Firebase.
             </p>
-            <button className="primary-button" type="button" onClick={() => window.location.reload()}>
+            <button
+              className="primary-button"
+              type="button"
+              onClick={() => window.location.reload()}
+            >
               <RefreshCcw size={18} aria-hidden="true" />
               Tải lại app
             </button>

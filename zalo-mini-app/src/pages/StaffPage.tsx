@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { ClipboardPenLine, Clock3, Send, TicketCheck, UserRoundCheck, UsersRound } from "lucide-react";
+import {
+  ClipboardPenLine,
+  Clock3,
+  Send,
+  TicketCheck,
+  UserRoundCheck,
+  UsersRound,
+} from "lucide-react";
 import { RedeemRewardPanel } from "../components/RedeemRewardPanel";
 import { BrandLogo } from "../components/BrandLogo";
 import {
@@ -16,14 +23,7 @@ type Props = {
   currentUser: AppUser;
 };
 
-const quickNotes = [
-  "Fade thấp",
-  "Fade cao",
-  "Cắt ngắn",
-  "Tỉa mái",
-  "Giữ form cũ",
-  "Nhuộm / uốn",
-];
+const quickNotes = ["Fade thấp", "Fade cao", "Cắt ngắn", "Tỉa mái", "Giữ form cũ", "Nhuộm / uốn"];
 
 export function StaffPage({ currentUser }: Props) {
   const salonId = useMemo(() => {
@@ -35,6 +35,7 @@ export function StaffPage({ currentUser }: Props) {
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [pointPerVisit, setPointPerVisit] = useState(1);
+  const [salonName, setSalonName] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -71,8 +72,14 @@ export function StaffPage({ currentUser }: Props) {
     }
 
     getSalonProfile(salonId)
-      .then((profile) => setPointPerVisit(Math.max(1, Math.floor(profile.pointPerVisit || 1))))
-      .catch(() => setPointPerVisit(1));
+      .then((profile) => {
+        setPointPerVisit(Math.max(1, Math.floor(profile.pointPerVisit || 1)));
+        setSalonName(profile.name.trim());
+      })
+      .catch(() => {
+        setPointPerVisit(1);
+        setSalonName("");
+      });
   }, [salonId]);
 
   useEffect(() => {
@@ -109,12 +116,13 @@ export function StaffPage({ currentUser }: Props) {
     try {
       await withMonitoringTrace(
         "staff_point_request",
-        () => submitPointRequest({
-          salonId,
-          session: selectedSession,
-          note,
-          pointsRequested: pointPerVisit,
-        }),
+        () =>
+          submitPointRequest({
+            salonId,
+            session: selectedSession,
+            note,
+            pointsRequested: pointPerVisit,
+          }),
         {
           salon_id: salonId,
           session_status: selectedSession.status,
@@ -158,15 +166,23 @@ export function StaffPage({ currentUser }: Props) {
         <div>
           <p className="eyebrow">Nhân viên</p>
           <h1>Khách đang chờ</h1>
-          <span>{currentUser.name || "Nhân viên"} · {salonId}</span>
+          <span>
+            {currentUser.name || "Nhân viên"} · {salonName || "Salon của bạn"}
+          </span>
         </div>
       </header>
 
       <div className="metrics-row compact-metrics">
         <Metric icon={<UsersRound size={20} />} label="Đang chờ" value={waitingCount} />
-        <Metric icon={<UserRoundCheck size={20} />} label="Chờ duyệt" value={pendingApprovalCount} />
+        <Metric
+          icon={<UserRoundCheck size={20} />}
+          label="Chờ duyệt"
+          value={pendingApprovalCount}
+        />
         <Metric icon={<ClipboardPenLine size={20} />} label="Điểm/lượt" value={pointPerVisit} />
-        {canRedeemRewards ? <Metric icon={<TicketCheck size={20} />} label="Đổi quà" value="Bật" /> : null}
+        {canRedeemRewards ? (
+          <Metric icon={<TicketCheck size={20} />} label="Đổi quà" value="Bật" />
+        ) : null}
       </div>
 
       <div className="ops-grid staff-workspace">
@@ -197,17 +213,25 @@ export function StaffPage({ currentUser }: Props) {
               >
                 <div className="ops-card-row">
                   <span className="ops-card-title">{session.customer?.name || "Khách hàng"}</span>
-                  <span className={statusPillClass(session.status)}>{statusLabel(session.status)}</span>
+                  <span className={statusPillClass(session.status)}>
+                    {statusLabel(session.status)}
+                  </span>
                 </div>
                 <span>{customerLine(session)}</span>
-                <small>{mirrorLabel(session.mirrorId)} · {formatDateTime(session.createdAtMs)}</small>
+                <small>
+                  {mirrorLabel(session.mirrorId)} · {formatDateTime(session.createdAtMs)}
+                </small>
               </button>
             ))
           )}
         </div>
 
         {selectedSession ? (
-          <div className={isPendingApproval ? "panel detail-panel pending-detail-panel" : "panel detail-panel"}>
+          <div
+            className={
+              isPendingApproval ? "panel detail-panel pending-detail-panel" : "panel detail-panel"
+            }
+          >
             <div className="detail-heading">
               <div>
                 <p className="eyebrow">{mirrorLabel(selectedSession.mirrorId)}</p>
@@ -219,7 +243,11 @@ export function StaffPage({ currentUser }: Props) {
             <div className="summary-grid compact-summary">
               <div className="summary-item">
                 <span>SĐT</span>
-                <strong>{selectedSession.customer?.phoneLast4 ? `******${selectedSession.customer.phoneLast4}` : "Chưa có"}</strong>
+                <strong>
+                  {selectedSession.customer?.phoneLast4
+                    ? `******${selectedSession.customer.phoneLast4}`
+                    : "Chưa có"}
+                </strong>
               </div>
               <div className="summary-item">
                 <span>Trạng thái</span>
@@ -227,7 +255,9 @@ export function StaffPage({ currentUser }: Props) {
               </div>
             </div>
 
-            <div className={isPendingApproval ? "service-state-card warning" : "service-state-card"}>
+            <div
+              className={isPendingApproval ? "service-state-card warning" : "service-state-card"}
+            >
               <Clock3 size={20} aria-hidden="true" />
               <div>
                 <strong>{detailStatusTitle(selectedSession.status)}</strong>

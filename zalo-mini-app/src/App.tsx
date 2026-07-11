@@ -6,15 +6,33 @@ import { parseQrContext } from "./services/qr";
 import { clearSavedSession, loadSavedSession, saveSession } from "./services/sessionStore";
 import type { AppSession, TabKey } from "./services/types";
 
-const AuthGate = lazy(() => import("./pages/AuthGate").then((module) => ({ default: module.AuthGate })));
-const HistoryPage = lazy(() => import("./pages/HistoryPage").then((module) => ({ default: module.HistoryPage })));
-const HomePage = lazy(() => import("./pages/HomePage").then((module) => ({ default: module.HomePage })));
-const OwnerPage = lazy(() => import("./pages/OwnerPage").then((module) => ({ default: module.OwnerPage })));
-const PrivacyPage = lazy(() => import("./pages/PrivacyPage").then((module) => ({ default: module.PrivacyPage })));
-const RewardsPage = lazy(() => import("./pages/RewardsPage").then((module) => ({ default: module.RewardsPage })));
-const ScanEntryPage = lazy(() => import("./pages/ScanEntryPage").then((module) => ({ default: module.ScanEntryPage })));
-const StaffPage = lazy(() => import("./pages/StaffPage").then((module) => ({ default: module.StaffPage })));
-const WheelPage = lazy(() => import("./pages/WheelPage").then((module) => ({ default: module.WheelPage })));
+const AuthGate = lazy(() =>
+  import("./pages/AuthGate").then((module) => ({ default: module.AuthGate })),
+);
+const HistoryPage = lazy(() =>
+  import("./pages/HistoryPage").then((module) => ({ default: module.HistoryPage })),
+);
+const HomePage = lazy(() =>
+  import("./pages/HomePage").then((module) => ({ default: module.HomePage })),
+);
+const OwnerPage = lazy(() =>
+  import("./pages/OwnerPage").then((module) => ({ default: module.OwnerPage })),
+);
+const PrivacyPage = lazy(() =>
+  import("./pages/PrivacyPage").then((module) => ({ default: module.PrivacyPage })),
+);
+const RewardsPage = lazy(() =>
+  import("./pages/RewardsPage").then((module) => ({ default: module.RewardsPage })),
+);
+const ScanEntryPage = lazy(() =>
+  import("./pages/ScanEntryPage").then((module) => ({ default: module.ScanEntryPage })),
+);
+const StaffPage = lazy(() =>
+  import("./pages/StaffPage").then((module) => ({ default: module.StaffPage })),
+);
+const WheelPage = lazy(() =>
+  import("./pages/WheelPage").then((module) => ({ default: module.WheelPage })),
+);
 
 const tabs: Array<{ key: TabKey; label: string; Icon: LucideIcon }> = [
   { key: "home", label: "Điểm", Icon: House },
@@ -34,11 +52,16 @@ function PageLoading() {
 }
 
 export default function App() {
+  const path = window.location.pathname;
+  const isCustomerRoute = !["/staff", "/owner", "/admin", "/privacy"].some((route) =>
+    path.startsWith(route),
+  );
   const currentQr = useMemo(() => parseQrContext(), []);
-  const [session, setSession] = useState<AppSession | null>(() => loadSavedSession(currentQr));
+  const [session, setSession] = useState<AppSession | null>(() =>
+    isCustomerRoute ? loadSavedSession(currentQr) : null,
+  );
   const [activeTab, setActiveTab] = useState<TabKey>("home");
   const [isOnline, setIsOnline] = useState(() => navigator.onLine);
-  const path = window.location.pathname;
 
   useEffect(() => {
     trackEvent("page_view", {
@@ -65,15 +88,19 @@ export default function App() {
   }, [path]);
 
   useEffect(() => {
+    if (!isCustomerRoute) {
+      return;
+    }
+
     if (session) {
       saveSession(session);
     } else {
       clearSavedSession();
     }
-  }, [session]);
+  }, [isCustomerRoute, session]);
 
   useEffect(() => {
-    if (!session) {
+    if (!isCustomerRoute || !session) {
       return undefined;
     }
 
@@ -94,7 +121,7 @@ export default function App() {
       isActive = false;
       unsubscribe?.();
     };
-  }, [session?.sessionId]);
+  }, [isCustomerRoute, session?.sessionId]);
 
   function resetSession() {
     trackEvent("customer_session_reset", {
@@ -169,7 +196,9 @@ export default function App() {
   } else if (session && activeTab === "rewards") {
     content = <RewardsPage session={session} />;
   } else if (session) {
-    content = <HomePage session={session} onTabChange={changeCustomerTab} onResetSession={resetSession} />;
+    content = (
+      <HomePage session={session} onTabChange={changeCustomerTab} onResetSession={resetSession} />
+    );
   }
 
   return (

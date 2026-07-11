@@ -108,11 +108,7 @@ export async function withMonitoringTrace<T>(
   }
 }
 
-export function setMonitoringUser(user: {
-  uid: string;
-  role: string;
-  salonId: string;
-}) {
+export function setMonitoringUser(user: { uid: string; role: string; salonId: string }) {
   if (isMonitoringDisabled()) {
     return;
   }
@@ -265,7 +261,10 @@ async function createSentryClient(): Promise<SentryModule | null> {
       release: import.meta.env.VITE_APP_VERSION || undefined,
       tracesSampleRate: parseSampleRate(import.meta.env.VITE_SENTRY_TRACES_SAMPLE_RATE, 0.1),
       replaysSessionSampleRate: parseSampleRate(import.meta.env.VITE_SENTRY_REPLAY_SAMPLE_RATE, 0),
-      replaysOnErrorSampleRate: parseSampleRate(import.meta.env.VITE_SENTRY_REPLAY_ON_ERROR_SAMPLE_RATE, 0),
+      replaysOnErrorSampleRate: parseSampleRate(
+        import.meta.env.VITE_SENTRY_REPLAY_ON_ERROR_SAMPLE_RATE,
+        0,
+      ),
       beforeSend(event) {
         if (event.user) {
           delete event.user.email;

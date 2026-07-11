@@ -1,14 +1,11 @@
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import { initializeApp } from "firebase-admin/app";
-import {
-  FieldValue,
-  Timestamp,
-  getFirestore,
-} from "firebase-admin/firestore";
+import { FieldValue, Timestamp, getFirestore } from "firebase-admin/firestore";
 import { getAuth } from "firebase-admin/auth";
 import { getStorage } from "firebase-admin/storage";
 import { defineSecret } from "firebase-functions/params";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { isValidMirrorQr } from "./security";
 
 initializeApp();
 
@@ -146,23 +143,18 @@ async function assertSalonRole(
 }
 
 function customerIdFor(salonId: string, zaloUserId: string): string {
-  return createHash("sha256")
-    .update(`${salonId}:${zaloUserId}`)
-    .digest("hex")
-    .slice(0, 40);
+  return createHash("sha256").update(`${salonId}:${zaloUserId}`).digest("hex").slice(0, 40);
 }
 
 function activeSessionRefFor(salonId: string, customerId: string) {
-  const id = createHash("sha256")
-    .update(`${salonId}:${customerId}`)
-    .digest("hex")
-    .slice(0, 40);
+  const id = createHash("sha256").update(`${salonId}:${customerId}`).digest("hex").slice(0, 40);
   return db.collection("active_service_sessions").doc(id);
 }
 
 async function verifyZaloAccessToken(accessTokenInput: unknown): Promise<ZaloProfile> {
   const accessToken = requireString(accessTokenInput, "zaloAccessToken");
-  const appSecret = zaloAppSecret.value() || process.env.ZALO_APP_SECRET || process.env.ZALO_SECRET_KEY || "";
+  const appSecret =
+    zaloAppSecret.value() || process.env.ZALO_APP_SECRET || process.env.ZALO_SECRET_KEY || "";
 
   if (!appSecret || appSecret.includes("your-")) {
     throw new HttpsError(
@@ -171,9 +163,7 @@ async function verifyZaloAccessToken(accessTokenInput: unknown): Promise<ZaloPro
     );
   }
 
-  const appsecretProof = createHmac("sha256", appSecret)
-    .update(accessToken)
-    .digest("hex");
+  const appsecretProof = createHmac("sha256", appSecret).update(accessToken).digest("hex");
   const endpoint = new URL(process.env.ZALO_PROFILE_ENDPOINT || "https://graph.zalo.me/v2.0/me");
   endpoint.searchParams.set("fields", "id,name,picture");
 
@@ -187,7 +177,7 @@ async function verifyZaloAccessToken(accessTokenInput: unknown): Promise<ZaloPro
       },
     });
 
-    payload = await response.json() as Record<string, unknown>;
+    payload = (await response.json()) as Record<string, unknown>;
     if (!response.ok) {
       throw new Error(String(payload.message ?? response.statusText));
     }
@@ -258,8 +248,9 @@ function isFreshServiceSession(createdAt: unknown, now: Timestamp): boolean {
   }
 
   const nowMs = now.toMillis();
-  return createdAtMs <= nowMs + 5 * 60 * 1000 &&
-    nowMs - createdAtMs <= SESSION_POINT_REQUEST_WINDOW_MS;
+  return (
+    createdAtMs <= nowMs + 5 * 60 * 1000 && nowMs - createdAtMs <= SESSION_POINT_REQUEST_WINDOW_MS
+  );
 }
 
 function startOfTodayBangkokMs(): number {
@@ -274,10 +265,7 @@ function startOfTodayBangkokMs(): number {
   return startUtcMs - offsetMs;
 }
 
-async function spinWheelForCustomer(
-  salonId: string,
-  customerId: string,
-): Promise<SpinWheelResult> {
+async function spinWheelForCustomer(salonId: string, customerId: string): Promise<SpinWheelResult> {
   const wheelRef = db.collection("lucky_wheel").doc(salonId);
   const customerRef = db.collection("customers").doc(customerId);
   const rewardRef = db.collection("reward_history").doc();
@@ -289,10 +277,7 @@ async function spinWheelForCustomer(
   let pointsAfter = 0;
 
   await db.runTransaction(async (tx) => {
-    const [wheelSnap, customerSnap] = await Promise.all([
-      tx.get(wheelRef),
-      tx.get(customerRef),
-    ]);
+    const [wheelSnap, customerSnap] = await Promise.all([tx.get(wheelRef), tx.get(customerRef)]);
     if (!wheelSnap.exists) {
       throw new HttpsError("not-found", "Vòng quay chưa được cấu hình");
     }
@@ -308,8 +293,9 @@ async function spinWheelForCustomer(
       throw new HttpsError("failed-precondition", "Khách chưa đủ điểm để quay");
     }
 
-    const activeSlots = (wheel?.slots ?? [])
-      .filter((slot: LuckyWheelSlot) => slot.active && slot.label.trim().length > 0);
+    const activeSlots = (wheel?.slots ?? []).filter(
+      (slot: LuckyWheelSlot) => slot.active && slot.label.trim().length > 0,
+    );
     if (activeSlots.length === 0) {
       throw new HttpsError("failed-precondition", "Vòng quay chưa có ô thưởng đang bật");
     }
@@ -365,9 +351,8 @@ export const createSalon = onCall(functionOptions, async (request) => {
   await db.runTransaction(async (tx) => {
     const existingUser = await tx.get(userRef);
     const existingUserData = existingUser.exists ? existingUser.data() : null;
-    const existingSalonId = typeof existingUserData?.salonId === "string"
-      ? existingUserData.salonId.trim()
-      : "";
+    const existingSalonId =
+      typeof existingUserData?.salonId === "string" ? existingUserData.salonId.trim() : "";
 
     if (existingSalonId) {
       throw new HttpsError("failed-precondition", "Tài khoản này đã thuộc một salon");
@@ -387,16 +372,20 @@ export const createSalon = onCall(functionOptions, async (request) => {
       createdAt: now,
       updatedAt: now,
     });
-    tx.set(userRef, {
-      salonId: salonRef.id,
-      name: ownerName,
-      phone: phone ?? null,
-      role: "owner",
-      isActive: true,
-      canRedeemRewards: true,
-      createdAt: now,
-      updatedAt: now,
-    }, { merge: true });
+    tx.set(
+      userRef,
+      {
+        salonId: salonRef.id,
+        name: ownerName,
+        phone: phone ?? null,
+        role: "owner",
+        isActive: true,
+        canRedeemRewards: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+      { merge: true },
+    );
     tx.set(wheelRef, {
       salonId: salonRef.id,
       requiredPoints: 5,
@@ -460,9 +449,10 @@ export const createStaffProfile = onCall(functionOptions, async (request) => {
       });
       staffUid = userRecord.uid;
     } catch (error) {
-      const code = typeof error === "object" && error !== null && "code" in error
-        ? String((error as { code?: unknown }).code)
-        : "";
+      const code =
+        typeof error === "object" && error !== null && "code" in error
+          ? String((error as { code?: unknown }).code)
+          : "";
       if (code === "auth/email-already-exists") {
         throw new HttpsError("already-exists", "Email nhân viên đã có tài khoản Auth");
       }
@@ -470,17 +460,23 @@ export const createStaffProfile = onCall(functionOptions, async (request) => {
     }
   }
 
-  await db.collection("users").doc(staffUid).set({
-    salonId,
-    name,
-    email: email ?? null,
-    phone: phone ?? null,
-    role: "staff",
-    isActive: true,
-    canRedeemRewards,
-    createdAt: now,
-    updatedAt: now,
-  }, { merge: true });
+  await db
+    .collection("users")
+    .doc(staffUid)
+    .set(
+      {
+        salonId,
+        name,
+        email: email ?? null,
+        phone: phone ?? null,
+        role: "staff",
+        isActive: true,
+        canRedeemRewards,
+        createdAt: now,
+        updatedAt: now,
+      },
+      { merge: true },
+    );
 
   return { uid: staffUid, email: email ?? "" };
 });
@@ -516,9 +512,7 @@ export const updateMirror = onCall(functionOptions, async (request) => {
   await assertSalonRole(uid, salonId, ["owner"]);
 
   const name = optionalString(request.data?.name);
-  const isActive = typeof request.data?.isActive === "boolean"
-    ? request.data.isActive
-    : undefined;
+  const isActive = typeof request.data?.isActive === "boolean" ? request.data.isActive : undefined;
   const regenerateQr = Boolean(request.data?.regenerateQr);
   const mirrorRef = db.collection("mirrors").doc(mirrorId);
   const mirrorSnap = await mirrorRef.get();
@@ -564,16 +558,17 @@ export const updateStaffProfile = onCall(functionOptions, async (request) => {
 
   const name = optionalString(request.data?.name);
   const phone = optionalString(request.data?.phone);
-  const isActive = typeof request.data?.isActive === "boolean"
-    ? request.data.isActive
-    : undefined;
-  const canRedeemRewards = typeof request.data?.canRedeemRewards === "boolean"
-    ? request.data.canRedeemRewards
-    : undefined;
+  const isActive = typeof request.data?.isActive === "boolean" ? request.data.isActive : undefined;
+  const canRedeemRewards =
+    typeof request.data?.canRedeemRewards === "boolean" ? request.data.canRedeemRewards : undefined;
   const staffRef = db.collection("users").doc(staffUid);
   const staffSnap = await staffRef.get();
 
-  if (!staffSnap.exists || staffSnap.data()?.salonId !== salonId || staffSnap.data()?.role !== "staff") {
+  if (
+    !staffSnap.exists ||
+    staffSnap.data()?.salonId !== salonId ||
+    staffSnap.data()?.role !== "staff"
+  ) {
     throw new HttpsError("not-found", "Không tìm thấy nhân viên");
   }
 
@@ -607,10 +602,16 @@ export const updateOwnerAvatar = onCall(functionOptions, async (request) => {
   const avatarUrl = avatarUrlString(request.data?.avatarUrl);
   const now = Timestamp.now();
 
-  await db.collection("users").doc(uid).set({
-    avatarUrl: avatarUrl || null,
-    updatedAt: now,
-  }, { merge: true });
+  await db
+    .collection("users")
+    .doc(uid)
+    .set(
+      {
+        avatarUrl: avatarUrl || null,
+        updatedAt: now,
+      },
+      { merge: true },
+    );
 
   await getAuth().updateUser(uid, {
     photoURL: avatarUrl || null,
@@ -622,7 +623,7 @@ export const updateOwnerAvatar = onCall(functionOptions, async (request) => {
 export const getSalonProfile = onCall(functionOptions, async (request) => {
   const uid = currentUid(request.auth);
   const salonId = requireString(request.data?.salonId, "salonId");
-  await assertSalonRole(uid, salonId, ["owner"]);
+  await assertSalonRole(uid, salonId, ["owner", "staff"]);
 
   const salonSnap = await db.collection("salons").doc(salonId).get();
   if (!salonSnap.exists) {
@@ -656,13 +657,16 @@ export const updateSalonProfile = onCall(functionOptions, async (request) => {
     throw new HttpsError("not-found", "Không tìm thấy salon");
   }
 
-  await salonRef.set({
-    name,
-    address: address ?? null,
-    phone: phone ?? null,
-    pointPerVisit,
-    updatedAt: Timestamp.now(),
-  }, { merge: true });
+  await salonRef.set(
+    {
+      name,
+      address: address ?? null,
+      phone: phone ?? null,
+      pointPerVisit,
+      updatedAt: Timestamp.now(),
+    },
+    { merge: true },
+  );
 
   return {
     id: salonId,
@@ -679,7 +683,8 @@ export const listStaffProfiles = onCall(functionOptions, async (request) => {
   const salonId = requireString(request.data?.salonId, "salonId");
   await assertSalonRole(uid, salonId, ["owner"]);
 
-  const snap = await db.collection("users")
+  const snap = await db
+    .collection("users")
     .where("salonId", "==", salonId)
     .where("role", "==", "staff")
     .limit(100)
@@ -764,11 +769,7 @@ export const registerCustomerFromZalo = onCall(zaloFunctionOptions, async (reque
     throw new HttpsError("not-found", "Không tìm thấy QR gương");
   }
   const mirror = mirrorSnap.data();
-  if (
-    mirror?.salonId !== salonId ||
-    mirror?.qrToken !== qrToken ||
-    mirror?.isActive !== true
-  ) {
+  if (!isValidMirrorQr(mirror, salonId, qrToken)) {
     throw new HttpsError("permission-denied", "QR gương không hợp lệ");
   }
 
@@ -889,7 +890,10 @@ export const submitPointRequest = onCall(functionOptions, async (request) => {
 
     const session = sessionSnap.data();
     if (session?.status !== "waiting") {
-      throw new HttpsError("failed-precondition", "Phiên này đã được gửi yêu cầu điểm hoặc đã xử lý");
+      throw new HttpsError(
+        "failed-precondition",
+        "Phiên này đã được gửi yêu cầu điểm hoặc đã xử lý",
+      );
     }
     if (!isFreshServiceSession(session.createdAt, now)) {
       throw new HttpsError("failed-precondition", "Phiên cắt đã quá thời gian cho phép cộng điểm");
@@ -919,20 +923,28 @@ export const submitPointRequest = onCall(functionOptions, async (request) => {
       updatedAt: now,
     });
 
-    tx.set(sessionRef, {
-      status: "serving",
-      updatedAt: now,
-    }, { merge: true });
-    tx.set(activeSessionRefFor(salonId, String(session.customerId || "")), {
-      salonId,
-      customerId: session.customerId,
-      sessionId,
-      mirrorId: session.mirrorId ?? null,
-      qrToken: session.qrToken ?? null,
-      status: "serving",
-      createdAt: session.createdAt ?? now,
-      updatedAt: now,
-    }, { merge: true });
+    tx.set(
+      sessionRef,
+      {
+        status: "serving",
+        updatedAt: now,
+      },
+      { merge: true },
+    );
+    tx.set(
+      activeSessionRefFor(salonId, String(session.customerId || "")),
+      {
+        salonId,
+        customerId: session.customerId,
+        sessionId,
+        mirrorId: session.mirrorId ?? null,
+        qrToken: session.qrToken ?? null,
+        status: "serving",
+        createdAt: session.createdAt ?? now,
+        updatedAt: now,
+      },
+      { merge: true },
+    );
   });
 
   return { requestId: requestRef.id };
@@ -992,10 +1004,14 @@ export const approvePointRequest = onCall(functionOptions, async (request) => {
       approvedBy: uid,
       createdAt: now,
     });
-    tx.set(sessionRef, {
-      status: "completed",
-      updatedAt: now,
-    }, { merge: true });
+    tx.set(
+      sessionRef,
+      {
+        status: "completed",
+        updatedAt: now,
+      },
+      { merge: true },
+    );
     tx.delete(activeSessionRefFor(salonId, String(pointRequest.customerId || "")));
   });
 
@@ -1023,17 +1039,25 @@ export const rejectPointRequest = onCall(functionOptions, async (request) => {
       throw new HttpsError("failed-precondition", "Yêu cầu đã được xử lý");
     }
 
-    tx.set(requestRef, {
-      status: "rejected",
-      rejectedBy: uid,
-      rejectedAt: now,
-      rejectionReason: reason,
-      updatedAt: now,
-    }, { merge: true });
-    tx.set(db.collection("chair_sessions").doc(String(pointRequest.sessionId || "")), {
-      status: "cancelled",
-      updatedAt: now,
-    }, { merge: true });
+    tx.set(
+      requestRef,
+      {
+        status: "rejected",
+        rejectedBy: uid,
+        rejectedAt: now,
+        rejectionReason: reason,
+        updatedAt: now,
+      },
+      { merge: true },
+    );
+    tx.set(
+      db.collection("chair_sessions").doc(String(pointRequest.sessionId || "")),
+      {
+        status: "cancelled",
+        updatedAt: now,
+      },
+      { merge: true },
+    );
     tx.delete(activeSessionRefFor(salonId, String(pointRequest.customerId || "")));
   });
 
@@ -1060,45 +1084,49 @@ export const getOwnerOverview = onCall(functionOptions, async (request) => {
     unusedRewardsSnap,
     customersSnap,
   ] = await Promise.all([
-    db.collection("chair_sessions")
+    db
+      .collection("chair_sessions")
       .where("salonId", "==", salonId)
       .where("createdAt", ">=", startOfToday)
       .count()
       .get(),
-    db.collection("chair_sessions")
+    db
+      .collection("chair_sessions")
       .where("salonId", "==", salonId)
       .where("createdAt", ">=", start7Days)
       .count()
       .get(),
-    db.collection("chair_sessions")
+    db
+      .collection("chair_sessions")
       .where("salonId", "==", salonId)
       .where("createdAt", ">=", start30Days)
       .count()
       .get(),
-    db.collection("point_requests")
+    db
+      .collection("point_requests")
       .where("salonId", "==", salonId)
       .where("status", "==", "pending")
       .count()
       .get(),
-    db.collection("point_requests")
+    db
+      .collection("point_requests")
       .where("salonId", "==", salonId)
       .where("status", "==", "approved")
       .where("approvedAt", ">=", startOfToday)
       .get(),
-    db.collection("reward_history")
+    db
+      .collection("reward_history")
       .where("salonId", "==", salonId)
       .where("createdAt", ">=", startOfToday)
       .count()
       .get(),
-    db.collection("reward_history")
+    db
+      .collection("reward_history")
       .where("salonId", "==", salonId)
       .where("status", "==", "unused")
       .count()
       .get(),
-    db.collection("customers")
-      .where("salonId", "==", salonId)
-      .limit(100)
-      .get(),
+    db.collection("customers").where("salonId", "==", salonId).limit(100).get(),
   ]);
 
   const inactiveCustomers = customersSnap.docs
@@ -1127,9 +1155,10 @@ export const getOwnerOverview = onCall(functionOptions, async (request) => {
     customers7Days: customers7DaysSnap.data().count,
     customers30Days: customers30DaysSnap.data().count,
     pendingRequests: pendingRequestsSnap.data().count,
-    pointsApprovedToday: approvedRequestsTodaySnap.docs.reduce((total, doc) => (
-      total + Number(doc.data().pointsAdded ?? 0)
-    ), 0),
+    pointsApprovedToday: approvedRequestsTodaySnap.docs.reduce(
+      (total, doc) => total + Number(doc.data().pointsAdded ?? 0),
+      0,
+    ),
     spinsToday: spinsTodaySnap.data().count,
     unusedRewards: unusedRewardsSnap.data().count,
     inactiveCustomers,
@@ -1141,10 +1170,7 @@ export const updateLuckyWheel = onCall(functionOptions, async (request) => {
   const salonId = requireString(request.data?.salonId, "salonId");
   await assertSalonRole(uid, salonId, ["owner"]);
 
-  const requiredPoints = requirePositiveNumber(
-    request.data?.requiredPoints,
-    "requiredPoints",
-  );
+  const requiredPoints = requirePositiveNumber(request.data?.requiredPoints, "requiredPoints");
   const deductPointsAfterSpin = requireBoolean(
     request.data?.deductPointsAfterSpin,
     "deductPointsAfterSpin",
@@ -1167,13 +1193,16 @@ export const updateLuckyWheel = onCall(functionOptions, async (request) => {
     };
   });
 
-  await db.collection("lucky_wheel").doc(salonId).set({
-    salonId,
-    requiredPoints,
-    deductPointsAfterSpin,
-    slots: cleanedSlots,
-    updatedAt: Timestamp.now(),
-  }, { merge: true });
+  await db.collection("lucky_wheel").doc(salonId).set(
+    {
+      salonId,
+      requiredPoints,
+      deductPointsAfterSpin,
+      slots: cleanedSlots,
+      updatedAt: Timestamp.now(),
+    },
+    { merge: true },
+  );
 
   return { ok: true };
 });
@@ -1195,25 +1224,89 @@ export const spinLuckyWheelFromZalo = onCall(zaloFunctionOptions, async (request
   return spinWheelForCustomer(salonId, customerId);
 });
 
+export const getCustomerSessionFromZalo = onCall(zaloFunctionOptions, async (request) => {
+  const salonId = requireString(request.data?.salonId, "salonId");
+  const sessionId = requireString(request.data?.sessionId, "sessionId");
+  const zaloProfile = await verifyZaloAccessToken(request.data?.zaloAccessToken);
+  const customerId = customerIdFor(salonId, zaloProfile.zaloUserId);
+
+  const [customerSnap, sessionSnap, wheelSnap] = await Promise.all([
+    db.collection("customers").doc(customerId).get(),
+    db.collection("chair_sessions").doc(sessionId).get(),
+    db.collection("lucky_wheel").doc(salonId).get(),
+  ]);
+
+  if (!customerSnap.exists || customerSnap.data()?.salonId !== salonId) {
+    throw new HttpsError("not-found", "Không tìm thấy hồ sơ khách hàng");
+  }
+  if (
+    !sessionSnap.exists ||
+    sessionSnap.data()?.salonId !== salonId ||
+    sessionSnap.data()?.customerId !== customerId
+  ) {
+    throw new HttpsError("permission-denied", "Lượt cắt không thuộc khách hàng này");
+  }
+
+  const customer = customerSnap.data() ?? {};
+  const session = sessionSnap.data() ?? {};
+  const wheel = wheelSnap.data() ?? {};
+  const slots = Array.isArray(wheel.slots)
+    ? wheel.slots.slice(0, 6).map((slot: unknown) => {
+        const value =
+          typeof slot === "object" && slot !== null
+            ? (slot as { label?: unknown; active?: unknown })
+            : {};
+        return {
+          label: typeof value.label === "string" ? value.label.trim() : "",
+          active: value.active !== false,
+        };
+      })
+    : [];
+
+  return {
+    sessionStatus: ["waiting", "serving", "completed", "cancelled"].includes(String(session.status))
+      ? String(session.status)
+      : "waiting",
+    customer: {
+      customerId,
+      name: String(customer.name ?? zaloProfile.name ?? "Khách hàng"),
+      phoneLast4: String(customer.phoneLast4 ?? ""),
+      points: Math.max(0, Number(customer.points ?? 0)),
+      allowPhoto: Boolean(customer.allowPhoto),
+    },
+    wheelConfig: {
+      requiredPoints: Math.max(1, Math.floor(Number(wheel.requiredPoints ?? 5))),
+      deductPointsAfterSpin: wheel.deductPointsAfterSpin !== false,
+      slots,
+    },
+  };
+});
+
 export const getCustomerHistoryFromZalo = onCall(zaloFunctionOptions, async (request) => {
   const salonId = requireString(request.data?.salonId, "salonId");
   const zaloProfile = await verifyZaloAccessToken(request.data?.zaloAccessToken);
   const customerId = customerIdFor(salonId, zaloProfile.zaloUserId);
   const limit = Math.min(Number(request.data?.limit ?? 20), 50);
 
-  const recordsSnap = await db.collection("haircut_records")
+  const recordsSnap = await db
+    .collection("haircut_records")
     .where("salonId", "==", salonId)
     .where("customerId", "==", customerId)
     .orderBy("createdAt", "desc")
     .limit(limit)
     .get();
 
-  const staffIds = [...new Set(recordsSnap.docs
-    .map((doc) => doc.data().staffId)
-    .filter((id): id is string => typeof id === "string" && id.length > 0))];
-  const staffDocs = staffIds.length > 0
-    ? await db.getAll(...staffIds.map((id) => db.collection("users").doc(id)))
-    : [];
+  const staffIds = [
+    ...new Set(
+      recordsSnap.docs
+        .map((doc) => doc.data().staffId)
+        .filter((id): id is string => typeof id === "string" && id.length > 0),
+    ),
+  ];
+  const staffDocs =
+    staffIds.length > 0
+      ? await db.getAll(...staffIds.map((id) => db.collection("users").doc(id)))
+      : [];
   const staffNames = new Map<string, string>();
   staffDocs.forEach((doc) => {
     const name = doc.data()?.name;
@@ -1243,7 +1336,8 @@ export const getCustomerRewardsFromZalo = onCall(zaloFunctionOptions, async (req
   const customerId = customerIdFor(salonId, zaloProfile.zaloUserId);
   const limit = Math.min(Number(request.data?.limit ?? 20), 50);
 
-  const rewardsSnap = await db.collection("reward_history")
+  const rewardsSnap = await db
+    .collection("reward_history")
     .where("salonId", "==", salonId)
     .where("customerId", "==", customerId)
     .orderBy("createdAt", "desc")
@@ -1271,7 +1365,8 @@ export const searchSalonCustomers = onCall(functionOptions, async (request) => {
   await assertSalonRole(uid, salonId, ["owner", "staff"]);
 
   const normalizedTerm = term.toLowerCase();
-  const customersSnap = await db.collection("customers")
+  const customersSnap = await db
+    .collection("customers")
     .where("salonId", "==", salonId)
     .limit(120)
     .get();
@@ -1293,53 +1388,59 @@ export const searchSalonCustomers = onCall(functionOptions, async (request) => {
         return true;
       }
 
-      return customer.name.toLowerCase().includes(normalizedTerm) ||
-        customer.phoneLast4.includes(normalizedTerm);
+      return (
+        customer.name.toLowerCase().includes(normalizedTerm) ||
+        customer.phoneLast4.includes(normalizedTerm)
+      );
     })
     .slice(0, 20);
 
-  const enriched = await Promise.all(customers.map(async (customer) => {
-    const [recordsSnap, rewardsSnap] = await Promise.all([
-      db.collection("haircut_records")
-        .where("salonId", "==", salonId)
-        .where("customerId", "==", customer.id)
-        .orderBy("createdAt", "desc")
-        .limit(5)
-        .get(),
-      db.collection("reward_history")
-        .where("salonId", "==", salonId)
-        .where("customerId", "==", customer.id)
-        .orderBy("createdAt", "desc")
-        .limit(10)
-        .get(),
-    ]);
+  const enriched = await Promise.all(
+    customers.map(async (customer) => {
+      const [recordsSnap, rewardsSnap] = await Promise.all([
+        db
+          .collection("haircut_records")
+          .where("salonId", "==", salonId)
+          .where("customerId", "==", customer.id)
+          .orderBy("createdAt", "desc")
+          .limit(5)
+          .get(),
+        db
+          .collection("reward_history")
+          .where("salonId", "==", salonId)
+          .where("customerId", "==", customer.id)
+          .orderBy("createdAt", "desc")
+          .limit(10)
+          .get(),
+      ]);
 
-    return {
-      ...customer,
-      recentRecords: recordsSnap.docs.map((doc) => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          staffName: data.staffName ?? "",
-          note: data.note ?? "",
-          pointsAdded: Number(data.pointsAdded ?? 1),
-          createdAtMs: timestampMillis(data.createdAt),
-        };
-      }),
-      unusedRewards: rewardsSnap.docs
-        .map((doc) => {
+      return {
+        ...customer,
+        recentRecords: recordsSnap.docs.map((doc) => {
           const data = doc.data();
           return {
             id: doc.id,
-            rewardName: data.rewardName ?? "",
-            rewardCode: data.rewardCode ?? "",
-            status: data.status ?? "unused",
+            staffName: data.staffName ?? "",
+            note: data.note ?? "",
+            pointsAdded: Number(data.pointsAdded ?? 1),
             createdAtMs: timestampMillis(data.createdAt),
           };
-        })
-        .filter((reward) => reward.status === "unused"),
-    };
-  }));
+        }),
+        unusedRewards: rewardsSnap.docs
+          .map((doc) => {
+            const data = doc.data();
+            return {
+              id: doc.id,
+              rewardName: data.rewardName ?? "",
+              rewardCode: data.rewardCode ?? "",
+              status: data.status ?? "unused",
+              createdAtMs: timestampMillis(data.createdAt),
+            };
+          })
+          .filter((reward) => reward.status === "unused"),
+      };
+    }),
+  );
 
   return { customers: enriched };
 });
@@ -1357,12 +1458,7 @@ export const deleteCustomerData = onCall(functionOptions, async (request) => {
     throw new HttpsError("not-found", "Không tìm thấy hồ sơ khách trong salon này");
   }
 
-  const [
-    deletedRecords,
-    deletedRewards,
-    deletedRequests,
-    deletedSessions,
-  ] = await Promise.all([
+  const [deletedRecords, deletedRewards, deletedRequests, deletedSessions] = await Promise.all([
     deleteCustomerCollectionDocs("haircut_records", salonId, customerId),
     deleteCustomerCollectionDocs("reward_history", salonId, customerId),
     deleteCustomerCollectionDocs("point_requests", salonId, customerId),
@@ -1390,7 +1486,8 @@ async function deleteCustomerCollectionDocs(
   salonId: string,
   customerId: string,
 ): Promise<number> {
-  const snap = await db.collection(collectionName)
+  const snap = await db
+    .collection(collectionName)
     .where("salonId", "==", salonId)
     .where("customerId", "==", customerId)
     .get();
@@ -1408,15 +1505,17 @@ async function deleteCustomerCollectionDocs(
 async function deleteStoragePrefix(prefix: string): Promise<number> {
   try {
     const [files] = await storage.bucket().getFiles({ prefix });
-    const deleted = await Promise.all(files.map(async (file) => {
-      try {
-        await file.delete();
-        return 1;
-      } catch (error) {
-        console.warn("Không xóa được file Storage", file.name, error);
-        return 0;
-      }
-    }));
+    const deleted = await Promise.all(
+      files.map(async (file) => {
+        try {
+          await file.delete();
+          return 1;
+        } catch (error) {
+          console.warn("Không xóa được file Storage", file.name, error);
+          return 0;
+        }
+      }),
+    );
 
     return deleted.reduce<number>((total, count) => total + count, 0);
   } catch (error) {
@@ -1435,7 +1534,8 @@ export const lookupRewardCode = onCall(functionOptions, async (request) => {
     throw new HttpsError("permission-denied", "Nhân viên chưa được phép kiểm tra mã quà");
   }
 
-  const query = await db.collection("reward_history")
+  const query = await db
+    .collection("reward_history")
     .where("salonId", "==", salonId)
     .where("rewardCode", "==", rewardCodeInput)
     .limit(1)
@@ -1480,7 +1580,8 @@ export const redeemRewardCode = onCall(functionOptions, async (request) => {
     throw new HttpsError("permission-denied", "Nhân viên chưa được phép xác nhận mã quà");
   }
 
-  const query = await db.collection("reward_history")
+  const query = await db
+    .collection("reward_history")
     .where("salonId", "==", salonId)
     .where("rewardCode", "==", rewardCodeInput)
     .limit(1)
@@ -1504,12 +1605,16 @@ export const redeemRewardCode = onCall(functionOptions, async (request) => {
       throw new HttpsError("failed-precondition", "Mã quà đã được xử lý");
     }
 
-    tx.set(rewardRef, {
-      status: "used",
-      usedAt: now,
-      usedBy: uid,
-      updatedAt: now,
-    }, { merge: true });
+    tx.set(
+      rewardRef,
+      {
+        status: "used",
+        usedAt: now,
+        usedBy: uid,
+        updatedAt: now,
+      },
+      { merge: true },
+    );
 
     return {
       rewardId: rewardSnap.id,

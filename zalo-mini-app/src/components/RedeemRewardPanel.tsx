@@ -140,7 +140,8 @@ export function RedeemRewardPanel({ salonId, disabled, note }: Props) {
 
       {result ? (
         <p className="alert success">
-          Đã xác nhận {result.rewardName || "mã quà"} {result.customerName ? `cho ${result.customerName}` : ""}.
+          Đã xác nhận {result.rewardName || "mã quà"}{" "}
+          {result.customerName ? `cho ${result.customerName}` : ""}.
         </p>
       ) : null}
       {error ? <p className="alert error">{error}</p> : null}
@@ -154,7 +155,11 @@ function RewardCodeStatus({ info }: { info: RewardCodeInfo }) {
   }
 
   return (
-    <div className={info.status === "unused" ? "reward-code-status success" : "reward-code-status warning"}>
+    <div
+      className={
+        info.status === "unused" ? "reward-code-status success" : "reward-code-status warning"
+      }
+    >
       <div>
         <strong>{info.rewardName || "Mã quà"}</strong>
         <span>{statusText(info.status)}</span>

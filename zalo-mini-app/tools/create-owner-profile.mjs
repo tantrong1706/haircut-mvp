@@ -140,11 +140,18 @@ try {
   const message = error instanceof Error ? error.message : String(error);
 
   if (message.includes("auth/invalid-credential") || message.includes("auth/wrong-password")) {
-    throw new Error("Email hoac mat khau khong dung. Neu da tao user trong Console, hay dung dung mat khau cua user do.");
+    throw new Error(
+      "Email hoac mat khau khong dung. Neu da tao user trong Console, hay dung dung mat khau cua user do.",
+    );
   }
 
-  if (message.includes("Missing or insufficient permissions") || message.includes("permission-denied")) {
-    throw new Error("Firestore Rules dang chan tao ho so owner. Can dung tab Dang ky tren web hoac cap nhat rules cho luong tao owner.");
+  if (
+    message.includes("Missing or insufficient permissions") ||
+    message.includes("permission-denied")
+  ) {
+    throw new Error(
+      "Firestore Rules dang chan tao ho so owner. Can dung tab Dang ky tren web hoac cap nhat rules cho luong tao owner.",
+    );
   }
 
   throw error;
@@ -178,7 +185,9 @@ function buildQrUrl(salonId, mirrorId, qrToken) {
 }
 
 function appUrl() {
-  return (process.env.VITE_PUBLIC_APP_URL || `https://${requiredEnv("VITE_FIREBASE_PROJECT_ID")}.web.app`).replace(/\/$/, "");
+  return (
+    process.env.VITE_PUBLIC_APP_URL || `https://${requiredEnv("VITE_FIREBASE_PROJECT_ID")}.web.app`
+  ).replace(/\/$/, "");
 }
 
 function readInput(argName, envName, required = true) {
@@ -247,9 +256,7 @@ function loadDotEnv(envPath) {
 }
 
 function errorCode(error) {
-  return typeof error === "object" && error !== null && "code" in error
-    ? String(error.code)
-    : "";
+  return typeof error === "object" && error !== null && "code" in error ? String(error.code) : "";
 }
 
 function printHelp() {

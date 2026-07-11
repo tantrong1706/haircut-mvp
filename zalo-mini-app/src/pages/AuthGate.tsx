@@ -21,11 +21,7 @@ import {
   signInOwnerStaff,
   signOutOwnerStaff,
 } from "../services/auth";
-import {
-  clearMonitoringUser,
-  setMonitoringUser,
-  trackEvent,
-} from "../services/monitoring";
+import { clearMonitoringUser, setMonitoringUser, trackEvent } from "../services/monitoring";
 
 type Props = {
   allowedRoles: AppRole[];
@@ -284,7 +280,8 @@ export function AuthGate({ allowedRoles, children }: Props) {
         </button>
 
         <p className="field-note">
-          Nếu đây là tài khoản nhân viên, hãy đăng xuất và để chủ salon tạo nhân viên trong mục Nhân viên.
+          Nếu đây là tài khoản nhân viên, hãy đăng xuất và để chủ salon tạo nhân viên trong mục Nhân
+          viên.
         </p>
         {profileCompletionAttempted && error ? <p className="alert error">{error}</p> : null}
       </section>
@@ -406,7 +403,9 @@ export function AuthGate({ allowedRoles, children }: Props) {
 
               <div className="password-checklist" aria-label="Độ an toàn mật khẩu">
                 <span className={password.length >= 8 ? "ok" : ""}>8+ ký tự</span>
-                <span className={/[A-Z]/.test(password) && /[a-z]/.test(password) ? "ok" : ""}>Chữ hoa/thường</span>
+                <span className={/[A-Z]/.test(password) && /[a-z]/.test(password) ? "ok" : ""}>
+                  Chữ hoa/thường
+                </span>
                 <span className={/\d/.test(password) ? "ok" : ""}>Có số</span>
                 <span className={password && password === confirmPassword ? "ok" : ""}>Khớp</span>
               </div>
@@ -438,7 +437,11 @@ export function AuthGate({ allowedRoles, children }: Props) {
           onClick={handleSubmit}
         >
           {submitting ? (
-            isSignup ? "Đang tạo tài khoản..." : "Đang đăng nhập..."
+            isSignup ? (
+              "Đang tạo tài khoản..."
+            ) : (
+              "Đang đăng nhập..."
+            )
           ) : isSignup ? (
             <>
               <UserPlus size={20} aria-hidden="true" />

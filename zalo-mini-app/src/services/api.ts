@@ -10,7 +10,12 @@ import {
   serverTimestamp,
   where,
 } from "firebase/firestore";
-import { callFunction, getFirebaseDb, getFunctionWriteMode, isFirebaseConfigured } from "./firebase";
+import {
+  callFunction,
+  getFirebaseDb,
+  getFunctionWriteMode,
+  isFirebaseConfigured,
+} from "./firebase";
 import {
   AppSession,
   CustomerProfile,
@@ -65,11 +70,65 @@ type CustomerRewardsFunctionResult = {
   }>;
 };
 
+type CustomerSessionFunctionResult = {
+  sessionStatus: AppSession["sessionStatus"];
+  customer: CustomerProfile;
+  wheelConfig: LuckyWheelConfig;
+};
+
 export function listenSessionLiveUpdates(
   session: AppSession,
   onChange: (session: AppSession) => void,
   onError?: (message: string) => void,
 ) {
+  if (getFunctionWriteMode() === "required") {
+    let stopped = false;
+    let refreshing = false;
+    let currentSession = session;
+
+    const refresh = async () => {
+      if (stopped || refreshing || !navigator.onLine || document.visibilityState === "hidden") {
+        return;
+      }
+
+      refreshing = true;
+      try {
+        const state = await getCustomerSessionState(currentSession);
+        const nextSession = {
+          ...currentSession,
+          sessionStatus: state.sessionStatus,
+          customer: state.customer,
+        };
+
+        if (JSON.stringify(nextSession) !== JSON.stringify(currentSession)) {
+          currentSession = nextSession;
+          onChange(nextSession);
+        }
+      } catch (error) {
+        onError?.(error instanceof Error ? error.message : "Không đồng bộ được lượt cắt");
+      } finally {
+        refreshing = false;
+      }
+    };
+
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") {
+        void refresh();
+      }
+    };
+    const intervalId = window.setInterval(() => void refresh(), 12_000);
+    window.addEventListener("focus", refreshWhenVisible);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    void refresh();
+
+    return () => {
+      stopped = true;
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refreshWhenVisible);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }
+
   const db = getFirebaseDb();
 
   if (!isFirebaseConfigured() || !db) {
@@ -107,11 +166,7 @@ export function listenSessionLiveUpdates(
 
       emit({
         ...currentSession,
-        customer: mapCustomerProfile(
-          snapshot.id,
-          snapshot.data(),
-          currentSession.customer,
-        ),
+        customer: mapCustomerProfile(snapshot.id, snapshot.data(), currentSession.customer),
       });
     },
     (error) => onError?.(error.message),
@@ -120,6 +175,30 @@ export function listenSessionLiveUpdates(
   return () => {
     unsubSession();
     unsubCustomer();
+  };
+}
+
+async function getCustomerSessionState(
+  session: AppSession,
+): Promise<CustomerSessionFunctionResult> {
+  const zaloAccessToken = await getZaloAccessToken();
+  const result = await callFunction<
+    { salonId: string; sessionId: string; zaloAccessToken: string },
+    CustomerSessionFunctionResult
+  >("getCustomerSessionFromZalo", {
+    salonId: session.qr.salonId,
+    sessionId: session.sessionId,
+    zaloAccessToken,
+  });
+
+  return {
+    sessionStatus: normalizeSessionStatus(result.sessionStatus),
+    customer: mapCustomerProfile(
+      result.customer.customerId || session.customer.customerId,
+      result.customer as unknown as Record<string, unknown>,
+      session.customer,
+    ),
+    wheelConfig: normalizeLuckyWheelConfig(result.wheelConfig),
   };
 }
 
@@ -160,7 +239,9 @@ export async function registerCustomer(input: RegisterInput): Promise<AppSession
   return buildSessionFromRegisterResult(input, result);
 }
 
-async function registerCustomerDirect(input: RegisterInput): Promise<RegisterCustomerFunctionResult> {
+async function registerCustomerDirect(
+  input: RegisterInput,
+): Promise<RegisterCustomerFunctionResult> {
   const db = getFirebaseDb();
 
   if (!db) {
@@ -168,9 +249,12 @@ async function registerCustomerDirect(input: RegisterInput): Promise<RegisterCus
   }
 
   const phoneDigits = normalizePhone(input.phone);
-  const zaloUserId = input.zaloUserId || `direct-${(await sha256Hex(input.zaloAccessToken)).slice(0, 24)}`;
+  const zaloUserId =
+    input.zaloUserId || `direct-${(await sha256Hex(input.zaloAccessToken)).slice(0, 24)}`;
   const customerId = await stableDocumentId(`${input.salonId}:${zaloUserId}`);
-  const dailySessionId = await stableDocumentId(`${input.salonId}:${input.mirrorId}:${customerId}:${localDateKey()}`);
+  const dailySessionId = await stableDocumentId(
+    `${input.salonId}:${input.mirrorId}:${customerId}:${localDateKey()}`,
+  );
   const customerRef = doc(db, "customers", customerId);
   const dailySessionRef = doc(db, "chair_sessions", dailySessionId);
   const fallbackSessionRef = doc(collection(db, "chair_sessions"));
@@ -384,14 +468,11 @@ export async function getHaircutHistory(session: AppSession): Promise<HaircutRec
     const result = await callFunction<
       { salonId: string; zaloAccessToken: string; limit: number },
       CustomerHistoryFunctionResult
-    >(
-      "getCustomerHistoryFromZalo",
-      {
-        salonId: session.qr.salonId,
-        zaloAccessToken,
-        limit: 20,
-      },
-    );
+    >("getCustomerHistoryFromZalo", {
+      salonId: session.qr.salonId,
+      zaloAccessToken,
+      limit: 20,
+    });
 
     return result.records.map((record) => ({
       id: record.id,
@@ -461,9 +542,13 @@ async function getHaircutHistoryDirect(session: AppSession): Promise<HaircutReco
     .map((item) => item.record);
 }
 
-export async function getCustomerWheelConfig(salonId: string): Promise<LuckyWheelConfig> {
+export async function getCustomerWheelConfig(session: AppSession): Promise<LuckyWheelConfig> {
   if (!isFirebaseConfigured()) {
     return defaultLuckyWheelConfig;
+  }
+
+  if (getFunctionWriteMode() === "required") {
+    return (await getCustomerSessionState(session)).wheelConfig;
   }
 
   const db = getFirebaseDb();
@@ -472,7 +557,7 @@ export async function getCustomerWheelConfig(salonId: string): Promise<LuckyWhee
     return defaultLuckyWheelConfig;
   }
 
-  const snap = await getDoc(doc(db, "lucky_wheel", salonId));
+  const snap = await getDoc(doc(db, "lucky_wheel", session.qr.salonId));
 
   return snap.exists() ? normalizeLuckyWheelConfig(snap.data()) : defaultLuckyWheelConfig;
 }
@@ -487,14 +572,11 @@ export async function getRewards(session: AppSession): Promise<Reward[]> {
     const result = await callFunction<
       { salonId: string; zaloAccessToken: string; limit: number },
       CustomerRewardsFunctionResult
-    >(
-      "getCustomerRewardsFromZalo",
-      {
-        salonId: session.qr.salonId,
-        zaloAccessToken,
-        limit: 20,
-      },
-    );
+    >("getCustomerRewardsFromZalo", {
+      salonId: session.qr.salonId,
+      zaloAccessToken,
+      limit: 20,
+    });
 
     return result.rewards.map((reward) => ({
       id: reward.id,
@@ -701,7 +783,7 @@ async function sha256Hex(value: string) {
 
   let hash = 0;
   for (let index = 0; index < value.length; index += 1) {
-    hash = Math.imul(31, hash) + value.charCodeAt(index) | 0;
+    hash = (Math.imul(31, hash) + value.charCodeAt(index)) | 0;
   }
 
   return Math.abs(hash).toString(16).padStart(40, "0");

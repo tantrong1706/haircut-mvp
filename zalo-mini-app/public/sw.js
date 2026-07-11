@@ -1,9 +1,19 @@
 const CACHE_NAME = "haircut-app-v6";
-const APP_SHELL = ["/", "/index.html", "/haircut-icon.svg", "/manifest.webmanifest", "/assets/salon-hero.webp", "/health.json"];
+const APP_SHELL = [
+  "/",
+  "/index.html",
+  "/haircut-icon.svg",
+  "/manifest.webmanifest",
+  "/assets/salon-hero.webp",
+  "/health.json",
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)).then(() => self.skipWaiting()),
+    caches
+      .open(CACHE_NAME)
+      .then((cache) => cache.addAll(APP_SHELL))
+      .then(() => self.skipWaiting()),
   );
 });
 

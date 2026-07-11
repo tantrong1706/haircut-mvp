@@ -258,13 +258,14 @@ export async function updateSalonProfile(input: {
       phone,
       pointPerVisit,
     },
-    () => updateSalonProfileDirect({
-      salonId: input.salonId,
-      name,
-      address,
-      phone,
-      pointPerVisit,
-    }),
+    () =>
+      updateSalonProfileDirect({
+        salonId: input.salonId,
+        name,
+        address,
+        phone,
+        pointPerVisit,
+      }),
   );
 }
 
@@ -336,7 +337,10 @@ async function getOwnerOverviewDirect(salonId: string): Promise<OwnerOverview> {
       const approvedAt = toMillis(request.approvedAt) ?? toMillis(request.createdAt);
       return request.status === "approved" && Number(approvedAt ?? 0) >= startMs;
     })
-    .reduce((total, request) => total + Number(request.pointsAdded ?? request.pointsRequested ?? 1), 0);
+    .reduce(
+      (total, request) => total + Number(request.pointsAdded ?? request.pointsRequested ?? 1),
+      0,
+    );
 
   const rewards = rewardsSnap.docs.map((item) => item.data());
   const spinsToday = rewards.filter((reward) => {
@@ -416,13 +420,17 @@ async function updateSalonProfileDirect(input: {
   }
 
   const salonRef = doc(db, "salons", input.salonId);
-  await setDoc(salonRef, {
-    name: input.name,
-    address: input.address || null,
-    phone: input.phone || null,
-    pointPerVisit: input.pointPerVisit,
-    updatedAt: serverTimestamp(),
-  }, { merge: true });
+  await setDoc(
+    salonRef,
+    {
+      name: input.name,
+      address: input.address || null,
+      phone: input.phone || null,
+      pointPerVisit: input.pointPerVisit,
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true },
+  );
 
   return getSalonProfileDirect(input.salonId);
 }
@@ -435,25 +443,18 @@ export async function getMirrors(salonId: string): Promise<SalonMirror[]> {
   }
 
   const snap = await getDocs(query(collection(db, "mirrors"), where("salonId", "==", salonId)));
-  return snap.docs
-    .map(mapMirror)
-    .sort((a, b) => a.name.localeCompare(b.name, "vi"));
+  return snap.docs.map(mapMirror).sort((a, b) => a.name.localeCompare(b.name, "vi"));
 }
 
-export async function createMirror(input: {
-  salonId: string;
-  name: string;
-}): Promise<SalonMirror> {
+export async function createMirror(input: { salonId: string; name: string }): Promise<SalonMirror> {
   const name = input.name.trim();
 
   if (!name) {
     throw new Error("Vui lòng nhập tên gương/ghế");
   }
 
-  return callWriteFunctionOrFallback(
-    "createMirror",
-    { salonId: input.salonId, name },
-    () => createMirrorDirect(input.salonId, name),
+  return callWriteFunctionOrFallback("createMirror", { salonId: input.salonId, name }, () =>
+    createMirrorDirect(input.salonId, name),
   ).then((result) => normalizeMirrorResult(input.salonId, result));
 }
 
@@ -464,11 +465,9 @@ export async function updateMirror(input: {
   isActive?: boolean;
   regenerateQr?: boolean;
 }): Promise<SalonMirror> {
-  return callWriteFunctionOrFallback(
-    "updateMirror",
-    input,
-    () => updateMirrorDirect(input),
-  ).then((result) => normalizeMirrorResult(input.salonId, result, input.mirrorId));
+  return callWriteFunctionOrFallback("updateMirror", input, () => updateMirrorDirect(input)).then(
+    (result) => normalizeMirrorResult(input.salonId, result, input.mirrorId),
+  );
 }
 
 export async function getStaffProfiles(salonId: string): Promise<StaffProfile[]> {
@@ -511,14 +510,15 @@ export async function createStaffProfile(input: {
       phone: input.phone?.trim() || undefined,
       canRedeemRewards: input.canRedeemRewards,
     },
-    () => createStaffProfileDirect({
-      ...input,
-      uid,
-      email,
-      password,
-      name,
-      phone: input.phone?.trim() || "",
-    }),
+    () =>
+      createStaffProfileDirect({
+        ...input,
+        uid,
+        email,
+        password,
+        name,
+        phone: input.phone?.trim() || "",
+      }),
   );
 }
 
@@ -530,10 +530,8 @@ export async function updateStaffProfile(input: {
   isActive?: boolean;
   canRedeemRewards?: boolean;
 }) {
-  return callWriteFunctionOrFallback(
-    "updateStaffProfile",
-    input,
-    () => updateStaffProfileDirect(input),
+  return callWriteFunctionOrFallback("updateStaffProfile", input, () =>
+    updateStaffProfileDirect(input),
   );
 }
 
@@ -547,10 +545,11 @@ export async function searchSalonCustomers(input: {
     return [];
   }
 
-  return callFunctionOrFallback<{ salonId: string; term: string }, { customers: CustomerLookupResult[] }>(
-    "searchSalonCustomers",
-    { salonId: input.salonId, term },
-    () => searchSalonCustomersDirect(input.salonId, term),
+  return callFunctionOrFallback<
+    { salonId: string; term: string },
+    { customers: CustomerLookupResult[] }
+  >("searchSalonCustomers", { salonId: input.salonId, term }, () =>
+    searchSalonCustomersDirect(input.salonId, term),
   ).then((result) => result.customers);
 }
 
@@ -567,10 +566,8 @@ export async function deleteCustomerData(input: {
   return callWriteFunctionOrFallback<
     { salonId: string; customerId: string },
     DeleteCustomerDataResult
-  >(
-    "deleteCustomerData",
-    { salonId: input.salonId, customerId },
-    () => deleteCustomerDataDirect(input.salonId, customerId),
+  >("deleteCustomerData", { salonId: input.salonId, customerId }, () =>
+    deleteCustomerDataDirect(input.salonId, customerId),
   );
 }
 
@@ -597,9 +594,10 @@ export async function submitPointRequest(input: {
   note: string;
   pointsRequested?: number;
 }) {
-  const pointsRequested = input.pointsRequested && input.pointsRequested > 0
-    ? Math.floor(input.pointsRequested)
-    : await getSalonPointPerVisit(input.salonId);
+  const pointsRequested =
+    input.pointsRequested && input.pointsRequested > 0
+      ? Math.floor(input.pointsRequested)
+      : await getSalonPointPerVisit(input.salonId);
 
   return callWriteFunctionOrFallback(
     "submitPointRequest",
@@ -678,10 +676,14 @@ async function submitPointRequestDirect(input: {
       updatedAt: serverTimestamp(),
     });
 
-    transaction.set(sessionRef, {
-      status: "serving",
-      updatedAt: serverTimestamp(),
-    }, { merge: true });
+    transaction.set(
+      sessionRef,
+      {
+        status: "serving",
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true },
+    );
   });
 }
 
@@ -720,8 +722,9 @@ function isFreshServiceSession(createdAt: unknown) {
   }
 
   const nowMs = Date.now();
-  return createdAtMs <= nowMs + 5 * 60 * 1000 &&
-    nowMs - createdAtMs <= SESSION_POINT_REQUEST_WINDOW_MS;
+  return (
+    createdAtMs <= nowMs + 5 * 60 * 1000 && nowMs - createdAtMs <= SESSION_POINT_REQUEST_WINDOW_MS
+  );
 }
 
 export async function approvePointRequest(request: PointRequest) {
@@ -1064,9 +1067,7 @@ async function getStaffProfilesDirect(salonId: string): Promise<{ staff: StaffPr
   const snap = await getDocs(query(collection(db, "users"), where("salonId", "==", salonId)));
 
   return {
-    staff: snap.docs
-      .map(mapStaffProfile)
-      .filter((staff): staff is StaffProfile => Boolean(staff)),
+    staff: snap.docs.map(mapStaffProfile).filter((staff): staff is StaffProfile => Boolean(staff)),
   };
 }
 
@@ -1085,19 +1086,24 @@ async function createStaffProfileDirect(input: {
     return;
   }
 
-  const staffUid = input.uid || await createStaffAuthUser(input.email, input.password, input.name);
+  const staffUid =
+    input.uid || (await createStaffAuthUser(input.email, input.password, input.name));
 
-  await setDoc(doc(db, "users", staffUid), {
-    salonId: input.salonId,
-    name: input.name,
-    email: input.email,
-    phone: input.phone || "",
-    role: "staff",
-    isActive: true,
-    canRedeemRewards: input.canRedeemRewards,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  }, { merge: true });
+  await setDoc(
+    doc(db, "users", staffUid),
+    {
+      salonId: input.salonId,
+      name: input.name,
+      email: input.email,
+      phone: input.phone || "",
+      role: "staff",
+      isActive: true,
+      canRedeemRewards: input.canRedeemRewards,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true },
+  );
 
   return { uid: staffUid, email: input.email };
 }
@@ -1169,14 +1175,17 @@ async function searchSalonCustomersDirect(
         unusedRewards: [],
       } satisfies CustomerLookupResult;
     })
-    .filter((customer) =>
-      customer.name.toLowerCase().includes(normalized) ||
-      customer.phoneLast4.includes(normalized),
+    .filter(
+      (customer) =>
+        customer.name.toLowerCase().includes(normalized) ||
+        customer.phoneLast4.includes(normalized),
     )
     .slice(0, 20);
 
   return {
-    customers: await Promise.all(customers.map((customer) => attachCustomerInsight(salonId, customer))),
+    customers: await Promise.all(
+      customers.map((customer) => attachCustomerInsight(salonId, customer)),
+    ),
   };
 }
 
@@ -1363,11 +1372,7 @@ function mapMirror(docSnap: { id: string; data: () => DocumentData }): SalonMirr
   };
 }
 
-function normalizeMirrorResult(
-  salonId: string,
-  result: unknown,
-  fallbackId = "",
-): SalonMirror {
+function normalizeMirrorResult(salonId: string, result: unknown, fallbackId = ""): SalonMirror {
   const data = isRecord(result) ? result : {};
   const mirrorId = String(data.mirrorId || data.id || fallbackId);
   const qrToken = String(data.qrToken || "");
@@ -1586,17 +1591,20 @@ async function createStaffAuthUser(email: string, password: string, name: string
     throw new Error("Firebase Auth chưa được cấu hình");
   }
 
-  const response = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${apiKey}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      email,
-      password,
-      displayName: name,
-      returnSecureToken: false,
-    }),
-  });
-  const payload = await response.json() as {
+  const response = await fetch(
+    `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email,
+        password,
+        displayName: name,
+        returnSecureToken: false,
+      }),
+    },
+  );
+  const payload = (await response.json()) as {
     localId?: string;
     error?: { message?: string };
   };

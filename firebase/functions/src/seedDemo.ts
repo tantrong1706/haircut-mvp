@@ -7,10 +7,7 @@ initializeApp();
 const db = getFirestore();
 
 function customerIdFor(salonId: string, zaloUserId: string): string {
-  return createHash("sha256")
-    .update(`${salonId}:${zaloUserId}`)
-    .digest("hex")
-    .slice(0, 40);
+  return createHash("sha256").update(`${salonId}:${zaloUserId}`).digest("hex").slice(0, 40);
 }
 
 function token() {
@@ -60,15 +57,18 @@ async function main() {
     updatedAt: now,
   });
 
-  await db.collection("mirrors").doc(mirrorId).set({
-    salonId,
-    name: "Gương số 1",
-    qrToken,
-    qrUrl: `http://127.0.0.1:5173/?salonId=${salonId}&mirrorId=${mirrorId}&qrToken=${qrToken}`,
-    isActive: true,
-    createdAt: now,
-    updatedAt: now,
-  });
+  await db
+    .collection("mirrors")
+    .doc(mirrorId)
+    .set({
+      salonId,
+      name: "Gương số 1",
+      qrToken,
+      qrUrl: `http://127.0.0.1:5173/?salonId=${salonId}&mirrorId=${mirrorId}&qrToken=${qrToken}`,
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    });
 
   await db.collection("customers").doc(customerId).set({
     salonId,
@@ -95,30 +95,36 @@ async function main() {
     createdAt: now,
   });
 
-  await db.collection("lucky_wheel").doc(salonId).set({
-    salonId,
-    requiredPoints: 5,
-    deductPointsAfterSpin: true,
-    slots: [
-      { label: "Giảm 10%", active: true },
-      { label: "Gội đầu miễn phí", active: true },
-      { label: "Tặng sáp tóc", active: true },
-      { label: "Giảm 20%", active: true },
-      { label: "Chúc bạn may mắn", active: true },
-      { label: "Hấp dầu miễn phí", active: true },
-    ],
-    updatedAt: now,
-  });
+  await db
+    .collection("lucky_wheel")
+    .doc(salonId)
+    .set({
+      salonId,
+      requiredPoints: 5,
+      deductPointsAfterSpin: true,
+      slots: [
+        { label: "Giảm 10%", active: true },
+        { label: "Gội đầu miễn phí", active: true },
+        { label: "Tặng sáp tóc", active: true },
+        { label: "Giảm 20%", active: true },
+        { label: "Chúc bạn may mắn", active: true },
+        { label: "Hấp dầu miễn phí", active: true },
+      ],
+      updatedAt: now,
+    });
 
-  await db.collection("reward_history").doc("demo-reward-1").set({
-    salonId,
-    customerId,
-    rewardName: "Giảm 10%",
-    rewardCode: `HC-${token().slice(0, 4).toUpperCase()}`,
-    pointsSpent: 5,
-    status: "unused",
-    createdAt: now,
-  });
+  await db
+    .collection("reward_history")
+    .doc("demo-reward-1")
+    .set({
+      salonId,
+      customerId,
+      rewardName: "Giảm 10%",
+      rewardCode: `HC-${token().slice(0, 4).toUpperCase()}`,
+      pointsSpent: 5,
+      status: "unused",
+      createdAt: now,
+    });
 
   console.log("Demo data seeded.");
 }

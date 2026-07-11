@@ -176,10 +176,11 @@ export function OwnerPage({ currentUser }: Props) {
     try {
       const nextProfile = await withMonitoringTrace(
         "owner_save_salon_profile",
-        () => updateSalonProfile({
-          salonId,
-          ...input,
-        }),
+        () =>
+          updateSalonProfile({
+            salonId,
+            ...input,
+          }),
         {
           salon_id: salonId,
         },
@@ -212,14 +213,10 @@ export function OwnerPage({ currentUser }: Props) {
     setError("");
 
     try {
-      await withMonitoringTrace(
-        "owner_approve_point_request",
-        () => approvePointRequest(request),
-        {
-          salon_id: salonId,
-          points_added: request.pointsAdded,
-        },
-      );
+      await withMonitoringTrace("owner_approve_point_request", () => approvePointRequest(request), {
+        salon_id: salonId,
+        points_added: request.pointsAdded,
+      });
       refreshOverview();
       trackEvent("owner_point_request_approved", {
         salon_id: salonId,
@@ -249,13 +246,9 @@ export function OwnerPage({ currentUser }: Props) {
     setError("");
 
     try {
-      await withMonitoringTrace(
-        "owner_reject_point_request",
-        () => rejectPointRequest(request),
-        {
-          salon_id: salonId,
-        },
-      );
+      await withMonitoringTrace("owner_reject_point_request", () => rejectPointRequest(request), {
+        salon_id: salonId,
+      });
       refreshOverview();
       trackEvent("owner_point_request_rejected", {
         salon_id: salonId,
@@ -302,10 +295,11 @@ export function OwnerPage({ currentUser }: Props) {
     try {
       const result = await withMonitoringTrace(
         "owner_save_avatar",
-        () => updateOwnerAvatar({
-          salonId,
-          avatarUrl: nextAvatarUrl,
-        }),
+        () =>
+          updateOwnerAvatar({
+            salonId,
+            avatarUrl: nextAvatarUrl,
+          }),
         {
           salon_id: salonId,
           has_avatar: Boolean(nextAvatarUrl.trim()),
@@ -332,10 +326,11 @@ export function OwnerPage({ currentUser }: Props) {
     try {
       const result = await withMonitoringTrace(
         "owner_upload_avatar",
-        () => uploadOwnerAvatarFile({
-          salonId,
-          file,
-        }),
+        () =>
+          uploadOwnerAvatarFile({
+            salonId,
+            file,
+          }),
         {
           salon_id: salonId,
           file_size: file.size,
@@ -471,12 +466,7 @@ export function OwnerPage({ currentUser }: Props) {
           />
         </>
       ) : activeTab === "approvals" ? (
-        <ApprovalsPanel
-          requests={requests}
-          busyId={busyId}
-          onApprove={approve}
-          onReject={reject}
-        />
+        <ApprovalsPanel requests={requests} busyId={busyId} onApprove={approve} onReject={reject} />
       ) : activeTab === "mirrors" ? (
         <MirrorsPanel
           salonId={salonId}
@@ -570,7 +560,9 @@ function ConfirmDialog({
             {request.cancelLabel || "Hủy"}
           </button>
           <button
-            className={request.tone === "danger" ? "primary-button danger-primary" : "primary-button"}
+            className={
+              request.tone === "danger" ? "primary-button danger-primary" : "primary-button"
+            }
             disabled={busy}
             onClick={onConfirm}
           >
@@ -663,7 +655,11 @@ function OwnerProfilePanel({
             {saving ? "Đang tải lên..." : "Lưu avatar"}
           </button>
           {selectedFile ? (
-            <button className="secondary-button" disabled={saving} onClick={() => setSelectedFile(null)}>
+            <button
+              className="secondary-button"
+              disabled={saving}
+              onClick={() => setSelectedFile(null)}
+            >
               <XCircle size={18} aria-hidden="true" />
               Bỏ chọn
             </button>
@@ -693,12 +689,7 @@ function SalonProfilePanel({
 }: {
   profile: SalonProfile | null;
   saving: boolean;
-  onSave: (input: {
-    name: string;
-    address: string;
-    phone: string;
-    pointPerVisit: number;
-  }) => void;
+  onSave: (input: { name: string; address: string; phone: string; pointPerVisit: number }) => void;
 }) {
   const [name, setName] = useState(profile?.name || "");
   const [address, setAddress] = useState(profile?.address || "");
@@ -712,12 +703,12 @@ function SalonProfilePanel({
     setPointPerVisit(profile?.pointPerVisit || 1);
   }, [profile?.id, profile?.name, profile?.address, profile?.phone, profile?.pointPerVisit]);
 
-  const changed = profile ? (
-    name.trim() !== profile.name ||
-    address.trim() !== profile.address ||
-    phone.trim() !== profile.phone ||
-    Number(pointPerVisit) !== profile.pointPerVisit
-  ) : false;
+  const changed = profile
+    ? name.trim() !== profile.name ||
+      address.trim() !== profile.address ||
+      phone.trim() !== profile.phone ||
+      Number(pointPerVisit) !== profile.pointPerVisit
+    : false;
 
   return (
     <div className="panel salon-profile-panel">
@@ -726,7 +717,9 @@ function SalonProfilePanel({
           <p className="eyebrow">Thiết lập salon</p>
           <h2>Thông tin vận hành</h2>
         </div>
-        <span className="pill muted-pill">{profile ? `${profile.freeCustomerLimit} khách miễn phí` : "Đang tải"}</span>
+        <span className="pill muted-pill">
+          {profile ? `${profile.freeCustomerLimit} khách miễn phí` : "Đang tải"}
+        </span>
       </div>
 
       <div className="salon-profile-grid">
@@ -771,12 +764,14 @@ function SalonProfilePanel({
         <button
           className="primary-button"
           disabled={saving || !profile || !name.trim() || !changed}
-          onClick={() => onSave({
-            name,
-            address,
-            phone,
-            pointPerVisit,
-          })}
+          onClick={() =>
+            onSave({
+              name,
+              address,
+              phone,
+              pointPerVisit,
+            })
+          }
         >
           <Save size={18} aria-hidden="true" />
           {saving ? "Đang lưu..." : "Lưu thông tin salon"}
@@ -896,7 +891,11 @@ function OverviewPanel({
             <p className="eyebrow">Giữ chân khách</p>
             <h2>Khách lâu chưa quay lại</h2>
           </div>
-          <button className="secondary-button compact" type="button" onClick={() => onOpenTab("customers")}>
+          <button
+            className="secondary-button compact"
+            type="button"
+            onClick={() => onOpenTab("customers")}
+          >
             <Search size={18} aria-hidden="true" />
             Tìm khách
           </button>
@@ -915,7 +914,8 @@ function OverviewPanel({
                 <div>
                   <strong>{customer.name}</strong>
                   <span>
-                    {customer.phoneLast4 ? `******${customer.phoneLast4}` : "Chưa có SĐT"} · {customer.points} điểm
+                    {customer.phoneLast4 ? `******${customer.phoneLast4}` : "Chưa có SĐT"} ·{" "}
+                    {customer.points} điểm
                   </span>
                 </div>
                 <div>
@@ -984,15 +984,7 @@ function OverviewPanel({
   );
 }
 
-function OverviewMetric({
-  icon,
-  label,
-  value,
-}: {
-  icon: ReactNode;
-  label: string;
-  value: number;
-}) {
+function OverviewMetric({ icon, label, value }: { icon: ReactNode; label: string; value: number }) {
   return (
     <div className="overview-metric">
       {icon}
@@ -1120,7 +1112,10 @@ function MirrorsPanel({
     }
   }
 
-  async function saveMirror(mirror: SalonMirror, payload: Partial<SalonMirror> & { regenerateQr?: boolean }) {
+  async function saveMirror(
+    mirror: SalonMirror,
+    payload: Partial<SalonMirror> & { regenerateQr?: boolean },
+  ) {
     setBusyId(mirror.id);
     onMessage("");
     onError("");
@@ -1168,7 +1163,11 @@ function MirrorsPanel({
           onChange={(event) => setName(event.target.value)}
           placeholder="Ví dụ: Gương 1, Gương 2, Ghế VIP"
         />
-        <button className="primary-button" disabled={busyId === "new" || !name.trim()} onClick={addMirror}>
+        <button
+          className="primary-button"
+          disabled={busyId === "new" || !name.trim()}
+          onClick={addMirror}
+        >
           <QrCode size={18} aria-hidden="true" />
           Tạo QR
         </button>
@@ -1328,7 +1327,11 @@ function MirrorCard({
           Copy link
         </button>
         {qrImageUrl ? (
-          <a className="secondary-button" href={qrImageUrl} download={`${safeFileName(mirror.name)}-qr.png`}>
+          <a
+            className="secondary-button"
+            href={qrImageUrl}
+            download={`${safeFileName(mirror.name)}-qr.png`}
+          >
             <Download size={18} aria-hidden="true" />
             Tai QR
           </a>
@@ -1337,7 +1340,11 @@ function MirrorCard({
           <Printer size={18} aria-hidden="true" />
           In QR
         </button>
-        <button className="secondary-button" disabled={busy} onClick={() => onSave(mirror, { name })}>
+        <button
+          className="secondary-button"
+          disabled={busy}
+          onClick={() => onSave(mirror, { name })}
+        >
           <Save size={18} aria-hidden="true" />
           Lưu tên
         </button>
@@ -1349,11 +1356,7 @@ function MirrorCard({
           <Power size={18} aria-hidden="true" />
           {mirror.isActive ? "Tắt QR" : "Bật QR"}
         </button>
-        <button
-          className="secondary-button"
-          disabled={busy}
-          onClick={() => onRegenerate(mirror)}
-        >
+        <button className="secondary-button" disabled={busy} onClick={() => onRegenerate(mirror)}>
           <RefreshCcw size={18} aria-hidden="true" />
           Tạo QR mới
         </button>
@@ -1363,12 +1366,14 @@ function MirrorCard({
 }
 
 function safeFileName(value: string) {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-zA-Z0-9_-]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .toLowerCase() || "haircut";
+  return (
+    value
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-zA-Z0-9_-]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .toLowerCase() || "haircut"
+  );
 }
 
 function escapeHtml(value: string) {
@@ -1419,7 +1424,14 @@ function StaffManagementPanel({
     onError("");
 
     try {
-      const createdStaff = await createStaffProfile({ salonId, email, password, name, phone, canRedeemRewards });
+      const createdStaff = await createStaffProfile({
+        salonId,
+        email,
+        password,
+        name,
+        phone,
+        canRedeemRewards,
+      });
       const createdUid = createdStaff && "uid" in createdStaff ? createdStaff.uid : "";
       if (createdUid) {
         const nextStaff: StaffProfile = {
@@ -1433,10 +1445,9 @@ function StaffManagementPanel({
           canRedeemRewards,
         };
         setStaff((current) =>
-          [
-            ...current.filter((item) => item.uid !== createdUid),
-            nextStaff,
-          ].sort((a, b) => a.name.localeCompare(b.name, "vi")),
+          [...current.filter((item) => item.uid !== createdUid), nextStaff].sort((a, b) =>
+            a.name.localeCompare(b.name, "vi"),
+          ),
         );
       }
       setEmail("");
@@ -1492,15 +1503,27 @@ function StaffManagementPanel({
       </div>
 
       <div className="staff-create-grid">
-        <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Email nhân viên" />
+        <input
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+          placeholder="Email nhân viên"
+        />
         <input
           value={password}
           onChange={(event) => setPassword(event.target.value)}
           type="password"
           placeholder="Mật khẩu tạm thời"
         />
-        <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Tên nhân viên" />
-        <input value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="SĐT nội bộ" />
+        <input
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          placeholder="Tên nhân viên"
+        />
+        <input
+          value={phone}
+          onChange={(event) => setPhone(event.target.value)}
+          placeholder="SĐT nội bộ"
+        />
         <label className="toggle-row inline-toggle">
           <input
             type="checkbox"
@@ -1575,11 +1598,23 @@ function StaffCard({
       {staff.email ? <span>{staff.email}</span> : null}
       <small>UID: {staff.uid}</small>
       <div className="staff-edit-grid">
-        <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Tên nhân viên" />
-        <input value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="SĐT nội bộ" />
+        <input
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          placeholder="Tên nhân viên"
+        />
+        <input
+          value={phone}
+          onChange={(event) => setPhone(event.target.value)}
+          placeholder="SĐT nội bộ"
+        />
       </div>
       <div className="button-row wrap-row">
-        <button className="secondary-button" disabled={busy} onClick={() => onSave(staff, { name, phone })}>
+        <button
+          className="secondary-button"
+          disabled={busy}
+          onClick={() => onSave(staff, { name, phone })}
+        >
           <Save size={18} aria-hidden="true" />
           Lưu
         </button>
@@ -1673,7 +1708,9 @@ function CustomerSearchPanel({
         <Search size={22} aria-hidden="true" />
         <div>
           <h2>Tìm khách</h2>
-          <p className="muted">Tìm theo tên hoặc 4 số cuối SĐT để xem điểm, lịch sử và mã quà chưa dùng.</p>
+          <p className="muted">
+            Tìm theo tên hoặc 4 số cuối SĐT để xem điểm, lịch sử và mã quà chưa dùng.
+          </p>
         </div>
       </div>
 
@@ -1688,7 +1725,11 @@ function CustomerSearchPanel({
           }}
           placeholder="Ví dụ: Anh Tân hoặc 8761"
         />
-        <button className="primary-button" disabled={loading || term.trim().length < 2} onClick={search}>
+        <button
+          className="primary-button"
+          disabled={loading || term.trim().length < 2}
+          onClick={search}
+        >
           <Search size={18} aria-hidden="true" />
           Tìm
         </button>
@@ -1719,7 +1760,8 @@ function CustomerSearchPanel({
                   ) : (
                     customer.recentRecords.map((record) => (
                       <small key={record.id}>
-                        {formatDateTime(record.createdAtMs)} · {record.staffName || "Nhân viên"} · {record.note || "Không ghi chú"}
+                        {formatDateTime(record.createdAtMs)} · {record.staffName || "Nhân viên"} ·{" "}
+                        {record.note || "Không ghi chú"}
                       </small>
                     ))
                   )}

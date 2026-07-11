@@ -40,7 +40,7 @@ if ($deploysHosting) {
 
   Remove-Item -LiteralPath $publicDir -Recurse -Force -ErrorAction SilentlyContinue
   New-Item -ItemType Directory -Path $publicDir | Out-Null
-  Copy-Item -Path (Join-Path $appDir "dist\*") -Destination $publicDir -Recurse -Force
+  Copy-Item -Path (Join-Path $appDir "www\*") -Destination $publicDir -Recurse -Force
 }
 
 if ($IncludeFunctions) {

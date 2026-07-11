@@ -8,7 +8,9 @@ type BeforeInstallPromptEvent = Event & {
 
 export function InstallAppPrompt() {
   const [installEvent, setInstallEvent] = useState<BeforeInstallPromptEvent | null>(null);
-  const [hidden, setHidden] = useState(() => localStorage.getItem("haircut_install_hidden") === "1");
+  const [hidden, setHidden] = useState(
+    () => localStorage.getItem("haircut_install_hidden") === "1",
+  );
 
   useEffect(() => {
     function handleBeforeInstallPrompt(event: Event) {

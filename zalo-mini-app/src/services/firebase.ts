@@ -17,6 +17,10 @@ export function isFirebaseConfigured() {
 }
 
 export function getFunctionWriteMode(): FunctionWriteMode {
+  if (import.meta.env.PROD && import.meta.env.VITE_APP_ENV !== "test") {
+    return "required";
+  }
+
   const mode = String(import.meta.env.VITE_FUNCTION_WRITE_MODE || "direct").toLowerCase();
 
   if (mode === "auto" || mode === "required") {

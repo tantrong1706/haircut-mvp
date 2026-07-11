@@ -2,7 +2,7 @@ name: Build
 
 on:
   push:
-    branches: [main]
+    branches: [main, ui-ux-upgrade]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -26,7 +26,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: firebase/functions/package-lock.json
 
@@ -34,9 +34,23 @@ jobs:
         working-directory: firebase/functions
         run: npm ci
 
+      - name: Check Functions source
+        working-directory: firebase/functions
+        run: npm run check
+
       - name: Build
         working-directory: firebase/functions
         run: npm run build
+
+      - name: Setup Java for Firestore emulator
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Test Firestore and Storage rules
+        working-directory: firebase
+        run: npx --yes firebase-tools@15.22.3 emulators:exec --project demo-haircut --only firestore,storage "npm --prefix functions run test:rules"
 
   zalo-mini-app:
     name: Zalo Mini App
@@ -49,7 +63,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: zalo-mini-app/package-lock.json
 
@@ -57,9 +71,60 @@ jobs:
         working-directory: zalo-mini-app
         run: npm ci
 
-      - name: Build
+      - name: Lint
         working-directory: zalo-mini-app
-        run: npm run build
+        run: npm run lint
+
+      - name: Check formatting
+        working-directory: zalo-mini-app
+        run: npm run format:check
+
+      - name: Unit tests
+        working-directory: zalo-mini-app
+        run: npm run test:run
+
+      - name: Build web
+        working-directory: zalo-mini-app
+        run: npm run build:web
+
+      - name: Validate Zalo package
+        working-directory: zalo-mini-app
+        run: npm run validate:zmp
+
+  browser-tests:
+    name: Browser flows
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: zalo-mini-app/package-lock.json
+
+      - name: Install dependencies
+        working-directory: zalo-mini-app
+        run: npm ci
+
+      - name: Install Chromium
+        working-directory: zalo-mini-app
+        run: npx playwright install --with-deps chromium
+
+      - name: Run browser tests
+        working-directory: zalo-mini-app
+        run: npm run test:e2e
+
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: zalo-mini-app/playwright-report
+          retention-days: 7
 
   repository-checks:
     name: Repository Checks

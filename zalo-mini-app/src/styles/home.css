@@ -1,0 +1,225 @@
+/* ================================
+   HomePage UI Upgrade - Barber Premium
+   Scope: customer home only
+================================ */
+
+.customer-home {
+  gap: 14px;
+  padding-bottom: 22px;
+}
+
+.customer-home .customer-hero {
+  border-radius: 26px;
+}
+
+.customer-home .visual-hero {
+  min-height: 186px;
+  padding: 18px;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(10, 10, 10, 0.92) 0%,
+      rgba(20, 20, 20, 0.78) 48%,
+      rgba(10, 10, 10, 0.18) 100%
+    ),
+    linear-gradient(180deg, rgba(10, 10, 10, 0.1), rgba(10, 10, 10, 0.86)),
+    url("/assets/salon-hero.webp") center / cover no-repeat;
+  border: 1px solid rgba(246, 199, 108, 0.36);
+  box-shadow: 0 24px 58px rgba(0, 0, 0, 0.24);
+}
+
+.customer-home .hero-topline {
+  align-items: center;
+}
+
+.customer-home .soft-chip {
+  border-radius: 999px;
+  padding: 7px 11px;
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: 0.02em;
+  background: rgba(246, 199, 108, 0.16);
+  color: #f6c76c;
+  border: 1px solid rgba(246, 199, 108, 0.34);
+  backdrop-filter: blur(10px);
+}
+
+.customer-home .eyebrow {
+  margin-top: auto;
+  color: rgba(246, 199, 108, 0.88);
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.customer-home .customer-hero h1 {
+  margin: 0;
+  font-size: clamp(30px, 8vw, 42px);
+  line-height: 1.02;
+  letter-spacing: -0.04em;
+  color: #ffffff;
+}
+
+.customer-home .customer-hero .muted {
+  max-width: 250px;
+  color: rgba(255, 255, 255, 0.82);
+  font-weight: 750;
+}
+
+.customer-home .status-card {
+  gap: 10px;
+  padding: 12px;
+  border-radius: 22px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(255, 248, 235, 0.86)), #ffffff;
+  border: 1px solid rgba(246, 199, 108, 0.24);
+  box-shadow: 0 18px 42px rgba(21, 25, 23, 0.1);
+}
+
+.customer-home .status-step {
+  min-height: 58px;
+  grid-template-columns: 34px 1fr;
+  padding: 12px;
+  border-radius: 16px;
+  background: #f8faf8;
+  border: 1px solid rgba(21, 25, 23, 0.06);
+}
+
+.customer-home .status-step.done {
+  background: linear-gradient(135deg, rgba(237, 247, 242, 0.98), rgba(255, 250, 240, 0.9)), #edf7f2;
+  border-color: rgba(19, 121, 91, 0.16);
+}
+
+.customer-home .status-step svg {
+  width: 28px;
+  height: 28px;
+  padding: 5px;
+  border-radius: 999px;
+  background: rgba(21, 25, 23, 0.06);
+}
+
+.customer-home .status-step.done svg {
+  background: rgba(19, 121, 91, 0.12);
+}
+
+.customer-home .status-step strong {
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.customer-home .status-step span {
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.customer-home .member-card {
+  min-height: 154px;
+  border-radius: 24px;
+  padding: 22px;
+  border: 1px solid rgba(21, 25, 23, 0.1);
+  background:
+    linear-gradient(
+      112deg,
+      rgba(255, 255, 255, 0.98) 0%,
+      rgba(255, 250, 240, 0.9) 46%,
+      rgba(18, 18, 18, 0.32) 100%
+    ),
+    url("/assets/salon-hero.webp") 70% 50% / cover no-repeat;
+  box-shadow: 0 20px 44px rgba(21, 25, 23, 0.12);
+}
+
+.customer-home .points-panel span {
+  color: rgba(21, 25, 23, 0.62);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.customer-home .points-panel strong {
+  margin-top: 6px;
+  font-size: clamp(58px, 18vw, 76px);
+  color: #151917;
+  letter-spacing: -0.08em;
+}
+
+.customer-home .member-card-mark {
+  width: 78px;
+  background: linear-gradient(135deg, #151917, #2a2a2a), #151917;
+  color: #f6c76c;
+  box-shadow: 0 18px 34px rgba(0, 0, 0, 0.24);
+}
+
+.customer-home .summary-grid {
+  gap: 12px;
+}
+
+.customer-home .summary-item {
+  border-radius: 18px;
+  padding: 15px;
+  background: #ffffff;
+  border: 1px solid rgba(21, 25, 23, 0.08);
+  box-shadow: 0 12px 26px rgba(21, 25, 23, 0.06);
+}
+
+.customer-home .summary-item span {
+  color: rgba(21, 25, 23, 0.58);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.customer-home .summary-item strong {
+  font-size: 15px;
+  color: #151917;
+}
+
+.customer-home .compact-actions {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.customer-home .compact-actions button {
+  min-height: 74px;
+  padding: 12px 8px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #ffffff, #f8f7f3);
+  border: 1px solid rgba(21, 25, 23, 0.08);
+  box-shadow: 0 12px 26px rgba(21, 25, 23, 0.06);
+}
+
+.customer-home .compact-actions button svg {
+  color: #d69b2d;
+}
+
+.customer-home .compact-actions button strong {
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.customer-home > .secondary-button {
+  width: 100%;
+  min-height: 50px;
+  border-radius: 18px;
+  background: #151917;
+  color: #ffffff;
+  border: 1px solid rgba(246, 199, 108, 0.28);
+  box-shadow: 0 14px 30px rgba(21, 25, 23, 0.18);
+}
+
+@media (max-width: 390px) {
+  .customer-home {
+    gap: 12px;
+  }
+
+  .customer-home .visual-hero {
+    min-height: 172px;
+    padding: 16px;
+  }
+
+  .customer-home .compact-actions button {
+    min-height: 68px;
+  }
+
+  .customer-home .points-panel strong {
+    font-size: 58px;
+  }
+}

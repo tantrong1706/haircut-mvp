@@ -7,14 +7,7 @@ import {
   signOut,
   updateProfile,
 } from "firebase/auth";
-import {
-  collection,
-  doc,
-  getDoc,
-  serverTimestamp,
-  setDoc,
-  writeBatch,
-} from "firebase/firestore";
+import { collection, doc, getDoc, serverTimestamp, setDoc, writeBatch } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import {
   callFunction,
@@ -118,14 +111,11 @@ export async function registerOwnerSalon(input: {
   }
 
   try {
-    await callFunction(
-      "createSalon",
-      {
-        name: salonName,
-        ownerName,
-        phone,
-      },
-    );
+    await callFunction("createSalon", {
+      name: salonName,
+      ownerName,
+      phone,
+    });
   } catch (err) {
     if (getFunctionWriteMode() === "required") {
       throw err;
@@ -175,14 +165,11 @@ export async function completeOwnerSalonProfile(input: {
   }
 
   try {
-    await callFunction(
-      "createSalon",
-      {
-        name: salonName,
-        ownerName,
-        phone,
-      },
-    );
+    await callFunction("createSalon", {
+      name: salonName,
+      ownerName,
+      phone,
+    });
   } catch (err) {
     if (getFunctionWriteMode() === "required") {
       throw err;
@@ -298,7 +285,10 @@ export async function updateOwnerAvatar(input: {
     }
   }
 
-  const result = await callWriteFunctionOrFallback<{ salonId: string; avatarUrl: string }, { avatarUrl: string }>(
+  const result = await callWriteFunctionOrFallback<
+    { salonId: string; avatarUrl: string },
+    { avatarUrl: string }
+  >(
     "updateOwnerAvatar",
     {
       salonId: input.salonId,
@@ -334,10 +324,7 @@ export async function uploadOwnerAvatarFile(input: {
     throw new Error("Ảnh avatar quá lớn. Vui lòng chọn ảnh nhẹ hơn 3MB.");
   }
 
-  const avatarRef = ref(
-    storage,
-    `salons/${input.salonId}/owner_avatars/${currentUser.uid}/avatar`,
-  );
+  const avatarRef = ref(storage, `salons/${input.salonId}/owner_avatars/${currentUser.uid}/avatar`);
 
   await uploadBytes(avatarRef, avatarBlob, {
     contentType: avatarBlob.type || "image/webp",
@@ -362,10 +349,14 @@ async function updateOwnerAvatarDirect(avatarUrl: string): Promise<{ avatarUrl: 
     throw new Error("Bạn cần đăng nhập chủ salon để đổi avatar");
   }
 
-  await setDoc(doc(db, "users", auth.currentUser.uid), {
-    avatarUrl: avatarUrl || null,
-    updatedAt: serverTimestamp(),
-  }, { merge: true });
+  await setDoc(
+    doc(db, "users", auth.currentUser.uid),
+    {
+      avatarUrl: avatarUrl || null,
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true },
+  );
 
   return { avatarUrl };
 }

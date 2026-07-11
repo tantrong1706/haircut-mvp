@@ -2,8 +2,8 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Production rules for VITE_FUNCTION_WRITE_MODE=required.
-    // Business writes must go through Cloud Functions/Admin SDK.
+    // Production policy: every business write goes through Cloud Functions.
+    // Customer-facing reads are also served by Zalo-verified Cloud Functions.
     function signedIn() {
       return request.auth != null;
     }
@@ -26,499 +26,62 @@ service cloud.firestore {
         && appUser().isActive == true;
     }
 
-    function isOwner(salonId) {
-      return isActiveMember(salonId) && appUser().role == "owner";
-    }
-
     function isStaffOrOwner(salonId) {
       return isActiveMember(salonId)
         && (appUser().role == "owner" || appUser().role == "staff");
     }
 
-    function salonPath(salonId) {
-      return /databases/$(database)/documents/salons/$(salonId);
-    }
-
-    function ownsSalonAfter(salonId) {
-      return signedIn()
-        && existsAfter(salonPath(salonId))
-        && getAfter(salonPath(salonId)).data.ownerId == request.auth.uid;
-    }
-
-    function optionalString(data, field) {
-      return !data.keys().hasAny([field])
-        || data[field] == null
-        || data[field] is string;
-    }
-
-    function validOwnerProfile(uid, data) {
-      return request.auth.uid == uid
-        && data.keys().hasOnly([
-          "salonId",
-          "name",
-          "avatarUrl",
-          "phone",
-          "role",
-          "isActive",
-          "canRedeemRewards",
-          "createdAt",
-          "updatedAt"
-        ])
-        && data.salonId is string
-        && data.name is string
-        && optionalString(data, "avatarUrl")
-        && optionalString(data, "phone")
-        && data.role == "owner"
-        && data.isActive == true
-        && data.canRedeemRewards == true
-        && ownsSalonAfter(data.salonId);
-    }
-
-    function validStaffProfile(data) {
-      return data.keys().hasOnly([
-          "salonId",
-          "name",
-          "email",
-          "phone",
-          "role",
-          "isActive",
-          "canRedeemRewards",
-          "createdAt",
-          "updatedAt"
-        ])
-        && data.salonId is string
-        && data.name is string
-        && optionalString(data, "email")
-        && optionalString(data, "phone")
-        && data.role == "staff"
-        && data.isActive == true
-        && data.canRedeemRewards is bool
-        && isOwner(data.salonId);
-    }
-
-    function validOwnerAvatarUpdate(uid) {
-      return signedIn()
-        && request.auth.uid == uid
-        && resource.data.role == "owner"
-        && isOwner(resource.data.salonId)
-        && request.resource.data.diff(resource.data).changedKeys().hasOnly(["avatarUrl", "updatedAt"])
-        && optionalString(request.resource.data, "avatarUrl");
-    }
-
-    function validStaffOwnerUpdate() {
-      return resource.data.role == "staff"
-        && isOwner(resource.data.salonId)
-        && request.resource.data.salonId == resource.data.salonId
-        && request.resource.data.role == "staff"
-        && request.resource.data.diff(resource.data).changedKeys().hasOnly([
-          "name",
-          "phone",
-          "isActive",
-          "canRedeemRewards",
-          "updatedAt"
-        ])
-        && optionalString(request.resource.data, "name")
-        && optionalString(request.resource.data, "phone")
-        && request.resource.data.isActive is bool
-        && request.resource.data.canRedeemRewards is bool;
-    }
-
-    function validNewSalon(data) {
-      return signedIn()
-        && data.keys().hasOnly([
-          "name",
-          "address",
-          "phone",
-          "ownerId",
-          "plan",
-          "freeCustomerLimit",
-          "pointPerVisit",
-          "createdAt",
-          "updatedAt"
-        ])
-        && data.name is string
-        && optionalString(data, "address")
-        && optionalString(data, "phone")
-        && data.ownerId == request.auth.uid
-        && data.plan == "free"
-        && data.freeCustomerLimit is int
-        && data.pointPerVisit is int;
-    }
-
-    function validSalonOwnerUpdate(data, oldData) {
-      return data.keys().hasOnly([
-          "name",
-          "address",
-          "phone",
-          "ownerId",
-          "plan",
-          "freeCustomerLimit",
-          "pointPerVisit",
-          "createdAt",
-          "updatedAt"
-        ])
-        && data.diff(oldData).affectedKeys().hasOnly([
-          "name",
-          "address",
-          "phone",
-          "pointPerVisit",
-          "updatedAt"
-        ])
-        && data.name is string
-        && optionalString(data, "address")
-        && optionalString(data, "phone")
-        && data.pointPerVisit is int
-        && data.pointPerVisit > 0;
-    }
-
-    function validLuckyWheel(data, salonId) {
-      return data.keys().hasOnly([
-          "salonId",
-          "requiredPoints",
-          "deductPointsAfterSpin",
-          "slots",
-          "updatedAt"
-        ])
-        && data.salonId == salonId
-        && data.requiredPoints is int
-        && data.requiredPoints > 0
-        && data.deductPointsAfterSpin is bool
-        && data.slots is list
-        && data.slots.size() == 6;
-    }
-
-    function validMirror(data) {
-      return data.keys().hasOnly([
-          "salonId",
-          "name",
-          "qrToken",
-          "qrUrl",
-          "isActive",
-          "createdAt",
-          "updatedAt"
-        ])
-        && data.salonId is string
-        && data.name is string
-        && data.qrToken is string
-        && data.qrUrl is string
-        && data.isActive is bool;
-    }
-
-    function mirrorPath(mirrorId) {
-      return /databases/$(database)/documents/mirrors/$(mirrorId);
-    }
-
-    function chairSessionPath(sessionId) {
-      return /databases/$(database)/documents/chair_sessions/$(sessionId);
-    }
-
-    function customerPath(customerId) {
-      return /databases/$(database)/documents/customers/$(customerId);
-    }
-
-    function validDirectSessionBase(data) {
-      return data.keys().hasOnly([
-          "salonId",
-          "mirrorId",
-          "qrToken",
-          "customerId",
-          "zaloUserId",
-          "status",
-          "createdAt",
-          "updatedAt"
-        ])
-        && data.salonId is string
-        && data.mirrorId is string
-        && data.qrToken is string
-        && data.customerId is string
-        && data.zaloUserId is string
-        && data.status in ["waiting", "serving", "completed", "cancelled"]
-        && exists(mirrorPath(data.mirrorId))
-        && get(mirrorPath(data.mirrorId)).data.salonId == data.salonId
-        && get(mirrorPath(data.mirrorId)).data.qrToken == data.qrToken
-        && get(mirrorPath(data.mirrorId)).data.isActive == true;
-    }
-
-    function validDirectSession(data) {
-      return validDirectSessionBase(data)
-        && data.status == "waiting";
-    }
-
-    function validDirectSessionRefresh(data, oldData) {
-      return data.diff(oldData).affectedKeys().hasOnly(["updatedAt"])
-        && oldData.status in ["waiting", "serving"]
-        && validDirectSessionBase(oldData);
-    }
-
-    function validDirectCustomer(data, customerId) {
-      return data.keys().hasOnly([
-          "salonId",
-          "zaloUserId",
-          "source",
-          "name",
-          "phone",
-          "phoneLast4",
-          "birthday",
-          "allowPhoto",
-          "activeSessionId",
-          "lastMirrorId",
-          "points",
-          "createdAt",
-          "updatedAt",
-          "lastVisitAt"
-        ])
-        && data.salonId is string
-        && data.zaloUserId is string
-        && data.source in ["zalo", "zalo_direct", "manual"]
-        && data.name is string
-        && optionalString(data, "phone")
-        && optionalString(data, "phoneLast4")
-        && optionalString(data, "birthday")
-        && data.allowPhoto is bool
-        && data.activeSessionId is string
-        && data.lastMirrorId is string
-        && data.points is int
-        && data.points >= 0
-        && existsAfter(chairSessionPath(data.activeSessionId))
-        && getAfter(chairSessionPath(data.activeSessionId)).data.customerId == customerId
-        && getAfter(chairSessionPath(data.activeSessionId)).data.salonId == data.salonId;
-    }
-
-    function validDirectCustomerUpdate(data, oldData, customerId) {
-      return validDirectCustomer(data, customerId)
-        && data.points == oldData.points
-        && data.diff(oldData).affectedKeys().hasOnly([
-          "name",
-          "source",
-          "phone",
-          "phoneLast4",
-          "birthday",
-          "allowPhoto",
-          "activeSessionId",
-          "lastMirrorId",
-          "updatedAt",
-          "lastVisitAt"
-        ]);
-    }
-
-    function validOwnerCustomerPointUpdate(data, oldData) {
-      return isOwner(oldData.salonId)
-        && data.diff(oldData).affectedKeys().hasOnly(["points", "lastVisitAt", "updatedAt"])
-        && data.points is int
-        && data.points >= oldData.points;
-    }
-
-    function validCustomerSpinPointUpdate(data, oldData) {
-      return data.diff(oldData).affectedKeys().hasOnly(["points", "updatedAt"])
-        && data.points is int
-        && data.points >= 0
-        && data.points <= oldData.points;
-    }
-
-    function validSessionStatusUpdate(data, oldData) {
-      return isStaffOrOwner(oldData.salonId)
-        && data.diff(oldData).affectedKeys().hasOnly(["status", "updatedAt"])
-        && (
-          (oldData.status == "waiting" && data.status == "serving") ||
-          (oldData.status == "serving" && data.status in ["completed", "cancelled"])
-        );
-    }
-
-    function validPointRequestCreate(data, requestId) {
-      return isStaffOrOwner(data.salonId)
-        && request.auth.uid == data.staffId
-        && data.keys().hasOnly([
-          "salonId",
-          "sessionId",
-          "customerId",
-          "staffId",
-          "staffName",
-          "note",
-          "photoUrls",
-          "pointsRequested",
-          "pointsAdded",
-          "status",
-          "createdAt",
-          "updatedAt"
-        ])
-        && data.sessionId == requestId
-        && data.customerId is string
-        && data.staffName == appUser().name
-        && data.note is string
-        && data.photoUrls is list
-        && data.pointsRequested is int
-        && data.pointsRequested > 0
-        && data.pointsRequested <= 10
-        && data.pointsAdded == data.pointsRequested
-        && data.status == "pending"
-        && exists(chairSessionPath(data.sessionId))
-        && get(chairSessionPath(data.sessionId)).data.salonId == data.salonId
-        && get(chairSessionPath(data.sessionId)).data.customerId == data.customerId
-        && get(chairSessionPath(data.sessionId)).data.status == "waiting";
-    }
-
-    function validPointRequestOwnerUpdate(data, oldData) {
-      return isOwner(oldData.salonId)
-        && oldData.status == "pending"
-        && data.diff(oldData).affectedKeys().hasOnly([
-          "status",
-          "approvedAt",
-          "approvedBy",
-          "rejectedAt",
-          "rejectionReason",
-          "updatedAt"
-        ])
-        && data.status in ["approved", "rejected"];
-    }
-
-    function validHaircutRecordCreate(data) {
-      return isOwner(data.salonId)
-        && data.keys().hasOnly([
-          "salonId",
-          "customerId",
-          "staffId",
-          "staffName",
-          "pointRequestId",
-          "note",
-          "photoUrls",
-          "pointsAdded",
-          "approvedBy",
-          "createdAt"
-        ])
-        && data.customerId is string
-        && data.staffId is string
-        && data.staffName is string
-        && data.pointRequestId is string
-        && data.note is string
-        && data.photoUrls is list
-        && data.pointsAdded is int
-        && data.pointsAdded > 0
-        && data.approvedBy == request.auth.uid;
-    }
-
-    function validRewardCreate(data) {
-      return data.keys().hasOnly([
-          "salonId",
-          "customerId",
-          "zaloUserId",
-          "rewardName",
-          "rewardCode",
-          "selectedIndex",
-          "status",
-          "pointsUsed",
-          "createdAt"
-        ])
-        && data.salonId is string
-        && data.customerId is string
-        && data.zaloUserId is string
-        && data.rewardName is string
-        && data.rewardCode is string
-        && data.selectedIndex is int
-        && data.status == "unused"
-        && data.pointsUsed is int
-        && data.pointsUsed >= 0
-        && exists(customerPath(data.customerId))
-        && get(customerPath(data.customerId)).data.salonId == data.salonId
-        && get(customerPath(data.customerId)).data.zaloUserId == data.zaloUserId;
-    }
-
-    function canRedeemReward(salonId) {
-      return isOwner(salonId)
-        || (isActiveMember(salonId) && appUser().role == "staff" && appUser().canRedeemRewards == true);
-    }
-
-    function validRewardRedeem(data, oldData) {
-      return canRedeemReward(oldData.salonId)
-        && oldData.status == "unused"
-        && data.diff(oldData).affectedKeys().hasOnly(["status", "usedAt", "usedBy", "updatedAt"])
-        && data.status == "used"
-        && data.usedBy == request.auth.uid;
-    }
-
     match /users/{uid} {
       allow read: if signedIn()
         && (
-          request.auth.uid == uid ||
-          (
+          request.auth.uid == uid
+          || (
             hasUserProfile()
             && resource.data.salonId == appUser().salonId
             && appUser().role == "owner"
           )
         );
-      allow create: if validOwnerProfile(uid, request.resource.data)
-        || validStaffProfile(request.resource.data);
-      allow update: if validOwnerAvatarUpdate(uid)
-        || validStaffOwnerUpdate();
-      allow delete: if false;
+      allow create, update, delete: if false;
     }
 
     match /salons/{salonId} {
       allow read: if isStaffOrOwner(salonId);
-      allow create: if validNewSalon(request.resource.data);
-      allow update: if isOwner(salonId)
-        && validSalonOwnerUpdate(request.resource.data, resource.data);
-      allow delete: if false;
+      allow create, update, delete: if false;
     }
 
     match /mirrors/{mirrorId} {
       allow read: if isStaffOrOwner(resource.data.salonId);
-      allow create: if validMirror(request.resource.data)
-        && (isOwner(request.resource.data.salonId) || ownsSalonAfter(request.resource.data.salonId));
-      allow update: if isOwner(resource.data.salonId);
-      allow delete: if false;
+      allow create, update, delete: if false;
     }
 
     match /customers/{customerId} {
-      allow get: if true;
-      allow list: if isStaffOrOwner(resource.data.salonId);
-      allow create: if validDirectCustomer(request.resource.data, customerId);
-      allow update: if validDirectCustomerUpdate(request.resource.data, resource.data, customerId)
-        || validOwnerCustomerPointUpdate(request.resource.data, resource.data)
-        || validCustomerSpinPointUpdate(request.resource.data, resource.data);
-      allow delete: if isOwner(resource.data.salonId);
+      allow read: if isStaffOrOwner(resource.data.salonId);
+      allow create, update, delete: if false;
     }
 
     match /chair_sessions/{sessionId} {
-      allow get: if true;
-      allow list: if isStaffOrOwner(resource.data.salonId);
-      allow create: if validDirectSession(request.resource.data);
-      allow update: if validDirectSessionRefresh(request.resource.data, resource.data)
-        || validSessionStatusUpdate(request.resource.data, resource.data);
-      allow delete: if isOwner(resource.data.salonId);
+      allow read: if isStaffOrOwner(resource.data.salonId);
+      allow create, update, delete: if false;
     }
 
     match /point_requests/{requestId} {
       allow read: if isStaffOrOwner(resource.data.salonId);
-      allow create: if validPointRequestCreate(request.resource.data, requestId);
-      allow update: if validPointRequestOwnerUpdate(request.resource.data, resource.data);
-      allow delete: if isOwner(resource.data.salonId);
+      allow create, update, delete: if false;
     }
 
     match /haircut_records/{recordId} {
-      allow get: if true;
-      allow list: if isStaffOrOwner(resource.data.salonId)
-        || (request.query.limit != null && request.query.limit <= 20);
-      allow create: if validHaircutRecordCreate(request.resource.data);
-      allow update: if false;
-      allow delete: if isOwner(resource.data.salonId);
+      allow read: if isStaffOrOwner(resource.data.salonId);
+      allow create, update, delete: if false;
     }
 
     match /lucky_wheel/{salonId} {
-      allow read: if true;
-      allow create: if validLuckyWheel(request.resource.data, salonId)
-        && (isOwner(salonId) || ownsSalonAfter(salonId));
-      allow update: if validLuckyWheel(request.resource.data, salonId)
-        && isOwner(salonId);
-      allow delete: if false;
+      allow read: if isStaffOrOwner(salonId);
+      allow create, update, delete: if false;
     }
 
     match /reward_history/{rewardId} {
-      allow get: if true;
-      allow list: if isStaffOrOwner(resource.data.salonId)
-        || (request.query.limit != null && request.query.limit <= 20);
-      allow create: if validRewardCreate(request.resource.data);
-      allow update: if validRewardRedeem(request.resource.data, resource.data);
-      allow delete: if isOwner(resource.data.salonId);
+      allow read: if isStaffOrOwner(resource.data.salonId);
+      allow create, update, delete: if false;
     }
 
     match /{document=**} {

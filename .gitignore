@@ -3,12 +3,18 @@ node_modules/
 
 # Build outputs
 dist/
+www/
 lib/
+coverage/
+playwright-report/
+test-results/
+.lighthouseci/
 .firebase/
 firebase/public/
 *.log
 
 # Firebase and local config
+.env
 .firebaserc
 *.local
 
@@ -16,6 +22,26 @@ firebase/public/
 zalo-mini-app/.env
 zalo-mini-app/.env.local
 firebase/functions/.env
+zalo-mini-app/qr-*-dev.png
+
+# Editor/agent packages are local tooling, not application source
+.agents/
+.augment/
+.claude/
+.codebuddy/
+.continue/
+.cursor/
+.factory/
+.gemini/
+.github/prompts/
+.kilocode/
+.kiro/
+.opencode/
+.qoder/
+.roo/
+.trae/
+.warp/
+.windsurf/
 
 # iOS
 DerivedData/
