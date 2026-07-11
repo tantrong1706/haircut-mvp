@@ -10,7 +10,6 @@ export default defineConfig({
     pool: "forks",
     maxWorkers: 1,
     fileParallelism: false,
-    isolate: false,
     clearMocks: true,
     coverage: {
       provider: "v8",
