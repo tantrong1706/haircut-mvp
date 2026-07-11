@@ -44,9 +44,10 @@ import {
   getMirrors,
   getOwnerOverview,
   getSalonProfile,
-  getStaffProfiles,
+  listenStaffProfiles,
   listenPendingPointRequests,
   rejectPointRequest,
+  sendStaffInviteEmail,
   saveLuckyWheelConfig,
   searchSalonCustomers,
   updateMirror,
@@ -102,6 +103,9 @@ export function OwnerPage({ currentUser }: Props) {
       (nextRequests) => {
         setRequests(nextRequests);
         setError("");
+        void getOwnerOverview(salonId)
+          .then(setOverview)
+          .catch(() => undefined);
       },
       setError,
     );
@@ -119,6 +123,29 @@ export function OwnerPage({ currentUser }: Props) {
 
   useEffect(() => {
     refreshOverview();
+  }, [salonId]);
+
+  useEffect(() => {
+    if (!salonId) {
+      return undefined;
+    }
+
+    const refreshSilently = () => {
+      if (document.visibilityState === "visible") {
+        void getOwnerOverview(salonId)
+          .then(setOverview)
+          .catch(() => undefined);
+      }
+    };
+    const intervalId = window.setInterval(refreshSilently, 60_000);
+    window.addEventListener("focus", refreshSilently);
+    document.addEventListener("visibilitychange", refreshSilently);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refreshSilently);
+      document.removeEventListener("visibilitychange", refreshSilently);
+    };
   }, [salonId]);
 
   useEffect(() => {
@@ -1395,7 +1422,6 @@ function StaffManagementPanel({
 }) {
   const [staff, setStaff] = useState<StaffProfile[]>([]);
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [canRedeemRewards, setCanRedeemRewards] = useState(false);
@@ -1403,20 +1429,20 @@ function StaffManagementPanel({
   const [busyId, setBusyId] = useState("");
 
   useEffect(() => {
-    refresh();
-  }, [salonId]);
-
-  async function refresh() {
     setLoading(true);
-    try {
-      setStaff(await getStaffProfiles(salonId));
-      onError("");
-    } catch (err) {
-      onError(err instanceof Error ? err.message : "Không tải được nhân viên");
-    } finally {
-      setLoading(false);
-    }
-  }
+    return listenStaffProfiles(
+      salonId,
+      (nextStaff) => {
+        setStaff(nextStaff);
+        setLoading(false);
+        onError("");
+      },
+      (message) => {
+        setLoading(false);
+        onError(message);
+      },
+    );
+  }, [salonId]);
 
   async function addStaff() {
     setBusyId("new");
@@ -1427,12 +1453,11 @@ function StaffManagementPanel({
       const createdStaff = await createStaffProfile({
         salonId,
         email,
-        password,
         name,
         phone,
         canRedeemRewards,
       });
-      const createdUid = createdStaff && "uid" in createdStaff ? createdStaff.uid : "";
+      const createdUid = createdStaff.uid;
       if (createdUid) {
         const nextStaff: StaffProfile = {
           uid: createdUid,
@@ -1443,6 +1468,7 @@ function StaffManagementPanel({
           role: "staff",
           isActive: true,
           canRedeemRewards,
+          inviteStatus: "pending",
         };
         setStaff((current) =>
           [...current.filter((item) => item.uid !== createdUid), nextStaff].sort((a, b) =>
@@ -1451,14 +1477,34 @@ function StaffManagementPanel({
         );
       }
       setEmail("");
-      setPassword("");
       setName("");
       setPhone("");
       setCanRedeemRewards(false);
-      refresh();
-      onMessage("Đã tạo tài khoản nhân viên.");
+      onMessage(
+        createdStaff.inviteEmailSent
+          ? "Đã gửi email mời. Nhân viên tự đặt mật khẩu trong hộp thư của họ."
+          : "Đã tạo tài khoản nhưng chưa gửi được email. Bấm Gửi lại email mời ở bên dưới.",
+      );
     } catch (err) {
       onError(err instanceof Error ? err.message : "Không thêm được nhân viên");
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  async function resendInvite(staffMember: StaffProfile) {
+    setBusyId(staffMember.uid);
+    onMessage("");
+    onError("");
+
+    try {
+      const sent = await sendStaffInviteEmail(staffMember.email);
+      if (!sent) {
+        throw new Error("Firebase chưa gửi được email mời. Kiểm tra mẫu email và tên miền Auth.");
+      }
+      onMessage(`Đã gửi lại email mời tới ${staffMember.email}.`);
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Không gửi lại được email mời");
     } finally {
       setBusyId("");
     }
@@ -1483,7 +1529,6 @@ function StaffManagementPanel({
           .map((item) => (item.uid === staffMember.uid ? { ...item, ...payload } : item))
           .sort((a, b) => a.name.localeCompare(b.name, "vi")),
       );
-      refresh();
       onMessage("Đã cập nhật nhân viên.");
     } catch (err) {
       onError(err instanceof Error ? err.message : "Không cập nhật được nhân viên");
@@ -1498,7 +1543,7 @@ function StaffManagementPanel({
         <UserPlus size={22} aria-hidden="true" />
         <div>
           <h2>Quản lý nhân viên</h2>
-          <p className="muted">Tạo tài khoản nhân viên bằng email và mật khẩu tạm thời.</p>
+          <p className="muted">Mời nhân viên bằng email để họ tự đặt mật khẩu.</p>
         </div>
       </div>
 
@@ -1507,12 +1552,6 @@ function StaffManagementPanel({
           value={email}
           onChange={(event) => setEmail(event.target.value)}
           placeholder="Email nhân viên"
-        />
-        <input
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          type="password"
-          placeholder="Mật khẩu tạm thời"
         />
         <input
           value={name}
@@ -1534,11 +1573,11 @@ function StaffManagementPanel({
         </label>
         <button
           className="primary-button"
-          disabled={busyId === "new" || !email.trim() || password.length < 6 || !name.trim()}
+          disabled={busyId === "new" || !email.trim() || !name.trim()}
           onClick={addStaff}
         >
           <UserPlus size={18} aria-hidden="true" />
-          Tạo
+          Tạo lời mời
         </button>
       </div>
 
@@ -1562,6 +1601,7 @@ function StaffManagementPanel({
               staff={staffMember}
               busy={busyId === staffMember.uid}
               onSave={saveStaff}
+              onRenewInvite={resendInvite}
             />
           ))
         )}
@@ -1574,10 +1614,12 @@ function StaffCard({
   staff,
   busy,
   onSave,
+  onRenewInvite,
 }: {
   staff: StaffProfile;
   busy: boolean;
   onSave: (staff: StaffProfile, payload: Partial<StaffProfile>) => void;
+  onRenewInvite: (staff: StaffProfile) => void;
 }) {
   const [name, setName] = useState(staff.name);
   const [phone, setPhone] = useState(staff.phone);
@@ -1596,6 +1638,9 @@ function StaffCard({
         </span>
       </div>
       {staff.email ? <span>{staff.email}</span> : null}
+      <small>
+        {staff.inviteStatus === "pending" ? "Chờ nhân viên đặt mật khẩu" : "Tài khoản đã kích hoạt"}
+      </small>
       <small>UID: {staff.uid}</small>
       <div className="staff-edit-grid">
         <input
@@ -1618,6 +1663,12 @@ function StaffCard({
           <Save size={18} aria-hidden="true" />
           Lưu
         </button>
+        {staff.inviteStatus === "pending" ? (
+          <button className="secondary-button" disabled={busy} onClick={() => onRenewInvite(staff)}>
+            <RefreshCcw size={18} aria-hidden="true" />
+            Gửi lại email mời
+          </button>
+        ) : null}
         <button
           className="secondary-button"
           disabled={busy}
@@ -1654,14 +1705,30 @@ function CustomerSearchPanel({
   const [results, setResults] = useState<CustomerLookupResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [busyCustomerId, setBusyCustomerId] = useState("");
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [searchedTerm, setSearchedTerm] = useState("");
+  const compactTerm = term.trim().replace(/\s/g, "");
+  const termDigits = compactTerm.replace(/\D/g, "");
+  const isNumericTerm = compactTerm.length > 0 && termDigits.length === compactTerm.length;
+  const canSearch = term.trim().length >= 2 && (!isNumericTerm || termDigits.length === 4);
 
-  async function search() {
+  async function search(loadMore = false) {
+    const normalizedTerm = term.trim();
+    const append = loadMore && normalizedTerm === searchedTerm && Boolean(nextCursor);
     setLoading(true);
     onMessage("");
     onError("");
 
     try {
-      setResults(await searchSalonCustomers({ salonId, term }));
+      const page = await searchSalonCustomers({
+        salonId,
+        term: normalizedTerm,
+        cursor: append ? nextCursor : null,
+        pageSize: 10,
+      });
+      setResults((current) => (append ? [...current, ...page.customers] : page.customers));
+      setNextCursor(page.nextCursor);
+      setSearchedTerm(normalizedTerm);
     } catch (err) {
       onError(err instanceof Error ? err.message : "Không tìm được khách");
     } finally {
@@ -1709,7 +1776,7 @@ function CustomerSearchPanel({
         <div>
           <h2>Tìm khách</h2>
           <p className="muted">
-            Tìm theo tên hoặc 4 số cuối SĐT để xem điểm, lịch sử và mã quà chưa dùng.
+            Tìm theo tên, phần đầu một từ hoặc đúng 4 số cuối SĐT để xem điểm, lịch sử và mã quà.
           </p>
         </div>
       </div>
@@ -1719,16 +1786,16 @@ function CustomerSearchPanel({
           value={term}
           onChange={(event) => setTerm(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              search();
+            if (event.key === "Enter" && canSearch) {
+              void search(false);
             }
           }}
           placeholder="Ví dụ: Anh Tân hoặc 8761"
         />
         <button
           className="primary-button"
-          disabled={loading || term.trim().length < 2}
-          onClick={search}
+          disabled={loading || !canSearch}
+          onClick={() => void search(false)}
         >
           <Search size={18} aria-hidden="true" />
           Tìm
@@ -1800,6 +1867,17 @@ function CustomerSearchPanel({
           ))
         )}
       </div>
+      {nextCursor && results.length > 0 ? (
+        <button
+          className="secondary-button customer-load-more"
+          type="button"
+          disabled={loading}
+          onClick={() => void search(true)}
+        >
+          <RefreshCcw size={18} aria-hidden="true" />
+          {loading ? "Đang tải..." : "Xem thêm khách"}
+        </button>
+      ) : null}
     </div>
   );
 }

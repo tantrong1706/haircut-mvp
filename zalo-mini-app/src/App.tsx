@@ -62,6 +62,12 @@ export default function App() {
   );
   const [activeTab, setActiveTab] = useState<TabKey>("home");
   const [isOnline, setIsOnline] = useState(() => navigator.onLine);
+  const [syncAttempt, setSyncAttempt] = useState(0);
+  const [sessionSync, setSessionSync] = useState<{
+    status: "idle" | "syncing" | "synced" | "error";
+    message: string;
+    syncedAtMs: number | null;
+  }>({ status: "idle", message: "", syncedAtMs: null });
 
   useEffect(() => {
     trackEvent("page_view", {
@@ -106,22 +112,31 @@ export default function App() {
 
     let unsubscribe: (() => void) | undefined;
     let isActive = true;
+    setSessionSync((current) => ({ ...current, status: "syncing", message: "" }));
 
     void import("./services/api").then(({ listenSessionLiveUpdates }) => {
       if (!isActive) {
         return;
       }
 
-      unsubscribe = listenSessionLiveUpdates(session, setSession, (message) => {
-        console.warn("Không đồng bộ được phiên khách.", message);
-      });
+      unsubscribe = listenSessionLiveUpdates(
+        session,
+        setSession,
+        (message) => {
+          console.warn("Không đồng bộ được phiên khách.", message);
+          setSessionSync((current) => ({ ...current, status: "error", message }));
+        },
+        (syncedAtMs) => {
+          setSessionSync({ status: "synced", message: "", syncedAtMs });
+        },
+      );
     });
 
     return () => {
       isActive = false;
       unsubscribe?.();
     };
-  }, [isCustomerRoute, session?.sessionId]);
+  }, [isCustomerRoute, session?.sessionId, syncAttempt]);
 
   function resetSession() {
     trackEvent("customer_session_reset", {
@@ -129,6 +144,21 @@ export default function App() {
     });
     setSession(null);
     setActiveTab("home");
+    setSessionSync({ status: "idle", message: "", syncedAtMs: null });
+  }
+
+  function retrySessionSync() {
+    if (!navigator.onLine) {
+      setSessionSync((current) => ({
+        ...current,
+        status: "error",
+        message: "Thiết bị đang mất kết nối mạng.",
+      }));
+      return;
+    }
+
+    setSessionSync((current) => ({ ...current, status: "syncing", message: "" }));
+    setSyncAttempt((current) => current + 1);
   }
 
   function changeCustomerTab(nextTab: TabKey) {
@@ -197,7 +227,15 @@ export default function App() {
     content = <RewardsPage session={session} />;
   } else if (session) {
     content = (
-      <HomePage session={session} onTabChange={changeCustomerTab} onResetSession={resetSession} />
+      <HomePage
+        session={session}
+        syncStatus={sessionSync.status}
+        syncMessage={sessionSync.message}
+        lastSyncedAtMs={sessionSync.syncedAtMs}
+        onRetrySync={retrySessionSync}
+        onTabChange={changeCustomerTab}
+        onResetSession={resetSession}
+      />
     );
   }
 

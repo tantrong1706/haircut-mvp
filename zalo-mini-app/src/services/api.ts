@@ -43,8 +43,11 @@ type RegisterCustomerFunctionResult = {
   customerId: string;
   sessionId: string;
   mirrorId?: string;
+  mirrorName?: string;
   qrToken?: string;
   sessionStatus?: AppSession["sessionStatus"];
+  assignedStaffName?: string;
+  claimedAtMs?: number | null;
   points: number;
   zaloUserId: string;
 };
@@ -72,6 +75,9 @@ type CustomerRewardsFunctionResult = {
 
 type CustomerSessionFunctionResult = {
   sessionStatus: AppSession["sessionStatus"];
+  mirrorName?: string;
+  assignedStaffName?: string;
+  claimedAtMs?: number | null;
   customer: CustomerProfile;
   wheelConfig: LuckyWheelConfig;
 };
@@ -80,14 +86,32 @@ export function listenSessionLiveUpdates(
   session: AppSession,
   onChange: (session: AppSession) => void,
   onError?: (message: string) => void,
+  onSynced?: (syncedAtMs: number) => void,
 ) {
   if (getFunctionWriteMode() === "required") {
     let stopped = false;
     let refreshing = false;
     let currentSession = session;
+    let retryCount = 0;
+    let timeoutId: number | undefined;
+
+    const scheduleRefresh = () => {
+      if (stopped) {
+        return;
+      }
+      window.clearTimeout(timeoutId);
+      const baseDelay = retryCount > 0 ? Math.min(60_000, 15_000 * 2 ** retryCount) : 18_000;
+      const jitter = Math.floor(Math.random() * 4_000);
+      timeoutId = window.setTimeout(() => void refresh(), baseDelay + jitter);
+    };
 
     const refresh = async () => {
-      if (stopped || refreshing || !navigator.onLine || document.visibilityState === "hidden") {
+      window.clearTimeout(timeoutId);
+      if (stopped) {
+        return;
+      }
+      if (refreshing || !navigator.onLine || document.visibilityState === "hidden") {
+        scheduleRefresh();
         return;
       }
 
@@ -97,6 +121,9 @@ export function listenSessionLiveUpdates(
         const nextSession = {
           ...currentSession,
           sessionStatus: state.sessionStatus,
+          assignedStaffName: state.assignedStaffName,
+          claimedAtMs: state.claimedAtMs,
+          mirrorName: state.mirrorName || currentSession.mirrorName,
           customer: state.customer,
         };
 
@@ -104,10 +131,14 @@ export function listenSessionLiveUpdates(
           currentSession = nextSession;
           onChange(nextSession);
         }
+        retryCount = 0;
+        onSynced?.(Date.now());
       } catch (error) {
+        retryCount = Math.min(retryCount + 1, 2);
         onError?.(error instanceof Error ? error.message : "Không đồng bộ được lượt cắt");
       } finally {
         refreshing = false;
+        scheduleRefresh();
       }
     };
 
@@ -116,14 +147,13 @@ export function listenSessionLiveUpdates(
         void refresh();
       }
     };
-    const intervalId = window.setInterval(() => void refresh(), 12_000);
     window.addEventListener("focus", refreshWhenVisible);
     document.addEventListener("visibilitychange", refreshWhenVisible);
     void refresh();
 
     return () => {
       stopped = true;
-      window.clearInterval(intervalId);
+      window.clearTimeout(timeoutId);
       window.removeEventListener("focus", refreshWhenVisible);
       document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
@@ -151,8 +181,15 @@ export function listenSessionLiveUpdates(
 
       emit({
         ...currentSession,
-        sessionStatus: normalizeSessionStatus(snapshot.data().status),
+        sessionStatus: normalizeSessionStatus(
+          snapshot.data().status,
+          snapshot.data().assignedStaffId,
+        ),
+        assignedStaffName: String(snapshot.data().assignedStaffName || ""),
+        claimedAtMs: toMillis(snapshot.data().claimedAt),
+        mirrorName: String(snapshot.data().mirrorName || currentSession.mirrorName || ""),
       });
+      onSynced?.(Date.now());
     },
     (error) => onError?.(error.message),
   );
@@ -168,6 +205,7 @@ export function listenSessionLiveUpdates(
         ...currentSession,
         customer: mapCustomerProfile(snapshot.id, snapshot.data(), currentSession.customer),
       });
+      onSynced?.(Date.now());
     },
     (error) => onError?.(error.message),
   );
@@ -192,7 +230,10 @@ async function getCustomerSessionState(
   });
 
   return {
-    sessionStatus: normalizeSessionStatus(result.sessionStatus),
+    sessionStatus: normalizeSessionStatus(result.sessionStatus, result.assignedStaffName),
+    assignedStaffName: result.assignedStaffName || "",
+    claimedAtMs: result.claimedAtMs ?? null,
+    mirrorName: result.mirrorName || session.mirrorName || "",
     customer: mapCustomerProfile(
       result.customer.customerId || session.customer.customerId,
       result.customer as unknown as Record<string, unknown>,
@@ -269,8 +310,15 @@ async function registerCustomerDirect(
     let sessionStatus: AppSession["sessionStatus"] = "waiting";
 
     if (dailySessionSnap.exists()) {
-      const currentStatus = normalizeSessionStatus(dailySessionSnap.data().status);
-      if (currentStatus === "waiting" || currentStatus === "serving") {
+      const currentStatus = normalizeSessionStatus(
+        dailySessionSnap.data().status,
+        dailySessionSnap.data().assignedStaffId,
+      );
+      if (
+        currentStatus === "waiting" ||
+        currentStatus === "serving" ||
+        currentStatus === "pending_approval"
+      ) {
         sessionStatus = currentStatus;
         transaction.set(dailySessionRef, { updatedAt: serverTimestamp() }, { merge: true });
       } else {
@@ -278,6 +326,7 @@ async function registerCustomerDirect(
         transaction.set(sessionRef, {
           salonId: input.salonId,
           mirrorId: input.mirrorId,
+          mirrorName: input.mirrorId,
           qrToken: input.qrToken,
           customerId,
           zaloUserId,
@@ -290,6 +339,7 @@ async function registerCustomerDirect(
       transaction.set(sessionRef, {
         salonId: input.salonId,
         mirrorId: input.mirrorId,
+        mirrorName: input.mirrorId,
         qrToken: input.qrToken,
         customerId,
         zaloUserId,
@@ -304,6 +354,7 @@ async function registerCustomerDirect(
       zaloUserId,
       source: "zalo_direct",
       name,
+      nameSearch: normalizeSearchText(name),
       phone: phoneDigits || null,
       phoneLast4: phoneDigits ? phoneDigits.slice(-4) : null,
       birthday: input.birthday || null,
@@ -336,6 +387,7 @@ async function registerCustomerDirect(
     customerId,
     sessionId: directResult.sessionId,
     mirrorId: input.mirrorId,
+    mirrorName: input.mirrorId,
     qrToken: input.qrToken,
     sessionStatus: directResult.sessionStatus,
     points: directResult.points,
@@ -662,6 +714,7 @@ function mockRegisterCustomer(input: RegisterInput): AppSession {
       qrToken: input.qrToken,
     },
     sessionId: "mock-session",
+    mirrorName: input.mirrorId,
     zaloUserId: "mock-local-zalo-user",
     sessionStatus: "waiting",
     customer: {
@@ -687,8 +740,11 @@ function buildSessionFromRegisterResult(
       qrToken: result.qrToken || input.qrToken,
     },
     sessionId: result.sessionId,
+    mirrorName: result.mirrorName || "",
     zaloUserId: result.zaloUserId,
     sessionStatus: result.sessionStatus || "waiting",
+    assignedStaffName: result.assignedStaffName || "",
+    claimedAtMs: result.claimedAtMs ?? null,
     customer: {
       customerId: result.customerId,
       name: input.name || "Khách hàng",
@@ -713,12 +769,33 @@ function mapCustomerProfile(
   };
 }
 
-function normalizeSessionStatus(value: unknown): AppSession["sessionStatus"] {
-  if (value === "serving" || value === "completed" || value === "cancelled") {
+function normalizeSessionStatus(
+  value: unknown,
+  assignedStaffId?: unknown,
+): AppSession["sessionStatus"] {
+  if (value === "serving" && !assignedStaffId) {
+    return "pending_approval";
+  }
+  if (
+    value === "serving" ||
+    value === "pending_approval" ||
+    value === "completed" ||
+    value === "cancelled"
+  ) {
     return value;
   }
 
   return "waiting";
+}
+
+function normalizeSearchText(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function getMockRewards(): Reward[] {

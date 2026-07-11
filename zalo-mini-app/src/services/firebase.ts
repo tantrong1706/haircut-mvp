@@ -158,6 +158,9 @@ export function friendlyFirebaseFunctionError(error: unknown) {
   if (code === "deadline-exceeded" || code === "unavailable") {
     return "Kết nối hệ thống đang chậm. Vui lòng thử lại.";
   }
+  if (code === "resource-exhausted") {
+    return message || "Bạn thao tác quá nhanh. Vui lòng chờ một phút rồi thử lại.";
+  }
   if (code === "internal") {
     if (message.toLowerCase().includes("index")) {
       return "Firebase đang thiếu hoặc đang tạo chỉ mục dữ liệu. Vui lòng thử lại sau vài phút.";

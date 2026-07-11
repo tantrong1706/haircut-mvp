@@ -25,4 +25,13 @@ describe("friendlyFirebaseFunctionError", () => {
       }),
     ).toBe("Khách chưa đủ điểm để quay");
   });
+
+  it("hiển thị đúng cảnh báo giới hạn tần suất", () => {
+    expect(
+      friendlyFirebaseFunctionError({
+        code: "functions/resource-exhausted",
+        message: "Bạn thao tác quá nhanh. Vui lòng chờ một phút rồi thử lại.",
+      }),
+    ).toContain("thao tác quá nhanh");
+  });
 });

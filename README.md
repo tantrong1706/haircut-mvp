@@ -5,12 +5,14 @@ HAIRCUT là hệ thống chăm sóc và giữ chân khách hàng cho salon tóc.
 ## Luồng chính
 
 1. Chủ salon đăng ký tại `/owner`; hệ thống tạo salon, hồ sơ owner, gương đầu tiên và vòng quay mặc định.
-2. Chủ tạo QR riêng cho từng gương/ghế và tài khoản riêng cho nhân viên.
+2. Chủ tạo QR riêng cho từng gương/ghế và gửi lời mời để nhân viên tự đặt mật khẩu.
 3. Khách quét QR trong Zalo, xác nhận tên và tạo lượt cắt.
-4. Nhân viên mở `/staff`, chọn khách, ghi chú và gửi yêu cầu cộng điểm.
+4. Nhân viên mở `/staff`, nhận khách, hoàn tất dịch vụ, ghi chú và gửi yêu cầu cộng điểm.
 5. Chủ duyệt hoặc từ chối; khách tự thấy trạng thái, điểm, lịch sử và quà được cập nhật.
 
 Salon của owner/staff luôn lấy từ tài khoản Firebase Auth, không lấy từ URL. Dữ liệu khách và mọi nghiệp vụ ghi đều đi qua Cloud Functions; Firestore Rules mặc định từ chối truy cập ngoài quyền được cấp.
+
+Luồng lượt cắt dùng các trạng thái rõ ràng: `waiting → serving → pending_approval → completed/cancelled`. Functions ràng buộc chỉ nhân viên đã nhận khách mới được gửi yêu cầu điểm; API khách Zalo có hạn mức chống spam theo token/IP đã băm.
 
 ## Địa chỉ
 

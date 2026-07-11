@@ -11,4 +11,12 @@ Frontend dùng chung một React app nhưng tách bundle theo route. Owner/staff
 
 Cloud Functions là ranh giới ghi nghiệp vụ. Firestore Rules chỉ cho thành viên đang hoạt động đọc dữ liệu salon của mình và từ chối mọi business write từ client. Admin SDK trong Functions thực hiện transaction cho check-in, duyệt điểm và quay thưởng.
 
+## Ràng buộc production
+
+- API khách Zalo áp dụng hạn mức theo endpoint, token và IP đã băm; collection `_public_rate_limits` không mở cho client và tự hết hạn bằng TTL. Kết quả xác minh Zalo được cache 60 giây trong instance, còn polling dùng jitter/backoff để tránh dồn tải.
+- App Check có thể bắt buộc bằng `REQUIRE_ZALO_APP_CHECK=true` sau khi runtime Zalo đã được cấu hình và kiểm tra tương thích.
+- Lượt phục vụ đi qua `waiting → serving → pending_approval → completed/cancelled`. `assignedStaffId` do Functions ghi và chỉ người đã nhận khách mới được gửi yêu cầu điểm.
+- Nhân viên mới không nhận mật khẩu từ chủ salon. Functions tạo tài khoản, Firebase gửi email đặt mật khẩu trực tiếp tới nhân viên; UID tùy ý từ client không được chấp nhận.
+- Tìm khách dùng `namePrefixes` hoặc `phoneLast4` có cursor và tự backfill dữ liệu cũ theo lô; dashboard dùng count/sum aggregation và truy vấn retention có giới hạn.
+
 `app-config.json` được sinh từ `.vite/manifest.json`; entry Zalo luôn có đuôi `.module.js`. Service worker chỉ đăng ký trên web thông thường, không chạy trong Zalo Mini App.

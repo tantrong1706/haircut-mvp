@@ -76,6 +76,65 @@
   box-shadow: 0 18px 42px rgba(21, 25, 23, 0.1);
 }
 
+.customer-home .session-sync-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid #d8e5df;
+  border-radius: 12px;
+  background: #f7faf8;
+  color: #315449;
+  font-size: 0.88rem;
+}
+
+.customer-home .session-sync-banner.error {
+  justify-content: space-between;
+  border-color: #efc8bd;
+  background: #fff6f2;
+  color: #8a2d1f;
+}
+
+.customer-home .session-sync-banner div {
+  display: grid;
+  gap: 2px;
+}
+
+.customer-home .session-sync-banner span {
+  line-height: 1.35;
+}
+
+.customer-home .session-sync-banner button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid currentColor;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  font-weight: 700;
+}
+
+.customer-home .last-sync-time {
+  justify-self: end;
+  color: #718078;
+  font-size: 0.76rem;
+}
+
+.customer-home .spin-icon {
+  animation: session-sync-spin 0.9s linear infinite;
+}
+
+@keyframes session-sync-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .customer-home .status-step {
   min-height: 58px;
   grid-template-columns: 34px 1fr;

@@ -3,6 +3,7 @@ import {
   CheckCircle2,
   Gift,
   Hourglass,
+  RefreshCcw,
   Scissors,
   Sparkles,
   type LucideIcon,
@@ -13,6 +14,10 @@ import { AppSession, TabKey } from "../services/types";
 
 type Props = {
   session: AppSession;
+  syncStatus?: "idle" | "syncing" | "synced" | "error";
+  syncMessage?: string;
+  lastSyncedAtMs?: number | null;
+  onRetrySync?: () => void;
   onTabChange: (tab: TabKey) => void;
   onResetSession: () => void;
 };
@@ -27,7 +32,15 @@ const actions: Array<{
   { tab: "rewards", title: "Quà", Icon: Gift },
 ];
 
-export function HomePage({ session, onTabChange, onResetSession }: Props) {
+export function HomePage({
+  session,
+  syncStatus = "idle",
+  syncMessage = "",
+  lastSyncedAtMs = null,
+  onRetrySync,
+  onTabChange,
+  onResetSession,
+}: Props) {
   const { customer } = session;
   const status = session.sessionStatus || "waiting";
 
@@ -36,25 +49,50 @@ export function HomePage({ session, onTabChange, onResetSession }: Props) {
       <header className="customer-hero premium-hero visual-hero compact-hero">
         <div className="hero-topline">
           <BrandLogo />
-          <span className="soft-chip">{mirrorLabel(session.qr.mirrorId)}</span>
+          <span className="soft-chip">{mirrorLabel(session.qr.mirrorId, session.mirrorName)}</span>
         </div>
         <p className="eyebrow">Thành viên</p>
         <h1>{customer.name}</h1>
-        <p className="muted">{shortStatusText(status)}</p>
+        <p className="muted">{shortStatusText(status, session.assignedStaffName)}</p>
       </header>
+
+      {syncStatus === "error" ? (
+        <div className="session-sync-banner error" role="status">
+          <div>
+            <strong>Chưa cập nhật được dữ liệu mới</strong>
+            <span>{syncMessage || "Điểm và trạng thái có thể chưa mới nhất."}</span>
+          </div>
+          <button type="button" onClick={onRetrySync}>
+            <RefreshCcw size={17} aria-hidden="true" />
+            Thử lại
+          </button>
+        </div>
+      ) : syncStatus === "syncing" ? (
+        <div className="session-sync-banner" role="status">
+          <RefreshCcw className="spin-icon" size={17} aria-hidden="true" />
+          <span>Đang cập nhật trạng thái...</span>
+        </div>
+      ) : lastSyncedAtMs ? (
+        <span className="last-sync-time">Cập nhật lúc {formatSyncTime(lastSyncedAtMs)}</span>
+      ) : null}
 
       <div className="status-card">
         <StatusStep
           done
           icon={<CheckCircle2 size={20} />}
           title="Đã check-in"
-          text={mirrorLabel(session.qr.mirrorId)}
+          text={mirrorLabel(session.qr.mirrorId, session.mirrorName)}
         />
         <StatusStep
-          done={status === "serving" || status === "completed" || status === "cancelled"}
+          done={
+            status === "serving" ||
+            status === "pending_approval" ||
+            status === "completed" ||
+            status === "cancelled"
+          }
           icon={<Hourglass size={20} />}
           title={staffStepTitle(status)}
-          text={staffStepText(status)}
+          text={staffStepText(status, session.assignedStaffName)}
         />
         <StatusStep
           done={status === "completed"}
@@ -125,7 +163,7 @@ function StatusStep({
   );
 }
 
-function shortStatusText(status: AppSession["sessionStatus"]) {
+function shortStatusText(status: AppSession["sessionStatus"], assignedStaffName?: string) {
   if (status === "completed") {
     return "Điểm đã được cập nhật.";
   }
@@ -133,6 +171,11 @@ function shortStatusText(status: AppSession["sessionStatus"]) {
     return "Lượt này không cộng điểm.";
   }
   if (status === "serving") {
+    return assignedStaffName
+      ? `${assignedStaffName} đang phục vụ bạn.`
+      : "Nhân viên đang phục vụ bạn.";
+  }
+  if (status === "pending_approval") {
     return "Đang chờ chủ salon duyệt điểm.";
   }
   return "Salon đã nhận khách.";
@@ -146,17 +189,25 @@ function staffStepTitle(status: AppSession["sessionStatus"]) {
     return "Đã xử lý";
   }
   if (status === "serving") {
+    return "Đang phục vụ";
+  }
+  if (status === "pending_approval") {
     return "Chờ duyệt";
   }
   return "Chờ nhân viên";
 }
 
-function staffStepText(status: AppSession["sessionStatus"]) {
+function staffStepText(status: AppSession["sessionStatus"], assignedStaffName?: string) {
   if (status === "cancelled") {
     return "Có thể tạo lượt mới.";
   }
   if (status === "waiting") {
-    return "Sau khi cắt xong.";
+    return "Salon sẽ nhận khách ngay.";
+  }
+  if (status === "serving") {
+    return assignedStaffName
+      ? `${assignedStaffName} đang phụ trách.`
+      : "Đã có nhân viên phụ trách.";
   }
   return "Đã gửi sang chủ.";
 }
@@ -181,10 +232,20 @@ function ownerStepText(status: AppSession["sessionStatus"]) {
   return "Duyệt sau khi cắt.";
 }
 
-function mirrorLabel(mirrorId: string) {
+function mirrorLabel(mirrorId: string, mirrorName?: string) {
+  if (mirrorName?.trim()) {
+    return mirrorName.trim();
+  }
   if (mirrorId.includes("mirror-1")) {
     return "Gương 1";
   }
 
   return mirrorId || "Gương";
+}
+
+function formatSyncTime(value: number) {
+  return new Intl.DateTimeFormat("vi-VN", {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
 }

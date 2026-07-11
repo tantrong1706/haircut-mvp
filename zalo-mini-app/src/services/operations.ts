@@ -8,6 +8,7 @@ import {
   getDocs,
   limit as firestoreLimit,
   onSnapshot,
+  orderBy,
   query,
   runTransaction,
   serverTimestamp,
@@ -15,8 +16,9 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
+import { sendPasswordResetEmail } from "firebase/auth";
 import { callFunctionOrFallback, callWriteFunctionOrFallback } from "./functionWrites";
-import { getFirebaseAuth, getFirebaseDb, isFirebaseConfigured } from "./firebase";
+import { callFunction, getFirebaseAuth, getFirebaseDb, isFirebaseConfigured } from "./firebase";
 import { LuckyWheelConfig, defaultLuckyWheelConfig } from "./types";
 import { normalizeLuckyWheelConfig } from "./wheel";
 
@@ -34,9 +36,13 @@ export type StaffSession = {
   id: string;
   salonId: string;
   mirrorId: string;
+  mirrorName: string;
   customerId: string;
   zaloUserId: string;
-  status: "waiting" | "serving" | "completed" | "cancelled";
+  status: "waiting" | "serving" | "pending_approval" | "completed" | "cancelled";
+  assignedStaffId: string;
+  assignedStaffName: string;
+  claimedAtMs: number | null;
   createdAtMs: number | null;
   customer?: CustomerSummary;
 };
@@ -109,6 +115,7 @@ export type StaffProfile = {
   role: "staff";
   isActive: boolean;
   canRedeemRewards: boolean;
+  inviteStatus: "pending" | "accepted";
 };
 
 export type CustomerRecordSummary = {
@@ -131,6 +138,11 @@ export type CustomerLookupResult = CustomerSummary & {
   lastVisitAtMs: number | null;
   recentRecords: CustomerRecordSummary[];
   unusedRewards: CustomerRewardSummary[];
+};
+
+export type CustomerSearchPage = {
+  customers: CustomerLookupResult[];
+  nextCursor: string | null;
 };
 
 export type RewardCodeInfo = {
@@ -165,7 +177,13 @@ export function listenActiveSessions(
     return () => undefined;
   }
 
-  const q = query(collection(db, "chair_sessions"), where("salonId", "==", salonId));
+  const q = query(
+    collection(db, "chair_sessions"),
+    where("salonId", "==", salonId),
+    where("status", "in", ["waiting", "serving", "pending_approval"]),
+    orderBy("createdAt", "desc"),
+    firestoreLimit(100),
+  );
 
   return onSnapshot(
     q,
@@ -173,7 +191,12 @@ export function listenActiveSessions(
       try {
         const sessions = snapshot.docs
           .map(mapSession)
-          .filter((session) => session.status === "waiting" || session.status === "serving")
+          .filter(
+            (session) =>
+              session.status === "waiting" ||
+              session.status === "serving" ||
+              session.status === "pending_approval",
+          )
           .sort((a, b) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0));
 
         onChange(await attachCustomers(sessions));
@@ -197,7 +220,13 @@ export function listenPendingPointRequests(
     return () => undefined;
   }
 
-  const q = query(collection(db, "point_requests"), where("salonId", "==", salonId));
+  const q = query(
+    collection(db, "point_requests"),
+    where("salonId", "==", salonId),
+    where("status", "==", "pending"),
+    orderBy("createdAt", "desc"),
+    firestoreLimit(100),
+  );
 
   return onSnapshot(
     q,
@@ -478,48 +507,100 @@ export async function getStaffProfiles(salonId: string): Promise<StaffProfile[]>
   ).then((result) => result.staff.sort((a, b) => a.name.localeCompare(b.name, "vi")));
 }
 
+export function listenStaffProfiles(
+  salonId: string,
+  onChange: (staff: StaffProfile[]) => void,
+  onError: (message: string) => void,
+) {
+  const db = getFirebaseDb();
+
+  if (!isFirebaseConfigured() || !db) {
+    void getStaffProfilesDirect(salonId).then((result) => onChange(result.staff));
+    return () => undefined;
+  }
+
+  const staffQuery = query(
+    collection(db, "users"),
+    where("salonId", "==", salonId),
+    where("role", "==", "staff"),
+  );
+
+  return onSnapshot(
+    staffQuery,
+    (snapshot) => {
+      onChange(
+        snapshot.docs
+          .map(mapStaffProfile)
+          .filter((staff): staff is StaffProfile => Boolean(staff))
+          .sort((a, b) => a.name.localeCompare(b.name, "vi")),
+      );
+    },
+    (error) => onError(error.message),
+  );
+}
+
 export async function createStaffProfile(input: {
   salonId: string;
-  uid?: string;
   email: string;
-  password: string;
   name: string;
   phone?: string;
   canRedeemRewards: boolean;
-}): Promise<{ uid?: string; email?: string } | void> {
-  const uid = input.uid?.trim();
+}): Promise<{ uid: string; email: string; inviteEmailSent: boolean }> {
   const email = input.email.trim().toLowerCase();
-  const password = input.password;
   const name = input.name.trim();
 
-  if (!email || !password || !name) {
-    throw new Error("Vui lòng nhập email, mật khẩu và tên nhân viên");
-  }
-  if (password.length < 6) {
-    throw new Error("Mật khẩu nhân viên phải có ít nhất 6 ký tự");
+  if (!email || !name) {
+    throw new Error("Vui lòng nhập email và tên nhân viên");
   }
 
-  return callWriteFunctionOrFallback(
-    "createStaffProfile",
-    {
-      salonId: input.salonId,
-      uid,
+  if (!isFirebaseConfigured()) {
+    return {
+      uid: `demo-staff-${Date.now()}`,
       email,
-      password,
-      name,
-      phone: input.phone?.trim() || undefined,
-      canRedeemRewards: input.canRedeemRewards,
+      inviteEmailSent: false,
+    };
+  }
+
+  const result = await callFunction<
+    {
+      salonId: string;
+      email: string;
+      name: string;
+      phone?: string;
+      canRedeemRewards: boolean;
     },
-    () =>
-      createStaffProfileDirect({
-        ...input,
-        uid,
-        email,
-        password,
-        name,
-        phone: input.phone?.trim() || "",
-      }),
-  );
+    { uid: string; email: string }
+  >("createStaffProfile", {
+    salonId: input.salonId,
+    email,
+    name,
+    phone: input.phone?.trim() || undefined,
+    canRedeemRewards: input.canRedeemRewards,
+  });
+
+  return {
+    ...result,
+    inviteEmailSent: await sendStaffInviteEmail(result.email),
+  };
+}
+
+export async function sendStaffInviteEmail(email: string): Promise<boolean> {
+  const auth = getFirebaseAuth();
+  if (!auth) {
+    return false;
+  }
+
+  try {
+    auth.languageCode = "vi";
+    await sendPasswordResetEmail(auth, email, {
+      url: `${window.location.origin}/staff`,
+      handleCodeInApp: false,
+    });
+    return true;
+  } catch (error) {
+    console.warn("Không gửi được email mời nhân viên.", error);
+    return false;
+  }
 }
 
 export async function updateStaffProfile(input: {
@@ -538,19 +619,33 @@ export async function updateStaffProfile(input: {
 export async function searchSalonCustomers(input: {
   salonId: string;
   term: string;
-}): Promise<CustomerLookupResult[]> {
+  cursor?: string | null;
+  pageSize?: number;
+}): Promise<CustomerSearchPage> {
   const term = input.term.trim();
 
   if (term.length < 2) {
-    return [];
+    return { customers: [], nextCursor: null };
+  }
+  const phoneDigits = term.replace(/\D/g, "");
+  if (phoneDigits.length === term.replace(/\s/g, "").length && phoneDigits.length !== 4) {
+    throw new Error("Vui lòng nhập đủ 4 số cuối điện thoại");
   }
 
   return callFunctionOrFallback<
-    { salonId: string; term: string },
-    { customers: CustomerLookupResult[] }
-  >("searchSalonCustomers", { salonId: input.salonId, term }, () =>
-    searchSalonCustomersDirect(input.salonId, term),
-  ).then((result) => result.customers);
+    { salonId: string; term: string; cursor?: string; pageSize: number },
+    CustomerSearchPage
+  >(
+    "searchSalonCustomers",
+    {
+      salonId: input.salonId,
+      term,
+      cursor: input.cursor || undefined,
+      pageSize: input.pageSize || 10,
+    },
+    () =>
+      searchSalonCustomersDirect(input.salonId, term, input.cursor || null, input.pageSize || 10),
+  );
 }
 
 export async function deleteCustomerData(input: {
@@ -612,6 +707,85 @@ export async function submitPointRequest(input: {
   );
 }
 
+export async function claimServiceSession(input: {
+  salonId: string;
+  session: StaffSession;
+}): Promise<{
+  status: StaffSession["status"];
+  assignedStaffId: string;
+  assignedStaffName: string;
+}> {
+  return callWriteFunctionOrFallback(
+    "claimServiceSession",
+    { salonId: input.salonId, sessionId: input.session.id },
+    () => claimServiceSessionDirect(input),
+  );
+}
+
+async function claimServiceSessionDirect(input: {
+  salonId: string;
+  session: StaffSession;
+}): Promise<{
+  status: StaffSession["status"];
+  assignedStaffId: string;
+  assignedStaffName: string;
+}> {
+  const db = getFirebaseDb();
+  const signedStaff = await getSignedStaffForDirectWrite();
+
+  if (!isFirebaseConfigured() || !db) {
+    return {
+      status: "serving",
+      assignedStaffId: signedStaff.uid || "demo-staff",
+      assignedStaffName: signedStaff.name,
+    };
+  }
+
+  const sessionRef = doc(db, "chair_sessions", input.session.id);
+  let result = {
+    status: "serving" as StaffSession["status"],
+    assignedStaffId: signedStaff.uid,
+    assignedStaffName: signedStaff.name,
+  };
+
+  await runTransaction(db, async (transaction) => {
+    const sessionSnap = await transaction.get(sessionRef);
+    if (!sessionSnap.exists() || sessionSnap.data().salonId !== input.salonId) {
+      throw new Error("Không tìm thấy lượt phục vụ");
+    }
+
+    const data = sessionSnap.data();
+    if (data.status === "serving") {
+      if (data.assignedStaffId !== signedStaff.uid) {
+        throw new Error(`Khách đã được ${String(data.assignedStaffName || "nhân viên khác")} nhận`);
+      }
+      result = {
+        status: "serving",
+        assignedStaffId: signedStaff.uid,
+        assignedStaffName: String(data.assignedStaffName || signedStaff.name),
+      };
+      return;
+    }
+    if (data.status !== "waiting") {
+      throw new Error("Lượt này không còn ở trạng thái chờ nhận");
+    }
+
+    transaction.set(
+      sessionRef,
+      {
+        status: "serving",
+        assignedStaffId: signedStaff.uid,
+        assignedStaffName: signedStaff.name,
+        claimedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true },
+    );
+  });
+
+  return result;
+}
+
 async function submitPointRequestDirect(input: {
   salonId: string;
   session: StaffSession;
@@ -645,8 +819,17 @@ async function submitPointRequestDirect(input: {
     if (sessionData.salonId !== input.salonId || customerId !== input.session.customerId) {
       throw new Error("Phiên phục vụ không thuộc đúng salon hoặc khách hàng");
     }
-    if (sessionData.status !== "waiting") {
-      throw new Error("Phiên này đã được gửi yêu cầu điểm hoặc đã xử lý");
+    if (sessionData.status !== "serving") {
+      throw new Error(
+        sessionData.status === "waiting"
+          ? "Nhân viên cần nhận khách trước khi gửi yêu cầu điểm"
+          : "Phiên này đã được gửi yêu cầu điểm hoặc đã xử lý",
+      );
+    }
+    if (sessionData.assignedStaffId !== signedStaff.uid) {
+      throw new Error(
+        `Lượt này đang do ${String(sessionData.assignedStaffName || "nhân viên khác")} phụ trách`,
+      );
     }
     if (!isFreshServiceSession(sessionData.createdAt)) {
       throw new Error("Phiên cắt đã quá thời gian cho phép cộng điểm");
@@ -679,7 +862,7 @@ async function submitPointRequestDirect(input: {
     transaction.set(
       sessionRef,
       {
-        status: "serving",
+        status: "pending_approval",
         updatedAt: serverTimestamp(),
       },
       { merge: true },
@@ -1059,6 +1242,7 @@ async function getStaffProfilesDirect(salonId: string): Promise<{ staff: StaffPr
           role: "staff",
           isActive: true,
           canRedeemRewards: true,
+          inviteStatus: "accepted",
         },
       ],
     };
@@ -1069,43 +1253,6 @@ async function getStaffProfilesDirect(salonId: string): Promise<{ staff: StaffPr
   return {
     staff: snap.docs.map(mapStaffProfile).filter((staff): staff is StaffProfile => Boolean(staff)),
   };
-}
-
-async function createStaffProfileDirect(input: {
-  salonId: string;
-  uid?: string;
-  email: string;
-  password: string;
-  name: string;
-  phone?: string;
-  canRedeemRewards: boolean;
-}) {
-  const db = getFirebaseDb();
-
-  if (!isFirebaseConfigured() || !db) {
-    return;
-  }
-
-  const staffUid =
-    input.uid || (await createStaffAuthUser(input.email, input.password, input.name));
-
-  await setDoc(
-    doc(db, "users", staffUid),
-    {
-      salonId: input.salonId,
-      name: input.name,
-      email: input.email,
-      phone: input.phone || "",
-      role: "staff",
-      isActive: true,
-      canRedeemRewards: input.canRedeemRewards,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    },
-    { merge: true },
-  );
-
-  return { uid: staffUid, email: input.email };
 }
 
 async function updateStaffProfileDirect(input: {
@@ -1152,16 +1299,18 @@ async function updateStaffProfileDirect(input: {
 async function searchSalonCustomersDirect(
   salonId: string,
   term: string,
-): Promise<{ customers: CustomerLookupResult[] }> {
+  cursor: string | null,
+  pageSize: number,
+): Promise<CustomerSearchPage> {
   const db = getFirebaseDb();
 
   if (!isFirebaseConfigured() || !db) {
-    return { customers: [] };
+    return { customers: [], nextCursor: null };
   }
 
-  const normalized = term.toLowerCase();
+  const normalized = normalizeCustomerSearch(term);
   const snap = await getDocs(query(collection(db, "customers"), where("salonId", "==", salonId)));
-  const customers = snap.docs
+  const matches = snap.docs
     .map((docSnap) => {
       const data = docSnap.data();
       return {
@@ -1177,15 +1326,20 @@ async function searchSalonCustomersDirect(
     })
     .filter(
       (customer) =>
-        customer.name.toLowerCase().includes(normalized) ||
+        normalizeCustomerSearch(customer.name).startsWith(normalized) ||
         customer.phoneLast4.includes(normalized),
     )
-    .slice(0, 20);
+    .sort((a, b) => a.name.localeCompare(b.name, "vi"));
+  const cursorIndex = cursor ? matches.findIndex((customer) => customer.id === cursor) : -1;
+  const safePageSize = Math.min(Math.max(Math.floor(pageSize), 5), 20);
+  const customers = matches.slice(cursorIndex + 1, cursorIndex + 1 + safePageSize);
+  const hasMore = cursorIndex + 1 + safePageSize < matches.length;
 
   return {
     customers: await Promise.all(
       customers.map((customer) => attachCustomerInsight(salonId, customer)),
     ),
+    nextCursor: hasMore ? (customers[customers.length - 1]?.id ?? null) : null,
   };
 }
 
@@ -1404,6 +1558,7 @@ function mapStaffProfile(docSnap: QueryDocumentSnapshot<DocumentData>): StaffPro
     role: "staff",
     isActive: Boolean(data.isActive),
     canRedeemRewards: Boolean(data.canRedeemRewards),
+    inviteStatus: data.inviteStatus === "pending" ? "pending" : "accepted",
   };
 }
 
@@ -1442,9 +1597,13 @@ function mapSession(docSnap: QueryDocumentSnapshot<DocumentData>): StaffSession 
     id: docSnap.id,
     salonId: String(data.salonId || ""),
     mirrorId: String(data.mirrorId || ""),
+    mirrorName: String(data.mirrorName || ""),
     customerId: String(data.customerId || ""),
     zaloUserId: String(data.zaloUserId || ""),
-    status: normalizeSessionStatus(data.status),
+    status: normalizeSessionStatus(data.status, data.assignedStaffId),
+    assignedStaffId: String(data.assignedStaffId || ""),
+    assignedStaffName: String(data.assignedStaffName || ""),
+    claimedAtMs: toMillis(data.claimedAt),
     createdAtMs: toMillis(data.createdAt),
   };
 }
@@ -1511,8 +1670,16 @@ async function getCustomer(customerId: string): Promise<CustomerSummary | undefi
   };
 }
 
-function normalizeSessionStatus(value: unknown): StaffSession["status"] {
-  if (value === "serving" || value === "completed" || value === "cancelled") {
+function normalizeSessionStatus(value: unknown, assignedStaffId?: unknown): StaffSession["status"] {
+  if (value === "serving" && !assignedStaffId) {
+    return "pending_approval";
+  }
+  if (
+    value === "serving" ||
+    value === "pending_approval" ||
+    value === "completed" ||
+    value === "cancelled"
+  ) {
     return value;
   }
 
@@ -1565,6 +1732,16 @@ function normalizeRewardCode(value: string) {
   return value.trim().toUpperCase().replace(/\s+/g, "");
 }
 
+function normalizeCustomerSearch(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function buildQrUrl(salonId: string, mirrorId: string, qrToken: string) {
   const params = new URLSearchParams({ salonId, mirrorId, qrToken });
   const miniAppId = String(import.meta.env.VITE_ZALO_MINI_APP_ID || "");
@@ -1582,55 +1759,6 @@ function randomToken() {
   }
 
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
-}
-
-async function createStaffAuthUser(email: string, password: string, name: string) {
-  const apiKey = String(import.meta.env.VITE_FIREBASE_API_KEY || "");
-
-  if (!apiKey) {
-    throw new Error("Firebase Auth chưa được cấu hình");
-  }
-
-  const response = await fetch(
-    `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        email,
-        password,
-        displayName: name,
-        returnSecureToken: false,
-      }),
-    },
-  );
-  const payload = (await response.json()) as {
-    localId?: string;
-    error?: { message?: string };
-  };
-
-  if (!response.ok || !payload.localId) {
-    throw new Error(friendlyIdentityToolkitError(payload.error?.message));
-  }
-
-  return payload.localId;
-}
-
-function friendlyIdentityToolkitError(message?: string) {
-  if (message === "OPERATION_NOT_ALLOWED") {
-    return "Firebase Auth chưa bật Email/Password. Vào Firebase Console > Authentication > Sign-in method để bật.";
-  }
-  if (message === "EMAIL_EXISTS") {
-    return "Email nhân viên đã có tài khoản. Hãy dùng email khác hoặc tạo hồ sơ bằng UID sau khi bật Cloud Functions.";
-  }
-  if (message === "INVALID_EMAIL") {
-    return "Email nhân viên không hợp lệ.";
-  }
-  if (message === "WEAK_PASSWORD : Password should be at least 6 characters") {
-    return "Mật khẩu nhân viên phải có ít nhất 6 ký tự.";
-  }
-
-  return message || "Không tạo được tài khoản nhân viên";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -1657,9 +1785,13 @@ function mockSessions(): StaffSession[] {
       id: "mock-session",
       salonId: "demo-salon",
       mirrorId: "demo-mirror-1",
+      mirrorName: "Gương 1",
       customerId: "mock-customer",
       zaloUserId: "mock-local-zalo-user",
       status: "waiting",
+      assignedStaffId: "",
+      assignedStaffName: "",
+      claimedAtMs: null,
       createdAtMs: Date.now(),
       customer: {
         id: "mock-customer",

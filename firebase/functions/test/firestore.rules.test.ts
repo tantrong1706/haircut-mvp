@@ -57,6 +57,10 @@ beforeEach(async () => {
       setDoc(doc(db, "haircut_records", "record-a"), privateRecord(salonA, "customer-a")),
       setDoc(doc(db, "reward_history", "reward-a"), privateRecord(salonA, "customer-a")),
       setDoc(doc(db, "lucky_wheel", salonA), { salonId: salonA, requiredPoints: 5, slots: [] }),
+      setDoc(doc(db, "_public_rate_limits", "private-counter"), {
+        count: 1,
+        expiresAt: new Date(),
+      }),
     ]);
   });
 });
@@ -113,6 +117,13 @@ describe("Firestore production rules", () => {
   it("chặn đọc công khai cấu hình vòng quay để tránh dò salon", async () => {
     const db = testEnv.unauthenticatedContext().firestore();
     await assertFails(getDoc(doc(db, "lucky_wheel", salonA)));
+  });
+
+  it("không cho thành viên salon đọc hoặc sửa bộ đếm chống spam", async () => {
+    const ownerDb = testEnv.authenticatedContext("owner-a").firestore();
+
+    await assertFails(getDoc(doc(ownerDb, "_public_rate_limits", "private-counter")));
+    await assertFails(setDoc(doc(ownerDb, "_public_rate_limits", "forged-counter"), { count: 0 }));
   });
 
   it("chỉ cho thành viên salon tải ảnh khách khi khách đã đồng ý", async () => {

@@ -17,8 +17,11 @@ export type CustomerProfile = {
 export type AppSession = {
   qr: QrContext;
   sessionId: string;
+  mirrorName?: string;
   zaloUserId: string;
-  sessionStatus?: "waiting" | "serving" | "completed" | "cancelled";
+  sessionStatus?: "waiting" | "serving" | "pending_approval" | "completed" | "cancelled";
+  assignedStaffName?: string;
+  claimedAtMs?: number | null;
   customer: CustomerProfile;
 };
 

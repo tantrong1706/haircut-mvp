@@ -11,6 +11,7 @@ import { RedeemRewardPanel } from "../components/RedeemRewardPanel";
 import { BrandLogo } from "../components/BrandLogo";
 import {
   StaffSession,
+  claimServiceSession,
   formatDateTime,
   getSalonProfile,
   listenActiveSessions,
@@ -33,6 +34,7 @@ export function StaffPage({ currentUser }: Props) {
   const [selectedId, setSelectedId] = useState("");
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(false);
+  const [claimingId, setClaimingId] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [pointPerVisit, setPointPerVisit] = useState(1);
   const [salonName, setSalonName] = useState("");
@@ -41,8 +43,17 @@ export function StaffPage({ currentUser }: Props) {
 
   const selectedSession = sessions.find((session) => session.id === selectedId) || sessions[0];
   const waitingCount = sessions.filter((session) => session.status === "waiting").length;
-  const pendingApprovalCount = sessions.filter((session) => session.status === "serving").length;
-  const isPendingApproval = selectedSession?.status === "serving";
+  const servingCount = sessions.filter((session) => session.status === "serving").length;
+  const pendingApprovalCount = sessions.filter(
+    (session) => session.status === "pending_approval",
+  ).length;
+  const isPendingApproval = selectedSession?.status === "pending_approval";
+  const isAssignedToCurrentUser = selectedSession?.assignedStaffId === currentUser.uid;
+  const canEditService = selectedSession?.status === "serving" && isAssignedToCurrentUser;
+  const isAssignedToAnother =
+    selectedSession?.status === "serving" &&
+    Boolean(selectedSession.assignedStaffId) &&
+    !isAssignedToCurrentUser;
   const canRedeemRewards = currentUser.role === "owner" || currentUser.canRedeemRewards === true;
 
   useEffect(() => {
@@ -100,7 +111,7 @@ export function StaffPage({ currentUser }: Props) {
   }, [selectedId]);
 
   async function handleSubmit() {
-    if (!selectedSession) {
+    if (!selectedSession || !canEditService) {
       return;
     }
 
@@ -128,21 +139,61 @@ export function StaffPage({ currentUser }: Props) {
           session_status: selectedSession.status,
         },
       );
-      setSessions((current) =>
-        current.map((session) =>
-          session.id === selectedSession.id ? { ...session, status: "serving" } : session,
-        ),
-      );
       setNote("");
       trackEvent("staff_point_request_submitted", {
         salon_id: salonId,
         points_requested: pointPerVisit,
       });
+      setSessions((current) =>
+        current.map((session) =>
+          session.id === selectedSession.id ? { ...session, status: "pending_approval" } : session,
+        ),
+      );
       setMessage(`Đã gửi yêu cầu cộng ${pointPerVisit} điểm.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không gửi được yêu cầu");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleClaim() {
+    if (!selectedSession || selectedSession.status !== "waiting") {
+      return;
+    }
+
+    setClaimingId(selectedSession.id);
+    setMessage("");
+    setError("");
+
+    try {
+      const result = await withMonitoringTrace(
+        "staff_claim_session",
+        () => claimServiceSession({ salonId, session: selectedSession }),
+        { salon_id: salonId },
+      );
+      setSessions((current) =>
+        current.map((session) =>
+          session.id === selectedSession.id
+            ? {
+                ...session,
+                status: result.status,
+                assignedStaffId: result.assignedStaffId,
+                assignedStaffName: result.assignedStaffName,
+                claimedAtMs: Date.now(),
+              }
+            : session,
+        ),
+      );
+      setMessage(
+        result.status === "pending_approval"
+          ? "Lượt này đã được gửi duyệt trước đó."
+          : "Đã nhận khách. Bạn có thể ghi chú sau khi hoàn tất dịch vụ.",
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không nhận được khách");
+    } finally {
+      setClaimingId("");
     }
   }
 
@@ -174,6 +225,7 @@ export function StaffPage({ currentUser }: Props) {
 
       <div className="metrics-row compact-metrics">
         <Metric icon={<UsersRound size={20} />} label="Đang chờ" value={waitingCount} />
+        <Metric icon={<UserRoundCheck size={20} />} label="Đang phục vụ" value={servingCount} />
         <Metric
           icon={<UserRoundCheck size={20} />}
           label="Chờ duyệt"
@@ -205,7 +257,7 @@ export function StaffPage({ currentUser }: Props) {
                 className={[
                   "ops-card",
                   selectedSession?.id === session.id ? "active" : "",
-                  session.status === "serving" ? "pending-card" : "",
+                  session.status === "pending_approval" ? "pending-card" : "",
                 ]
                   .filter(Boolean)
                   .join(" ")}
@@ -219,7 +271,8 @@ export function StaffPage({ currentUser }: Props) {
                 </div>
                 <span>{customerLine(session)}</span>
                 <small>
-                  {mirrorLabel(session.mirrorId)} · {formatDateTime(session.createdAtMs)}
+                  {mirrorLabel(session.mirrorId, session.mirrorName)} ·{" "}
+                  {formatDateTime(session.createdAtMs)}
                 </small>
               </button>
             ))
@@ -234,7 +287,9 @@ export function StaffPage({ currentUser }: Props) {
           >
             <div className="detail-heading">
               <div>
-                <p className="eyebrow">{mirrorLabel(selectedSession.mirrorId)}</p>
+                <p className="eyebrow">
+                  {mirrorLabel(selectedSession.mirrorId, selectedSession.mirrorName)}
+                </p>
                 <h2>{selectedSession.customer?.name || "Khách hàng"}</h2>
               </div>
               <span className="pill">{selectedSession.customer?.points ?? 0} điểm</span>
@@ -260,8 +315,8 @@ export function StaffPage({ currentUser }: Props) {
             >
               <Clock3 size={20} aria-hidden="true" />
               <div>
-                <strong>{detailStatusTitle(selectedSession.status)}</strong>
-                <span>{detailStatusText(selectedSession.status)}</span>
+                <strong>{detailStatusTitle(selectedSession, currentUser.uid)}</strong>
+                <span>{detailStatusText(selectedSession, currentUser.uid)}</span>
               </div>
             </div>
 
@@ -275,7 +330,7 @@ export function StaffPage({ currentUser }: Props) {
                   <button
                     key={quickNote}
                     type="button"
-                    disabled={isPendingApproval}
+                    disabled={!canEditService}
                     onClick={() => addQuickNote(quickNote)}
                   >
                     {quickNote}
@@ -286,26 +341,39 @@ export function StaffPage({ currentUser }: Props) {
                 value={note}
                 onChange={(event) => setNote(event.target.value)}
                 placeholder="Ví dụ: Fade thấp, giữ mái, không cắt quá cao"
-                disabled={isPendingApproval}
+                disabled={!canEditService}
               />
             </label>
 
-            <button
-              className="primary-button"
-              disabled={loading || isPendingApproval || note.trim().length === 0}
-              onClick={handleSubmit}
-            >
-              {isPendingApproval ? (
-                "Đang chờ duyệt"
-              ) : loading ? (
-                "Đang gửi..."
-              ) : (
-                <>
-                  <Send size={20} aria-hidden="true" />
-                  Gửi cộng {pointPerVisit} điểm
-                </>
-              )}
-            </button>
+            {selectedSession.status === "waiting" ? (
+              <button
+                className="primary-button"
+                disabled={claimingId === selectedSession.id}
+                onClick={handleClaim}
+              >
+                <UserRoundCheck size={20} aria-hidden="true" />
+                {claimingId === selectedSession.id ? "Đang nhận khách..." : "Nhận khách"}
+              </button>
+            ) : (
+              <button
+                className="primary-button"
+                disabled={loading || !canEditService || note.trim().length === 0}
+                onClick={handleSubmit}
+              >
+                {isPendingApproval ? (
+                  "Đang chờ chủ duyệt"
+                ) : isAssignedToAnother ? (
+                  `Đang do ${selectedSession.assignedStaffName || "nhân viên khác"} phục vụ`
+                ) : loading ? (
+                  "Đang gửi..."
+                ) : (
+                  <>
+                    <Send size={20} aria-hidden="true" />
+                    Gửi cộng {pointPerVisit} điểm
+                  </>
+                )}
+              </button>
+            )}
           </div>
         ) : null}
 
@@ -347,7 +415,10 @@ function customerLine(session: StaffSession) {
   return `${phone} · ${customer.points} điểm`;
 }
 
-function mirrorLabel(mirrorId: string) {
+function mirrorLabel(mirrorId: string, mirrorName?: string) {
+  if (mirrorName?.trim()) {
+    return mirrorName.trim();
+  }
   if (mirrorId.includes("mirror-1")) {
     return "Gương 1";
   }
@@ -356,8 +427,11 @@ function mirrorLabel(mirrorId: string) {
 }
 
 function statusLabel(status: StaffSession["status"]) {
-  if (status === "serving") {
+  if (status === "pending_approval") {
     return "Chờ duyệt";
+  }
+  if (status === "serving") {
+    return "Đang phục vụ";
   }
   if (status === "completed") {
     return "Đã xong";
@@ -370,8 +444,11 @@ function statusLabel(status: StaffSession["status"]) {
 }
 
 function statusPillClass(status: StaffSession["status"]) {
-  if (status === "serving") {
+  if (status === "pending_approval") {
     return "session-status warning";
+  }
+  if (status === "serving") {
+    return "session-status success";
   }
   if (status === "completed") {
     return "session-status success";
@@ -383,30 +460,40 @@ function statusPillClass(status: StaffSession["status"]) {
   return "session-status";
 }
 
-function detailStatusTitle(status: StaffSession["status"]) {
-  if (status === "serving") {
+function detailStatusTitle(session: StaffSession, currentUid: string) {
+  if (session.status === "pending_approval") {
     return "Đã gửi yêu cầu điểm";
   }
-  if (status === "completed") {
+  if (session.status === "serving") {
+    return session.assignedStaffId === currentUid
+      ? "Bạn đang phụ trách khách này"
+      : `${session.assignedStaffName || "Nhân viên khác"} đang phục vụ`;
+  }
+  if (session.status === "completed") {
     return "Lượt cắt đã hoàn tất";
   }
-  if (status === "cancelled") {
+  if (session.status === "cancelled") {
     return "Lượt cắt đã hủy";
   }
 
   return "Sẵn sàng ghi nhận lượt cắt";
 }
 
-function detailStatusText(status: StaffSession["status"]) {
-  if (status === "serving") {
+function detailStatusText(session: StaffSession, currentUid: string) {
+  if (session.status === "pending_approval") {
     return "Chờ chủ salon duyệt, không gửi lại để tránh cộng trùng điểm.";
   }
-  if (status === "completed") {
+  if (session.status === "serving") {
+    return session.assignedStaffId === currentUid
+      ? "Hoàn tất dịch vụ, thêm ghi chú rồi gửi chủ salon duyệt điểm."
+      : "Chỉ nhân viên đã nhận khách mới có thể gửi yêu cầu cộng điểm.";
+  }
+  if (session.status === "completed") {
     return "Điểm và lịch sử đã được cập nhật cho khách.";
   }
-  if (status === "cancelled") {
+  if (session.status === "cancelled") {
     return "Khách cần tạo lượt mới nếu tiếp tục sử dụng dịch vụ.";
   }
 
-  return "Chưa gửi yêu cầu điểm cho lượt này. Ghi chú giúp chủ salon kiểm tra chính xác hơn.";
+  return "Nhấn Nhận khách trước khi bắt đầu phục vụ.";
 }
