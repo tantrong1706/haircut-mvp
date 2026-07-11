@@ -168,6 +168,23 @@ async function verifyZaloAccessToken(accessTokenInput: unknown): Promise<ZaloPro
   endpoint.searchParams.set("fields", "id,name,picture");
 
   let payload: Record<string, unknown>;
+  let responseStatus: number | "network-error" = "network-error";
+  let responseErrorCode: string | number = "request-failed";
+  const safeLogMessage = (value: unknown) => {
+    let message = String(value || "Không xác minh được Zalo access token");
+    for (const sensitiveValue of [accessToken, appSecret, appsecretProof]) {
+      message = message.split(sensitiveValue).join("[redacted]");
+    }
+    return message.slice(0, 500);
+  };
+  const logVerificationFailure = (errorCode: string | number, message: string) => {
+    console.warn("Không xác minh được danh tính Zalo", {
+      status: responseStatus,
+      errorCode,
+      message: safeLogMessage(message),
+    });
+  };
+
   try {
     const response = await fetch(endpoint, {
       method: "GET",
@@ -176,29 +193,35 @@ async function verifyZaloAccessToken(accessTokenInput: unknown): Promise<ZaloPro
         appsecret_proof: appsecretProof,
       },
     });
+    responseStatus = response.status;
 
     payload = (await response.json()) as Record<string, unknown>;
+    responseErrorCode = String(payload.error ?? payload.error_code ?? `http-${response.status}`);
     if (!response.ok) {
       throw new Error(String(payload.message ?? response.statusText));
     }
   } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Không xác minh được Zalo access token";
+    logVerificationFailure(responseErrorCode, message);
     throw new HttpsError(
       "unauthenticated",
-      error instanceof Error ? error.message : "Không xác minh được Zalo access token",
+      message,
     );
   }
 
   const errorCode = Number(payload.error ?? 0);
   if (Number.isFinite(errorCode) && errorCode !== 0) {
-    throw new HttpsError(
-      "unauthenticated",
-      String(payload.message ?? "Zalo access token không hợp lệ"),
-    );
+    const message = String(payload.message ?? "Zalo access token không hợp lệ");
+    logVerificationFailure(errorCode, message);
+    throw new HttpsError("unauthenticated", message);
   }
 
   const zaloUserId = String(payload.id ?? "").trim();
   if (!zaloUserId) {
-    throw new HttpsError("unauthenticated", "Zalo không trả về user id hợp lệ");
+    const message = "Zalo không trả về user id hợp lệ";
+    logVerificationFailure("missing-user-id", message);
+    throw new HttpsError("unauthenticated", message);
   }
 
   const picture = payload.picture as { data?: { url?: unknown } } | undefined;

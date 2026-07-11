@@ -134,7 +134,7 @@ export function friendlyFirebaseFunctionError(error: unknown) {
   const message = normalizeRawErrorMessage(rawMessage);
 
   if (code === "unauthenticated") {
-    return "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.";
+    return message || "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.";
   }
   if (code === "permission-denied") {
     return "Tài khoản này không có quyền với salon này.";
