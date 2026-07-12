@@ -12,6 +12,12 @@ import { getStorage } from "firebase-admin/storage";
 import { defineSecret } from "firebase-functions/params";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { buildNameSearchPrefixes, normalizeSearchText } from "./customerSearch";
+import {
+  MAX_HAIRCUT_PHOTOS,
+  MAX_HAIRCUT_PHOTO_SIZE,
+  isExpectedHaircutPhotoPath,
+  storageObjectNameFromDownloadUrl,
+} from "./customerPhotos";
 import { isValidMirrorQr } from "./security";
 
 initializeApp();
@@ -127,11 +133,14 @@ function safePhotoUrls(value: unknown): string[] {
   if (value === undefined || value === null) {
     return [];
   }
-  if (!Array.isArray(value) || value.length > 5) {
-    throw new HttpsError("invalid-argument", "Chỉ được gửi tối đa 5 ảnh kiểu tóc");
+  if (!Array.isArray(value) || value.length > MAX_HAIRCUT_PHOTOS) {
+    throw new HttpsError(
+      "invalid-argument",
+      `Chỉ được gửi tối đa ${MAX_HAIRCUT_PHOTOS} ảnh kiểu tóc`,
+    );
   }
 
-  return value.map((item, index) => {
+  const urls = value.map((item, index) => {
     const url = limitedString(item, `photoUrls[${index}]`, 500);
     try {
       if (new URL(url).protocol !== "https:") {
@@ -141,6 +150,122 @@ function safePhotoUrls(value: unknown): string[] {
       throw new HttpsError("invalid-argument", `Ảnh ${index + 1} không có link HTTPS hợp lệ`);
     }
     return url;
+  });
+
+  if (new Set(urls).size !== urls.length) {
+    throw new HttpsError("invalid-argument", "Danh sách ảnh có ảnh bị trùng");
+  }
+
+  return urls;
+}
+
+async function assertSubmittedHaircutPhotos(input: {
+  photoUrls: string[];
+  salonId: string;
+  customerId: string;
+  sessionId: string;
+  uploaderUid: string;
+}) {
+  if (input.photoUrls.length === 0) {
+    return;
+  }
+
+  const bucket = storage.bucket();
+  await Promise.all(
+    input.photoUrls.map(async (photoUrl, index) => {
+      const objectName = storageObjectNameFromDownloadUrl(photoUrl, bucket.name);
+      if (
+        !objectName ||
+        !isExpectedHaircutPhotoPath(objectName, {
+          salonId: input.salonId,
+          customerId: input.customerId,
+          sessionId: input.sessionId,
+        })
+      ) {
+        throw new HttpsError("invalid-argument", `Ảnh ${index + 1} không thuộc đúng lượt cắt này`);
+      }
+
+      let metadata;
+      try {
+        [metadata] = await bucket.file(objectName).getMetadata();
+      } catch {
+        throw new HttpsError("failed-precondition", `Không tìm thấy ảnh ${index + 1} đã tải lên`);
+      }
+
+      const customMetadata = metadata.metadata ?? {};
+      const metadataIsValid =
+        metadata.contentType === "image/jpeg" &&
+        Number(metadata.size) > 0 &&
+        Number(metadata.size) <= MAX_HAIRCUT_PHOTO_SIZE &&
+        customMetadata.salonId === input.salonId &&
+        customMetadata.customerId === input.customerId &&
+        customMetadata.sessionId === input.sessionId &&
+        customMetadata.uploaderUid === input.uploaderUid;
+
+      if (!metadataIsValid) {
+        throw new HttpsError(
+          "invalid-argument",
+          `Ảnh ${index + 1} không có thông tin xác thực hợp lệ`,
+        );
+      }
+    }),
+  );
+}
+
+async function deleteSubmittedHaircutPhotos(input: {
+  photoUrls: unknown;
+  salonId: string;
+  customerId: string;
+  sessionId: string;
+}) {
+  if (!Array.isArray(input.photoUrls)) {
+    return;
+  }
+
+  const bucket = storage.bucket();
+  await Promise.all(
+    input.photoUrls.slice(0, MAX_HAIRCUT_PHOTOS).map(async (value, index) => {
+      if (typeof value !== "string") {
+        return;
+      }
+
+      const objectName = storageObjectNameFromDownloadUrl(value, bucket.name);
+      if (
+        !objectName ||
+        !isExpectedHaircutPhotoPath(objectName, {
+          salonId: input.salonId,
+          customerId: input.customerId,
+          sessionId: input.sessionId,
+        })
+      ) {
+        return;
+      }
+
+      try {
+        await bucket.file(objectName).delete({ ignoreNotFound: true });
+      } catch {
+        console.warn("Không xóa được ảnh kiểu tóc", { photoIndex: index + 1 });
+      }
+    }),
+  );
+}
+
+function trustedStoredHaircutPhotoUrls(
+  value: unknown,
+  input: { salonId: string; customerId: string; sessionId: string },
+) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const bucketName = storage.bucket().name;
+  return value.slice(0, MAX_HAIRCUT_PHOTOS).filter((photoUrl): photoUrl is string => {
+    if (typeof photoUrl !== "string") {
+      return false;
+    }
+
+    const objectName = storageObjectNameFromDownloadUrl(photoUrl, bucketName);
+    return Boolean(objectName && isExpectedHaircutPhotoPath(objectName, input));
   });
 }
 
@@ -1145,6 +1270,35 @@ export const submitPointRequest = onCall(functionOptions, async (request) => {
   const sessionRef = db.collection("chair_sessions").doc(sessionId);
   const requestRef = db.collection("point_requests").doc(sessionId);
 
+  if (photoUrls.length > 0) {
+    const sessionSnap = await sessionRef.get();
+    const session = sessionSnap.data();
+    if (!sessionSnap.exists || session?.salonId !== salonId) {
+      throw new HttpsError("not-found", "Không tìm thấy phiên phục vụ");
+    }
+    if (session.status !== "serving" || session.assignedStaffId !== uid) {
+      throw new HttpsError("permission-denied", "Bạn không phụ trách lượt cắt này");
+    }
+
+    const customerId = String(session.customerId || "");
+    const customerSnap = await db.collection("customers").doc(customerId).get();
+    if (
+      !customerSnap.exists ||
+      customerSnap.data()?.salonId !== salonId ||
+      customerSnap.data()?.allowPhoto !== true
+    ) {
+      throw new HttpsError("failed-precondition", "Khách chưa đồng ý lưu ảnh kiểu tóc");
+    }
+
+    await assertSubmittedHaircutPhotos({
+      photoUrls,
+      salonId,
+      customerId,
+      sessionId,
+      uploaderUid: uid,
+    });
+  }
+
   await db.runTransaction(async (tx) => {
     const [sessionSnap, existingRequestSnap] = await Promise.all([
       tx.get(sessionRef),
@@ -1181,6 +1335,9 @@ export const submitPointRequest = onCall(functionOptions, async (request) => {
     const customerSnap = await tx.get(customerRef);
     if (!customerSnap.exists || customerSnap.data()?.salonId !== salonId) {
       throw new HttpsError("failed-precondition", "Hồ sơ khách không thuộc salon này");
+    }
+    if (photoUrls.length > 0 && customerSnap.data()?.allowPhoto !== true) {
+      throw new HttpsError("failed-precondition", "Khách chưa đồng ý lưu ảnh kiểu tóc");
     }
 
     tx.set(requestRef, {
@@ -1327,7 +1484,7 @@ export const approvePointRequest = onCall(functionOptions, async (request) => {
   const requestRef = db.collection("point_requests").doc(requestId);
   const now = Timestamp.now();
 
-  await db.runTransaction(async (tx) => {
+  const discardedPhotos = await db.runTransaction(async (tx) => {
     const pointSnap = await tx.get(requestRef);
     if (!pointSnap.exists) {
       throw new HttpsError("not-found", "Không tìm thấy yêu cầu cộng điểm");
@@ -1341,9 +1498,21 @@ export const approvePointRequest = onCall(functionOptions, async (request) => {
     }
 
     const customerRef = db.collection("customers").doc(pointRequest.customerId);
+    const customerSnap = await tx.get(customerRef);
+    if (!customerSnap.exists || customerSnap.data()?.salonId !== salonId) {
+      throw new HttpsError("failed-precondition", "Hồ sơ khách không thuộc salon này");
+    }
     const recordRef = db.collection("haircut_records").doc();
     const sessionRef = db.collection("chair_sessions").doc(pointRequest.sessionId);
     const pointsAdded = Number(pointRequest.pointsRequested ?? pointRequest.pointsAdded ?? 1);
+    const canKeepPhotos = customerSnap.data()?.allowPhoto === true;
+    const recordPhotoUrls = canKeepPhotos
+      ? trustedStoredHaircutPhotoUrls(pointRequest.photoUrls, {
+          salonId,
+          customerId: String(pointRequest.customerId || ""),
+          sessionId: String(pointRequest.sessionId || ""),
+        })
+      : [];
 
     if (!Number.isFinite(pointsAdded) || pointsAdded <= 0) {
       throw new HttpsError("failed-precondition", "Số điểm cộng không hợp lệ");
@@ -1358,6 +1527,7 @@ export const approvePointRequest = onCall(functionOptions, async (request) => {
       status: "approved",
       approvedBy: uid,
       approvedAt: now,
+      photoUrls: recordPhotoUrls,
       updatedAt: now,
     });
     tx.set(recordRef, {
@@ -1367,7 +1537,7 @@ export const approvePointRequest = onCall(functionOptions, async (request) => {
       staffName: pointRequest.staffName ?? "",
       pointRequestId: requestId,
       note: pointRequest.note ?? "",
-      photoUrls: pointRequest.photoUrls ?? [],
+      photoUrls: recordPhotoUrls,
       pointsAdded,
       approvedBy: uid,
       createdAt: now,
@@ -1381,7 +1551,22 @@ export const approvePointRequest = onCall(functionOptions, async (request) => {
       { merge: true },
     );
     tx.delete(activeSessionRefFor(salonId, String(pointRequest.customerId || "")));
+
+    return canKeepPhotos
+      ? null
+      : {
+          photoUrls: pointRequest.photoUrls,
+          customerId: String(pointRequest.customerId || ""),
+          sessionId: String(pointRequest.sessionId || ""),
+        };
   });
+
+  if (discardedPhotos) {
+    await deleteSubmittedHaircutPhotos({
+      ...discardedPhotos,
+      salonId,
+    });
+  }
 
   return { ok: true };
 });
@@ -1396,7 +1581,7 @@ export const rejectPointRequest = onCall(functionOptions, async (request) => {
   const requestRef = db.collection("point_requests").doc(requestId);
   const now = Timestamp.now();
 
-  await db.runTransaction(async (tx) => {
+  const rejectedPhotos = await db.runTransaction(async (tx) => {
     const snap = await tx.get(requestRef);
     if (!snap.exists || snap.data()?.salonId !== salonId) {
       throw new HttpsError("not-found", "Không tìm thấy yêu cầu cộng điểm");
@@ -1414,6 +1599,7 @@ export const rejectPointRequest = onCall(functionOptions, async (request) => {
         rejectedBy: uid,
         rejectedAt: now,
         rejectionReason: reason,
+        photoUrls: [],
         updatedAt: now,
       },
       { merge: true },
@@ -1427,6 +1613,17 @@ export const rejectPointRequest = onCall(functionOptions, async (request) => {
       { merge: true },
     );
     tx.delete(activeSessionRefFor(salonId, String(pointRequest.customerId || "")));
+
+    return {
+      photoUrls: pointRequest.photoUrls,
+      customerId: String(pointRequest.customerId || ""),
+      sessionId: String(pointRequest.sessionId || ""),
+    };
+  });
+
+  await deleteSubmittedHaircutPhotos({
+    ...rejectedPhotos,
+    salonId,
   });
 
   return { ok: true };
@@ -1684,13 +1881,20 @@ export const getCustomerHistoryFromZalo = onCall(zaloFunctionOptions, async (req
   const customerId = customerIdFor(salonId, zaloProfile.zaloUserId);
   const limit = boundedQueryLimit(request.data?.limit, 20, 50);
 
-  const recordsSnap = await db
-    .collection("haircut_records")
-    .where("salonId", "==", salonId)
-    .where("customerId", "==", customerId)
-    .orderBy("createdAt", "desc")
-    .limit(limit)
-    .get();
+  const [recordsSnap, customerSnap] = await Promise.all([
+    db
+      .collection("haircut_records")
+      .where("salonId", "==", salonId)
+      .where("customerId", "==", customerId)
+      .orderBy("createdAt", "desc")
+      .limit(limit)
+      .get(),
+    db.collection("customers").doc(customerId).get(),
+  ]);
+  const canViewPhotos =
+    customerSnap.exists &&
+    customerSnap.data()?.salonId === salonId &&
+    customerSnap.data()?.allowPhoto === true;
 
   const staffIds = [
     ...new Set(
@@ -1719,7 +1923,13 @@ export const getCustomerHistoryFromZalo = onCall(zaloFunctionOptions, async (req
         createdAtMs: timestampMillis(data.createdAt),
         staffName: staffNames.get(data.staffId) ?? "Nhân viên",
         note: data.note ?? "",
-        photoUrls: data.photoUrls ?? [],
+        photoUrls: canViewPhotos
+          ? trustedStoredHaircutPhotoUrls(data.photoUrls, {
+              salonId,
+              customerId,
+              sessionId: String(data.pointRequestId || ""),
+            })
+          : [],
         pointsAdded: data.pointsAdded ?? 0,
       };
     }),

@@ -202,6 +202,127 @@
   outline: none;
 }
 
+.compact-ops-page .staff-photo-panel {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(21, 25, 23, 0.08);
+  border-radius: 18px;
+  background: #f8faf8;
+}
+
+.compact-ops-page .staff-photo-heading,
+.compact-ops-page .staff-photo-heading > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.compact-ops-page .staff-photo-heading > div {
+  flex: 1;
+}
+
+.compact-ops-page .staff-photo-heading span {
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.compact-ops-page .staff-photo-heading strong {
+  color: rgba(21, 25, 23, 0.58);
+  font-size: 12px;
+}
+
+.compact-ops-page .staff-photo-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.compact-ops-page .photo-action {
+  position: relative;
+  min-height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  overflow: hidden;
+  border: 1px solid #151917;
+  border-radius: 14px;
+  background: #151917;
+  color: #ffffff;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.compact-ops-page .photo-action.secondary {
+  border-color: rgba(21, 25, 23, 0.12);
+  background: #ffffff;
+  color: #151917;
+}
+
+.compact-ops-page .photo-action.disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.compact-ops-page .photo-action input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.compact-ops-page .photo-consent-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 11px;
+  border: 1px solid rgba(66, 103, 201, 0.18);
+  border-radius: 14px;
+  background: #f4f7ff;
+  color: #2d4b9c;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.4;
+}
+
+.compact-ops-page .photo-consent-notice svg {
+  flex: 0 0 auto;
+}
+
+.compact-ops-page .staff-photo-grid {
+  margin-top: 0;
+}
+
+.compact-ops-page .haircut-photo > button {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(21, 25, 23, 0.84);
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(21, 25, 23, 0.22);
+}
+
+.compact-ops-page .spin-icon {
+  animation: staff-photo-spin 0.8s linear infinite;
+}
+
+@keyframes staff-photo-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .compact-ops-page .quick-note-row {
   display: flex;
   flex-wrap: wrap;

@@ -41,7 +41,7 @@ export function HistoryPage({ session }: Props) {
   }, [session]);
 
   return (
-    <section className="page">
+    <section className="page history-page">
       <header className="page-header">
         <p className="eyebrow">Hồ sơ khách</p>
         <h1>Lịch sử cắt tóc</h1>
@@ -66,10 +66,23 @@ export function HistoryPage({ session }: Props) {
           records.map((record) => (
             <article className="list-item" key={record.id}>
               <CalendarCheck2 size={22} aria-hidden="true" />
-              <div>
+              <div className="history-record-content">
                 <strong>{record.createdAt || "Chưa có ngày"}</strong>
                 <p>{record.note || "Không có ghi chú kiểu tóc"}</p>
                 <small>Nhân viên: {record.staffName || "Chưa rõ"}</small>
+                {record.photoUrls.length > 0 ? (
+                  <div className="haircut-photo-grid history-photo-grid" aria-label="Ảnh kiểu tóc">
+                    {record.photoUrls.map((photoUrl, index) => (
+                      <div className="haircut-photo" key={photoUrl}>
+                        <img
+                          src={photoUrl}
+                          alt={`Ảnh kiểu tóc lần cắt ${index + 1}`}
+                          loading="lazy"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
               </div>
               <span className="pill">+{record.pointsAdded}</span>
             </article>

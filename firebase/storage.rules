@@ -40,10 +40,36 @@ service firebase.storage {
         && customerDoc(customerId).data.allowPhoto == true;
     }
 
-    function isAllowedImageUpload() {
+    function sessionExists(sessionId) {
+      return firestore.exists(/databases/(default)/documents/chair_sessions/$(sessionId));
+    }
+
+    function sessionDoc(sessionId) {
+      return firestore.get(/databases/(default)/documents/chair_sessions/$(sessionId));
+    }
+
+    function isAssignedSessionMember(salonId, customerId, sessionId) {
+      return isActiveMember(salonId)
+        && sessionExists(sessionId)
+        && sessionDoc(sessionId).data.salonId == salonId
+        && sessionDoc(sessionId).data.customerId == customerId
+        && sessionDoc(sessionId).data.assignedStaffId == request.auth.uid;
+    }
+
+    function isAssignedServingMember(salonId, customerId, sessionId) {
+      return isAssignedSessionMember(salonId, customerId, sessionId)
+        && sessionDoc(sessionId).data.status == "serving";
+    }
+
+    function isAllowedHaircutPhoto(salonId, customerId, sessionId) {
       return request.resource != null
-        && request.resource.size <= 5 * 1024 * 1024
-        && request.resource.contentType.matches('image/.*');
+        && request.resource.size > 0
+        && request.resource.size <= 3 * 1024 * 1024
+        && request.resource.contentType == "image/jpeg"
+        && request.resource.metadata.salonId == salonId
+        && request.resource.metadata.customerId == customerId
+        && request.resource.metadata.sessionId == sessionId
+        && request.resource.metadata.uploaderUid == request.auth.uid;
     }
 
     function isAllowedAvatarUpload() {
@@ -52,13 +78,15 @@ service firebase.storage {
         && request.resource.contentType.matches('image/(jpeg|png|webp)');
     }
 
-    match /salons/{salonId}/customers/{customerId}/{allPaths=**} {
-      allow read: if isActiveMember(salonId)
-        && customerAllowsPhoto(salonId, customerId);
-      allow create, update: if isActiveMember(salonId)
+    match /salons/{salonId}/customers/{customerId}/haircuts/{sessionId}/{fileName} {
+      allow read: if customerAllowsPhoto(salonId, customerId)
+        && (isOwner(salonId) || isAssignedSessionMember(salonId, customerId, sessionId));
+      allow create: if isAssignedServingMember(salonId, customerId, sessionId)
         && customerAllowsPhoto(salonId, customerId)
-        && isAllowedImageUpload();
-      allow delete: if isActiveMember(salonId);
+        && isAllowedHaircutPhoto(salonId, customerId, sessionId);
+      allow update: if false;
+      allow delete: if isOwner(salonId)
+        || isAssignedSessionMember(salonId, customerId, sessionId);
     }
 
     match /salons/{salonId}/owner_avatars/{ownerUid}/{fileName} {

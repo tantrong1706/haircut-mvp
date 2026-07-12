@@ -1039,6 +1039,46 @@ small {
   margin-top: 6px;
 }
 
+.history-record-content {
+  min-width: 0;
+}
+
+.history-page .list-item {
+  align-items: start;
+}
+
+.history-page .list-item > .pill {
+  margin-top: 0;
+}
+
+.haircut-photo-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.haircut-photo {
+  position: relative;
+  min-width: 0;
+  aspect-ratio: 4 / 5;
+  overflow: hidden;
+  border: 1px solid rgba(21, 25, 23, 0.1);
+  border-radius: 14px;
+  background: #e8ede9;
+}
+
+.haircut-photo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.history-photo-grid {
+  width: min(100%, 300px);
+}
+
 .empty-state {
   display: grid;
   place-items: center;

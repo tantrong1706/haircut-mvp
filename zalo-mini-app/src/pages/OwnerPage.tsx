@@ -1058,6 +1058,19 @@ function ApprovalsPanel({
             </span>
             <span>Thợ: {request.staffName || "Nhân viên"}</span>
             <p>{request.note || "Không có ghi chú"}</p>
+            {request.customer?.allowPhoto === true && request.photoUrls.length > 0 ? (
+              <div className="haircut-photo-grid approval-photo-grid" aria-label="Ảnh kiểu tóc">
+                {request.photoUrls.map((photoUrl, index) => (
+                  <div className="haircut-photo" key={photoUrl}>
+                    <img
+                      src={photoUrl}
+                      alt={`Ảnh kiểu tóc ${index + 1} của ${request.customer?.name || "khách hàng"}`}
+                      loading="lazy"
+                    />
+                  </div>
+                ))}
+              </div>
+            ) : null}
             <small>
               +{request.pointsAdded} điểm · {formatDateTime(request.createdAtMs)}
             </small>

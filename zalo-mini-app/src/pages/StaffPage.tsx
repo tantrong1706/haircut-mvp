@@ -1,9 +1,14 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
+  Camera,
   ClipboardPenLine,
   Clock3,
+  ImagePlus,
+  LoaderCircle,
   Send,
+  ShieldCheck,
   TicketCheck,
+  Trash2,
   UserRoundCheck,
   UsersRound,
 } from "lucide-react";
@@ -18,6 +23,12 @@ import {
   submitPointRequest,
 } from "../services/operations";
 import { AppUser } from "../services/auth";
+import {
+  MAX_HAIRCUT_PHOTOS,
+  UploadedHaircutPhoto,
+  deleteHaircutPhoto,
+  uploadHaircutPhoto,
+} from "../services/customerPhotos";
 import { trackEvent, withMonitoringTrace } from "../services/monitoring";
 
 type Props = {
@@ -38,6 +49,10 @@ export function StaffPage({ currentUser }: Props) {
   const [loaded, setLoaded] = useState(false);
   const [pointPerVisit, setPointPerVisit] = useState(1);
   const [salonName, setSalonName] = useState("");
+  const [photosBySession, setPhotosBySession] = useState<Record<string, UploadedHaircutPhoto[]>>(
+    {},
+  );
+  const [photoBusy, setPhotoBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -50,6 +65,9 @@ export function StaffPage({ currentUser }: Props) {
   const isPendingApproval = selectedSession?.status === "pending_approval";
   const isAssignedToCurrentUser = selectedSession?.assignedStaffId === currentUser.uid;
   const canEditService = selectedSession?.status === "serving" && isAssignedToCurrentUser;
+  const selectedPhotos = selectedSession ? (photosBySession[selectedSession.id] ?? []) : [];
+  const customerAllowsPhoto = selectedSession?.customer?.allowPhoto === true;
+  const hasRevokedPhotoConsent = selectedPhotos.length > 0 && !customerAllowsPhoto;
   const isAssignedToAnother =
     selectedSession?.status === "serving" &&
     Boolean(selectedSession.assignedStaffId) &&
@@ -132,6 +150,7 @@ export function StaffPage({ currentUser }: Props) {
             salonId,
             session: selectedSession,
             note,
+            photoUrls: selectedPhotos.map((photo) => photo.url),
             pointsRequested: pointPerVisit,
           }),
         {
@@ -140,6 +159,11 @@ export function StaffPage({ currentUser }: Props) {
         },
       );
       setNote("");
+      setPhotosBySession((current) => {
+        const next = { ...current };
+        delete next[selectedSession.id];
+        return next;
+      });
       trackEvent("staff_point_request_submitted", {
         salon_id: salonId,
         points_requested: pointPerVisit,
@@ -154,6 +178,88 @@ export function StaffPage({ currentUser }: Props) {
       setError(err instanceof Error ? err.message : "Không gửi được yêu cầu");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handlePhotoFiles(files: File[]) {
+    const session = selectedSession;
+    if (!session || !canEditService || !customerAllowsPhoto || photoBusy) {
+      return;
+    }
+
+    const availableSlots = MAX_HAIRCUT_PHOTOS - selectedPhotos.length;
+    if (availableSlots <= 0) {
+      setError(`Mỗi lượt chỉ lưu tối đa ${MAX_HAIRCUT_PHOTOS} ảnh.`);
+      return;
+    }
+    if (files.length > availableSlots) {
+      setError(`Bạn chỉ có thể thêm ${availableSlots} ảnh nữa cho lượt này.`);
+      return;
+    }
+
+    setPhotoBusy(true);
+    setMessage("");
+    setError("");
+    let uploadedCount = 0;
+
+    try {
+      for (const file of files) {
+        const uploadedPhoto = await withMonitoringTrace(
+          "staff_upload_haircut_photo",
+          () =>
+            uploadHaircutPhoto({
+              salonId,
+              customerId: session.customerId,
+              sessionId: session.id,
+              file,
+            }),
+          {
+            salon_id: salonId,
+            file_size: file.size,
+            file_type: file.type,
+          },
+        );
+
+        setPhotosBySession((current) => ({
+          ...current,
+          [session.id]: [...(current[session.id] ?? []), uploadedPhoto],
+        }));
+        uploadedCount += 1;
+      }
+
+      trackEvent("staff_haircut_photos_uploaded", {
+        salon_id: salonId,
+        photo_count: uploadedCount,
+      });
+      setMessage(`Đã thêm ${uploadedCount} ảnh kiểu tóc.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không tải được ảnh kiểu tóc");
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
+
+  async function removePhoto(photo: UploadedHaircutPhoto) {
+    const sessionId = selectedSession?.id;
+    if (!sessionId || photoBusy) {
+      return;
+    }
+
+    setPhotoBusy(true);
+    setMessage("");
+    setError("");
+
+    try {
+      await deleteHaircutPhoto(photo.path);
+      setPhotosBySession((current) => ({
+        ...current,
+        [sessionId]: (current[sessionId] ?? []).filter((item) => item.id !== photo.id),
+      }));
+      setMessage("Đã xóa ảnh kiểu tóc.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không xóa được ảnh kiểu tóc");
+    } finally {
+      setPhotoBusy(false);
     }
   }
 
@@ -345,6 +451,107 @@ export function StaffPage({ currentUser }: Props) {
               />
             </label>
 
+            <section className="staff-photo-panel" aria-label="Ảnh kiểu tóc">
+              <div className="staff-photo-heading">
+                <div>
+                  <span>Ảnh kiểu tóc</span>
+                  <strong>
+                    {selectedPhotos.length}/{MAX_HAIRCUT_PHOTOS} ảnh
+                  </strong>
+                </div>
+                {photoBusy ? (
+                  <LoaderCircle className="spin-icon" size={20} aria-hidden="true" />
+                ) : null}
+              </div>
+
+              {!customerAllowsPhoto ? (
+                <div className="photo-consent-notice">
+                  <ShieldCheck size={20} aria-hidden="true" />
+                  <span>
+                    {selectedPhotos.length > 0
+                      ? "Khách đã rút quyền lưu ảnh. Hãy xóa ảnh trước khi gửi duyệt."
+                      : "Khách chưa đồng ý lưu ảnh. Không chụp hoặc tải ảnh lên."}
+                  </span>
+                </div>
+              ) : (
+                <div className="staff-photo-actions">
+                  <label
+                    className={
+                      !canEditService || photoBusy || selectedPhotos.length >= MAX_HAIRCUT_PHOTOS
+                        ? "photo-action disabled"
+                        : "photo-action"
+                    }
+                  >
+                    <Camera size={19} aria-hidden="true" />
+                    <span>Chụp ảnh</span>
+                    <input
+                      aria-label="Chụp ảnh kiểu tóc"
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      capture="environment"
+                      disabled={
+                        !canEditService || photoBusy || selectedPhotos.length >= MAX_HAIRCUT_PHOTOS
+                      }
+                      onChange={(event) => {
+                        const files = Array.from(event.target.files ?? []);
+                        event.target.value = "";
+                        void handlePhotoFiles(files);
+                      }}
+                    />
+                  </label>
+
+                  <label
+                    className={
+                      !canEditService || photoBusy || selectedPhotos.length >= MAX_HAIRCUT_PHOTOS
+                        ? "photo-action secondary disabled"
+                        : "photo-action secondary"
+                    }
+                  >
+                    <ImagePlus size={19} aria-hidden="true" />
+                    <span>Chọn ảnh</span>
+                    <input
+                      aria-label="Chọn ảnh kiểu tóc từ máy"
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      multiple
+                      disabled={
+                        !canEditService || photoBusy || selectedPhotos.length >= MAX_HAIRCUT_PHOTOS
+                      }
+                      onChange={(event) => {
+                        const files = Array.from(event.target.files ?? []);
+                        event.target.value = "";
+                        void handlePhotoFiles(files);
+                      }}
+                    />
+                  </label>
+                </div>
+              )}
+
+              {selectedPhotos.length > 0 ? (
+                <div className="haircut-photo-grid staff-photo-grid">
+                  {selectedPhotos.map((photo, index) => (
+                    <div className="haircut-photo" key={photo.id}>
+                      <img src={photo.url} alt={`Ảnh kiểu tóc ${index + 1}`} />
+                      <button
+                        type="button"
+                        aria-label={`Xóa ảnh kiểu tóc ${index + 1}`}
+                        disabled={photoBusy}
+                        onClick={() => void removePhoto(photo)}
+                      >
+                        <Trash2 size={16} aria-hidden="true" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : customerAllowsPhoto ? (
+                <small>
+                  {canEditService
+                    ? "Chụp ảnh sau khi hoàn tất để lưu đúng kiểu tóc của khách."
+                    : "Nhận khách trước khi chụp ảnh."}
+                </small>
+              ) : null}
+            </section>
+
             {selectedSession.status === "waiting" ? (
               <button
                 className="primary-button"
@@ -357,7 +564,13 @@ export function StaffPage({ currentUser }: Props) {
             ) : (
               <button
                 className="primary-button"
-                disabled={loading || !canEditService || note.trim().length === 0}
+                disabled={
+                  loading ||
+                  photoBusy ||
+                  hasRevokedPhotoConsent ||
+                  !canEditService ||
+                  note.trim().length === 0
+                }
                 onClick={handleSubmit}
               >
                 {isPendingApproval ? (

@@ -39,11 +39,13 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await testEnv.clearFirestore();
+  await testEnv.clearStorage();
   await testEnv.withSecurityRulesDisabled(async (context) => {
     const db = context.firestore();
     await Promise.all([
       setDoc(doc(db, "users", "owner-a"), member(salonA, "owner")),
       setDoc(doc(db, "users", "staff-a"), member(salonA, "staff")),
+      setDoc(doc(db, "users", "staff-other-a"), member(salonA, "staff")),
       setDoc(doc(db, "users", "owner-b"), member(salonB, "owner")),
       setDoc(doc(db, "salons", salonA), { name: "Salon A", ownerId: "owner-a" }),
       setDoc(doc(db, "salons", salonB), { name: "Salon B", ownerId: "owner-b" }),
@@ -54,6 +56,11 @@ beforeEach(async () => {
         allowPhoto: true,
       }),
       setDoc(doc(db, "chair_sessions", "session-a"), session(salonA, "customer-a")),
+      setDoc(doc(db, "chair_sessions", "session-photo"), {
+        ...session(salonA, "customer-photo"),
+        status: "serving",
+        assignedStaffId: "staff-a",
+      }),
       setDoc(doc(db, "haircut_records", "record-a"), privateRecord(salonA, "customer-a")),
       setDoc(doc(db, "reward_history", "reward-a"), privateRecord(salonA, "customer-a")),
       setDoc(doc(db, "lucky_wheel", salonA), { salonId: salonA, requiredPoints: 5, slots: [] }),
@@ -126,14 +133,70 @@ describe("Firestore production rules", () => {
     await assertFails(setDoc(doc(ownerDb, "_public_rate_limits", "forged-counter"), { count: 0 }));
   });
 
-  it("chỉ cho thành viên salon tải ảnh khách khi khách đã đồng ý", async () => {
+  it("chỉ cho nhân viên phụ trách tải ảnh vào đúng lượt khách đã đồng ý", async () => {
     const staffStorage = testEnv.authenticatedContext("staff-a").storage();
-    const allowed = ref(staffStorage, `salons/${salonA}/customers/customer-photo/style.webp`);
-    const denied = ref(staffStorage, `salons/${salonA}/customers/customer-a/style.webp`);
+    const otherStaffStorage = testEnv.authenticatedContext("staff-other-a").storage();
+    const allowedPath =
+      `salons/${salonA}/customers/customer-photo/haircuts/session-photo/` +
+      "photo-123456789abc.jpg";
+    const deniedConsentPath =
+      `salons/${salonA}/customers/customer-a/haircuts/session-a/` + "photo-123456789abc.jpg";
+    const allowed = ref(staffStorage, allowedPath);
+    const wrongStaff = ref(otherStaffStorage, allowedPath);
+    const deniedConsent = ref(staffStorage, deniedConsentPath);
+    const bytes = new Uint8Array([1, 2, 3]);
+    const validMetadata = {
+      contentType: "image/jpeg",
+      customMetadata: {
+        salonId: salonA,
+        customerId: "customer-photo",
+        sessionId: "session-photo",
+        uploaderUid: "staff-a",
+      },
+    };
+
+    await assertSucceeds(uploadBytes(allowed, bytes, validMetadata));
+    await assertSucceeds(getBytes(allowed));
+    await assertFails(uploadBytes(wrongStaff, bytes, validMetadata));
+    await assertFails(
+      uploadBytes(deniedConsent, bytes, {
+        ...validMetadata,
+        customMetadata: {
+          ...validMetadata.customMetadata,
+          customerId: "customer-a",
+          sessionId: "session-a",
+        },
+      }),
+    );
+  });
+
+  it("từ chối ảnh có metadata giả hoặc định dạng không hợp lệ", async () => {
+    const staffStorage = testEnv.authenticatedContext("staff-a").storage();
+    const basePath = `salons/${salonA}/customers/customer-photo/haircuts/session-photo`;
     const bytes = new Uint8Array([1, 2, 3]);
 
-    await assertSucceeds(uploadBytes(allowed, bytes, { contentType: "image/webp" }));
-    await assertFails(uploadBytes(denied, bytes, { contentType: "image/webp" }));
+    await assertFails(
+      uploadBytes(ref(staffStorage, `${basePath}/photo-123456789abc.jpg`), bytes, {
+        contentType: "image/jpeg",
+        customMetadata: {
+          salonId: salonA,
+          customerId: "customer-photo",
+          sessionId: "session-photo",
+          uploaderUid: "staff-other-a",
+        },
+      }),
+    );
+    await assertFails(
+      uploadBytes(ref(staffStorage, `${basePath}/photo-abcdef123456.png`), bytes, {
+        contentType: "image/png",
+        customMetadata: {
+          salonId: salonA,
+          customerId: "customer-photo",
+          sessionId: "session-photo",
+          uploaderUid: "staff-a",
+        },
+      }),
+    );
   });
 
   it("chỉ owner được tải avatar của chính mình", async () => {

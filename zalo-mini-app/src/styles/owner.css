@@ -207,6 +207,11 @@
   font-weight: 950;
 }
 
+.owner-page .approval-photo-grid {
+  width: min(100%, 360px);
+  grid-template-columns: repeat(3, minmax(0, 112px));
+}
+
 .owner-page .management-card-header {
   display: flex;
   align-items: center;

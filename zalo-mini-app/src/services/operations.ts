@@ -54,6 +54,7 @@ export type PointRequest = {
   customerId: string;
   staffName: string;
   note: string;
+  photoUrls: string[];
   pointsAdded: number;
   status: "pending" | "approved" | "rejected";
   createdAtMs: number | null;
@@ -687,6 +688,7 @@ export async function submitPointRequest(input: {
   salonId: string;
   session: StaffSession;
   note: string;
+  photoUrls?: string[];
   pointsRequested?: number;
 }) {
   const pointsRequested =
@@ -700,7 +702,7 @@ export async function submitPointRequest(input: {
       salonId: input.salonId,
       sessionId: input.session.id,
       note: input.note,
-      photoUrls: [],
+      photoUrls: input.photoUrls ?? [],
       pointsRequested,
     },
     () => submitPointRequestDirect({ ...input, pointsRequested }),
@@ -790,6 +792,7 @@ async function submitPointRequestDirect(input: {
   salonId: string;
   session: StaffSession;
   note: string;
+  photoUrls?: string[];
   pointsRequested: number;
 }) {
   const db = getFirebaseDb();
@@ -843,6 +846,9 @@ async function submitPointRequestDirect(input: {
     if (!customerSnap.exists() || customerSnap.data().salonId !== input.salonId) {
       throw new Error("Hồ sơ khách không thuộc salon này");
     }
+    if ((input.photoUrls?.length ?? 0) > 0 && customerSnap.data().allowPhoto !== true) {
+      throw new Error("Khách chưa đồng ý lưu ảnh kiểu tóc");
+    }
 
     transaction.set(requestRef, {
       salonId: input.salonId,
@@ -851,7 +857,7 @@ async function submitPointRequestDirect(input: {
       staffId: signedStaff.uid,
       staffName: signedStaff.name,
       note: input.note,
-      photoUrls: [],
+      photoUrls: input.photoUrls ?? [],
       pointsRequested,
       pointsAdded: pointsRequested,
       status: "pending",
@@ -968,7 +974,7 @@ async function approvePointRequestDirect(request: PointRequest) {
       staffName: requestData.staffName || "",
       pointRequestId: request.id,
       note: requestData.note || "",
-      photoUrls: [],
+      photoUrls: customerSnap.data().allowPhoto === true ? request.photoUrls : [],
       pointsAdded,
       approvedBy: getFirebaseAuth()?.currentUser?.uid || "",
       createdAt: serverTimestamp(),
@@ -1610,18 +1616,62 @@ function mapSession(docSnap: QueryDocumentSnapshot<DocumentData>): StaffSession 
 
 function mapPointRequest(docSnap: QueryDocumentSnapshot<DocumentData>): PointRequest {
   const data = docSnap.data();
+  const salonId = String(data.salonId || "");
+  const sessionId = String(data.sessionId || "");
+  const customerId = String(data.customerId || "");
 
   return {
     id: docSnap.id,
-    salonId: String(data.salonId || ""),
-    sessionId: String(data.sessionId || ""),
-    customerId: String(data.customerId || ""),
+    salonId,
+    sessionId,
+    customerId,
     staffName: String(data.staffName || ""),
     note: String(data.note || ""),
+    photoUrls: trustedPointRequestPhotoUrls(data.photoUrls, { salonId, customerId, sessionId }),
     pointsAdded: Number(data.pointsAdded ?? data.pointsRequested ?? 1),
     status: normalizeRequestStatus(data.status),
     createdAtMs: toMillis(data.createdAt),
   };
+}
+
+function trustedPointRequestPhotoUrls(
+  value: unknown,
+  input: { salonId: string; customerId: string; sessionId: string },
+) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const bucketName = String(import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "");
+  if (!bucketName) {
+    return [];
+  }
+
+  const prefix = `salons/${input.salonId}/customers/${input.customerId}/haircuts/${input.sessionId}/`;
+  return value.slice(0, 3).filter((photoUrl): photoUrl is string => {
+    if (typeof photoUrl !== "string") {
+      return false;
+    }
+
+    try {
+      const parsed = new URL(photoUrl);
+      const match = parsed.pathname.match(/^\/v0\/b\/([^/]+)\/o\/(.+)$/);
+      if (
+        parsed.protocol !== "https:" ||
+        parsed.hostname !== "firebasestorage.googleapis.com" ||
+        !match ||
+        decodeURIComponent(match[1]) !== bucketName
+      ) {
+        return false;
+      }
+
+      const objectName = decodeURIComponent(match[2]);
+      const fileName = objectName.startsWith(prefix) ? objectName.slice(prefix.length) : "";
+      return /^photo-[A-Za-z0-9-]{12,80}\.jpg$/.test(fileName);
+    } catch {
+      return false;
+    }
+  });
 }
 
 async function attachCustomers(sessions: StaffSession[]) {

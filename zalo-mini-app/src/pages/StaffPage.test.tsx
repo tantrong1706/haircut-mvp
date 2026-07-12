@@ -6,6 +6,8 @@ import { StaffPage } from "./StaffPage";
 
 const mocks = vi.hoisted(() => ({
   claimServiceSession: vi.fn(),
+  deleteHaircutPhoto: vi.fn(),
+  uploadHaircutPhoto: vi.fn(),
   submitPointRequest: vi.fn(),
   listenActiveSessions: vi.fn(),
   getSalonProfile: vi.fn(),
@@ -17,6 +19,12 @@ vi.mock("../services/operations", () => ({
   listenActiveSessions: mocks.listenActiveSessions,
   getSalonProfile: mocks.getSalonProfile,
   formatDateTime: () => "09:00 12/07/2026",
+}));
+
+vi.mock("../services/customerPhotos", () => ({
+  MAX_HAIRCUT_PHOTOS: 3,
+  deleteHaircutPhoto: mocks.deleteHaircutPhoto,
+  uploadHaircutPhoto: mocks.uploadHaircutPhoto,
 }));
 
 vi.mock("../services/monitoring", () => ({
@@ -45,8 +53,12 @@ const waitingSession: StaffSession = {
   },
 };
 
+let sessionsForTest: StaffSession[] = [waitingSession];
+
 describe("StaffPage", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
+    sessionsForTest = [waitingSession];
     mocks.getSalonProfile.mockResolvedValue({
       id: "salon-a",
       name: "HAIRCUT Studio",
@@ -57,7 +69,7 @@ describe("StaffPage", () => {
     });
     mocks.listenActiveSessions.mockImplementation(
       (_salonId: string, onChange: (sessions: StaffSession[]) => void) => {
-        onChange([waitingSession]);
+        onChange(sessionsForTest);
         return vi.fn();
       },
     );
@@ -66,6 +78,12 @@ describe("StaffPage", () => {
       assignedStaffId: "staff-a",
       assignedStaffName: "Nam",
     });
+    mocks.uploadHaircutPhoto.mockResolvedValue({
+      id: "photo-a",
+      path: "salons/salon-a/customers/customer-a/haircuts/session-a/photo-a.jpg",
+      url: "https://firebasestorage.googleapis.com/photo-a.jpg",
+    });
+    mocks.deleteHaircutPhoto.mockResolvedValue(undefined);
     mocks.submitPointRequest.mockResolvedValue({ requestId: "session-a" });
   });
 
@@ -97,5 +115,53 @@ describe("StaffPage", () => {
 
     await waitFor(() => expect(mocks.submitPointRequest).toHaveBeenCalledOnce());
     expect(screen.getByText("Đang chờ chủ duyệt")).toBeInTheDocument();
+  });
+
+  it("chụp ảnh cho khách đã đồng ý và gửi ảnh cùng yêu cầu duyệt", async () => {
+    sessionsForTest = [
+      {
+        ...waitingSession,
+        status: "serving",
+        assignedStaffId: "staff-a",
+        assignedStaffName: "Nam",
+        customer: {
+          ...waitingSession.customer!,
+          allowPhoto: true,
+        },
+      },
+    ];
+    const user = userEvent.setup();
+    render(
+      <StaffPage
+        currentUser={{
+          uid: "staff-a",
+          salonId: "salon-a",
+          name: "Nam",
+          avatarUrl: "",
+          role: "staff",
+          isActive: true,
+          canRedeemRewards: false,
+        }}
+      />,
+    );
+
+    const photo = new File([new Uint8Array([1, 2, 3])], "toc-moi.jpg", {
+      type: "image/jpeg",
+    });
+    await user.upload(await screen.findByLabelText("Chụp ảnh kiểu tóc"), photo);
+
+    await waitFor(() => expect(mocks.uploadHaircutPhoto).toHaveBeenCalledOnce());
+    expect(await screen.findByAltText("Ảnh kiểu tóc 1")).toBeInTheDocument();
+
+    await user.type(screen.getByPlaceholderText(/Fade thấp/i), "Fade thấp, giữ mái");
+    await user.click(screen.getByRole("button", { name: /Gửi cộng 2 điểm/i }));
+
+    await waitFor(() =>
+      expect(mocks.submitPointRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          photoUrls: ["https://firebasestorage.googleapis.com/photo-a.jpg"],
+        }),
+      ),
+    );
   });
 });
