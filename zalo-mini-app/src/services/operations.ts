@@ -178,6 +178,7 @@ export type RewardCodeInfo = {
   customerName?: string;
   createdAtMs?: number | null;
   usedAtMs?: number | null;
+  expiresAtMs?: number | null;
 };
 
 export type DeleteCustomerDataResult = {
@@ -292,7 +293,24 @@ export function listenPendingPointRequests(
           .filter((request) => request.status === "pending")
           .sort((a, b) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0));
 
-        onChange(await attachCustomersToRequests(requests));
+        const legacyRequests = requests.filter((request) => !request.customer);
+        if (legacyRequests.length === 0) {
+          onChange(requests);
+          return;
+        }
+
+        const legacyCustomers = new Map(
+          (await attachCustomersToRequests(legacyRequests)).map((request) => [
+            request.id,
+            request.customer,
+          ]),
+        );
+        onChange(
+          requests.map((request) => ({
+            ...request,
+            customer: request.customer ?? legacyCustomers.get(request.id),
+          })),
+        );
       } catch (error) {
         onError(errorMessage(error));
       }
@@ -1314,6 +1332,7 @@ export async function saveLuckyWheelConfig(salonId: string, config: LuckyWheelCo
     {
       salonId,
       requiredPoints: normalized.requiredPoints,
+      rewardValidityDays: normalized.rewardValidityDays,
       deductPointsAfterSpin: normalized.deductPointsAfterSpin,
       slots: normalized.slots,
     },
@@ -1346,6 +1365,22 @@ export async function redeemRewardCode(input: {
       rewardName: maybeResult?.rewardName || "",
       customerName: maybeResult?.customerName || "",
     };
+  });
+}
+
+export async function restoreRewardCode(input: { salonId: string; rewardCode: string }) {
+  const rewardCode = normalizeRewardCode(input.rewardCode);
+  if (!rewardCode) {
+    throw new Error("Mã quà không hợp lệ");
+  }
+
+  return callFunction<
+    { salonId: string; rewardCode: string; reason: string },
+    { rewardCode: string; status: "unused" }
+  >("restoreRewardCode", {
+    salonId: input.salonId,
+    rewardCode,
+    reason: "Chủ salon hoàn tác thao tác bấm nhầm",
   });
 }
 
@@ -1413,6 +1448,7 @@ async function saveLuckyWheelConfigDirect(salonId: string, config: LuckyWheelCon
     {
       salonId,
       requiredPoints: config.requiredPoints,
+      rewardValidityDays: config.rewardValidityDays,
       deductPointsAfterSpin: config.deductPointsAfterSpin,
       slots: config.slots,
       updatedAt: serverTimestamp(),
@@ -1896,13 +1932,7 @@ function mapSession(docSnap: QueryDocumentSnapshot<DocumentData>): StaffSession 
     createdAtMs: toMillis(data.createdAt),
     expiresAtMs: toMillis(data.expiresAt),
     cancellationReason: String(data.cancellationReason || ""),
-    customer: {
-      id: customerId,
-      name: String(summary.name || "Khách hàng"),
-      phoneLast4: String(summary.phoneLast4 || ""),
-      points: Math.max(0, Number(summary.points ?? 0)),
-      allowPhoto: Boolean(summary.allowPhoto),
-    },
+    customer: embeddedCustomerSummary(summary, customerId),
   };
 }
 
@@ -1911,6 +1941,10 @@ function mapPointRequest(docSnap: QueryDocumentSnapshot<DocumentData>): PointReq
   const salonId = String(data.salonId || "");
   const sessionId = String(data.sessionId || "");
   const customerId = String(data.customerId || "");
+  const summary =
+    typeof data.customerSummary === "object" && data.customerSummary !== null
+      ? data.customerSummary
+      : null;
 
   return {
     id: docSnap.id,
@@ -1925,6 +1959,17 @@ function mapPointRequest(docSnap: QueryDocumentSnapshot<DocumentData>): PointReq
     pointsAdded: Number(data.pointsAdded ?? data.pointsRequested ?? 1),
     status: normalizeRequestStatus(data.status),
     createdAtMs: toMillis(data.createdAt),
+    customer: summary ? embeddedCustomerSummary(summary, customerId) : undefined,
+  };
+}
+
+function embeddedCustomerSummary(value: Record<string, unknown>, customerId: string) {
+  return {
+    id: customerId,
+    name: String(value.name || "Khách hàng"),
+    phoneLast4: String(value.phoneLast4 || ""),
+    points: Math.max(0, Number(value.points ?? 0)),
+    allowPhoto: Boolean(value.allowPhoto),
   };
 }
 

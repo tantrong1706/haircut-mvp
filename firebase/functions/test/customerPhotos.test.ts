@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   isExpectedHaircutPhotoPath,
+  isExpectedOwnerAvatarPath,
   storageObjectNameFromDownloadUrl,
 } from "../src/customerPhotos";
 
@@ -36,6 +37,23 @@ describe("customer photo validation", () => {
         salonId: "salon-a",
         customerId: "customer-b",
         sessionId: "session-a",
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("owner avatar path", () => {
+  it("chỉ chấp nhận avatar đúng owner và salon", () => {
+    expect(
+      isExpectedOwnerAvatarPath("salons/salon-a/owner_avatars/owner-a/avatar", {
+        salonId: "salon-a",
+        ownerUid: "owner-a",
+      }),
+    ).toBe(true);
+    expect(
+      isExpectedOwnerAvatarPath("salons/salon-a/owner_avatars/owner-b/avatar.png", {
+        salonId: "salon-a",
+        ownerUid: "owner-a",
       }),
     ).toBe(false);
   });

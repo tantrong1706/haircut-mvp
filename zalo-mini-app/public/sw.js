@@ -1,4 +1,5 @@
-const CACHE_NAME = "haircut-app-v6";
+const CACHE_VERSION = new URL(self.location.href).searchParams.get("v") || "local";
+const CACHE_NAME = `haircut-app-${CACHE_VERSION}`;
 const APP_SHELL = [
   "/",
   "/index.html",
@@ -36,7 +37,24 @@ self.addEventListener("fetch", (event) => {
   }
 
   if (request.mode === "navigate") {
-    event.respondWith(fetch(request).catch(() => caches.match("/index.html")));
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response.ok) {
+            const copy = response.clone();
+            event.waitUntil(
+              caches.open(CACHE_NAME).then((cache) => cache.put("/index.html", copy)),
+            );
+          }
+          return response;
+        })
+        .catch(() => caches.match("/index.html")),
+    );
+    return;
+  }
+
+  if (new URL(request.url).pathname === "/health.json") {
+    event.respondWith(fetch(request));
     return;
   }
 
@@ -47,8 +65,10 @@ self.addEventListener("fetch", (event) => {
       }
 
       return fetch(request).then((response) => {
-        const copy = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+        if (response.ok) {
+          const copy = response.clone();
+          event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put(request, copy)));
+        }
         return response;
       });
     }),

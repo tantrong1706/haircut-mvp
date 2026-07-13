@@ -1,5 +1,7 @@
 # Hợp đồng API Cloud Functions
 
+> Tài liệu tham khảo, chưa phải schema sinh tự động. Tên callable và validation trong `firebase/functions/src/index.ts` là hợp đồng thực thi; mọi thay đổi production phải đi kèm test Functions và cập nhật tài liệu này.
+
 Các hàm dưới đây là callable HTTPS Functions. Web app nên dùng `VITE_FUNCTION_WRITE_MODE=required` khi chạy pilot thật để mọi thao tác nghiệp vụ đi qua Cloud Functions.
 
 Luồng khách Zalo không tin `zaloUserId` do client tự gửi. Client lấy `zaloAccessToken` bằng `getAccessToken()` của `zmp-sdk`, gửi token lên Cloud Functions; server dùng `ZALO_APP_SECRET` để gọi Zalo Open API và tự suy ra user id thật.

@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
   buildCustomerContactPatch,
+  canCreateCustomerWithinPlan,
+  canRestoreReward,
   canCancelServiceSession,
   countUniqueCustomersSince,
   deletionJobOutcome,
+  effectiveRewardStatus,
   isVerifiedOwnerIdentity,
   isServiceSessionExpired,
   legacyBranchPatch,
+  rewardExpiresAtMs,
   selectWheelSlot,
   serviceSessionExpiresAtMs,
   wheelRewardOutcome,
@@ -33,6 +37,20 @@ describe("dữ liệu khách khi check-in lại", () => {
       phoneLast4: null,
       birthday: null,
     });
+  });
+});
+
+describe("hạn mức khách theo gói", () => {
+  it("cho khách thứ 50 và chặn khách thứ 51 ở gói free", () => {
+    expect(
+      canCreateCustomerWithinPlan({ plan: "free", customerCount: 49, freeCustomerLimit: 50 }),
+    ).toBe(true);
+    expect(
+      canCreateCustomerWithinPlan({ plan: "free", customerCount: 50, freeCustomerLimit: 50 }),
+    ).toBe(false);
+    expect(
+      canCreateCustomerWithinPlan({ plan: "pro", customerCount: 51, freeCustomerLimit: 50 }),
+    ).toBe(true);
   });
 });
 
@@ -108,6 +126,38 @@ describe("thống kê và vòng quay", () => {
       rewardCode: null,
       status: "no_prize",
     });
+  });
+});
+
+describe("hạn dùng mã quà", () => {
+  it("hết hạn đúng tại mốc thời gian cấu hình", () => {
+    const expiresAtMs = rewardExpiresAtMs(1_000, 90);
+
+    expect(effectiveRewardStatus("unused", expiresAtMs, expiresAtMs - 1)).toBe("unused");
+    expect(effectiveRewardStatus("unused", expiresAtMs, expiresAtMs)).toBe("expired");
+    expect(effectiveRewardStatus("used", expiresAtMs, expiresAtMs + 1)).toBe("used");
+  });
+
+  it("chỉ cho owner hoàn tác mã vừa đổi trong cửa sổ an toàn", () => {
+    const nowMs = 1_000_000;
+    expect(
+      canRestoreReward({
+        status: "used",
+        usedAtMs: nowMs - 5 * 60_000,
+        expiresAtMs: nowMs + 60_000,
+        nowMs,
+        restoreWindowMs: 15 * 60_000,
+      }),
+    ).toBe(true);
+    expect(
+      canRestoreReward({
+        status: "used",
+        usedAtMs: nowMs - 16 * 60_000,
+        expiresAtMs: nowMs + 60_000,
+        nowMs,
+        restoreWindowMs: 15 * 60_000,
+      }),
+    ).toBe(false);
   });
 });
 

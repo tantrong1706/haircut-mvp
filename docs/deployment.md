@@ -36,6 +36,10 @@
 
 ## Rollback
 
+- Trước mỗi rollout thay đổi schema, tạo Firestore managed export vào bucket backup riêng, ghi release tag, commit, thời điểm export và người thực hiện vào biên bản phát hành. Không lưu export hoặc khóa dịch vụ trong repository.
 - Hosting: chọn bản phát hành trước trong Firebase Hosting release history.
-- Functions: deploy lại commit ổn định trước; không hạ Rules nếu tạo lại public access.
+- Functions: deploy lại release tag ổn định trước; chỉ rollback code tương thích ngược với dữ liệu đã ghi và không hạ Rules nếu tạo lại public access.
+- Firestore: ưu tiên sửa tiến (forward fix). Chỉ import export vào project phục hồi/staging trước, kiểm đếm document và chạy smoke test rồi mới quyết định khôi phục production; import không tự xóa dữ liệu phát sinh sau thời điểm export.
+- Storage: bật versioning/lifecycle trên bucket backup theo chính sách vận hành và kiểm tra riêng ảnh kiểu tóc/avatar sau phục hồi.
 - Zalo: giữ phiên bản test trước và chỉ phát hành production sau khi smoke test đạt.
+- Mỗi quý chạy một diễn tập restore không dùng dữ liệu khách thật, ghi lại RTO/RPO, lỗi gặp phải và người phê duyệt.

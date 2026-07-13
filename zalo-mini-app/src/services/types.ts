@@ -46,6 +46,7 @@ export type Reward = {
   rewardCode: string;
   status: "unused" | "used" | "expired";
   createdAt: string;
+  expiresAt?: string;
 };
 
 export type SpinResult = {
@@ -65,12 +66,14 @@ export type LuckyWheelSlot = {
 
 export type LuckyWheelConfig = {
   requiredPoints: number;
+  rewardValidityDays: number;
   deductPointsAfterSpin: boolean;
   slots: LuckyWheelSlot[];
 };
 
 export const defaultLuckyWheelConfig: LuckyWheelConfig = {
   requiredPoints: 5,
+  rewardValidityDays: 90,
   deductPointsAfterSpin: true,
   slots: [
     { label: "Giảm 10%", active: true, type: "reward" },

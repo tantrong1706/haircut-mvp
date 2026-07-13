@@ -72,6 +72,7 @@ type CustomerRewardsFunctionResult = {
     rewardCode: string;
     status: Reward["status"];
     createdAtMs: number | null;
+    expiresAtMs: number | null;
   }>;
 };
 
@@ -124,9 +125,15 @@ export function listenSessionLiveUpdates(
         return;
       }
       window.clearTimeout(timeoutId);
-      const baseDelay = retryCount > 0 ? Math.min(60_000, 15_000 * 2 ** retryCount) : 18_000;
-      const jitter = Math.floor(Math.random() * 4_000);
-      timeoutId = window.setTimeout(() => void refresh(), baseDelay + jitter);
+      const delay = customerSessionRefreshDelay(
+        currentSession.sessionStatus,
+        retryCount,
+        Math.random(),
+      );
+      if (delay === null) {
+        return;
+      }
+      timeoutId = window.setTimeout(() => void refresh(), delay);
     };
 
     const refresh = async () => {
@@ -247,6 +254,29 @@ export function listenSessionLiveUpdates(
     unsubSession();
     unsubCustomer();
   };
+}
+
+export function customerSessionRefreshDelay(
+  status: AppSession["sessionStatus"],
+  retryCount: number,
+  randomValue: number,
+) {
+  if (status === "completed" || status === "cancelled") {
+    return null;
+  }
+
+  const baseDelay =
+    retryCount > 0
+      ? Math.min(90_000, 20_000 * 2 ** Math.min(retryCount, 3))
+      : status === "pending_approval"
+        ? 30_000
+        : status === "serving"
+          ? 24_000
+          : 20_000;
+  const safeRandom = Number.isFinite(randomValue)
+    ? Math.min(Math.max(randomValue, 0), 0.999999)
+    : 0;
+  return baseDelay + Math.floor(safeRandom * 5_000);
 }
 
 async function getCustomerSessionState(
@@ -602,6 +632,9 @@ async function spinWheelDirect(session: AppSession): Promise<SpinResult> {
       selectedIndex,
       status: isWinning ? "unused" : "no_prize",
       pointsUsed: wheelConfig.deductPointsAfterSpin ? wheelConfig.requiredPoints : 0,
+      expiresAt: isWinning
+        ? new Date(Date.now() + wheelConfig.rewardValidityDays * 24 * 60 * 60 * 1000)
+        : null,
       createdAt: serverTimestamp(),
     });
 
@@ -742,6 +775,7 @@ export async function getRewards(session: AppSession): Promise<Reward[]> {
       rewardCode: reward.rewardCode || "",
       status: normalizeRewardStatus(reward.status),
       createdAt: formatDate(reward.createdAtMs),
+      expiresAt: formatDate(reward.expiresAtMs),
     }));
   } catch (error) {
     if (getFunctionWriteMode() === "required") {
@@ -776,18 +810,22 @@ async function getRewardsDirect(session: AppSession): Promise<Reward[]> {
     .map((item) => {
       const data = item.data();
       const createdAtMs = toMillis(data.createdAt);
+      const expiresAtMs = toMillis(data.expiresAt);
 
       return {
         createdAtMs,
+        status: data.status,
         reward: {
           id: item.id,
           rewardName: data.rewardName || "",
           rewardCode: data.rewardCode || "",
-          status: normalizeRewardStatus(data.status),
+          status: normalizeRewardStatus(data.status, expiresAtMs),
           createdAt: formatDate(createdAtMs),
+          expiresAt: formatDate(expiresAtMs),
         },
       };
     })
+    .filter((item) => item.status !== "no_prize")
     .sort((a, b) => Number(b.createdAtMs ?? 0) - Number(a.createdAtMs ?? 0))
     .slice(0, 20)
     .map((item) => item.reward);
@@ -929,9 +967,16 @@ function makeRewardCode() {
   return `HC-${date}-${random}`;
 }
 
-function normalizeRewardStatus(status: unknown): Reward["status"] {
+function normalizeRewardStatus(
+  status: unknown,
+  expiresAtMs: number | null = null,
+): Reward["status"] {
   if (status === "used" || status === "expired") {
     return status;
+  }
+
+  if (expiresAtMs !== null && expiresAtMs <= Date.now()) {
+    return "expired";
   }
 
   return "unused";

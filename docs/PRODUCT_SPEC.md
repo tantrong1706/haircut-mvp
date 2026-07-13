@@ -1,5 +1,7 @@
 # Đặc Tả Sản Phẩm HAIRCUT
 
+> Tài liệu định hướng sản phẩm. Luồng và mô hình production hiện hành được chốt tại `docs/architecture.md`, `docs/DATABASE.md` và code Cloud Functions; khi có khác biệt, các nguồn đó được ưu tiên.
+
 ## Định vị
 
 HAIRCUT giúp salon tóc biến khách ghé một lần thành khách quay lại bằng cách lưu lịch sử cắt tóc, cộng điểm và đổi quà qua Zalo Mini App.

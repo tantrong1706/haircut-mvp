@@ -1,4 +1,5 @@
 import { FirebaseApp, initializeApp } from "firebase/app";
+import { ReCaptchaEnterpriseProvider, initializeAppCheck } from "firebase/app-check";
 import { Auth, getAuth } from "firebase/auth";
 import { Firestore, getFirestore } from "firebase/firestore";
 import { Functions, getFunctions, httpsCallable } from "firebase/functions";
@@ -45,6 +46,14 @@ export function getFirebaseApp() {
       appId: import.meta.env.VITE_FIREBASE_APP_ID,
       measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
     });
+
+    const appCheckSiteKey = String(import.meta.env.VITE_FIREBASE_APP_CHECK_SITE_KEY || "").trim();
+    if (appCheckSiteKey) {
+      initializeAppCheck(app, {
+        provider: new ReCaptchaEnterpriseProvider(appCheckSiteKey),
+        isTokenAutoRefreshEnabled: true,
+      });
+    }
   }
 
   return app;
@@ -124,11 +133,11 @@ export async function callFunction<TInput, TOutput>(
     const result = await fn(payload);
     return result.data;
   } catch (error) {
-    throw new Error(friendlyFirebaseFunctionError(error));
+    throw new Error(friendlyFirebaseFunctionError(error, name));
   }
 }
 
-export function friendlyFirebaseFunctionError(error: unknown) {
+export function friendlyFirebaseFunctionError(error: unknown, callableName = "") {
   const code = normalizeErrorCode(readErrorField(error, "code"));
   const rawMessage = readErrorMessage(error);
   const message = normalizeRawErrorMessage(rawMessage);
@@ -137,6 +146,10 @@ export function friendlyFirebaseFunctionError(error: unknown) {
     return message || "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.";
   }
   if (code === "permission-denied") {
+    if (isApprovedPermissionMessage(callableName, message)) {
+      return message;
+    }
+
     return "Tài khoản này không có quyền với salon này.";
   }
   if (code === "not-found") {
@@ -170,6 +183,49 @@ export function friendlyFirebaseFunctionError(error: unknown) {
   }
 
   return message || "Không xử lý được thao tác. Vui lòng thử lại.";
+}
+
+const COMMON_PERMISSION_MESSAGES = new Set([
+  "Không tìm thấy hồ sơ phân quyền",
+  "Tài khoản đã bị tắt",
+  "Không có quyền với salon này",
+  "Bạn không được phân công tại chi nhánh này",
+]);
+
+const PERMISSION_MESSAGES_BY_CALLABLE: Record<string, Set<string>> = {
+  createSalon: new Set(["Tài khoản này không thể tạo salon"]),
+  resolveCustomerQr: new Set([
+    "QR Gương 1 không hợp lệ hoặc đã bị khóa",
+    "QR chi nhánh không hợp lệ hoặc đã được tạo lại",
+    "QR salon không hợp lệ hoặc đã được tạo lại",
+  ]),
+  registerCustomerFromZalo: new Set([
+    "QR Gương 1 không hợp lệ hoặc đã bị khóa",
+    "QR chi nhánh không hợp lệ hoặc đã được tạo lại",
+    "QR salon không hợp lệ hoặc đã được tạo lại",
+  ]),
+  submitPointRequest: new Set(["Bạn không phụ trách lượt cắt này"]),
+  cancelServiceSession: new Set(["Bạn không được hủy lượt cắt này"]),
+  approvePointRequest: new Set(["Yêu cầu không thuộc salon này"]),
+  getCustomerSessionFromZalo: new Set(["Lượt cắt không thuộc khách hàng này"]),
+  lookupRewardCode: new Set(["Nhân viên chưa được phép kiểm tra mã quà"]),
+  redeemRewardCode: new Set(["Nhân viên chưa được phép xác nhận mã quà"]),
+};
+
+function isApprovedPermissionMessage(callableName: string, message: string) {
+  if (!message || message.length > 180) {
+    return false;
+  }
+  if (COMMON_PERMISSION_MESSAGES.has(message)) {
+    return true;
+  }
+  if (PERMISSION_MESSAGES_BY_CALLABLE[callableName]?.has(message)) {
+    return true;
+  }
+
+  return (
+    callableName === "submitPointRequest" && /^Lượt này đang do .{1,80} phụ trách$/u.test(message)
+  );
 }
 
 function normalizeErrorCode(value: string) {

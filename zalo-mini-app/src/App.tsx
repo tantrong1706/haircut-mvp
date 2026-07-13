@@ -173,7 +173,9 @@ export default function App() {
     return (
       <div className="app-shell ops-shell">
         {!isOnline ? (
-          <p className="offline-banner">Mất kết nối mạng. Dữ liệu mới sẽ gửi lại khi có mạng.</p>
+          <p className="offline-banner">
+            Mất kết nối mạng. Thao tác chưa lưu cần được thử lại sau khi có mạng.
+          </p>
         ) : null}
         <main className="app-main wide-main">
           <Suspense fallback={<PageLoading />}>
@@ -191,7 +193,9 @@ export default function App() {
     return (
       <div className="app-shell ops-shell">
         {!isOnline ? (
-          <p className="offline-banner">Mất kết nối mạng. Dữ liệu mới sẽ gửi lại khi có mạng.</p>
+          <p className="offline-banner">
+            Mất kết nối mạng. Thao tác chưa lưu cần được thử lại sau khi có mạng.
+          </p>
         ) : null}
         <main className="app-main wide-main">
           <Suspense fallback={<PageLoading />}>
@@ -242,7 +246,9 @@ export default function App() {
   return (
     <div className="app-shell">
       {!isOnline ? (
-        <p className="offline-banner">Mất kết nối mạng. Dữ liệu mới sẽ gửi lại khi có mạng.</p>
+        <p className="offline-banner">
+          Mất kết nối mạng. Thao tác chưa lưu cần được thử lại sau khi có mạng.
+        </p>
       ) : null}
       <main className="app-main">
         <Suspense fallback={<PageLoading />}>{content}</Suspense>

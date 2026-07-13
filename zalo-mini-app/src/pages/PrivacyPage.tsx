@@ -1,6 +1,9 @@
 import { BrandLogo } from "../components/BrandLogo";
 
 export function PrivacyPage() {
+  const supportEmail = String(import.meta.env.VITE_SUPPORT_EMAIL || "").trim();
+  const supportPhone = String(import.meta.env.VITE_SUPPORT_PHONE || "").trim();
+
   return (
     <section className="privacy-page">
       <header className="page-header">
@@ -73,9 +76,19 @@ export function PrivacyPage() {
 
         <h2>9. Liên hệ</h2>
         <p>
-          Email hỗ trợ: <strong>[ĐIỀN EMAIL HỖ TRỢ THẬT]</strong>
-          <br />
-          Điện thoại hỗ trợ: <strong>[ĐIỀN SỐ ĐIỆN THOẠI HỖ TRỢ THẬT]</strong>
+          {supportEmail ? (
+            <>
+              Email hỗ trợ: <a href={`mailto:${supportEmail}`}>{supportEmail}</a>
+            </>
+          ) : (
+            <>Khách vui lòng liên hệ trực tiếp salon đã hiển thị khi check-in.</>
+          )}
+          {supportPhone ? (
+            <>
+              <br />
+              Điện thoại hỗ trợ: <a href={`tel:${supportPhone}`}>{supportPhone}</a>
+            </>
+          ) : null}
         </p>
       </div>
     </section>

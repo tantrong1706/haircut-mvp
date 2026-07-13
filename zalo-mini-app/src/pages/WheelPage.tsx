@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Gift, LockKeyhole, Sparkles, Ticket } from "lucide-react";
+import { Gift, LockKeyhole, RefreshCcw, Sparkles, Ticket } from "lucide-react";
 import { BrandLogo } from "../components/BrandLogo";
 import { getCustomerWheelConfig, spinWheel } from "../services/api";
 import { trackEvent, withMonitoringTrace } from "../services/monitoring";
@@ -23,6 +23,7 @@ export function WheelPage({ session, onSessionChange }: Props) {
   const [result, setResult] = useState<SpinResult | null>(null);
   const [rotationDeg, setRotationDeg] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [loadVersion, setLoadVersion] = useState(0);
   const slots = useMemo(() => activeWheelSlots(wheelConfig), [wheelConfig]);
   const missingPoints = Math.max(0, wheelConfig.requiredPoints - session.customer.points);
   const canSpin = !loadingConfig && !spinning && missingPoints === 0 && slots.length > 0;
@@ -45,7 +46,7 @@ export function WheelPage({ session, onSessionChange }: Props) {
         setError(err instanceof Error ? err.message : "Không tải được cấu hình vòng quay"),
       )
       .finally(() => setLoadingConfig(false));
-  }, [session.sessionId]);
+  }, [loadVersion, session.sessionId]);
 
   async function handleSpin() {
     setSpinning(true);
@@ -160,7 +161,17 @@ export function WheelPage({ session, onSessionChange }: Props) {
         </div>
       ) : null}
 
-      {error ? <p className="alert error">{error}</p> : null}
+      {error ? (
+        <div className="alert error retry-alert">
+          <span>{error}</span>
+          {loadingConfig ? null : (
+            <button type="button" onClick={() => setLoadVersion((value) => value + 1)}>
+              <RefreshCcw size={16} aria-hidden="true" />
+              Tải lại
+            </button>
+          )}
+        </div>
+      ) : null}
 
       {result ? (
         <div className={`reward-result${result.isWinning ? "" : " no-prize"}`}>

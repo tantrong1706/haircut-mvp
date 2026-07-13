@@ -27,9 +27,12 @@ if ($deploysHosting) {
   $publicDir = Join-Path $firebaseDir "public"
 
   Push-Location $appDir
-  npm install
-  npm run build
-  Pop-Location
+  try {
+    npm ci
+    npm run build
+  } finally {
+    Pop-Location
+  }
 
   $resolvedFirebaseDir = (Resolve-Path -LiteralPath $firebaseDir).Path
   $publicParent = Split-Path -Parent $publicDir
@@ -41,25 +44,33 @@ if ($deploysHosting) {
   Remove-Item -LiteralPath $publicDir -Recurse -Force -ErrorAction SilentlyContinue
   New-Item -ItemType Directory -Path $publicDir | Out-Null
   Copy-Item -Path (Join-Path $appDir "www\*") -Destination $publicDir -Recurse -Force
+  if (-not (Test-Path -LiteralPath (Join-Path $publicDir "index.html"))) {
+    throw "Bản Hosting thiếu index.html sau khi đóng gói"
+  }
 }
 
 if ($IncludeFunctions) {
   Push-Location (Join-Path $firebaseDir "functions")
-  npm install
-  npm run build
-  Pop-Location
+  try {
+    npm ci
+    npm run build
+  } finally {
+    Pop-Location
+  }
 }
 
 Push-Location $firebaseDir
-if ($OnlyRules) {
-  firebase deploy --only firestore:rules,firestore:indexes
-} elseif ($OnlyHosting) {
-  firebase deploy --only hosting
-} else {
-  $targets = @("hosting")
-  if ($IncludeFirestore) { $targets += "firestore:rules", "firestore:indexes" }
-  if ($IncludeFunctions) { $targets += "functions" }
-  if ($IncludeStorage) { $targets += "storage" }
-  firebase deploy --only ($targets -join ",")
+try {
+  if ($OnlyRules) {
+    firebase deploy --only firestore:rules,firestore:indexes
+  } elseif ($OnlyHosting) {
+    firebase deploy --only hosting
+  } else {
+    if ($IncludeFunctions) { firebase deploy --only functions }
+    if ($IncludeFirestore) { firebase deploy --only firestore:rules,firestore:indexes }
+    if ($IncludeStorage) { firebase deploy --only storage }
+    firebase deploy --only hosting
+  }
+} finally {
+  Pop-Location
 }
-Pop-Location

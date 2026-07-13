@@ -9,6 +9,7 @@ interface ImportMetaEnv {
   readonly VITE_FIREBASE_STORAGE_BUCKET?: string;
   readonly VITE_FIREBASE_MESSAGING_SENDER_ID?: string;
   readonly VITE_FIREBASE_APP_ID?: string;
+  readonly VITE_FIREBASE_APP_CHECK_SITE_KEY?: string;
   readonly VITE_FIREBASE_MEASUREMENT_ID?: string;
   readonly VITE_FIREBASE_REGION?: string;
   readonly VITE_FUNCTION_WRITE_MODE?: string;
@@ -17,6 +18,8 @@ interface ImportMetaEnv {
   readonly VITE_SENTRY_TRACES_SAMPLE_RATE?: string;
   readonly VITE_SENTRY_REPLAY_SAMPLE_RATE?: string;
   readonly VITE_SENTRY_REPLAY_ON_ERROR_SAMPLE_RATE?: string;
+  readonly VITE_SUPPORT_EMAIL?: string;
+  readonly VITE_SUPPORT_PHONE?: string;
   readonly VITE_ZALO_MINI_APP_ID?: string;
   readonly VITE_ZALO_PREVIEW?: string;
   readonly VITE_PREVIEW_SALON_ID?: string;

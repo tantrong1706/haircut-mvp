@@ -45,3 +45,15 @@ export function isExpectedHaircutPhotoPath(
   const fileName = objectName.slice(prefix.length);
   return /^photo-[A-Za-z0-9-]{12,80}\.jpg$/.test(fileName);
 }
+
+export function isExpectedOwnerAvatarPath(
+  objectName: string,
+  input: { salonId: string; ownerUid: string },
+) {
+  const prefix = `salons/${input.salonId}/owner_avatars/${input.ownerUid}/`;
+  if (!objectName.startsWith(prefix)) {
+    return false;
+  }
+
+  return /^avatar(?:\.(?:jpg|jpeg|png|webp))?$/i.test(objectName.slice(prefix.length));
+}

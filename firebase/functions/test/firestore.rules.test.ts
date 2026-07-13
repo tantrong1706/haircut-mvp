@@ -49,6 +49,16 @@ beforeEach(async () => {
       setDoc(doc(db, "users", "staff-a"), member(salonA, "staff", [branchA])),
       setDoc(doc(db, "users", "staff-other-a"), member(salonA, "staff", [branchB])),
       setDoc(doc(db, "users", "owner-b"), member(salonB, "owner")),
+      setDoc(doc(db, "users", "inactive-a"), {
+        ...member(salonA, "staff", [branchA]),
+        isActive: false,
+      }),
+      setDoc(doc(db, "users", "fake-role-a"), {
+        salonId: salonA,
+        role: "admin",
+        isActive: true,
+        branchIds: [branchA],
+      }),
       setDoc(doc(db, "salons", salonA), { name: "Salon A", ownerId: "owner-a" }),
       setDoc(doc(db, "salons", salonB), { name: "Salon B", ownerId: "owner-b" }),
       setDoc(doc(db, "branches", branchA), {
@@ -131,6 +141,33 @@ describe("Firestore production rules", () => {
     await assertFails(getDoc(doc(staffDb, "chair_sessions", "session-b")));
     await assertSucceeds(getDoc(doc(staffDb, "branches", branchA)));
     await assertFails(getDoc(doc(staffDb, "branches", branchB)));
+  });
+
+  it("chặn tài khoản inactive và role không hợp lệ", async () => {
+    const inactiveDb = testEnv.authenticatedContext("inactive-a").firestore();
+    const fakeRoleDb = testEnv.authenticatedContext("fake-role-a").firestore();
+
+    await assertFails(getDoc(doc(inactiveDb, "chair_sessions", "session-a")));
+    await assertFails(getDoc(doc(fakeRoleDb, "chair_sessions", "session-a")));
+    await assertFails(getDoc(doc(fakeRoleDb, "salons", salonA)));
+  });
+
+  it("bắt buộc query hàng chờ giới hạn đúng salon và chi nhánh", async () => {
+    const staffDb = testEnv.authenticatedContext("staff-a").firestore();
+    const scopedQuery = query(
+      collection(staffDb, "chair_sessions"),
+      where("salonId", "==", salonA),
+      where("branchId", "==", branchA),
+      limit(20),
+    );
+    const broadQuery = query(
+      collection(staffDb, "chair_sessions"),
+      where("salonId", "==", salonA),
+      limit(20),
+    );
+
+    await assertSucceeds(getDocs(scopedQuery));
+    await assertFails(getDocs(broadQuery));
   });
 
   it("chặn nhân viên tự tạo yêu cầu điểm hoặc sửa phiên", async () => {
@@ -227,6 +264,22 @@ describe("Firestore production rules", () => {
       }),
     );
     await assertFails(
+      uploadBytes(
+        ref(staffStorage, `${basePath}/photo-oversized123.jpg`),
+        new Uint8Array(3 * 1024 * 1024 + 1),
+        {
+          contentType: "image/jpeg",
+          customMetadata: {
+            salonId: salonA,
+            customerId: "customer-photo",
+            sessionId: "session-photo",
+            branchId: branchA,
+            uploaderUid: "staff-a",
+          },
+        },
+      ),
+    );
+    await assertFails(
       uploadBytes(ref(staffStorage, `${basePath}/photo-abcdef123456.png`), bytes, {
         contentType: "image/png",
         customMetadata: {
@@ -242,6 +295,7 @@ describe("Firestore production rules", () => {
   it("chỉ owner được tải avatar của chính mình", async () => {
     const ownerStorage = testEnv.authenticatedContext("owner-a").storage();
     const staffStorage = testEnv.authenticatedContext("staff-a").storage();
+    const otherOwnerStorage = testEnv.authenticatedContext("owner-b").storage();
     const ownAvatar = ref(ownerStorage, `salons/${salonA}/owner_avatars/owner-a/avatar.png`);
     const forgedAvatar = ref(staffStorage, `salons/${salonA}/owner_avatars/owner-a/avatar.png`);
     const bytes = new Uint8Array([1, 2, 3]);
@@ -249,6 +303,8 @@ describe("Firestore production rules", () => {
     await assertSucceeds(uploadBytes(ownAvatar, bytes, { contentType: "image/png" }));
     await assertSucceeds(getBytes(ownAvatar));
     await assertFails(uploadBytes(forgedAvatar, bytes, { contentType: "image/png" }));
+    await assertFails(getBytes(ref(otherOwnerStorage, ownAvatar.fullPath)));
+    await assertFails(deleteObject(ref(otherOwnerStorage, ownAvatar.fullPath)));
     await assertSucceeds(deleteObject(ownAvatar));
   });
 });

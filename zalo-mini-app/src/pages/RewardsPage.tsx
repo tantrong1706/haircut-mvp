@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BadgeCheck, Gift, Ticket } from "lucide-react";
+import { BadgeCheck, Gift, RefreshCcw, Ticket } from "lucide-react";
 import { getRewards } from "../services/api";
 import { AppSession, Reward } from "../services/types";
 
@@ -11,6 +11,7 @@ export function RewardsPage({ session }: Props) {
   const [rewards, setRewards] = useState<Reward[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [loadVersion, setLoadVersion] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -25,7 +26,6 @@ export function RewardsPage({ session }: Props) {
       })
       .catch((err) => {
         if (!cancelled) {
-          setRewards([]);
           setError(err instanceof Error ? err.message : "Không tải được mã quà");
         }
       })
@@ -38,7 +38,7 @@ export function RewardsPage({ session }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [session]);
+  }, [loadVersion, session]);
 
   return (
     <section className="page rewards-page">
@@ -55,7 +55,13 @@ export function RewardsPage({ session }: Props) {
             <p>Danh sách ưu đãi của bạn sẽ hiện ở đây.</p>
           </div>
         ) : error ? (
-          <p className="alert error">{error}</p>
+          <div className="alert error retry-alert">
+            <span>{error}</span>
+            <button type="button" onClick={() => setLoadVersion((value) => value + 1)}>
+              <RefreshCcw size={16} aria-hidden="true" />
+              Thử lại
+            </button>
+          </div>
         ) : rewards.length === 0 ? (
           <div className="empty-state">
             <Ticket size={30} aria-hidden="true" />
@@ -70,6 +76,7 @@ export function RewardsPage({ session }: Props) {
                 <strong>{reward.rewardName}</strong>
                 <p>Mã: {reward.rewardCode}</p>
                 <small>{reward.createdAt || "Chưa có ngày tạo"}</small>
+                {reward.expiresAt ? <small>Hạn dùng: {reward.expiresAt}</small> : null}
               </div>
               <span className={reward.status === "unused" ? "pill" : "pill muted-pill"}>
                 {statusLabel(reward.status)}

@@ -48,7 +48,7 @@ export async function getZaloIdentity(): Promise<ZaloIdentity> {
   } catch {
     return {
       accessToken,
-      name: "Khách hàng",
+      name: "",
     };
   }
 }

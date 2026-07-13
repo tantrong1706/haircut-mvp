@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppSession } from "../services/types";
 import { HistoryPage } from "./HistoryPage";
@@ -53,5 +54,20 @@ describe("HistoryPage", () => {
       "https://firebasestorage.googleapis.com/photo-a.jpg",
     );
     expect(screen.getByText("Fade thấp, giữ mái")).toBeInTheDocument();
+  });
+
+  it("cho thử lại tại chỗ sau lỗi mạng", async () => {
+    const user = userEvent.setup();
+    mocks.getHaircutHistory
+      .mockRejectedValueOnce(new Error("Mạng đang gián đoạn"))
+      .mockResolvedValueOnce([]);
+
+    render(<HistoryPage session={session} />);
+
+    expect(await screen.findByText("Mạng đang gián đoạn")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Thử lại" }));
+
+    expect(await screen.findByText("Chưa có lịch sử cắt tóc")).toBeInTheDocument();
+    expect(mocks.getHaircutHistory).toHaveBeenCalledTimes(2);
   });
 });

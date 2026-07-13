@@ -114,6 +114,7 @@ service firebase.storage {
       allow read: if isActiveMember(salonId);
       allow create, update: if isOwner(salonId)
         && request.auth.uid == ownerUid
+        && fileName.matches('avatar(\\.(jpg|jpeg|png|webp))?')
         && isAllowedAvatarUpload();
       allow delete: if isOwner(salonId)
         && request.auth.uid == ownerUid;

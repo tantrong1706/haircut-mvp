@@ -1,11 +1,15 @@
 import { useEffect, useState, type ReactNode } from "react";
 import {
+  ArrowLeft,
   Building2,
+  CircleCheckBig,
   KeyRound,
   LockKeyhole,
   LogOut,
   Mail,
+  MailCheck,
   Phone,
+  Send,
   ShieldCheck,
   UserPlus,
   UserRound,
@@ -16,8 +20,10 @@ import {
   AppUser,
   completeOwnerSalonProfile,
   getAppUser,
+  isValidAuthEmail,
   listenAuthState,
   registerOwnerSalon,
+  requestOwnerStaffPasswordReset,
   signInOwnerStaff,
   signOutOwnerStaff,
 } from "../services/auth";
@@ -28,7 +34,7 @@ type Props = {
   children: (user: AppUser) => ReactNode;
 };
 
-type AuthMode = "signin" | "signup";
+type AuthMode = "signin" | "signup" | "reset";
 
 type UnlinkedUser = {
   uid: string;
@@ -48,6 +54,8 @@ export function AuthGate({ allowedRoles, children }: Props) {
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [resettingPassword, setResettingPassword] = useState(false);
+  const [passwordResetSent, setPasswordResetSent] = useState(false);
   const [profileCompletionAttempted, setProfileCompletionAttempted] = useState(false);
   const [error, setError] = useState("");
 
@@ -179,6 +187,36 @@ export function AuthGate({ allowedRoles, children }: Props) {
     }
   }
 
+  async function handlePasswordReset() {
+    setResettingPassword(true);
+    setPasswordResetSent(false);
+    setError("");
+
+    try {
+      await requestOwnerStaffPasswordReset(email);
+      setEmail(email.trim().toLowerCase());
+      setPasswordResetSent(true);
+      trackEvent("ops_password_reset_requested", {
+        route: window.location.pathname,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không gửi được email đặt lại mật khẩu");
+    } finally {
+      setResettingPassword(false);
+    }
+  }
+
+  function selectMode(nextMode: AuthMode) {
+    setMode(nextMode);
+    setError("");
+    setPasswordResetSent(false);
+
+    if (nextMode === "reset") {
+      setPassword("");
+      setConfirmPassword("");
+    }
+  }
+
   async function handleSignOut() {
     trackEvent("ops_signout", {
       role: appUser?.role || "unknown",
@@ -290,175 +328,249 @@ export function AuthGate({ allowedRoles, children }: Props) {
 
   if (!appUser) {
     const isSignup = mode === "signup";
+    const isPasswordReset = mode === "reset";
 
     return (
       <section className="entry-page auth-entry">
         <header className="entry-hero auth-hero premium-hero visual-hero">
           <BrandLogo />
           <p className="eyebrow">Chủ salon / Nhân viên</p>
-          <h1>{isSignup ? "Đăng ký salon mới" : "Đăng nhập quản lý"}</h1>
+          <h1>
+            {isPasswordReset
+              ? "Khôi phục mật khẩu"
+              : isSignup
+                ? "Đăng ký salon mới"
+                : "Đăng nhập quản lý"}
+          </h1>
           <p className="muted">
-            {isSignup
-              ? "Tạo tài khoản chủ salon. Nhân viên sẽ được chủ salon tạo tài khoản riêng."
-              : "Dùng tài khoản đã được phân quyền trong salon."}
+            {isPasswordReset
+              ? "Nhận email xác minh để đặt lại mật khẩu an toàn."
+              : isSignup
+                ? "Tạo tài khoản chủ salon. Nhân viên sẽ được chủ salon tạo tài khoản riêng."
+                : "Dùng tài khoản đã được phân quyền trong salon."}
           </p>
         </header>
 
-        <div className="segmented-control auth-tabs" aria-label="Chọn luồng tài khoản">
-          <button
-            className={!isSignup ? "active" : ""}
-            onClick={() => {
-              setMode("signin");
-              setError("");
-            }}
-          >
-            <LockKeyhole size={18} aria-hidden="true" />
-            Đăng nhập
-          </button>
-          <button
-            className={isSignup ? "active" : ""}
-            onClick={() => {
-              setMode("signup");
-              setError("");
-            }}
-          >
-            <UserPlus size={18} aria-hidden="true" />
-            Đăng ký
-          </button>
-        </div>
+        {!isPasswordReset ? (
+          <div className="segmented-control auth-tabs" aria-label="Chọn luồng tài khoản">
+            <button className={!isSignup ? "active" : ""} onClick={() => selectMode("signin")}>
+              <LockKeyhole size={18} aria-hidden="true" />
+              Đăng nhập
+            </button>
+            <button className={isSignup ? "active" : ""} onClick={() => selectMode("signup")}>
+              <UserPlus size={18} aria-hidden="true" />
+              Đăng ký
+            </button>
+          </div>
+        ) : null}
 
-        <div className="panel form-panel auth-panel">
-          {isSignup ? (
-            <>
-              <label className="field">
-                <span>
-                  <UserRound size={18} aria-hidden="true" />
-                  Tên chủ salon
-                </span>
-                <input
-                  value={ownerName}
-                  onChange={(event) => setOwnerName(event.target.value)}
-                  autoComplete="name"
-                  placeholder="Ví dụ: Anh Trọng"
-                />
-              </label>
-
-              <label className="field">
-                <span>
-                  <Building2 size={18} aria-hidden="true" />
-                  Tên salon
-                </span>
-                <input
-                  value={salonName}
-                  onChange={(event) => setSalonName(event.target.value)}
-                  placeholder="Ví dụ: HAIRCUT Studio"
-                />
-              </label>
-            </>
-          ) : null}
-
-          <label className="field">
-            <span>
-              <Mail size={18} aria-hidden="true" />
-              Email
-            </span>
-            <input
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              autoComplete="email"
-              inputMode="email"
-              placeholder="email@salon.com"
-            />
-          </label>
-
-          <label className="field">
-            <span>
-              <KeyRound size={18} aria-hidden="true" />
-              Mật khẩu
-            </span>
-            <input
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              type="password"
-              autoComplete={isSignup ? "new-password" : "current-password"}
-              placeholder={isSignup ? "Tối thiểu 8 ký tự" : "Mật khẩu"}
-            />
-          </label>
-
-          {isSignup ? (
-            <>
-              <label className="field">
-                <span>
-                  <KeyRound size={18} aria-hidden="true" />
-                  Nhập lại mật khẩu
-                </span>
-                <input
-                  value={confirmPassword}
-                  onChange={(event) => setConfirmPassword(event.target.value)}
-                  type="password"
-                  autoComplete="new-password"
-                  placeholder="Nhập lại mật khẩu"
-                />
-              </label>
-
-              <div className="password-checklist" aria-label="Độ an toàn mật khẩu">
-                <span className={password.length >= 8 ? "ok" : ""}>8+ ký tự</span>
-                <span className={/[A-Z]/.test(password) && /[a-z]/.test(password) ? "ok" : ""}>
-                  Chữ hoa/thường
-                </span>
-                <span className={/\d/.test(password) ? "ok" : ""}>Có số</span>
-                <span className={password && password === confirmPassword ? "ok" : ""}>Khớp</span>
-              </div>
-
-              <label className="field">
-                <span>
-                  <Phone size={18} aria-hidden="true" />
-                  SĐT salon
-                </span>
-                <input
-                  value={phone}
-                  onChange={(event) => setPhone(event.target.value)}
-                  inputMode="tel"
-                  placeholder="Không bắt buộc"
-                />
-              </label>
-            </>
-          ) : null}
-        </div>
-
-        <button
-          className="primary-button"
-          disabled={
-            submitting ||
-            !email.trim() ||
-            password.length < (isSignup ? 8 : 6) ||
-            (isSignup && (!ownerName.trim() || !salonName.trim() || password !== confirmPassword))
-          }
-          onClick={handleSubmit}
+        <form
+          className="auth-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void (isPasswordReset ? handlePasswordReset() : handleSubmit());
+          }}
         >
-          {submitting ? (
-            isSignup ? (
-              "Đang tạo tài khoản..."
-            ) : (
-              "Đang đăng nhập..."
-            )
-          ) : isSignup ? (
+          <div className="panel form-panel auth-panel">
+            {isPasswordReset ? (
+              <div className="auth-reset-summary">
+                <span className="auth-reset-icon">
+                  <MailCheck size={24} aria-hidden="true" />
+                </span>
+                <div>
+                  <h2>Email xác minh</h2>
+                  <p>Nhập email của tài khoản chủ salon hoặc nhân viên.</p>
+                </div>
+              </div>
+            ) : null}
+
+            {isSignup ? (
+              <>
+                <label className="field">
+                  <span>
+                    <UserRound size={18} aria-hidden="true" />
+                    Tên chủ salon
+                  </span>
+                  <input
+                    value={ownerName}
+                    onChange={(event) => setOwnerName(event.target.value)}
+                    autoComplete="name"
+                    placeholder="Ví dụ: Anh Trọng"
+                  />
+                </label>
+
+                <label className="field">
+                  <span>
+                    <Building2 size={18} aria-hidden="true" />
+                    Tên salon
+                  </span>
+                  <input
+                    value={salonName}
+                    onChange={(event) => setSalonName(event.target.value)}
+                    placeholder="Ví dụ: HAIRCUT Studio"
+                  />
+                </label>
+              </>
+            ) : null}
+
+            <label className="field">
+              <span>
+                <Mail size={18} aria-hidden="true" />
+                Email
+              </span>
+              <input
+                value={email}
+                onChange={(event) => {
+                  setEmail(event.target.value);
+                  setPasswordResetSent(false);
+                }}
+                autoComplete="email"
+                inputMode="email"
+                placeholder="email@salon.com"
+              />
+            </label>
+
+            {!isPasswordReset ? (
+              <>
+                <label className="field">
+                  <span>
+                    <KeyRound size={18} aria-hidden="true" />
+                    Mật khẩu
+                  </span>
+                  <input
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    type="password"
+                    autoComplete={isSignup ? "new-password" : "current-password"}
+                    placeholder={isSignup ? "Tối thiểu 8 ký tự" : "Mật khẩu"}
+                  />
+                </label>
+
+                {!isSignup ? (
+                  <button
+                    type="button"
+                    className="auth-forgot-button"
+                    onClick={() => selectMode("reset")}
+                  >
+                    Quên mật khẩu?
+                  </button>
+                ) : null}
+              </>
+            ) : null}
+
+            {isSignup ? (
+              <>
+                <label className="field">
+                  <span>
+                    <KeyRound size={18} aria-hidden="true" />
+                    Nhập lại mật khẩu
+                  </span>
+                  <input
+                    value={confirmPassword}
+                    onChange={(event) => setConfirmPassword(event.target.value)}
+                    type="password"
+                    autoComplete="new-password"
+                    placeholder="Nhập lại mật khẩu"
+                  />
+                </label>
+
+                <div className="password-checklist" aria-label="Độ an toàn mật khẩu">
+                  <span className={password.length >= 8 ? "ok" : ""}>8+ ký tự</span>
+                  <span className={/[A-Z]/.test(password) && /[a-z]/.test(password) ? "ok" : ""}>
+                    Chữ hoa/thường
+                  </span>
+                  <span className={/\d/.test(password) ? "ok" : ""}>Có số</span>
+                  <span className={password && password === confirmPassword ? "ok" : ""}>Khớp</span>
+                </div>
+
+                <label className="field">
+                  <span>
+                    <Phone size={18} aria-hidden="true" />
+                    SĐT salon
+                  </span>
+                  <input
+                    value={phone}
+                    onChange={(event) => setPhone(event.target.value)}
+                    inputMode="tel"
+                    placeholder="Không bắt buộc"
+                  />
+                </label>
+              </>
+            ) : null}
+          </div>
+
+          {isPasswordReset ? (
             <>
-              <UserPlus size={20} aria-hidden="true" />
-              Tạo salon
+              <button
+                type="submit"
+                className="primary-button"
+                disabled={resettingPassword || !isValidAuthEmail(email)}
+              >
+                <Send size={19} aria-hidden="true" />
+                {resettingPassword
+                  ? "Đang gửi email..."
+                  : passwordResetSent
+                    ? "Gửi lại email"
+                    : "Gửi email đặt lại mật khẩu"}
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={resettingPassword}
+                onClick={() => selectMode("signin")}
+              >
+                <ArrowLeft size={18} aria-hidden="true" />
+                Quay lại đăng nhập
+              </button>
             </>
           ) : (
-            <>
-              <LockKeyhole size={20} aria-hidden="true" />
-              Đăng nhập
-            </>
+            <button
+              type="submit"
+              className="primary-button"
+              disabled={
+                submitting ||
+                !email.trim() ||
+                password.length < (isSignup ? 8 : 6) ||
+                (isSignup &&
+                  (!ownerName.trim() || !salonName.trim() || password !== confirmPassword))
+              }
+            >
+              {submitting ? (
+                isSignup ? (
+                  "Đang tạo tài khoản..."
+                ) : (
+                  "Đang đăng nhập..."
+                )
+              ) : isSignup ? (
+                <>
+                  <UserPlus size={20} aria-hidden="true" />
+                  Tạo salon
+                </>
+              ) : (
+                <>
+                  <LockKeyhole size={20} aria-hidden="true" />
+                  Đăng nhập
+                </>
+              )}
+            </button>
           )}
-        </button>
 
-        <p className="field-note">
-          Nhân viên đăng nhập bằng email và mật khẩu tạm thời do chủ salon tạo trong mục Nhân viên.
-        </p>
-        {error ? <p className="alert error">{error}</p> : null}
+          {!isPasswordReset ? (
+            <p className="field-note">
+              Nhân viên dùng email được chủ salon mời và tự đặt mật khẩu qua email.
+            </p>
+          ) : null}
+          {passwordResetSent ? (
+            <p className="alert success auth-reset-success">
+              <CircleCheckBig size={20} aria-hidden="true" />
+              <span>
+                Nếu email khớp tài khoản, thư đặt lại mật khẩu đã được gửi. Mã xác minh dùng một lần
+                nằm trong liên kết của email.
+              </span>
+            </p>
+          ) : null}
+          {error ? <p className="alert error">{error}</p> : null}
+        </form>
       </section>
     );
   }

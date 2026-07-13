@@ -1,5 +1,7 @@
 # Hướng Dẫn Đưa HAIRCUT Lên App Store
 
+> Tài liệu lưu trữ cho giai đoạn iOS. Trạng thái production hiện hành nằm ở `README.md`, `docs/architecture.md`, `docs/deployment.md` và `docs/ZALO_REVIEW_SUBMISSION.md`; không dùng các mốc triển khai cũ bên dưới để vận hành Firebase.
+
 Bản v4 này dùng làm checklist thật trước TestFlight và App Store. Không submit App Store khi backend chưa live, Firestore rules còn mở, thiếu demo account, hoặc app vẫn là beta/demo.
 
 ## Phạm Vi V1.0

@@ -2,6 +2,7 @@ import {
   User,
   createUserWithEmailAndPassword,
   onAuthStateChanged,
+  sendPasswordResetEmail,
   sendEmailVerification,
   signInWithEmailAndPassword,
   signOut,
@@ -58,6 +59,59 @@ export async function signInOwnerStaff(email: string, password: string) {
     await signInWithEmailAndPassword(auth, email, password);
   } catch (err) {
     throw new Error(friendlyAuthError(err));
+  }
+}
+
+export function isValidAuthEmail(emailInput: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailInput.trim());
+}
+
+export function passwordResetActionSettings(
+  location: Pick<Location, "hostname" | "origin" | "pathname"> = window.location,
+) {
+  if (location.hostname === "localhost" || location.hostname === "127.0.0.1") {
+    return undefined;
+  }
+
+  return {
+    url: `${location.origin}${location.pathname}`,
+    handleCodeInApp: false,
+  };
+}
+
+export async function requestOwnerStaffPasswordReset(emailInput: string) {
+  const auth = getFirebaseAuth();
+  const email = emailInput.trim().toLowerCase();
+
+  if (!auth) {
+    throw new Error("Firebase Auth chưa được cấu hình");
+  }
+  if (!isValidAuthEmail(email)) {
+    throw new Error("Vui lòng nhập email hợp lệ");
+  }
+
+  auth.languageCode = "vi";
+  try {
+    const actionSettings = passwordResetActionSettings();
+    if (actionSettings) {
+      await sendPasswordResetEmail(auth, email, actionSettings);
+    } else {
+      await sendPasswordResetEmail(auth, email);
+    }
+  } catch (error) {
+    const code = authErrorCode(error);
+    if (code === "auth/invalid-email") {
+      throw new Error("Email không hợp lệ.");
+    }
+    if (code === "auth/too-many-requests") {
+      throw new Error("Bạn đã yêu cầu quá nhiều lần. Vui lòng thử lại sau.");
+    }
+    if (code === "auth/unauthorized-continue-uri") {
+      throw new Error("Tên miền hiện tại chưa được Firebase cho phép đặt lại mật khẩu.");
+    }
+    if (code !== "auth/user-not-found") {
+      throw new Error(friendlyAuthError(error));
+    }
   }
 }
 
@@ -192,15 +246,13 @@ export async function updateOwnerAvatar(input: {
   const avatarUrl = input.avatarUrl.trim();
 
   if (avatarUrl) {
-    let parsed: URL;
-    try {
-      parsed = new URL(avatarUrl);
-    } catch {
-      throw new Error("Link avatar không hợp lệ");
-    }
-
-    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
-      throw new Error("Avatar phải dùng link http hoặc https");
+    const auth = getFirebaseAuth();
+    const bucketName = String(import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "");
+    if (
+      !auth?.currentUser ||
+      !isOwnerAvatarDownloadUrl(avatarUrl, bucketName, input.salonId, auth.currentUser.uid)
+    ) {
+      throw new Error("Avatar phải là ảnh vừa tải lên từ thiết bị của chủ salon");
     }
   }
 
@@ -222,6 +274,39 @@ export async function updateOwnerAvatar(input: {
   }
 
   return result;
+}
+
+export function isOwnerAvatarDownloadUrl(
+  downloadUrl: string,
+  bucketName: string,
+  salonId: string,
+  ownerUid: string,
+) {
+  if (!bucketName || !salonId || !ownerUid) {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(downloadUrl);
+    const match = parsed.pathname.match(/^\/v0\/b\/([^/]+)\/o\/(.+)$/);
+    if (
+      parsed.protocol !== "https:" ||
+      parsed.hostname !== "firebasestorage.googleapis.com" ||
+      !match ||
+      decodeURIComponent(match[1]) !== bucketName
+    ) {
+      return false;
+    }
+
+    const objectName = decodeURIComponent(match[2]);
+    const prefix = `salons/${salonId}/owner_avatars/${ownerUid}/`;
+    return (
+      objectName.startsWith(prefix) &&
+      /^avatar(?:\.(?:jpg|jpeg|png|webp))?$/i.test(objectName.slice(prefix.length))
+    );
+  } catch {
+    return false;
+  }
 }
 
 export async function uploadOwnerAvatarFile(input: {

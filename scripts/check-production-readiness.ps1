@@ -89,10 +89,10 @@ if (Test-Path -LiteralPath $firebaserc) {
   Add-Result "Firebase project" "FAIL" "Thiếu firebase\.firebaserc"
 }
 
-$envPath = Join-Path $root "zalo-mini-app\.env"
+$envPath = Join-Path $root "zalo-mini-app\.env.production"
 $env = Read-EnvFile $envPath
 if ($env.Count -eq 0) {
-  Add-Result "Zalo web .env" "FAIL" "Thiếu zalo-mini-app\.env cho bản production"
+  Add-Result "Zalo web production env" "FAIL" "Thiếu zalo-mini-app\.env.production"
 } else {
   $mode = $env["VITE_FUNCTION_WRITE_MODE"]
   if (-not $mode) {
@@ -104,6 +104,12 @@ if ($env.Count -eq 0) {
   } else {
     Add-Result "VITE_FUNCTION_WRITE_MODE" "FAIL" "$mode không được phép trong production"
   }
+}
+
+if ($env["VITE_SUPPORT_EMAIL"] -or $env["VITE_SUPPORT_PHONE"]) {
+  Add-Result "Privacy contact" "OK" "Đã cấu hình ít nhất một kênh hỗ trợ"
+} else {
+  Add-Result "Privacy contact" "FAIL" "Thiếu VITE_SUPPORT_EMAIL hoặc VITE_SUPPORT_PHONE"
 }
 
 $liveRules = Join-Path $root "firebase\firestore.rules"
@@ -165,6 +171,18 @@ if ($functionsEnv["ZALO_MINI_APP_ID"]) {
   Add-Result "Functions Zalo App ID" "OK" "Đã cấu hình"
 } else {
   Add-Result "Functions Zalo App ID" "FAIL" "Thiếu ZALO_MINI_APP_ID trong firebase/functions/.env"
+}
+
+if ($functionsEnv["REQUIRE_ZALO_APP_CHECK"] -eq "true") {
+  if ($env["VITE_FIREBASE_APP_CHECK_SITE_KEY"]) {
+    Add-Result "Firebase App Check" "OK" "Frontend và Functions đều đã bật cấu hình"
+  } else {
+    Add-Result "Firebase App Check" "FAIL" "Functions đang bắt buộc App Check nhưng frontend thiếu site key"
+  }
+} elseif ($env["VITE_FIREBASE_APP_CHECK_SITE_KEY"]) {
+  Add-Result "Firebase App Check" "WARN" "Frontend đã có provider nhưng Functions chưa bắt buộc token"
+} else {
+  Add-Result "Firebase App Check" "WARN" "Chưa cấu hình rollout App Check production"
 }
 
 $functionsPackage = Get-Content -Raw -LiteralPath (Join-Path $root "firebase\functions\package.json") | ConvertFrom-Json
@@ -230,7 +248,7 @@ Write-Host "- Tên salon, số gương/ghế, tên từng gương/ghế."
 Write-Host "- Email hoặc số điện thoại hỗ trợ để đưa vào Privacy Policy."
 Write-Host "- Zalo Mini App ID production và quyền truy cập Zalo Developer."
 
-$failCount = ($results | Where-Object { $_.Status -eq "FAIL" }).Count
+$failCount = @($results | Where-Object { $_.Status -eq "FAIL" }).Count
 if ($failCount -gt 0) {
   exit 1
 }

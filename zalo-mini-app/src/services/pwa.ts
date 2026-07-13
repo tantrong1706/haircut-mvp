@@ -12,7 +12,10 @@ export function registerServiceWorker() {
   }
 
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js").catch((error) => {
+    const buildAsset = new URL(import.meta.url).pathname.split("/").pop() || "local";
+    const serviceWorkerUrl = `/sw.js?v=${encodeURIComponent(buildAsset)}`;
+
+    navigator.serviceWorker.register(serviceWorkerUrl).catch((error) => {
       console.warn("Không đăng ký được service worker.", error);
     });
   });

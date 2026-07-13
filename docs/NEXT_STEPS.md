@@ -1,5 +1,7 @@
 # Việc Cần Làm Tiếp
 
+> Lộ trình lịch sử, không phản ánh đầy đủ code hiện tại. Dùng `docs/FULL_APP_AUDIT.md` và `docs/ZALO_REVIEW_SUBMISSION.md` để theo dõi các cổng phát hành còn lại.
+
 ## Đã có
 
 - Đặc tả sản phẩm.

@@ -547,7 +547,7 @@ export function OwnerPage({ currentUser }: Props) {
           onSave={saveWheel}
         />
       ) : (
-        <RedeemRewardPanel salonId={salonId} />
+        <RedeemRewardPanel salonId={salonId} allowRestore />
       )}
 
       {message ? <p className="alert success">{message}</p> : null}
@@ -809,8 +809,11 @@ function SalonProfilePanel({
           <input
             type="number"
             min={1}
+            max={100}
             value={pointPerVisit}
-            onChange={(event) => setPointPerVisit(Math.max(1, Number(event.target.value || 1)))}
+            onChange={(event) =>
+              setPointPerVisit(Math.min(100, Math.max(1, Number(event.target.value || 1))))
+            }
           />
           <small>Nhân viên sẽ gửi yêu cầu cộng đúng số điểm này cho mỗi lượt cắt.</small>
         </label>
@@ -1216,8 +1219,17 @@ function BranchesPanel({
   }
 
   async function copyQr(url: string) {
-    await navigator.clipboard.writeText(url);
-    onMessage("Đã sao chép liên kết QR.");
+    try {
+      if (!navigator.clipboard) {
+        throw new Error("clipboard unavailable");
+      }
+      await navigator.clipboard.writeText(url);
+      onMessage("Đã sao chép liên kết QR.");
+      onError("");
+    } catch {
+      onMessage("");
+      onError("Thiết bị không cho phép sao chép liên kết. Hãy dùng nút Tải QR.");
+    }
   }
 
   async function regenerateSalonQr() {
@@ -1278,6 +1290,7 @@ function BranchesPanel({
           active
           busy={busyId === "salon-qr"}
           onCopy={copyQr}
+          onError={onError}
           onRegenerate={() =>
             onConfirm({
               title: "Tạo lại QR chung?",
@@ -1349,6 +1362,7 @@ function BranchesPanel({
               branch={branch}
               busy={busyId === branch.id}
               onCopy={copyQr}
+              onError={onError}
               onSave={(payload) => saveBranch(branch, payload)}
               onToggle={() => saveBranch(branch, { isActive: !branch.isActive })}
               onRegenerate={() =>
@@ -1376,6 +1390,7 @@ function ManagedQrCard({
   branch,
   busy,
   onCopy,
+  onError,
   onSave,
   onToggle,
   onRegenerate,
@@ -1387,6 +1402,7 @@ function ManagedQrCard({
   branch?: SalonBranch;
   busy: boolean;
   onCopy: (url: string) => void;
+  onError: (message: string) => void;
   onSave?: (payload: Partial<SalonBranch>) => void;
   onToggle?: () => void;
   onRegenerate: () => void;
@@ -1437,6 +1453,7 @@ function ManagedQrCard({
     const printWindow = window.open("", "_blank", "width=420,height=620");
 
     if (!printWindow) {
+      onError("Trình duyệt đang chặn cửa sổ in. Hãy cho phép cửa sổ bật lên rồi thử lại.");
       return;
     }
 
@@ -2130,11 +2147,28 @@ function WheelConfigPanel({
           <input
             type="number"
             min={1}
+            max={10000}
             value={config.requiredPoints}
             onChange={(event) =>
               onChange({
                 ...config,
-                requiredPoints: Math.max(1, Number(event.target.value || 1)),
+                requiredPoints: Math.min(10_000, Math.max(1, Number(event.target.value || 1))),
+              })
+            }
+          />
+        </label>
+
+        <label className="field">
+          <span>Hạn dùng mã quà (ngày)</span>
+          <input
+            type="number"
+            min={1}
+            max={365}
+            value={config.rewardValidityDays}
+            onChange={(event) =>
+              onChange({
+                ...config,
+                rewardValidityDays: Math.min(365, Math.max(1, Number(event.target.value || 1))),
               })
             }
           />
@@ -2157,6 +2191,7 @@ function WheelConfigPanel({
               <span>{index + 1}</span>
               <input
                 value={slot.label}
+                maxLength={60}
                 onChange={(event) => updateSlot(index, event.target.value)}
                 placeholder={`Ô ${index + 1}`}
               />

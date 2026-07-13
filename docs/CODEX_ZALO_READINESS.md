@@ -4,7 +4,7 @@
 
 **READY FOR MANUAL DEPLOY**
 
-Code local đã qua lint, format, typecheck/build ZMP, 68 unit/rules tests và kiểm tra diff. Trạng thái này cho phép deploy thủ công lên Firebase và Zalo Testing; chưa được bấm gửi xét duyệt trước khi hoàn tất các mục **MANUAL ACTIONS**.
+Code local đã qua lint, format, typecheck/build ZMP, 99 unit/rules/integration tests và 15 lượt E2E trên desktop Chrome, Android Chromium và iPhone WebKit. Trạng thái này cho phép deploy thủ công lên Firebase và Zalo Testing; chưa được bấm gửi xét duyệt trước khi hoàn tất các mục **MANUAL ACTIONS**.
 
 ## 2. File đã sửa
 
@@ -38,29 +38,33 @@ Không commit, push hoặc deploy trong tác vụ này.
 
 Còn lại:
 
-- **H-09:** đã tăng unit/rules test nhưng chưa có integration test emulator cho toàn bộ callable transaction, race và partial failure thật.
-- **H-10:** coverage frontend vẫn chưa đo toàn bộ `src`; 20 unit test hiện tại chưa thay thế kiểm thử luồng đầy đủ trên thiết bị.
+- **H-09:** đã có integration test emulator cho quota, duyệt điểm chống replay và vòng quay/đổi/hoàn tác quà; chưa phủ toàn bộ callable, race và partial failure.
+- **H-10:** coverage hiện hành đạt 70,5% với 43 unit test, nhưng vẫn chưa đo toàn bộ `src`.
 
 Hai mục này không chặn deploy lên môi trường Testing, nhưng phải được xem là rủi ro còn lại trước khi tuyên bố production đã được kiểm thử toàn diện.
 
 ## 5. Test đã chạy
 
-| Lệnh | Kết quả |
-| --- | --- |
-| `zalo-mini-app: npx --no-install tsc --noEmit` | PASS |
-| `zalo-mini-app: npm run lint` | PASS |
-| `zalo-mini-app: npm run format:check` | PASS |
-| `zalo-mini-app: npm run test:run` | PASS - 9 file, 24 test |
-| `zalo-mini-app: npm run build:zmp` | PASS - có `tsc`, 3.415 module; chunk lớn nhất 262,64 KB |
-| `firebase/functions: npm run typecheck` | PASS |
-| `firebase/functions: npm run lint` | PASS |
-| `firebase/functions: npm run format:check` | PASS |
-| `firebase/functions: npm run test:unit` | PASS - 5 file, 33 test |
-| `firebase emulators:exec --project demo-haircut --only firestore,storage "npm --prefix functions run test:rules"` | PASS - 1 file, 11 test |
-| `git diff --check` | PASS - chỉ có cảnh báo chuyển LF/CRLF của Git trên Windows |
-| `git ls-files` + quét literal secret đã che giá trị | PASS - không có file môi trường/debug bị track; 2 kết quả đều là placeholder trong `.env.example`/README |
+| Lệnh                                                                                                              | Kết quả                                                                                                  |
+| ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `zalo-mini-app: npx --no-install tsc --noEmit`                                                                    | PASS                                                                                                     |
+| `zalo-mini-app: npm run lint`                                                                                     | PASS                                                                                                     |
+| `zalo-mini-app: npm run format:check`                                                                             | PASS                                                                                                     |
+| `zalo-mini-app: npm run test:coverage`                                                                            | PASS - 16 file, 43 test; coverage 70,5%                                                                  |
+| `zalo-mini-app: npm run build:zmp`                                                                                | PASS - có `tsc`, 3.417 module; chunk lớn nhất 262,64 KB                                                  |
+| `zalo-mini-app: Playwright desktop-chromium`                                                                      | PASS - 5/5                                                                                               |
+| `zalo-mini-app: Playwright mobile-chromium`                                                                       | PASS - 5/5                                                                                               |
+| `zalo-mini-app: Playwright mobile-webkit`                                                                         | PASS - 5/5                                                                                               |
+| `firebase/functions: npm run typecheck`                                                                           | PASS                                                                                                     |
+| `firebase/functions: npm run lint`                                                                                | PASS                                                                                                     |
+| `firebase/functions: npm run format:check`                                                                        | PASS                                                                                                     |
+| `firebase/functions: npm run test:unit`                                                                           | PASS - 6 file, 40 test                                                                                   |
+| `firebase emulators:exec --project demo-haircut --only firestore,storage "npm --prefix functions run test:rules"` | PASS - 1 file, 13 test                                                                                   |
+| `firebase emulators:exec --project demo-haircut --only firestore "npm --prefix functions run test:integration"`   | PASS - 1 file, 3 test                                                                                    |
+| `git diff --check`                                                                                                | PASS - chỉ có cảnh báo chuyển LF/CRLF của Git trên Windows                                               |
+| `git ls-files` + quét literal secret đã che giá trị                                                               | PASS - không có file môi trường/debug bị track; 2 kết quả đều là placeholder trong `.env.example`/README |
 
-Tổng: **68/68 test pass**. Sáu mục `[x]` trong hồ sơ Zalo đã được đối chiếu bằng build schema, ZMP asset validation, unit test frontend/Functions và Rules emulator. Không chạy E2E, Lighthouse hoặc test trên Firebase/Zalo production.
+Tổng: **99/99 unit/rules/integration test pass** và **15/15 lượt E2E pass**. Sáu mục `[x]` trong hồ sơ Zalo đã được đối chiếu bằng build schema, ZMP asset validation, unit test frontend/Functions, Rules/callable emulator và E2E đa trình duyệt. Không chạy Lighthouse hoặc test trên Firebase/Zalo production.
 
 ## 6. Migration
 

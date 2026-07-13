@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CalendarCheck2, ClipboardList, Scissors } from "lucide-react";
+import { CalendarCheck2, ClipboardList, RefreshCcw, Scissors } from "lucide-react";
 import { getHaircutHistory } from "../services/api";
 import { AppSession, HaircutRecord } from "../services/types";
 
@@ -11,6 +11,7 @@ export function HistoryPage({ session }: Props) {
   const [records, setRecords] = useState<HaircutRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [loadVersion, setLoadVersion] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -25,7 +26,6 @@ export function HistoryPage({ session }: Props) {
       })
       .catch((err) => {
         if (!cancelled) {
-          setRecords([]);
           setError(err instanceof Error ? err.message : "Không tải được lịch sử cắt tóc");
         }
       })
@@ -38,7 +38,7 @@ export function HistoryPage({ session }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [session]);
+  }, [loadVersion, session]);
 
   return (
     <section className="page history-page">
@@ -55,7 +55,13 @@ export function HistoryPage({ session }: Props) {
             <p>Vui lòng chờ trong giây lát.</p>
           </div>
         ) : error ? (
-          <p className="alert error">{error}</p>
+          <div className="alert error retry-alert">
+            <span>{error}</span>
+            <button type="button" onClick={() => setLoadVersion((value) => value + 1)}>
+              <RefreshCcw size={16} aria-hidden="true" />
+              Thử lại
+            </button>
+          </div>
         ) : records.length === 0 ? (
           <div className="empty-state">
             <ClipboardList size={30} aria-hidden="true" />

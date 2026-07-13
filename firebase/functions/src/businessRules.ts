@@ -113,6 +113,46 @@ export function wheelRewardOutcome(type: "reward" | "no_prize", generatedCode: s
   };
 }
 
+export function rewardExpiresAtMs(createdAtMs: number, validityDays: number) {
+  const safeDays = Math.min(Math.max(Math.floor(validityDays), 1), 365);
+  return createdAtMs + safeDays * 24 * 60 * 60 * 1000;
+}
+
+export function effectiveRewardStatus(
+  status: unknown,
+  expiresAtMs: number | null,
+  nowMs: number,
+): "unused" | "used" | "expired" | "no_prize" {
+  if (status === "used" || status === "expired" || status === "no_prize") {
+    return status;
+  }
+  return expiresAtMs !== null && expiresAtMs <= nowMs ? "expired" : "unused";
+}
+
+export function canCreateCustomerWithinPlan(input: {
+  plan: unknown;
+  customerCount: number;
+  freeCustomerLimit: number;
+}) {
+  return input.plan !== "free" || input.customerCount < input.freeCustomerLimit;
+}
+
+export function canRestoreReward(input: {
+  status: unknown;
+  usedAtMs: number | null;
+  expiresAtMs: number | null;
+  nowMs: number;
+  restoreWindowMs: number;
+}) {
+  return (
+    input.status === "used" &&
+    input.usedAtMs !== null &&
+    input.usedAtMs <= input.nowMs &&
+    input.nowMs - input.usedAtMs <= input.restoreWindowMs &&
+    (input.expiresAtMs === null || input.expiresAtMs > input.nowMs)
+  );
+}
+
 export function countUniqueCustomersSince(
   records: Array<{ customerId?: unknown; createdAtMs: number | null }>,
   sinceMs: number,
