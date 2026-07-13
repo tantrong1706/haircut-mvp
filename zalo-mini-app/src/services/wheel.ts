@@ -24,10 +24,15 @@ function normalizeSlot(value: unknown, index: number): LuckyWheelSlot {
   const slot = isRecord(value) ? value : {};
   const fallback = defaultLuckyWheelConfig.slots[index]?.label || `Ô ${index + 1}`;
   const label = typeof slot.label === "string" && slot.label.trim() ? slot.label.trim() : fallback;
+  const type =
+    slot.type === "no_prize" || (slot.type !== "reward" && /may mắn|không trúng/i.test(label))
+      ? "no_prize"
+      : "reward";
 
   return {
     label,
     active: Boolean(slot.active ?? true),
+    type,
   };
 }
 

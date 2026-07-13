@@ -49,7 +49,7 @@ export function HomePage({
       <header className="customer-hero premium-hero visual-hero compact-hero">
         <div className="hero-topline">
           <BrandLogo />
-          <span className="soft-chip">{mirrorLabel(session.qr.mirrorId, session.mirrorName)}</span>
+          <span className="soft-chip">{branchLabel(session)}</span>
         </div>
         <p className="eyebrow">Thành viên</p>
         <h1>{customer.name}</h1>
@@ -81,7 +81,11 @@ export function HomePage({
           done
           icon={<CheckCircle2 size={20} />}
           title="Đã check-in"
-          text={mirrorLabel(session.qr.mirrorId, session.mirrorName)}
+          text={
+            session.branchAddress
+              ? `${branchLabel(session)} · ${session.branchAddress}`
+              : branchLabel(session)
+          }
         />
         <StatusStep
           done={
@@ -232,15 +236,8 @@ function ownerStepText(status: AppSession["sessionStatus"]) {
   return "Duyệt sau khi cắt.";
 }
 
-function mirrorLabel(mirrorId: string, mirrorName?: string) {
-  if (mirrorName?.trim()) {
-    return mirrorName.trim();
-  }
-  if (mirrorId.includes("mirror-1")) {
-    return "Gương 1";
-  }
-
-  return mirrorId || "Gương";
+function branchLabel(session: AppSession) {
+  return session.branchName?.trim() || session.mirrorName?.trim() || "Chi nhánh";
 }
 
 function formatSyncTime(value: number) {

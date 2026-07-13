@@ -6,17 +6,21 @@ import { StaffPage } from "./StaffPage";
 
 const mocks = vi.hoisted(() => ({
   claimServiceSession: vi.fn(),
+  cancelServiceSession: vi.fn(),
   deleteHaircutPhoto: vi.fn(),
   uploadHaircutPhoto: vi.fn(),
   submitPointRequest: vi.fn(),
   listenActiveSessions: vi.fn(),
+  getBranchQrSettings: vi.fn(),
   getSalonProfile: vi.fn(),
 }));
 
 vi.mock("../services/operations", () => ({
   claimServiceSession: mocks.claimServiceSession,
+  cancelServiceSession: mocks.cancelServiceSession,
   submitPointRequest: mocks.submitPointRequest,
   listenActiveSessions: mocks.listenActiveSessions,
+  getBranchQrSettings: mocks.getBranchQrSettings,
   getSalonProfile: mocks.getSalonProfile,
   formatDateTime: () => "09:00 12/07/2026",
 }));
@@ -35,15 +39,19 @@ vi.mock("../services/monitoring", () => ({
 const waitingSession: StaffSession = {
   id: "session-a",
   salonId: "salon-a",
+  branchId: "branch-a",
+  branchName: "Chi nhánh Quận 1",
+  branchAddress: "1 Nguyễn Huệ",
   mirrorId: "mirror-1",
   mirrorName: "Gương 1",
   customerId: "customer-a",
-  zaloUserId: "zalo-a",
   status: "waiting",
   assignedStaffId: "",
   assignedStaffName: "",
   claimedAtMs: null,
   createdAtMs: Date.now(),
+  expiresAtMs: Date.now() + 60_000,
+  cancellationReason: "",
   customer: {
     id: "customer-a",
     name: "Anh Tân",
@@ -67,8 +75,26 @@ describe("StaffPage", () => {
       pointPerVisit: 2,
       freeCustomerLimit: 50,
     });
+    mocks.getBranchQrSettings.mockResolvedValue({
+      salonQrUrl: "",
+      branches: [
+        {
+          id: "branch-a",
+          salonId: "salon-a",
+          name: "Chi nhánh Quận 1",
+          address: "1 Nguyễn Huệ",
+          phone: "",
+          qrUrl: "",
+          isActive: true,
+        },
+      ],
+    });
     mocks.listenActiveSessions.mockImplementation(
-      (_salonId: string, onChange: (sessions: StaffSession[]) => void) => {
+      (
+        _salonId: string,
+        _branchIds: string[] | null,
+        onChange: (sessions: StaffSession[]) => void,
+      ) => {
         onChange(sessionsForTest);
         return vi.fn();
       },
@@ -78,6 +104,7 @@ describe("StaffPage", () => {
       assignedStaffId: "staff-a",
       assignedStaffName: "Nam",
     });
+    mocks.cancelServiceSession.mockResolvedValue({ ok: true, status: "cancelled" });
     mocks.uploadHaircutPhoto.mockResolvedValue({
       id: "photo-a",
       path: "salons/salon-a/customers/customer-a/haircuts/session-a/photo-a.jpg",
@@ -99,6 +126,8 @@ describe("StaffPage", () => {
           role: "staff",
           isActive: true,
           canRedeemRewards: false,
+          branchId: "branch-a",
+          branchIds: ["branch-a"],
         }}
       />,
     );
@@ -141,6 +170,8 @@ describe("StaffPage", () => {
           role: "staff",
           isActive: true,
           canRedeemRewards: false,
+          branchId: "branch-a",
+          branchIds: ["branch-a"],
         }}
       />,
     );

@@ -16,6 +16,7 @@ export type UploadedHaircutPhoto = {
 
 export async function uploadHaircutPhoto(input: {
   salonId: string;
+  branchId: string;
   customerId: string;
   sessionId: string;
   file: File;
@@ -29,6 +30,7 @@ export async function uploadHaircutPhoto(input: {
   }
 
   const salonId = safeDocumentId(input.salonId, "salon");
+  const branchId = safeDocumentId(input.branchId, "chi nhánh");
   const customerId = safeDocumentId(input.customerId, "khách hàng");
   const sessionId = safeDocumentId(input.sessionId, "lượt cắt");
   const sourceFile = validateSourceFile(input.file);
@@ -46,6 +48,7 @@ export async function uploadHaircutPhoto(input: {
     contentType: "image/jpeg",
     customMetadata: {
       salonId,
+      branchId,
       customerId,
       sessionId,
       uploaderUid: currentUser.uid,

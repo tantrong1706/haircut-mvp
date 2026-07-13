@@ -2,6 +2,7 @@ import { createHash, createHmac, randomBytes } from "node:crypto";
 import { initializeApp } from "firebase-admin/app";
 import {
   AggregateField,
+  DocumentData,
   FieldPath,
   FieldValue,
   Timestamp,
@@ -11,6 +12,20 @@ import { getAuth } from "firebase-admin/auth";
 import { getStorage } from "firebase-admin/storage";
 import { defineSecret } from "firebase-functions/params";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { onSchedule } from "firebase-functions/v2/scheduler";
+import {
+  buildCustomerContactPatch,
+  canCancelServiceSession,
+  countUniqueCustomersSince,
+  deletionJobOutcome,
+  isServiceSessionExpired,
+  isVerifiedOwnerIdentity,
+  legacyBranchPatch,
+  normalizeWheelSlotType,
+  selectWheelSlot,
+  serviceSessionExpiresAtMs,
+  wheelRewardOutcome,
+} from "./businessRules";
 import { buildNameSearchPrefixes, normalizeSearchText } from "./customerSearch";
 import {
   MAX_HAIRCUT_PHOTOS,
@@ -18,7 +33,15 @@ import {
   isExpectedHaircutPhotoPath,
   storageObjectNameFromDownloadUrl,
 } from "./customerPhotos";
-import { isValidMirrorQr } from "./security";
+import {
+  canUserAccessBranch,
+  createSignedQrToken,
+  defaultBranchIdForSalon,
+  isValidMirrorQr,
+  isValidSignedQrToken,
+  selectQrBranch,
+  shouldReuseActiveSession,
+} from "./security";
 
 initializeApp();
 
@@ -26,6 +49,11 @@ const db = getFirestore();
 const storage = getStorage();
 const functionOptions = { region: "asia-southeast1" };
 const zaloAppSecret = defineSecret("ZALO_APP_SECRET");
+const qrSigningSecret = defineSecret("QR_SIGNING_SECRET");
+const qrFunctionOptions = {
+  ...functionOptions,
+  secrets: [qrSigningSecret],
+};
 const zaloFunctionOptions = {
   ...functionOptions,
   secrets: [zaloAppSecret],
@@ -33,10 +61,17 @@ const zaloFunctionOptions = {
   concurrency: 40,
   maxInstances: 30,
 };
+const zaloQrFunctionOptions = {
+  ...zaloFunctionOptions,
+  secrets: [zaloAppSecret, qrSigningSecret],
+};
 const SESSION_POINT_REQUEST_WINDOW_MS = 12 * 60 * 60 * 1000;
+const OPEN_SESSION_STATUSES = ["waiting", "serving", "pending_approval"] as const;
+const SESSION_EXPIRY_BATCH_SIZE = 100;
 const ZALO_PROFILE_CACHE_TTL_MS = 60_000;
 const ZALO_PROFILE_CACHE_MAX_SIZE = 500;
 const PUBLIC_RATE_LIMITS = {
+  resolveCustomerQr: { windowMs: 60_000, tokenLimit: 30, ipLimit: 180 },
   registerCustomerFromZalo: { windowMs: 60_000, tokenLimit: 6, ipLimit: 60 },
   getCustomerSessionFromZalo: { windowMs: 60_000, tokenLimit: 20, ipLimit: 180 },
   getCustomerHistoryFromZalo: { windowMs: 60_000, tokenLimit: 12, ipLimit: 120 },
@@ -56,17 +91,21 @@ type AppUser = {
   isActive: boolean;
   canRedeemRewards?: boolean;
   inviteStatus?: "pending" | "accepted";
+  branchId?: string;
+  branchIds?: string[];
 };
 
 type LuckyWheelSlot = {
   label: string;
   active: boolean;
+  type: "reward" | "no_prize";
 };
 
 type SpinWheelResult = {
   rewardId: string;
   rewardName: string;
   rewardCode: string;
+  isWinning: boolean;
   pointsAfter: number;
   selectedIndex: number;
 };
@@ -162,6 +201,7 @@ function safePhotoUrls(value: unknown): string[] {
 async function assertSubmittedHaircutPhotos(input: {
   photoUrls: string[];
   salonId: string;
+  branchId: string;
   customerId: string;
   sessionId: string;
   uploaderUid: string;
@@ -198,6 +238,7 @@ async function assertSubmittedHaircutPhotos(input: {
         Number(metadata.size) > 0 &&
         Number(metadata.size) <= MAX_HAIRCUT_PHOTO_SIZE &&
         customMetadata.salonId === input.salonId &&
+        customMetadata.branchId === input.branchId &&
         customMetadata.customerId === input.customerId &&
         customMetadata.sessionId === input.sessionId &&
         customMetadata.uploaderUid === input.uploaderUid;
@@ -355,6 +396,50 @@ async function assertSalonRole(
   return user;
 }
 
+function assertBranchAccess(user: AppUser, branchId: string) {
+  if (!canUserAccessBranch(user, branchId)) {
+    throw new HttpsError("permission-denied", "Bạn không được phân công tại chi nhánh này");
+  }
+}
+
+async function resolveStaffBranchIds(salonId: string, value: unknown): Promise<string[]> {
+  const requested = Array.isArray(value)
+    ? [...new Set(value.filter((item): item is string => typeof item === "string"))]
+        .map((item) => item.trim())
+        .filter(Boolean)
+    : [];
+
+  let branchIds = requested;
+  if (branchIds.length === 0) {
+    const activeBranches = await db
+      .collection("branches")
+      .where("salonId", "==", salonId)
+      .where("isActive", "==", true)
+      .limit(2)
+      .get();
+    if (activeBranches.size === 1) {
+      branchIds = [activeBranches.docs[0].id];
+    }
+  }
+
+  if (branchIds.length === 0 || branchIds.length > 20) {
+    throw new HttpsError("invalid-argument", "Hãy chọn ít nhất một chi nhánh cho nhân viên");
+  }
+
+  const branchSnaps = await Promise.all(
+    branchIds.map((branchId) => db.collection("branches").doc(branchId).get()),
+  );
+  if (
+    branchSnaps.some(
+      (snap) => !snap.exists || snap.data()?.salonId !== salonId || snap.data()?.isActive !== true,
+    )
+  ) {
+    throw new HttpsError("failed-precondition", "Chi nhánh phân công không hợp lệ hoặc đã khóa");
+  }
+
+  return branchIds;
+}
+
 function customerIdFor(salonId: string, zaloUserId: string): string {
   return createHash("sha256").update(`${salonId}:${zaloUserId}`).digest("hex").slice(0, 40);
 }
@@ -362,6 +447,13 @@ function customerIdFor(salonId: string, zaloUserId: string): string {
 function activeSessionRefFor(salonId: string, customerId: string) {
   const id = createHash("sha256").update(`${salonId}:${customerId}`).digest("hex").slice(0, 40);
   return db.collection("active_service_sessions").doc(id);
+}
+
+function customerDeletionJobRefFor(salonId: string, customerId: string) {
+  const id = createHash("sha256")
+    .update(`customer-deletion:${salonId}:${customerId}`)
+    .digest("hex");
+  return db.collection("customer_deletion_jobs").doc(id);
 }
 
 async function enforcePublicRequestPolicy(
@@ -609,11 +701,200 @@ function miniAppUrl(salonId: string, mirrorId: string, qrToken: string): string 
   return `https://zalo.me/s/${miniAppId}?${params.toString()}`;
 }
 
+function qrVersion(value: unknown): number {
+  const parsed = Math.floor(Number(value ?? 1));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+}
+
+function signedQrUrl(input: {
+  kind: "salon" | "branch";
+  salonId: string;
+  branchId?: string;
+  version: number;
+}) {
+  const secret = qrSigningSecret.value();
+  if (secret.length < 32) {
+    throw new HttpsError(
+      "failed-precondition",
+      "QR_SIGNING_SECRET chưa được cấu hình đúng trên Firebase",
+    );
+  }
+
+  const qrToken = createSignedQrToken(secret, input);
+  const params = new URLSearchParams({
+    qrType: input.kind,
+    salonId: input.salonId,
+    qrToken,
+  });
+  if (input.kind === "branch" && input.branchId) {
+    params.set("branchId", input.branchId);
+  }
+
+  const miniAppId = process.env.ZALO_MINI_APP_ID || "your-mini-app-id";
+  return `https://zalo.me/s/${miniAppId}?${params.toString()}`;
+}
+
+function publicBranch(doc: { id: string; data(): DocumentData }) {
+  const data = doc.data();
+  return {
+    id: doc.id,
+    name: String(data.name || "Chi nhánh"),
+    address: String(data.address || ""),
+    phone: String(data.phone || ""),
+    isActive: data.isActive === true,
+  };
+}
+
+type CustomerQrResolution = {
+  qrType: "salon" | "branch" | "legacy-mirror";
+  salonId: string;
+  salonName: string;
+  branchId: string | null;
+  branchName: string;
+  branchAddress: string;
+  selectionRequired: boolean;
+  branches: Array<ReturnType<typeof publicBranch>>;
+  legacyMirrorId?: string;
+};
+
+async function resolveCustomerQrData(data: unknown): Promise<CustomerQrResolution> {
+  const input = typeof data === "object" && data !== null ? (data as Record<string, unknown>) : {};
+  const salonId = requireString(input.salonId, "salonId");
+  const qrToken = requireString(input.qrToken, "qrToken");
+  const requestedType = optionalString(input.qrType);
+  const branchId = optionalString(input.branchId);
+  const mirrorId = optionalString(input.mirrorId);
+  const qrType =
+    requestedType === "salon" || requestedType === "branch"
+      ? requestedType
+      : mirrorId
+        ? "legacy-mirror"
+        : "salon";
+  const salonSnap = await db.collection("salons").doc(salonId).get();
+
+  if (!salonSnap.exists || salonSnap.data()?.isActive === false) {
+    throw new HttpsError("not-found", "Salon không tồn tại hoặc đã ngừng hoạt động");
+  }
+
+  const salonName = String(salonSnap.data()?.name || "Salon");
+  const secret = qrSigningSecret.value();
+  if (secret.length < 32) {
+    throw new HttpsError("failed-precondition", "QR của salon chưa được cấu hình");
+  }
+
+  if (qrType === "legacy-mirror") {
+    const mirrorSnap = await db
+      .collection("mirrors")
+      .doc(requireString(mirrorId, "mirrorId"))
+      .get();
+    if (!mirrorSnap.exists || !isValidMirrorQr(mirrorSnap.data(), salonId, qrToken)) {
+      throw new HttpsError("permission-denied", "QR Gương 1 không hợp lệ hoặc đã bị khóa");
+    }
+
+    const resolvedBranchId =
+      optionalString(mirrorSnap.data()?.branchId) ?? defaultBranchIdForSalon(salonId);
+    const branchSnap = await db.collection("branches").doc(resolvedBranchId).get();
+    if (
+      !branchSnap.exists ||
+      branchSnap.data()?.salonId !== salonId ||
+      branchSnap.data()?.isActive !== true
+    ) {
+      throw new HttpsError(
+        "failed-precondition",
+        "QR cũ chưa được chuyển sang chi nhánh hoặc chi nhánh đã bị khóa",
+      );
+    }
+    const branch = publicBranch(branchSnap as { id: string; data(): DocumentData });
+    return {
+      qrType,
+      salonId,
+      salonName,
+      branchId: branch.id,
+      branchName: branch.name,
+      branchAddress: branch.address,
+      selectionRequired: false,
+      branches: [branch],
+      legacyMirrorId: mirrorSnap.id,
+    };
+  }
+
+  if (qrType === "branch") {
+    const resolvedBranchId = requireString(branchId, "branchId");
+    const branchSnap = await db.collection("branches").doc(resolvedBranchId).get();
+    if (
+      !branchSnap.exists ||
+      branchSnap.data()?.salonId !== salonId ||
+      branchSnap.data()?.isActive !== true
+    ) {
+      throw new HttpsError("failed-precondition", "Chi nhánh không tồn tại hoặc đã bị khóa");
+    }
+    const valid = isValidSignedQrToken(
+      secret,
+      {
+        kind: "branch",
+        salonId,
+        branchId: resolvedBranchId,
+        version: qrVersion(branchSnap.data()?.qrVersion),
+      },
+      qrToken,
+    );
+    if (!valid) {
+      throw new HttpsError("permission-denied", "QR chi nhánh không hợp lệ hoặc đã được tạo lại");
+    }
+    const branch = publicBranch(branchSnap as { id: string; data(): DocumentData });
+    return {
+      qrType,
+      salonId,
+      salonName,
+      branchId: branch.id,
+      branchName: branch.name,
+      branchAddress: branch.address,
+      selectionRequired: false,
+      branches: [branch],
+    };
+  }
+
+  const validSalonQr = isValidSignedQrToken(
+    secret,
+    { kind: "salon", salonId, version: qrVersion(salonSnap.data()?.salonQrVersion) },
+    qrToken,
+  );
+  if (!validSalonQr) {
+    throw new HttpsError("permission-denied", "QR salon không hợp lệ hoặc đã được tạo lại");
+  }
+
+  const branchSnaps = await db
+    .collection("branches")
+    .where("salonId", "==", salonId)
+    .limit(100)
+    .get();
+  const branches = branchSnaps.docs
+    .map(publicBranch)
+    .filter((branch) => branch.isActive)
+    .sort((left, right) => left.name.localeCompare(right.name, "vi"));
+  const selection = selectQrBranch(branches, branchId);
+  if (selection.mode === "invalid") {
+    throw new HttpsError("failed-precondition", "Chi nhánh đã chọn không còn hoạt động");
+  }
+  const selected = branches.find((branch) => branch.id === selection.branchId);
+
+  return {
+    qrType,
+    salonId,
+    salonName,
+    branchId: selected?.id ?? null,
+    branchName: selected?.name ?? "",
+    branchAddress: selected?.address ?? "",
+    selectionRequired: selection.mode === "choose",
+    branches,
+  };
+}
+
 function timestampMillis(value: unknown): number | null {
   return value instanceof Timestamp ? value.toMillis() : null;
 }
 
-function isFreshServiceSession(createdAt: unknown, now: Timestamp): boolean {
+function isFreshServiceSession(createdAt: unknown, now: Timestamp, expiresAt?: unknown): boolean {
   const createdAtMs = timestampMillis(createdAt);
 
   if (!createdAtMs) {
@@ -621,8 +902,13 @@ function isFreshServiceSession(createdAt: unknown, now: Timestamp): boolean {
   }
 
   const nowMs = now.toMillis();
+  const expiresAtMs =
+    timestampMillis(expiresAt) ??
+    serviceSessionExpiresAtMs(createdAtMs, SESSION_POINT_REQUEST_WINDOW_MS);
   return (
-    createdAtMs <= nowMs + 5 * 60 * 1000 && nowMs - createdAtMs <= SESSION_POINT_REQUEST_WINDOW_MS
+    createdAtMs <= nowMs + 5 * 60 * 1000 &&
+    nowMs - createdAtMs <= SESSION_POINT_REQUEST_WINDOW_MS &&
+    !isServiceSessionExpired(expiresAtMs, nowMs)
   );
 }
 
@@ -646,6 +932,7 @@ async function spinWheelForCustomer(salonId: string, customerId: string): Promis
 
   let selectedReward = "";
   let selectedCode = "";
+  let isWinning = true;
   let selectedIndex = 0;
   let pointsAfter = 0;
 
@@ -666,27 +953,40 @@ async function spinWheelForCustomer(salonId: string, customerId: string): Promis
       throw new HttpsError("failed-precondition", "Khách chưa đủ điểm để quay");
     }
 
-    const activeSlots = (wheel?.slots ?? []).filter(
-      (slot: LuckyWheelSlot) => slot.active && slot.label.trim().length > 0,
+    const selectedSlot = selectWheelSlot(
+      Array.isArray(wheel?.slots)
+        ? wheel.slots.map((slot: LuckyWheelSlot) => ({
+            label: String(slot.label || "").trim(),
+            active: slot.active !== false,
+            type: normalizeWheelSlotType(slot.type, String(slot.label || "")),
+          }))
+        : [],
+      Math.random(),
     );
-    if (activeSlots.length === 0) {
+    if (!selectedSlot) {
       throw new HttpsError("failed-precondition", "Vòng quay chưa có ô thưởng đang bật");
     }
 
-    selectedIndex = Math.floor(Math.random() * activeSlots.length);
-    selectedReward = activeSlots[selectedIndex].label;
-    selectedCode = rewardCode(rewardRef.id);
+    selectedIndex = selectedSlot.index;
+    selectedReward = selectedSlot.label;
+    const rewardOutcome = wheelRewardOutcome(selectedSlot.type, rewardCode(rewardRef.id));
+    isWinning = rewardOutcome.isWinning;
+    selectedCode = rewardOutcome.rewardCode ?? "";
     const deductPoints = Boolean(wheel?.deductPointsAfterSpin);
     pointsAfter = deductPoints ? points - requiredPoints : points;
+    const branchId = String(customer?.lastBranchId || defaultBranchIdForSalon(salonId));
 
     tx.set(rewardRef, {
       salonId,
+      branchId,
+      branchName: String(customer?.lastBranchName || "Chi nhánh chính"),
       customerId,
       rewardName: selectedReward,
-      rewardCode: selectedCode,
+      rewardCode: rewardOutcome.rewardCode,
+      isWinning,
       selectedIndex,
       pointsSpent: deductPoints ? requiredPoints : 0,
-      status: "unused",
+      status: rewardOutcome.status,
       createdAt: now,
     });
 
@@ -702,13 +1002,21 @@ async function spinWheelForCustomer(salonId: string, customerId: string): Promis
     rewardId: rewardRef.id,
     rewardName: selectedReward,
     rewardCode: selectedCode,
+    isWinning,
     pointsAfter,
     selectedIndex,
   };
 }
 
-export const createSalon = onCall(functionOptions, async (request) => {
+export const createSalon = onCall(qrFunctionOptions, async (request) => {
   const uid = currentUid(request.auth);
+  const authUser = await getAuth().getUser(uid);
+  if (!isVerifiedOwnerIdentity(authUser)) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Hãy xác minh email chủ salon rồi đăng nhập lại trước khi tạo salon",
+    );
+  }
   const name = requireString(request.data?.name, "name");
   const ownerName = optionalString(request.data?.ownerName) ?? name;
   const address = optionalString(request.data?.address);
@@ -717,8 +1025,8 @@ export const createSalon = onCall(functionOptions, async (request) => {
   const salonRef = db.collection("salons").doc();
   const userRef = db.collection("users").doc(uid);
   const wheelRef = db.collection("lucky_wheel").doc(salonRef.id);
-  const mirrorRef = db.collection("mirrors").doc();
-  const qrToken = randomToken();
+  const branchId = defaultBranchIdForSalon(salonRef.id);
+  const branchRef = db.collection("branches").doc(branchId);
   const now = Timestamp.now();
 
   await db.runTransaction(async (tx) => {
@@ -742,6 +1050,8 @@ export const createSalon = onCall(functionOptions, async (request) => {
       plan: "free",
       freeCustomerLimit: 50,
       pointPerVisit: 1,
+      salonQrVersion: 1,
+      defaultBranchId: branchId,
       createdAt: now,
       updatedAt: now,
     });
@@ -754,6 +1064,7 @@ export const createSalon = onCall(functionOptions, async (request) => {
         role: "owner",
         isActive: true,
         canRedeemRewards: true,
+        branchIds: [],
         createdAt: now,
         updatedAt: now,
       },
@@ -764,21 +1075,22 @@ export const createSalon = onCall(functionOptions, async (request) => {
       requiredPoints: 5,
       deductPointsAfterSpin: true,
       slots: [
-        { label: "Giảm 10%", active: true },
-        { label: "Gội đầu miễn phí", active: true },
-        { label: "Tặng sáp tóc", active: true },
-        { label: "Giảm 20%", active: true },
-        { label: "Chúc bạn may mắn", active: true },
-        { label: "Hấp dầu miễn phí", active: true },
+        { label: "Giảm 10%", active: true, type: "reward" },
+        { label: "Gội đầu miễn phí", active: true, type: "reward" },
+        { label: "Tặng sáp tóc", active: true, type: "reward" },
+        { label: "Giảm 20%", active: true, type: "reward" },
+        { label: "Chúc bạn may mắn", active: true, type: "no_prize" },
+        { label: "Hấp dầu miễn phí", active: true, type: "reward" },
       ],
       updatedAt: now,
     });
-    tx.set(mirrorRef, {
+    tx.set(branchRef, {
       salonId: salonRef.id,
-      name: "Gương 1",
-      qrToken,
-      qrUrl: miniAppUrl(salonRef.id, mirrorRef.id, qrToken),
+      name: "Chi nhánh chính",
+      address: address ?? null,
+      phone: phone ?? null,
       isActive: true,
+      qrVersion: 1,
       createdAt: now,
       updatedAt: now,
     });
@@ -786,8 +1098,14 @@ export const createSalon = onCall(functionOptions, async (request) => {
 
   return {
     salonId: salonRef.id,
-    mirrorId: mirrorRef.id,
-    qrUrl: miniAppUrl(salonRef.id, mirrorRef.id, qrToken),
+    branchId,
+    salonQrUrl: signedQrUrl({ kind: "salon", salonId: salonRef.id, version: 1 }),
+    branchQrUrl: signedQrUrl({
+      kind: "branch",
+      salonId: salonRef.id,
+      branchId,
+      version: 1,
+    }),
   };
 });
 
@@ -800,6 +1118,7 @@ export const createStaffProfile = onCall(functionOptions, async (request) => {
   const name = limitedString(request.data?.name, "name", 80);
   const phone = optionalLimitedString(request.data?.phone, "phone", 30);
   const canRedeemRewards = Boolean(request.data?.canRedeemRewards);
+  const branchIds = await resolveStaffBranchIds(salonId, request.data?.branchIds);
   const now = Timestamp.now();
   let staffUid = "";
 
@@ -823,6 +1142,8 @@ export const createStaffProfile = onCall(functionOptions, async (request) => {
         role: "staff",
         isActive: true,
         canRedeemRewards,
+        branchId: branchIds[0],
+        branchIds,
         inviteStatus: "pending",
         invitedBy: uid,
         invitedAt: now,
@@ -830,7 +1151,7 @@ export const createStaffProfile = onCall(functionOptions, async (request) => {
         updatedAt: now,
       });
 
-    return { uid: staffUid, email };
+    return { uid: staffUid, email, branchIds };
   } catch (error) {
     if (staffUid) {
       await getAuth()
@@ -920,6 +1241,257 @@ export const updateMirror = onCall(functionOptions, async (request) => {
   };
 });
 
+export const listBranches = onCall(qrFunctionOptions, async (request) => {
+  const uid = currentUid(request.auth);
+  const salonId = requireString(request.data?.salonId, "salonId");
+  const user = await assertSalonRole(uid, salonId, ["owner", "staff"]);
+  const [salonSnap, branchesSnap] = await Promise.all([
+    db.collection("salons").doc(salonId).get(),
+    db.collection("branches").where("salonId", "==", salonId).limit(100).get(),
+  ]);
+
+  if (!salonSnap.exists) {
+    throw new HttpsError("not-found", "Không tìm thấy salon");
+  }
+
+  const branches = branchesSnap.docs
+    .filter((branch) => user.role === "owner" || canUserAccessBranch(user, branch.id))
+    .map((branch) => {
+      const result = publicBranch(branch);
+      return {
+        ...result,
+        qrUrl:
+          user.role === "owner"
+            ? signedQrUrl({
+                kind: "branch",
+                salonId,
+                branchId: branch.id,
+                version: qrVersion(branch.data().qrVersion),
+              })
+            : "",
+      };
+    })
+    .sort((left, right) => left.name.localeCompare(right.name, "vi"));
+
+  return {
+    salonQrUrl:
+      user.role === "owner"
+        ? signedQrUrl({
+            kind: "salon",
+            salonId,
+            version: qrVersion(salonSnap.data()?.salonQrVersion),
+          })
+        : "",
+    branches,
+  };
+});
+
+export const createBranch = onCall(qrFunctionOptions, async (request) => {
+  const uid = currentUid(request.auth);
+  const salonId = requireString(request.data?.salonId, "salonId");
+  await assertSalonRole(uid, salonId, ["owner"]);
+  const name = limitedString(request.data?.name, "name", 80);
+  const address = optionalLimitedString(request.data?.address, "address", 200);
+  const phone = optionalLimitedString(request.data?.phone, "phone", 30);
+  const branchRef = db.collection("branches").doc();
+  const now = Timestamp.now();
+
+  await branchRef.set({
+    salonId,
+    name,
+    address: address ?? null,
+    phone: phone ?? null,
+    isActive: true,
+    qrVersion: 1,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  return {
+    id: branchRef.id,
+    salonId,
+    name,
+    address: address ?? "",
+    phone: phone ?? "",
+    isActive: true,
+    qrUrl: signedQrUrl({ kind: "branch", salonId, branchId: branchRef.id, version: 1 }),
+  };
+});
+
+export const updateBranch = onCall(qrFunctionOptions, async (request) => {
+  const uid = currentUid(request.auth);
+  const salonId = requireString(request.data?.salonId, "salonId");
+  const branchId = requireString(request.data?.branchId, "branchId");
+  await assertSalonRole(uid, salonId, ["owner"]);
+  const branchRef = db.collection("branches").doc(branchId);
+  const branchSnap = await branchRef.get();
+
+  if (!branchSnap.exists || branchSnap.data()?.salonId !== salonId) {
+    throw new HttpsError("not-found", "Không tìm thấy chi nhánh");
+  }
+
+  const payload: Record<string, unknown> = { updatedAt: Timestamp.now() };
+  if (request.data?.name !== undefined) {
+    payload.name = limitedString(request.data.name, "name", 80);
+  }
+  if (request.data?.address !== undefined) {
+    payload.address = optionalLimitedString(request.data.address, "address", 200) ?? null;
+  }
+  if (request.data?.phone !== undefined) {
+    payload.phone = optionalLimitedString(request.data.phone, "phone", 30) ?? null;
+  }
+  if (typeof request.data?.isActive === "boolean") {
+    payload.isActive = request.data.isActive;
+  }
+
+  await branchRef.set(payload, { merge: true });
+  const updated = await branchRef.get();
+  const branch = publicBranch(updated as { id: string; data(): DocumentData });
+  return {
+    ...branch,
+    salonId,
+    qrUrl: signedQrUrl({
+      kind: "branch",
+      salonId,
+      branchId,
+      version: qrVersion(updated.data()?.qrVersion),
+    }),
+  };
+});
+
+export const rotateSalonQr = onCall(qrFunctionOptions, async (request) => {
+  const uid = currentUid(request.auth);
+  const salonId = requireString(request.data?.salonId, "salonId");
+  await assertSalonRole(uid, salonId, ["owner"]);
+  const salonRef = db.collection("salons").doc(salonId);
+  let version = 1;
+
+  await db.runTransaction(async (tx) => {
+    const salonSnap = await tx.get(salonRef);
+    if (!salonSnap.exists) {
+      throw new HttpsError("not-found", "Không tìm thấy salon");
+    }
+    version = qrVersion(salonSnap.data()?.salonQrVersion) + 1;
+    tx.set(salonRef, { salonQrVersion: version, updatedAt: Timestamp.now() }, { merge: true });
+  });
+
+  return { qrUrl: signedQrUrl({ kind: "salon", salonId, version }) };
+});
+
+export const rotateBranchQr = onCall(qrFunctionOptions, async (request) => {
+  const uid = currentUid(request.auth);
+  const salonId = requireString(request.data?.salonId, "salonId");
+  const branchId = requireString(request.data?.branchId, "branchId");
+  await assertSalonRole(uid, salonId, ["owner"]);
+  const branchRef = db.collection("branches").doc(branchId);
+  let version = 1;
+
+  await db.runTransaction(async (tx) => {
+    const branchSnap = await tx.get(branchRef);
+    if (!branchSnap.exists || branchSnap.data()?.salonId !== salonId) {
+      throw new HttpsError("not-found", "Không tìm thấy chi nhánh");
+    }
+    version = qrVersion(branchSnap.data()?.qrVersion) + 1;
+    tx.set(branchRef, { qrVersion: version, updatedAt: Timestamp.now() }, { merge: true });
+  });
+
+  return {
+    qrUrl: signedQrUrl({ kind: "branch", salonId, branchId, version }),
+  };
+});
+
+export const migrateSalonBranches = onCall(
+  { ...qrFunctionOptions, timeoutSeconds: 300 },
+  async (request) => {
+    const uid = currentUid(request.auth);
+    const salonId = requireString(request.data?.salonId, "salonId");
+    await assertSalonRole(uid, salonId, ["owner"]);
+    const salonRef = db.collection("salons").doc(salonId);
+    const branchId = defaultBranchIdForSalon(salonId);
+    const branchRef = db.collection("branches").doc(branchId);
+    let branchName = "Chi nhánh chính";
+
+    await db.runTransaction(async (tx) => {
+      const [salonSnap, branchSnap] = await Promise.all([tx.get(salonRef), tx.get(branchRef)]);
+      if (!salonSnap.exists) {
+        throw new HttpsError("not-found", "Không tìm thấy salon");
+      }
+      if (!branchSnap.exists) {
+        tx.set(branchRef, {
+          salonId,
+          name: branchName,
+          address: salonSnap.data()?.address ?? null,
+          phone: salonSnap.data()?.phone ?? null,
+          isActive: true,
+          qrVersion: 1,
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+        });
+      } else {
+        branchName = String(branchSnap.data()?.name || branchName);
+      }
+      tx.set(
+        salonRef,
+        {
+          defaultBranchId: branchId,
+          salonQrVersion: qrVersion(salonSnap.data()?.salonQrVersion),
+          updatedAt: Timestamp.now(),
+        },
+        { merge: true },
+      );
+    });
+
+    const counts: Record<string, number> = {};
+    counts.mirrors = await backfillSalonCollection("mirrors", salonId, (data) => {
+      const patch = legacyBranchPatch({
+        currentBranchId: data.branchId,
+        defaultBranchId: branchId,
+        defaultBranchName: branchName,
+      });
+      return patch ? { branchId: patch.branchId, updatedAt: Timestamp.now() } : null;
+    });
+    counts.users = await backfillSalonCollection("users", salonId, (data) => {
+      if (data.role !== "staff") {
+        return null;
+      }
+      const branchIds = Array.isArray(data.branchIds) ? data.branchIds : [];
+      return branchIds.length > 0
+        ? null
+        : { branchId, branchIds: [branchId], updatedAt: Timestamp.now() };
+    });
+
+    counts.chair_sessions = await backfillOperationalSessions(
+      "chair_sessions",
+      salonId,
+      branchId,
+      branchName,
+    );
+    counts.active_service_sessions = await backfillOperationalSessions(
+      "active_service_sessions",
+      salonId,
+      branchId,
+      branchName,
+    );
+    for (const collectionName of ["point_requests", "haircut_records", "reward_history"]) {
+      counts[collectionName] = await backfillSalonCollection(collectionName, salonId, (data) => {
+        const patch = legacyBranchPatch({
+          currentBranchId: data.branchId,
+          defaultBranchId: branchId,
+          defaultBranchName: branchName,
+        });
+        return patch ? { ...patch, updatedAt: Timestamp.now() } : null;
+      });
+    }
+    counts.customers = await backfillSalonCollection("customers", salonId, (data) =>
+      data.lastBranchId
+        ? null
+        : { lastBranchId: branchId, lastBranchName: branchName, updatedAt: Timestamp.now() },
+    );
+
+    return { branchId, branchName, counts };
+  },
+);
+
 export const updateStaffProfile = onCall(functionOptions, async (request) => {
   const uid = currentUid(request.auth);
   const salonId = requireString(request.data?.salonId, "salonId");
@@ -931,6 +1503,10 @@ export const updateStaffProfile = onCall(functionOptions, async (request) => {
   const isActive = typeof request.data?.isActive === "boolean" ? request.data.isActive : undefined;
   const canRedeemRewards =
     typeof request.data?.canRedeemRewards === "boolean" ? request.data.canRedeemRewards : undefined;
+  const branchIds =
+    request.data?.branchIds === undefined
+      ? undefined
+      : await resolveStaffBranchIds(salonId, request.data.branchIds);
   const staffRef = db.collection("users").doc(staffUid);
   const staffSnap = await staffRef.get();
 
@@ -957,6 +1533,10 @@ export const updateStaffProfile = onCall(functionOptions, async (request) => {
   }
   if (canRedeemRewards !== undefined) {
     payload.canRedeemRewards = canRedeemRewards;
+  }
+  if (branchIds) {
+    payload.branchId = branchIds[0];
+    payload.branchIds = branchIds;
   }
 
   await staffRef.set(payload, { merge: true });
@@ -1072,6 +1652,12 @@ export const listStaffProfiles = onCall(functionOptions, async (request) => {
         role: "staff",
         isActive: Boolean(data.isActive),
         canRedeemRewards: Boolean(data.canRedeemRewards),
+        branchId: String(data.branchId || ""),
+        branchIds: Array.isArray(data.branchIds)
+          ? data.branchIds.filter((value): value is string => typeof value === "string")
+          : data.branchId
+            ? [String(data.branchId)]
+            : [],
         inviteStatus: data.inviteStatus ?? "accepted",
       };
     }),
@@ -1109,7 +1695,6 @@ export const createManualCustomer = onCall(functionOptions, async (request) => {
       birthday: birthday ?? null,
       allowPhoto,
       updatedAt: now,
-      lastVisitAt: now,
     };
 
     if (snap.exists) {
@@ -1126,10 +1711,14 @@ export const createManualCustomer = onCall(functionOptions, async (request) => {
   return { customerId };
 });
 
-export const registerCustomerFromZalo = onCall(zaloFunctionOptions, async (request) => {
+export const resolveCustomerQr = onCall(qrFunctionOptions, async (request) => {
   const salonId = requireString(request.data?.salonId, "salonId");
-  const mirrorId = requireString(request.data?.mirrorId, "mirrorId");
-  const qrToken = requireString(request.data?.qrToken, "qrToken");
+  await enforcePublicRequestPolicy("resolveCustomerQr", request, salonId, request.data?.qrToken);
+  return resolveCustomerQrData(request.data);
+});
+
+export const registerCustomerFromZalo = onCall(zaloQrFunctionOptions, async (request) => {
+  const salonId = requireString(request.data?.salonId, "salonId");
   await enforcePublicRequestPolicy(
     "registerCustomerFromZalo",
     request,
@@ -1143,27 +1732,34 @@ export const registerCustomerFromZalo = onCall(zaloFunctionOptions, async (reque
     String(zaloProfile.name ?? "Khách hàng").slice(0, 80);
   const phone = optionalLimitedString(request.data?.phone, "phone", 30);
   const birthday = optionalLimitedString(request.data?.birthday, "birthday", 20);
+  const contactPatch = buildCustomerContactPatch({
+    phone,
+    birthday,
+    clearPhone: request.data?.clearPhone === true,
+    clearBirthday: request.data?.clearBirthday === true,
+  });
   const allowPhoto = requireBoolean(request.data?.allowPhoto, "allowPhoto");
-
-  const mirrorSnap = await db.collection("mirrors").doc(mirrorId).get();
-  if (!mirrorSnap.exists) {
-    throw new HttpsError("not-found", "Không tìm thấy QR gương");
+  const qrResolution = await resolveCustomerQrData(request.data);
+  if (qrResolution.selectionRequired) {
+    throw new HttpsError("failed-precondition", "Vui lòng chọn chi nhánh trước khi tạo lượt");
   }
-  const mirror = mirrorSnap.data();
-  if (!isValidMirrorQr(mirror, salonId, qrToken)) {
-    throw new HttpsError("permission-denied", "QR gương không hợp lệ");
+  if (!qrResolution.branchId) {
+    throw new HttpsError("failed-precondition", "Salon chưa có chi nhánh đang hoạt động");
   }
+  const branchId = qrResolution.branchId;
 
   const customerId = customerIdFor(salonId, zaloUserId);
   const customerRef = db.collection("customers").doc(customerId);
   const sessionRef = db.collection("chair_sessions").doc();
   const activeSessionRef = activeSessionRefFor(salonId, customerId);
   const now = Timestamp.now();
-  const mirrorName = String(mirror?.name || "Gương").slice(0, 80);
+  const expiresAt = Timestamp.fromMillis(
+    serviceSessionExpiresAtMs(now.toMillis(), SESSION_POINT_REQUEST_WINDOW_MS),
+  );
   let returnedSessionId = sessionRef.id;
-  let returnedMirrorId = mirrorId;
-  let returnedMirrorName = mirrorName;
-  let returnedQrToken = qrToken;
+  let returnedBranchId = branchId;
+  let returnedBranchName = qrResolution.branchName;
+  let returnedBranchAddress = qrResolution.branchAddress;
   let returnedStatus = "waiting";
 
   await db.runTransaction(async (tx) => {
@@ -1171,62 +1767,130 @@ export const registerCustomerFromZalo = onCall(zaloFunctionOptions, async (reque
       tx.get(customerRef),
       tx.get(activeSessionRef),
     ]);
+    const activeSession = activeSessionSnap.exists ? activeSessionSnap.data() : null;
+    let reuseExistingSession = Boolean(
+      activeSession &&
+      shouldReuseActiveSession({
+        status: activeSession.status,
+        sessionId: activeSession.sessionId,
+        createdAtMs: timestampMillis(activeSession.createdAt),
+        expiresAtMs: timestampMillis(activeSession.expiresAt),
+        nowMs: now.toMillis(),
+        maxAgeMs: SESSION_POINT_REQUEST_WINDOW_MS,
+      }),
+    );
+    const previousSessionId =
+      activeSession && typeof activeSession.sessionId === "string" ? activeSession.sessionId : "";
+    const previousSessionRef = previousSessionId
+      ? db.collection("chair_sessions").doc(previousSessionId)
+      : null;
+    const previousSessionSnap = previousSessionRef ? await tx.get(previousSessionRef) : null;
+
+    if (
+      reuseExistingSession &&
+      (!previousSessionSnap?.exists ||
+        previousSessionSnap.data()?.salonId !== salonId ||
+        previousSessionSnap.data()?.customerId !== customerId)
+    ) {
+      reuseExistingSession = false;
+    }
+
+    if (reuseExistingSession && activeSession) {
+      returnedSessionId = String(activeSession.sessionId);
+      returnedBranchId = String(activeSession.branchId || branchId);
+      returnedBranchName = String(activeSession.branchName || qrResolution.branchName);
+      returnedBranchAddress = String(activeSession.branchAddress || qrResolution.branchAddress);
+      const activeStatus = String(activeSession.status ?? "");
+      returnedStatus =
+        activeStatus === "serving" && !activeSession.assignedStaffId
+          ? "pending_approval"
+          : activeStatus;
+    }
+
+    const existingCustomer = customerSnap.exists ? customerSnap.data() : {};
+    const customerSummary = {
+      name,
+      phoneLast4:
+        contactPatch.phoneLast4 !== undefined
+          ? (contactPatch.phoneLast4 ?? "")
+          : String(existingCustomer?.phoneLast4 || ""),
+      points: Math.max(0, Number(existingCustomer?.points ?? 0)),
+      allowPhoto,
+    };
+
     const baseCustomer = {
       salonId,
       zaloUserId,
       name,
       nameSearch: normalizeSearchText(name),
       namePrefixes: buildNameSearchPrefixes(name),
-      phone: phone ?? null,
-      phoneLast4: last4(phone) ?? null,
-      birthday: birthday ?? null,
+      ...contactPatch,
       allowPhoto,
+      lastBranchId: returnedBranchId,
+      lastBranchName: returnedBranchName,
       updatedAt: now,
-      lastVisitAt: now,
     };
 
     if (customerSnap.exists) {
       tx.set(customerRef, baseCustomer, { merge: true });
     } else {
       tx.set(customerRef, {
+        phone: null,
+        phoneLast4: null,
+        birthday: null,
         ...baseCustomer,
         points: 0,
         createdAt: now,
       });
     }
 
-    const activeSession = activeSessionSnap.exists ? activeSessionSnap.data() : null;
-    const activeStatus = String(activeSession?.status ?? "");
-    const canReuseActiveSession =
-      activeSession &&
-      (activeStatus === "waiting" ||
-        activeStatus === "serving" ||
-        activeStatus === "pending_approval") &&
-      isFreshServiceSession(activeSession.createdAt, now) &&
-      typeof activeSession.sessionId === "string" &&
-      activeSession.sessionId.length > 0;
-
-    if (canReuseActiveSession) {
-      returnedSessionId = String(activeSession.sessionId);
-      returnedMirrorId = String(activeSession.mirrorId || mirrorId);
-      returnedMirrorName = String(activeSession.mirrorName || "");
-      returnedQrToken = String(activeSession.qrToken || qrToken);
-      returnedStatus =
-        activeStatus === "serving" && !activeSession.assignedStaffId
-          ? "pending_approval"
-          : activeStatus;
+    if (reuseExistingSession && previousSessionRef) {
       tx.set(activeSessionRef, { updatedAt: now }, { merge: true });
+      tx.set(
+        previousSessionRef,
+        {
+          customerSummary,
+          updatedAt: now,
+        },
+        { merge: true },
+      );
       return;
+    }
+
+    if (
+      previousSessionRef &&
+      previousSessionSnap?.exists &&
+      OPEN_SESSION_STATUSES.includes(
+        String(previousSessionSnap.data()?.status) as (typeof OPEN_SESSION_STATUSES)[number],
+      )
+    ) {
+      tx.set(
+        previousSessionRef,
+        {
+          status: "cancelled",
+          isOpen: false,
+          cancellationReason: "expired",
+          cancelledAt: now,
+          updatedAt: now,
+        },
+        { merge: true },
+      );
     }
 
     tx.set(sessionRef, {
       salonId,
-      mirrorId,
-      mirrorName,
-      qrToken,
+      branchId,
+      branchName: qrResolution.branchName,
+      branchAddress: qrResolution.branchAddress,
+      qrType: qrResolution.qrType,
+      legacyMirrorId: qrResolution.legacyMirrorId ?? null,
+      mirrorId: qrResolution.legacyMirrorId ?? null,
+      mirrorName: qrResolution.branchName,
       customerId,
-      zaloUserId,
+      customerSummary,
       status: "waiting",
+      isOpen: true,
+      expiresAt,
       createdAt: now,
       updatedAt: now,
     });
@@ -1234,10 +1898,14 @@ export const registerCustomerFromZalo = onCall(zaloFunctionOptions, async (reque
       salonId,
       customerId,
       sessionId: sessionRef.id,
-      mirrorId,
-      mirrorName,
-      qrToken,
+      branchId,
+      branchName: qrResolution.branchName,
+      branchAddress: qrResolution.branchAddress,
+      qrType: qrResolution.qrType,
+      legacyMirrorId: qrResolution.legacyMirrorId ?? null,
       status: "waiting",
+      isOpen: true,
+      expiresAt,
       createdAt: now,
       updatedAt: now,
     });
@@ -1247,9 +1915,9 @@ export const registerCustomerFromZalo = onCall(zaloFunctionOptions, async (reque
   return {
     customerId,
     sessionId: returnedSessionId,
-    mirrorId: returnedMirrorId,
-    mirrorName: returnedMirrorName,
-    qrToken: returnedQrToken,
+    branchId: returnedBranchId,
+    branchName: returnedBranchName,
+    branchAddress: returnedBranchAddress,
     sessionStatus: returnedStatus,
     points: customerSnap.data()?.points ?? 0,
     zaloUserId,
@@ -1276,6 +1944,11 @@ export const submitPointRequest = onCall(functionOptions, async (request) => {
     if (!sessionSnap.exists || session?.salonId !== salonId) {
       throw new HttpsError("not-found", "Không tìm thấy phiên phục vụ");
     }
+    const branchId = String(session.branchId || "");
+    if (!branchId) {
+      throw new HttpsError("failed-precondition", "Lượt cắt chưa được gắn chi nhánh");
+    }
+    assertBranchAccess(user, branchId);
     if (session.status !== "serving" || session.assignedStaffId !== uid) {
       throw new HttpsError("permission-denied", "Bạn không phụ trách lượt cắt này");
     }
@@ -1293,6 +1966,7 @@ export const submitPointRequest = onCall(functionOptions, async (request) => {
     await assertSubmittedHaircutPhotos({
       photoUrls,
       salonId,
+      branchId,
       customerId,
       sessionId,
       uploaderUid: uid,
@@ -1310,6 +1984,11 @@ export const submitPointRequest = onCall(functionOptions, async (request) => {
     }
 
     const session = sessionSnap.data();
+    const branchId = String(session?.branchId || "");
+    if (!branchId) {
+      throw new HttpsError("failed-precondition", "Lượt cắt chưa được gắn chi nhánh");
+    }
+    assertBranchAccess(user, branchId);
     if (session?.status !== "serving") {
       throw new HttpsError(
         "failed-precondition",
@@ -1324,7 +2003,7 @@ export const submitPointRequest = onCall(functionOptions, async (request) => {
         `Lượt này đang do ${String(session.assignedStaffName || "nhân viên khác")} phụ trách`,
       );
     }
-    if (!isFreshServiceSession(session.createdAt, now)) {
+    if (!isFreshServiceSession(session.createdAt, now, session.expiresAt)) {
       throw new HttpsError("failed-precondition", "Phiên cắt đã quá thời gian cho phép cộng điểm");
     }
     if (existingRequestSnap.exists) {
@@ -1342,6 +2021,8 @@ export const submitPointRequest = onCall(functionOptions, async (request) => {
 
     tx.set(requestRef, {
       salonId,
+      branchId,
+      branchName: session.branchName ?? "",
       sessionId,
       customerId: session.customerId,
       staffId: uid,
@@ -1367,11 +2048,13 @@ export const submitPointRequest = onCall(functionOptions, async (request) => {
       activeSessionRefFor(salonId, String(session.customerId || "")),
       {
         salonId,
+        branchId,
+        branchName: session.branchName ?? "",
+        branchAddress: session.branchAddress ?? "",
         customerId: session.customerId,
         sessionId,
-        mirrorId: session.mirrorId ?? null,
-        mirrorName: session.mirrorName ?? null,
-        qrToken: session.qrToken ?? null,
+        qrType: session.qrType ?? null,
+        legacyMirrorId: session.legacyMirrorId ?? null,
         status: "pending_approval",
         assignedStaffId: uid,
         assignedStaffName: staffName,
@@ -1408,7 +2091,12 @@ export const claimServiceSession = onCall(functionOptions, async (request) => {
     }
 
     const session = sessionSnap.data() ?? {};
-    if (!isFreshServiceSession(session.createdAt, now)) {
+    const branchId = String(session.branchId || "");
+    if (!branchId) {
+      throw new HttpsError("failed-precondition", "Lượt cắt chưa được gắn chi nhánh");
+    }
+    assertBranchAccess(user, branchId);
+    if (!isFreshServiceSession(session.createdAt, now, session.expiresAt)) {
       throw new HttpsError("failed-precondition", "Lượt phục vụ đã quá thời gian cho phép");
     }
 
@@ -1460,11 +2148,13 @@ export const claimServiceSession = onCall(functionOptions, async (request) => {
       activeSessionRefFor(salonId, String(session.customerId || "")),
       {
         salonId,
+        branchId,
+        branchName: session.branchName ?? "",
+        branchAddress: session.branchAddress ?? "",
         customerId: session.customerId,
         sessionId,
-        mirrorId: session.mirrorId ?? null,
-        mirrorName: session.mirrorName ?? null,
-        qrToken: session.qrToken ?? null,
+        qrType: session.qrType ?? null,
+        legacyMirrorId: session.legacyMirrorId ?? null,
         ...assignment,
         createdAt: session.createdAt ?? now,
       },
@@ -1474,6 +2164,168 @@ export const claimServiceSession = onCall(functionOptions, async (request) => {
 
   return { status: resultStatus, assignedStaffId, assignedStaffName };
 });
+
+export const cancelServiceSession = onCall(functionOptions, async (request) => {
+  const uid = currentUid(request.auth);
+  const salonId = requireString(request.data?.salonId, "salonId");
+  const sessionId = requireString(request.data?.sessionId, "sessionId");
+  const cancellationReason = request.data?.reason === "no_show" ? "no_show" : "cancelled";
+  const note = optionalLimitedString(request.data?.note, "note", 200) ?? "";
+  const user = await assertSalonRole(uid, salonId, ["owner", "staff"]);
+  const sessionRef = db.collection("chair_sessions").doc(sessionId);
+  const pointRequestRef = db.collection("point_requests").doc(sessionId);
+  const now = Timestamp.now();
+
+  const cancelledPhotos = await db.runTransaction(async (tx) => {
+    const [sessionSnap, pointRequestSnap] = await Promise.all([
+      tx.get(sessionRef),
+      tx.get(pointRequestRef),
+    ]);
+    if (!sessionSnap.exists || sessionSnap.data()?.salonId !== salonId) {
+      throw new HttpsError("not-found", "Không tìm thấy lượt cắt");
+    }
+
+    const session = sessionSnap.data() ?? {};
+    const branchId = String(session.branchId || "");
+    assertBranchAccess(user, branchId);
+    if (session.status === "cancelled") {
+      return null;
+    }
+
+    const assignedBranchIds = Array.isArray(user.branchIds)
+      ? user.branchIds.filter((value): value is string => typeof value === "string")
+      : user.branchId
+        ? [user.branchId]
+        : [];
+    if (
+      !canCancelServiceSession({
+        userId: uid,
+        role: user.role,
+        assignedBranchIds,
+        branchId,
+        status: session.status,
+        assignedStaffId: session.assignedStaffId,
+      })
+    ) {
+      throw new HttpsError("permission-denied", "Bạn không được hủy lượt cắt này");
+    }
+
+    const customerId = String(session.customerId || "");
+    const activeRef = activeSessionRefFor(salonId, customerId);
+    const activeSnap = await tx.get(activeRef);
+    tx.set(
+      sessionRef,
+      {
+        status: "cancelled",
+        isOpen: false,
+        cancellationReason,
+        cancellationNote: note,
+        cancelledBy: uid,
+        cancelledAt: now,
+        updatedAt: now,
+      },
+      { merge: true },
+    );
+    if (activeSnap.exists && activeSnap.data()?.sessionId === sessionId) {
+      tx.delete(activeRef);
+    }
+
+    const pointRequest = pointRequestSnap.exists ? pointRequestSnap.data() : null;
+    if (pointRequest?.status === "pending") {
+      if (user.role !== "owner") {
+        throw new HttpsError(
+          "failed-precondition",
+          "Yêu cầu điểm đang chờ duyệt; chỉ chủ salon được hủy lượt",
+        );
+      }
+      tx.set(
+        pointRequestRef,
+        {
+          status: "rejected",
+          rejectedBy: uid,
+          rejectedAt: now,
+          rejectionReason: cancellationReason,
+          photoUrls: [],
+          updatedAt: now,
+        },
+        { merge: true },
+      );
+      return {
+        photoUrls: pointRequest.photoUrls,
+        customerId,
+        sessionId,
+      };
+    }
+    return null;
+  });
+
+  if (cancelledPhotos) {
+    await deleteSubmittedHaircutPhotos({ ...cancelledPhotos, salonId });
+  }
+  return { ok: true, status: "cancelled", cancellationReason };
+});
+
+export const expireStaleServiceSessions = onSchedule(
+  {
+    ...functionOptions,
+    schedule: "every 15 minutes",
+    timeZone: "Asia/Bangkok",
+    timeoutSeconds: 300,
+  },
+  async () => {
+    const now = Timestamp.now();
+    const staleSnap = await db
+      .collection("chair_sessions")
+      .where("isOpen", "==", true)
+      .where("expiresAt", "<=", now)
+      .limit(SESSION_EXPIRY_BATCH_SIZE)
+      .get();
+
+    let expiredCount = 0;
+    for (const staleDoc of staleSnap.docs) {
+      const expired = await db.runTransaction(async (tx) => {
+        const sessionSnap = await tx.get(staleDoc.ref);
+        const session = sessionSnap.data() ?? {};
+        if (
+          !sessionSnap.exists ||
+          session.isOpen !== true ||
+          !OPEN_SESSION_STATUSES.includes(
+            String(session.status) as (typeof OPEN_SESSION_STATUSES)[number],
+          ) ||
+          !isServiceSessionExpired(timestampMillis(session.expiresAt), now.toMillis())
+        ) {
+          return false;
+        }
+
+        const activeRef = activeSessionRefFor(
+          String(session.salonId || ""),
+          String(session.customerId || ""),
+        );
+        const activeSnap = await tx.get(activeRef);
+        tx.set(
+          staleDoc.ref,
+          {
+            status: "cancelled",
+            isOpen: false,
+            cancellationReason: "expired",
+            cancelledAt: now,
+            updatedAt: now,
+          },
+          { merge: true },
+        );
+        if (activeSnap.exists && activeSnap.data()?.sessionId === staleDoc.id) {
+          tx.delete(activeRef);
+        }
+        return true;
+      });
+      if (expired) {
+        expiredCount += 1;
+      }
+    }
+
+    console.info("Đã xử lý lượt cắt hết hạn", { expiredCount });
+  },
+);
 
 export const approvePointRequest = onCall(functionOptions, async (request) => {
   const uid = currentUid(request.auth);
@@ -1495,6 +2347,10 @@ export const approvePointRequest = onCall(functionOptions, async (request) => {
     }
     if (pointRequest?.status !== "pending") {
       throw new HttpsError("failed-precondition", "Yêu cầu đã được xử lý");
+    }
+    const branchId = String(pointRequest?.branchId || "");
+    if (!branchId) {
+      throw new HttpsError("failed-precondition", "Yêu cầu chưa được gắn chi nhánh");
     }
 
     const customerRef = db.collection("customers").doc(pointRequest.customerId);
@@ -1532,6 +2388,8 @@ export const approvePointRequest = onCall(functionOptions, async (request) => {
     });
     tx.set(recordRef, {
       salonId,
+      branchId,
+      branchName: pointRequest.branchName ?? "",
       customerId: pointRequest.customerId,
       staffId: pointRequest.staffId,
       staffName: pointRequest.staffName ?? "",
@@ -1546,6 +2404,8 @@ export const approvePointRequest = onCall(functionOptions, async (request) => {
       sessionRef,
       {
         status: "completed",
+        isOpen: false,
+        completedAt: now,
         updatedAt: now,
       },
       { merge: true },
@@ -1608,6 +2468,9 @@ export const rejectPointRequest = onCall(functionOptions, async (request) => {
       db.collection("chair_sessions").doc(String(pointRequest.sessionId || "")),
       {
         status: "cancelled",
+        isOpen: false,
+        cancellationReason: "rejected",
+        cancelledAt: now,
         updatedAt: now,
       },
       { merge: true },
@@ -1633,73 +2496,75 @@ export const getOwnerOverview = onCall(functionOptions, async (request) => {
   const uid = currentUid(request.auth);
   const salonId = requireString(request.data?.salonId, "salonId");
   await assertSalonRole(uid, salonId, ["owner"]);
+  const branchId = optionalString(request.data?.branchId);
+  if (branchId) {
+    const branchSnap = await db.collection("branches").doc(branchId).get();
+    if (!branchSnap.exists || branchSnap.data()?.salonId !== salonId) {
+      throw new HttpsError("invalid-argument", "Chi nhánh lọc không thuộc salon này");
+    }
+  }
 
   const startOfToday = Timestamp.fromMillis(startOfTodayBangkokMs());
   const nowMs = Date.now();
-  const start7Days = Timestamp.fromMillis(nowMs - 7 * 24 * 60 * 60 * 1000);
-  const start30Days = Timestamp.fromMillis(nowMs - 30 * 24 * 60 * 60 * 1000);
+  const start7DaysMs = nowMs - 7 * 24 * 60 * 60 * 1000;
+  const start30DaysMs = nowMs - 30 * 24 * 60 * 60 * 1000;
+  const start30Days = Timestamp.fromMillis(start30DaysMs);
   const inactiveCutoffMs = nowMs - 30 * 24 * 60 * 60 * 1000;
+  let completedQuery = db
+    .collection("haircut_records")
+    .where("salonId", "==", salonId)
+    .where("createdAt", ">=", start30Days);
+  let pendingQuery = db
+    .collection("point_requests")
+    .where("salonId", "==", salonId)
+    .where("status", "==", "pending");
+  let approvedQuery = db
+    .collection("point_requests")
+    .where("salonId", "==", salonId)
+    .where("status", "==", "approved")
+    .where("approvedAt", ">=", startOfToday);
+  let spinsQuery = db
+    .collection("reward_history")
+    .where("salonId", "==", salonId)
+    .where("createdAt", ">=", startOfToday);
+  let unusedRewardsQuery = db
+    .collection("reward_history")
+    .where("salonId", "==", salonId)
+    .where("status", "==", "unused");
+  let inactiveCustomersQuery = db
+    .collection("customers")
+    .where("salonId", "==", salonId)
+    .where("lastVisitAt", "<", Timestamp.fromMillis(inactiveCutoffMs));
+
+  if (branchId) {
+    completedQuery = completedQuery.where("branchId", "==", branchId);
+    pendingQuery = pendingQuery.where("branchId", "==", branchId);
+    approvedQuery = approvedQuery.where("branchId", "==", branchId);
+    spinsQuery = spinsQuery.where("branchId", "==", branchId);
+    unusedRewardsQuery = unusedRewardsQuery.where("branchId", "==", branchId);
+    inactiveCustomersQuery = inactiveCustomersQuery.where("lastBranchId", "==", branchId);
+  }
+
   const [
-    customersTodaySnap,
-    customers7DaysSnap,
-    customers30DaysSnap,
+    completedSnap,
     pendingRequestsSnap,
     approvedPointsTodaySnap,
     spinsTodaySnap,
     unusedRewardsSnap,
     customersSnap,
   ] = await Promise.all([
-    db
-      .collection("chair_sessions")
-      .where("salonId", "==", salonId)
-      .where("createdAt", ">=", startOfToday)
-      .count()
-      .get(),
-    db
-      .collection("chair_sessions")
-      .where("salonId", "==", salonId)
-      .where("createdAt", ">=", start7Days)
-      .count()
-      .get(),
-    db
-      .collection("chair_sessions")
-      .where("salonId", "==", salonId)
-      .where("createdAt", ">=", start30Days)
-      .count()
-      .get(),
-    db
-      .collection("point_requests")
-      .where("salonId", "==", salonId)
-      .where("status", "==", "pending")
-      .count()
-      .get(),
-    db
-      .collection("point_requests")
-      .where("salonId", "==", salonId)
-      .where("status", "==", "approved")
-      .where("approvedAt", ">=", startOfToday)
-      .aggregate({ points: AggregateField.sum("pointsAdded") })
-      .get(),
-    db
-      .collection("reward_history")
-      .where("salonId", "==", salonId)
-      .where("createdAt", ">=", startOfToday)
-      .count()
-      .get(),
-    db
-      .collection("reward_history")
-      .where("salonId", "==", salonId)
-      .where("status", "==", "unused")
-      .count()
-      .get(),
-    db
-      .collection("customers")
-      .where("salonId", "==", salonId)
-      .where("lastVisitAt", "<", Timestamp.fromMillis(inactiveCutoffMs))
-      .orderBy("lastVisitAt", "asc")
-      .limit(5)
-      .get(),
+    completedQuery.select("customerId", "createdAt").get(),
+    pendingQuery.count().get(),
+    approvedQuery.aggregate({ points: AggregateField.sum("pointsAdded") }).get(),
+    spinsQuery.count().get(),
+    unusedRewardsQuery.count().get(),
+    inactiveCustomersQuery.orderBy("lastVisitAt", "asc").limit(5).get(),
   ]);
+
+  const completedRecords = completedSnap.docs.map((doc) => ({
+    customerId: doc.data().customerId,
+    createdAtMs: timestampMillis(doc.data().createdAt),
+  }));
 
   const inactiveCustomers = customersSnap.docs
     .map((doc) => {
@@ -1721,9 +2586,9 @@ export const getOwnerOverview = onCall(functionOptions, async (request) => {
     .sort((a, b) => b.daysSinceLastVisit - a.daysSinceLastVisit);
 
   return {
-    customersToday: customersTodaySnap.data().count,
-    customers7Days: customers7DaysSnap.data().count,
-    customers30Days: customers30DaysSnap.data().count,
+    customersToday: countUniqueCustomersSince(completedRecords, startOfToday.toMillis()),
+    customers7Days: countUniqueCustomersSince(completedRecords, start7DaysMs),
+    customers30Days: countUniqueCustomersSince(completedRecords, start30DaysMs),
     pendingRequests: pendingRequestsSnap.data().count,
     pointsApprovedToday: Number(approvedPointsTodaySnap.data().points ?? 0),
     spinsToday: spinsTodaySnap.data().count,
@@ -1757,6 +2622,10 @@ export const updateLuckyWheel = onCall(functionOptions, async (request) => {
     return {
       label: (slot as { label: string }).label.trim(),
       active: Boolean((slot as { active?: boolean }).active ?? true),
+      type: normalizeWheelSlotType(
+        (slot as { type?: unknown }).type,
+        (slot as { label: string }).label,
+      ),
     };
   });
 
@@ -1833,11 +2702,13 @@ export const getCustomerSessionFromZalo = onCall(zaloFunctionOptions, async (req
     ? wheel.slots.slice(0, 6).map((slot: unknown) => {
         const value =
           typeof slot === "object" && slot !== null
-            ? (slot as { label?: unknown; active?: unknown })
+            ? (slot as { label?: unknown; active?: unknown; type?: unknown })
             : {};
+        const label = typeof value.label === "string" ? value.label.trim() : "";
         return {
-          label: typeof value.label === "string" ? value.label.trim() : "",
+          label,
           active: value.active !== false,
+          type: normalizeWheelSlotType(value.type, label),
         };
       })
     : [];
@@ -1853,7 +2724,10 @@ export const getCustomerSessionFromZalo = onCall(zaloFunctionOptions, async (req
           : "waiting",
     assignedStaffName: String(session.assignedStaffName ?? ""),
     claimedAtMs: timestampMillis(session.claimedAt),
-    mirrorName: String(session.mirrorName ?? ""),
+    branchId: String(session.branchId ?? ""),
+    branchName: String(session.branchName ?? session.mirrorName ?? ""),
+    branchAddress: String(session.branchAddress ?? ""),
+    mirrorName: String(session.branchName ?? session.mirrorName ?? ""),
     customer: {
       customerId,
       name: String(customer.name ?? zaloProfile.name ?? "Khách hàng"),
@@ -2091,75 +2965,350 @@ export const deleteCustomerData = onCall(functionOptions, async (request) => {
   await assertSalonRole(uid, salonId, ["owner"]);
 
   const customerRef = db.collection("customers").doc(customerId);
-  const customerSnap = await customerRef.get();
+  const jobRef = customerDeletionJobRefFor(salonId, customerId);
+  const [customerSnap, jobSnap] = await Promise.all([customerRef.get(), jobRef.get()]);
+  const existingJob = jobSnap.data() ?? {};
 
-  if (!customerSnap.exists || customerSnap.data()?.salonId !== salonId) {
+  if (existingJob.status === "completed") {
+    return customerDeletionResult(customerId, existingJob);
+  }
+  if (
+    (!customerSnap.exists || customerSnap.data()?.salonId !== salonId) &&
+    (!jobSnap.exists || existingJob.salonId !== salonId || existingJob.customerId !== customerId)
+  ) {
     throw new HttpsError("not-found", "Không tìm thấy hồ sơ khách trong salon này");
   }
 
-  const [deletedRecords, deletedRewards, deletedRequests, deletedSessions] = await Promise.all([
-    deleteCustomerCollectionDocs("haircut_records", salonId, customerId),
-    deleteCustomerCollectionDocs("reward_history", salonId, customerId),
-    deleteCustomerCollectionDocs("point_requests", salonId, customerId),
-    deleteCustomerCollectionDocs("chair_sessions", salonId, customerId),
-  ]);
-
-  await customerRef.delete();
-  await activeSessionRefFor(salonId, customerId).delete();
-  const deletedStorageFiles = await deleteStoragePrefix(
-    `salons/${salonId}/customers/${customerId}/`,
+  await jobRef.set(
+    {
+      salonId,
+      customerId,
+      requestedBy: uid,
+      status: "running",
+      attempts: FieldValue.increment(1),
+      updatedAt: FieldValue.serverTimestamp(),
+      createdAt: existingJob.createdAt ?? FieldValue.serverTimestamp(),
+    },
+    { merge: true },
   );
 
-  return {
-    customerId,
-    deletedRecords,
-    deletedRewards,
-    deletedRequests,
-    deletedSessions,
-    deletedStorageFiles,
+  const collectionNames = [
+    "haircut_records",
+    "reward_history",
+    "point_requests",
+    "chair_sessions",
+  ] as const;
+  const collectionResults = await Promise.all(
+    collectionNames.map((collectionName) =>
+      deleteCustomerCollectionDocs(collectionName, salonId, customerId),
+    ),
+  );
+  let operationFailed = collectionResults.some((result) => result.failed);
+  let remainingDocuments = collectionResults.reduce((total, result) => total + result.remaining, 0);
+
+  const activeSessionRef = activeSessionRefFor(salonId, customerId);
+  try {
+    await activeSessionRef.delete();
+  } catch {
+    operationFailed = true;
+  }
+  try {
+    if ((await activeSessionRef.get()).exists) {
+      remainingDocuments += 1;
+    }
+  } catch {
+    operationFailed = true;
+    remainingDocuments += 1;
+  }
+
+  const storageResult = await deleteStoragePrefixStrict(
+    `salons/${salonId}/customers/${customerId}/`,
+  );
+  operationFailed ||= storageResult.failed > 0 || storageResult.listFailed;
+
+  let customerRemaining = customerSnap.exists ? 1 : 0;
+  if (
+    deletionJobOutcome({
+      remainingDocuments,
+      remainingStorageFiles: storageResult.remaining,
+      failedStorageFiles: storageResult.failed,
+      operationFailed,
+    }) === "completed"
+  ) {
+    try {
+      await customerRef.delete();
+      customerRemaining = (await customerRef.get()).exists ? 1 : 0;
+    } catch {
+      operationFailed = true;
+      customerRemaining = 1;
+    }
+  }
+
+  remainingDocuments += customerRemaining;
+  const status = deletionJobOutcome({
+    remainingDocuments,
+    remainingStorageFiles: storageResult.remaining,
+    failedStorageFiles: storageResult.failed,
+    operationFailed,
+  });
+  const totals = {
+    deletedRecords: Number(existingJob.deletedRecords ?? 0) + collectionResults[0].deleted,
+    deletedRewards: Number(existingJob.deletedRewards ?? 0) + collectionResults[1].deleted,
+    deletedRequests: Number(existingJob.deletedRequests ?? 0) + collectionResults[2].deleted,
+    deletedSessions: Number(existingJob.deletedSessions ?? 0) + collectionResults[3].deleted,
+    deletedStorageFiles: Number(existingJob.deletedStorageFiles ?? 0) + storageResult.deleted,
   };
+
+  await jobRef.set(
+    {
+      ...totals,
+      status,
+      remainingDocuments,
+      remainingStorageFiles: storageResult.remaining,
+      failedStorageFiles: storageResult.failed,
+      updatedAt: FieldValue.serverTimestamp(),
+      completedAt: status === "completed" ? FieldValue.serverTimestamp() : null,
+    },
+    { merge: true },
+  );
+
+  if (status !== "completed") {
+    throw new HttpsError(
+      "unavailable",
+      "Chưa xóa hết dữ liệu khách. Hãy thử lại để tiếp tục tác vụ an toàn",
+    );
+  }
+
+  return customerDeletionResult(customerId, { ...totals, status });
 });
 
 async function deleteCustomerCollectionDocs(
   collectionName: string,
   salonId: string,
   customerId: string,
-): Promise<number> {
-  const snap = await db
+): Promise<{ deleted: number; remaining: number; failed: boolean }> {
+  const customerQuery = db
     .collection(collectionName)
     .where("salonId", "==", salonId)
-    .where("customerId", "==", customerId)
-    .get();
+    .where("customerId", "==", customerId);
+  let deleted = 0;
+  let failed = false;
 
-  const docs = snap.docs;
-  for (let start = 0; start < docs.length; start += 450) {
-    const batch = db.batch();
-    docs.slice(start, start + 450).forEach((doc) => batch.delete(doc.ref));
-    await batch.commit();
+  try {
+    const snap = await customerQuery.get();
+    for (let start = 0; start < snap.docs.length; start += 450) {
+      const batchDocs = snap.docs.slice(start, start + 450);
+      const batch = db.batch();
+      batchDocs.forEach((doc) => batch.delete(doc.ref));
+      try {
+        await batch.commit();
+        deleted += batchDocs.length;
+      } catch {
+        failed = true;
+        break;
+      }
+    }
+  } catch {
+    failed = true;
   }
 
-  return docs.length;
+  try {
+    const remaining = (await customerQuery.get()).size;
+    return { deleted, remaining, failed };
+  } catch {
+    return { deleted, remaining: 1, failed: true };
+  }
 }
 
-async function deleteStoragePrefix(prefix: string): Promise<number> {
-  try {
-    const [files] = await storage.bucket().getFiles({ prefix });
-    const deleted = await Promise.all(
-      files.map(async (file) => {
-        try {
-          await file.delete();
-          return 1;
-        } catch (error) {
-          console.warn("Không xóa được file Storage", file.name, error);
-          return 0;
-        }
-      }),
-    );
+function customerDeletionResult(customerId: string, data: DocumentData) {
+  return {
+    customerId,
+    status: "completed" as const,
+    deletedRecords: Number(data.deletedRecords ?? 0),
+    deletedRewards: Number(data.deletedRewards ?? 0),
+    deletedRequests: Number(data.deletedRequests ?? 0),
+    deletedSessions: Number(data.deletedSessions ?? 0),
+    deletedStorageFiles: Number(data.deletedStorageFiles ?? 0),
+  };
+}
 
-    return deleted.reduce<number>((total, count) => total + count, 0);
-  } catch (error) {
-    console.warn("Không truy cập được Storage bucket để xóa ảnh khách", error);
-    return 0;
+async function backfillOperationalSessions(
+  collectionName: "chair_sessions" | "active_service_sessions",
+  salonId: string,
+  defaultBranchId: string,
+  defaultBranchName: string,
+): Promise<number> {
+  let cursorId = "";
+  let updated = 0;
+
+  while (true) {
+    let pageQuery = db
+      .collection(collectionName)
+      .where("salonId", "==", salonId)
+      .orderBy(FieldPath.documentId())
+      .limit(200);
+    if (cursorId) {
+      pageQuery = pageQuery.startAfter(cursorId);
+    }
+    const page = await pageQuery.get();
+    if (page.empty) {
+      break;
+    }
+
+    const customerIds = [
+      ...new Set(
+        page.docs
+          .map((doc) => doc.data().customerId)
+          .filter((value): value is string => typeof value === "string" && value.length > 0),
+      ),
+    ];
+    const customerSnaps =
+      customerIds.length > 0
+        ? await db.getAll(...customerIds.map((id) => db.collection("customers").doc(id)))
+        : [];
+    const customers = new Map(customerSnaps.map((snap) => [snap.id, snap.data() ?? {}]));
+    const batch = db.batch();
+    let writes = 0;
+
+    page.docs.forEach((doc) => {
+      const data = doc.data();
+      const patch: Record<string, unknown> = {};
+      const status = String(data.status || "waiting");
+      const isOpen = OPEN_SESSION_STATUSES.includes(
+        status as (typeof OPEN_SESSION_STATUSES)[number],
+      );
+
+      Object.assign(
+        patch,
+        legacyBranchPatch({
+          currentBranchId: data.branchId,
+          defaultBranchId,
+          defaultBranchName,
+        }) ?? {},
+      );
+      if (typeof data.isOpen !== "boolean") {
+        patch.isOpen = isOpen;
+      }
+      if (isOpen && !timestampMillis(data.expiresAt)) {
+        const createdAtMs = timestampMillis(data.createdAt) ?? 0;
+        patch.expiresAt = Timestamp.fromMillis(
+          serviceSessionExpiresAtMs(createdAtMs, SESSION_POINT_REQUEST_WINDOW_MS),
+        );
+      }
+      if (!data.customerSummary) {
+        const customer = customers.get(String(data.customerId || "")) ?? {};
+        patch.customerSummary = {
+          name: String(customer.name || "Khách hàng"),
+          phoneLast4: String(customer.phoneLast4 || ""),
+          points: Math.max(0, Number(customer.points ?? 0)),
+          allowPhoto: Boolean(customer.allowPhoto),
+        };
+      }
+      if (collectionName === "chair_sessions") {
+        if (data.zaloUserId !== undefined) {
+          patch.zaloUserId = FieldValue.delete();
+        }
+        if (data.qrToken !== undefined) {
+          patch.qrToken = FieldValue.delete();
+        }
+      }
+
+      if (Object.keys(patch).length > 0) {
+        patch.updatedAt = Timestamp.now();
+        batch.set(doc.ref, patch, { merge: true });
+        writes += 1;
+      }
+    });
+
+    if (writes > 0) {
+      await batch.commit();
+      updated += writes;
+    }
+    cursorId = page.docs[page.docs.length - 1].id;
+    if (page.size < 200) {
+      break;
+    }
+  }
+
+  return updated;
+}
+
+async function backfillSalonCollection(
+  collectionName: string,
+  salonId: string,
+  patchFor: (data: DocumentData) => Record<string, unknown> | null,
+): Promise<number> {
+  let cursorId = "";
+  let updated = 0;
+
+  while (true) {
+    let pageQuery = db
+      .collection(collectionName)
+      .where("salonId", "==", salonId)
+      .orderBy(FieldPath.documentId())
+      .limit(300);
+    if (cursorId) {
+      pageQuery = pageQuery.startAfter(cursorId);
+    }
+    const page = await pageQuery.get();
+    if (page.empty) {
+      break;
+    }
+
+    const batch = db.batch();
+    let writes = 0;
+    page.docs.forEach((doc) => {
+      const patch = patchFor(doc.data());
+      if (patch) {
+        batch.set(doc.ref, patch, { merge: true });
+        writes += 1;
+      }
+    });
+    if (writes > 0) {
+      await batch.commit();
+      updated += writes;
+    }
+
+    cursorId = page.docs[page.docs.length - 1].id;
+    if (page.size < 300) {
+      break;
+    }
+  }
+
+  return updated;
+}
+
+async function deleteStoragePrefixStrict(prefix: string): Promise<{
+  deleted: number;
+  failed: number;
+  remaining: number;
+  listFailed: boolean;
+}> {
+  let files;
+  try {
+    [files] = await storage.bucket().getFiles({ prefix });
+  } catch {
+    return { deleted: 0, failed: 1, remaining: 1, listFailed: true };
+  }
+
+  const deletionResults = await Promise.all(
+    files.map(async (file) => {
+      try {
+        await file.delete();
+        return true;
+      } catch {
+        return false;
+      }
+    }),
+  );
+  const deleted = deletionResults.filter(Boolean).length;
+  const failed = deletionResults.length - deleted;
+
+  try {
+    const [remainingFiles] = await storage.bucket().getFiles({ prefix });
+    return { deleted, failed, remaining: remainingFiles.length, listFailed: false };
+  } catch {
+    return { deleted, failed: failed + 1, remaining: 1, listFailed: true };
   }
 }
 

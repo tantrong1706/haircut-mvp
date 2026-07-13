@@ -7,18 +7,16 @@ import {
   signOut,
   updateProfile,
 } from "firebase/auth";
-import { collection, doc, getDoc, serverTimestamp, setDoc, writeBatch } from "firebase/firestore";
+import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import {
   callFunction,
   getFirebaseAuth,
   getFirebaseDb,
   getFirebaseStorage,
-  getFunctionWriteMode,
   isFirebaseConfigured,
 } from "./firebase";
 import { callWriteFunctionOrFallback } from "./functionWrites";
-import { defaultLuckyWheelConfig } from "./types";
 
 export type AppRole = "owner" | "staff";
 
@@ -30,6 +28,8 @@ export type AppUser = {
   role: AppRole;
   isActive: boolean;
   canRedeemRewards?: boolean;
+  branchId?: string;
+  branchIds?: string[];
 };
 
 const OWNER_AVATAR_MAX_SOURCE_SIZE = 10 * 1024 * 1024;
@@ -88,10 +88,8 @@ export async function registerOwnerSalon(input: {
   }
 
   let credential;
-  let isNewAccount = false;
   try {
     credential = await createUserWithEmailAndPassword(auth, email, password);
-    isNewAccount = true;
   } catch (err) {
     if (authErrorCode(err) !== "auth/email-already-in-use") {
       throw new Error(friendlyAuthError(err));
@@ -101,33 +99,26 @@ export async function registerOwnerSalon(input: {
   }
 
   await updateProfile(credential.user, { displayName: ownerName });
-  if (isNewAccount && !credential.user.emailVerified) {
-    sendEmailVerification(credential.user).catch(() => undefined);
-  }
   const existingProfile = await getAppUser(credential.user.uid);
 
   if (existingProfile?.salonId) {
     return existingProfile;
   }
 
-  try {
-    await callFunction("createSalon", {
-      name: salonName,
-      ownerName,
-      phone,
-    });
-  } catch (err) {
-    if (getFunctionWriteMode() === "required") {
-      throw err;
+  if (!credential.user.emailVerified) {
+    try {
+      await sendEmailVerification(credential.user);
+    } finally {
+      await signOut(auth);
     }
-
-    await createOwnerSalonDirect({
-      uid: credential.user.uid,
-      ownerName,
-      salonName,
-      phone,
-    });
+    throw new Error("Đã gửi email xác minh. Hãy xác minh email rồi đăng nhập để tạo salon");
   }
+
+  await callFunction("createSalon", {
+    name: salonName,
+    ownerName,
+    phone,
+  });
 
   const profile = await getAppUser(credential.user.uid);
   if (!profile) {
@@ -149,6 +140,12 @@ export async function completeOwnerSalonProfile(input: {
     throw new Error("Bạn cần đăng nhập trước khi hoàn tất hồ sơ salon");
   }
 
+  await currentUser.reload();
+  const verifiedUser = auth?.currentUser;
+  if (!verifiedUser?.emailVerified) {
+    throw new Error("Hãy xác minh email chủ salon rồi đăng nhập lại để tạo salon");
+  }
+
   const ownerName = input.ownerName.trim();
   const salonName = input.salonName.trim();
   const phone = input.phone?.trim() || undefined;
@@ -157,103 +154,25 @@ export async function completeOwnerSalonProfile(input: {
     throw new Error("Vui lòng nhập tên chủ salon và tên salon");
   }
 
-  await updateProfile(currentUser, { displayName: ownerName });
-  const existingProfile = await getAppUser(currentUser.uid);
+  await updateProfile(verifiedUser, { displayName: ownerName });
+  const existingProfile = await getAppUser(verifiedUser.uid);
 
   if (existingProfile?.salonId) {
     return existingProfile;
   }
 
-  try {
-    await callFunction("createSalon", {
-      name: salonName,
-      ownerName,
-      phone,
-    });
-  } catch (err) {
-    if (getFunctionWriteMode() === "required") {
-      throw err;
-    }
+  await callFunction("createSalon", {
+    name: salonName,
+    ownerName,
+    phone,
+  });
 
-    await createOwnerSalonDirect({
-      uid: currentUser.uid,
-      ownerName,
-      salonName,
-      phone,
-    });
-  }
-
-  const profile = await getAppUser(currentUser.uid);
+  const profile = await getAppUser(verifiedUser.uid);
   if (!profile) {
     throw new Error("Đã tạo salon nhưng chưa tải được hồ sơ chủ salon");
   }
 
   return profile;
-}
-
-async function createOwnerSalonDirect(input: {
-  uid: string;
-  ownerName: string;
-  salonName: string;
-  phone?: string;
-}) {
-  const db = getFirebaseDb();
-
-  if (!db) {
-    throw new Error("Firebase chưa được cấu hình");
-  }
-
-  const salonRef = doc(collection(db, "salons"));
-  const mirrorRef = doc(collection(db, "mirrors"));
-  const userRef = doc(db, "users", input.uid);
-  const wheelRef = doc(db, "lucky_wheel", salonRef.id);
-  const qrToken = randomToken();
-  const now = serverTimestamp();
-  const batch = writeBatch(db);
-
-  batch.set(salonRef, {
-    name: input.salonName,
-    address: null,
-    phone: input.phone ?? null,
-    ownerId: input.uid,
-    plan: "free",
-    freeCustomerLimit: 50,
-    pointPerVisit: 1,
-    createdAt: now,
-    updatedAt: now,
-  });
-
-  batch.set(userRef, {
-    salonId: salonRef.id,
-    name: input.ownerName,
-    avatarUrl: "",
-    phone: input.phone ?? null,
-    role: "owner",
-    isActive: true,
-    canRedeemRewards: true,
-    createdAt: now,
-    updatedAt: now,
-  });
-
-  batch.set(wheelRef, {
-    salonId: salonRef.id,
-    requiredPoints: defaultLuckyWheelConfig.requiredPoints,
-    deductPointsAfterSpin: defaultLuckyWheelConfig.deductPointsAfterSpin,
-    slots: defaultLuckyWheelConfig.slots,
-    updatedAt: now,
-  });
-
-  batch.set(mirrorRef, {
-    salonId: salonRef.id,
-    name: "Gương 1",
-    qrToken,
-    qrUrl: buildQrUrl(salonRef.id, mirrorRef.id, qrToken),
-    isActive: true,
-    createdAt: now,
-    updatedAt: now,
-  });
-
-  await batch.commit();
 }
 
 export async function signOutOwnerStaff() {
@@ -451,26 +370,13 @@ export async function getAppUser(uid: string): Promise<AppUser | null> {
     role,
     isActive: Boolean(data.isActive),
     canRedeemRewards: Boolean(data.canRedeemRewards),
+    branchId: String(data.branchId || ""),
+    branchIds: Array.isArray(data.branchIds)
+      ? data.branchIds.filter((value): value is string => typeof value === "string")
+      : data.branchId
+        ? [String(data.branchId)]
+        : [],
   };
-}
-
-function buildQrUrl(salonId: string, mirrorId: string, qrToken: string) {
-  const params = new URLSearchParams({ salonId, mirrorId, qrToken });
-  const miniAppId = String(import.meta.env.VITE_ZALO_MINI_APP_ID || "").trim();
-
-  if (miniAppId) {
-    return `https://zalo.me/s/${miniAppId}?${params.toString()}`;
-  }
-
-  return `${window.location.origin}/?${params.toString()}`;
-}
-
-function randomToken() {
-  if (window.crypto?.randomUUID) {
-    return window.crypto.randomUUID().replace(/-/g, "");
-  }
-
-  return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
 function authErrorCode(error: unknown) {

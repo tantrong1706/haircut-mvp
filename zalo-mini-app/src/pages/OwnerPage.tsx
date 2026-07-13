@@ -30,27 +30,30 @@ import { BrandLogo } from "../components/BrandLogo";
 import { RedeemRewardPanel } from "../components/RedeemRewardPanel";
 import {
   CustomerLookupResult,
-  SalonMirror,
+  SalonBranch,
   OwnerOverview,
   PointRequest,
   SalonProfile,
   StaffProfile,
   approvePointRequest,
-  createMirror,
+  createBranch,
   createStaffProfile,
   deleteCustomerData,
   formatDateTime,
   getLuckyWheelConfig,
-  getMirrors,
+  getBranchQrSettings,
   getOwnerOverview,
   getSalonProfile,
   listenStaffProfiles,
   listenPendingPointRequests,
+  migrateSalonBranches,
   rejectPointRequest,
+  rotateBranchQr,
+  rotateSalonQr,
   sendStaffInviteEmail,
   saveLuckyWheelConfig,
   searchSalonCustomers,
-  updateMirror,
+  updateBranch,
   updateSalonProfile,
   updateStaffProfile,
 } from "../services/operations";
@@ -58,7 +61,7 @@ import { AppUser, updateOwnerAvatar, uploadOwnerAvatarFile } from "../services/a
 import { trackEvent, withMonitoringTrace } from "../services/monitoring";
 import { LuckyWheelConfig, defaultLuckyWheelConfig } from "../services/types";
 
-type OwnerTab = "overview" | "approvals" | "mirrors" | "staff" | "customers" | "wheel" | "redeem";
+type OwnerTab = "overview" | "approvals" | "branches" | "staff" | "customers" | "wheel" | "redeem";
 
 type ConfirmRequest = {
   title: string;
@@ -79,6 +82,8 @@ export function OwnerPage({ currentUser }: Props) {
   }, [currentUser.salonId]);
   const [activeTab, setActiveTab] = useState<OwnerTab>("overview");
   const [requests, setRequests] = useState<PointRequest[]>([]);
+  const [ownerBranches, setOwnerBranches] = useState<SalonBranch[]>([]);
+  const [branchFilter, setBranchFilter] = useState("all");
   const [overview, setOverview] = useState<OwnerOverview | null>(null);
   const [salonProfile, setSalonProfile] = useState<SalonProfile | null>(null);
   const [wheelConfig, setWheelConfig] = useState<LuckyWheelConfig>(defaultLuckyWheelConfig);
@@ -100,16 +105,26 @@ export function OwnerPage({ currentUser }: Props) {
 
     return listenPendingPointRequests(
       salonId,
+      branchFilter === "all" ? null : branchFilter,
       (nextRequests) => {
         setRequests(nextRequests);
         setError("");
-        void getOwnerOverview(salonId)
+        void getOwnerOverview(salonId, branchFilter === "all" ? null : branchFilter)
           .then(setOverview)
           .catch(() => undefined);
       },
       setError,
     );
-  }, [salonId]);
+  }, [branchFilter, salonId]);
+
+  useEffect(() => {
+    if (!salonId) {
+      return;
+    }
+    getBranchQrSettings(salonId)
+      .then((settings) => setOwnerBranches(settings.branches))
+      .catch(() => undefined);
+  }, [activeTab, salonId]);
 
   useEffect(() => {
     if (!salonId) {
@@ -123,7 +138,7 @@ export function OwnerPage({ currentUser }: Props) {
 
   useEffect(() => {
     refreshOverview();
-  }, [salonId]);
+  }, [branchFilter, salonId]);
 
   useEffect(() => {
     if (!salonId) {
@@ -132,7 +147,7 @@ export function OwnerPage({ currentUser }: Props) {
 
     const refreshSilently = () => {
       if (document.visibilityState === "visible") {
-        void getOwnerOverview(salonId)
+        void getOwnerOverview(salonId, branchFilter === "all" ? null : branchFilter)
           .then(setOverview)
           .catch(() => undefined);
       }
@@ -146,7 +161,7 @@ export function OwnerPage({ currentUser }: Props) {
       window.removeEventListener("focus", refreshSilently);
       document.removeEventListener("visibilitychange", refreshSilently);
     };
-  }, [salonId]);
+  }, [branchFilter, salonId]);
 
   useEffect(() => {
     refreshSalonProfile();
@@ -170,7 +185,7 @@ export function OwnerPage({ currentUser }: Props) {
 
     setLoadingOverview(true);
     try {
-      setOverview(await getOwnerOverview(salonId));
+      setOverview(await getOwnerOverview(salonId, branchFilter === "all" ? null : branchFilter));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không tải được tổng quan");
     } finally {
@@ -440,10 +455,10 @@ export function OwnerPage({ currentUser }: Props) {
           onClick={() => setActiveTab("approvals")}
         />
         <OwnerTabButton
-          active={activeTab === "mirrors"}
+          active={activeTab === "branches"}
           icon={<QrCode size={18} />}
-          label="QR"
-          onClick={() => setActiveTab("mirrors")}
+          label="Chi nhánh"
+          onClick={() => setActiveTab("branches")}
         />
         <OwnerTabButton
           active={activeTab === "staff"}
@@ -471,6 +486,20 @@ export function OwnerPage({ currentUser }: Props) {
         />
       </div>
 
+      {activeTab === "overview" || activeTab === "approvals" ? (
+        <label className="field owner-branch-filter">
+          <span>Phạm vi dữ liệu</span>
+          <select value={branchFilter} onChange={(event) => setBranchFilter(event.target.value)}>
+            <option value="all">Tất cả chi nhánh</option>
+            {ownerBranches.map((branch) => (
+              <option key={branch.id} value={branch.id}>
+                {branch.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
+
       {activeTab === "overview" ? (
         <>
           <OwnerProfilePanel
@@ -494,8 +523,8 @@ export function OwnerPage({ currentUser }: Props) {
         </>
       ) : activeTab === "approvals" ? (
         <ApprovalsPanel requests={requests} busyId={busyId} onApprove={approve} onReject={reject} />
-      ) : activeTab === "mirrors" ? (
-        <MirrorsPanel
+      ) : activeTab === "branches" ? (
+        <BranchesPanel
           salonId={salonId}
           onMessage={setMessage}
           onError={setError}
@@ -985,11 +1014,11 @@ function OverviewPanel({
             <small>Đổi điểm quay và 6 ô thưởng</small>
           </span>
         </button>
-        <button type="button" onClick={() => onOpenTab("mirrors")}>
+        <button type="button" onClick={() => onOpenTab("branches")}>
           <QrCode size={20} aria-hidden="true" />
           <span>
-            <strong>Gương QR</strong>
-            <small>Tạo link QR riêng cho từng gương/ghế</small>
+            <strong>Chi nhánh & QR</strong>
+            <small>QR chung cho salon và QR riêng từng chi nhánh</small>
           </span>
         </button>
         <button type="button" onClick={() => onOpenTab("staff")}>
@@ -1057,6 +1086,7 @@ function ApprovalsPanel({
               {request.customer?.phoneLast4 ? `******${request.customer.phoneLast4}` : "Chưa có"}
             </span>
             <span>Thợ: {request.staffName || "Nhân viên"}</span>
+            <span>Chi nhánh: {request.branchName || "Chi nhánh"}</span>
             <p>{request.note || "Không có ghi chú"}</p>
             {request.customer?.allowPhoto === true && request.photoUrls.length > 0 ? (
               <div className="haircut-photo-grid approval-photo-grid" aria-label="Ảnh kiểu tóc">
@@ -1100,7 +1130,7 @@ function ApprovalsPanel({
   );
 }
 
-function MirrorsPanel({
+function BranchesPanel({
   salonId,
   onMessage,
   onError,
@@ -1111,8 +1141,11 @@ function MirrorsPanel({
   onError: (message: string) => void;
   onConfirm: (request: ConfirmRequest) => void;
 }) {
-  const [mirrors, setMirrors] = useState<SalonMirror[]>([]);
+  const [branches, setBranches] = useState<SalonBranch[]>([]);
+  const [salonQrUrl, setSalonQrUrl] = useState("");
   const [name, setName] = useState("");
+  const [address, setAddress] = useState("");
+  const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState("");
 
@@ -1123,60 +1156,60 @@ function MirrorsPanel({
   async function refresh() {
     setLoading(true);
     try {
-      setMirrors(await getMirrors(salonId));
+      const settings = await getBranchQrSettings(salonId);
+      setSalonQrUrl(settings.salonQrUrl);
+      setBranches(settings.branches);
       onError("");
     } catch (err) {
-      onError(err instanceof Error ? err.message : "Không tải được danh sách gương");
+      onError(err instanceof Error ? err.message : "Không tải được danh sách chi nhánh");
     } finally {
       setLoading(false);
     }
   }
 
-  async function addMirror() {
+  async function addBranch() {
     setBusyId("new");
     onMessage("");
     onError("");
 
     try {
-      const createdMirror = await createMirror({ salonId, name });
+      const created = await createBranch({ salonId, name, address, phone });
       setName("");
-      setMirrors((current) =>
-        [...current, createdMirror].sort((a, b) => a.name.localeCompare(b.name, "vi")),
+      setAddress("");
+      setPhone("");
+      setBranches((current) =>
+        [...current, created].sort((a, b) => a.name.localeCompare(b.name, "vi")),
       );
-      refresh();
-      onMessage("Đã tạo QR gương mới.");
+      onMessage("Đã tạo chi nhánh và QR riêng.");
     } catch (err) {
-      onError(err instanceof Error ? err.message : "Không tạo được QR gương");
+      onError(err instanceof Error ? err.message : "Không tạo được chi nhánh");
     } finally {
       setBusyId("");
     }
   }
 
-  async function saveMirror(
-    mirror: SalonMirror,
-    payload: Partial<SalonMirror> & { regenerateQr?: boolean },
-  ) {
-    setBusyId(mirror.id);
+  async function saveBranch(branch: SalonBranch, payload: Partial<SalonBranch>) {
+    setBusyId(branch.id);
     onMessage("");
     onError("");
 
     try {
-      const updatedMirror = await updateMirror({
+      const updated = await updateBranch({
         salonId,
-        mirrorId: mirror.id,
+        branchId: branch.id,
         name: payload.name,
+        address: payload.address,
+        phone: payload.phone,
         isActive: payload.isActive,
-        regenerateQr: payload.regenerateQr,
       });
-      setMirrors((current) =>
+      setBranches((current) =>
         current
-          .map((item) => (item.id === mirror.id ? updatedMirror : item))
+          .map((item) => (item.id === branch.id ? updated : item))
           .sort((a, b) => a.name.localeCompare(b.name, "vi")),
       );
-      refresh();
-      onMessage(payload.regenerateQr ? "Đã tạo lại QR mới cho gương." : "Đã cập nhật gương.");
+      onMessage("Đã cập nhật chi nhánh.");
     } catch (err) {
-      onError(err instanceof Error ? err.message : "Không cập nhật được gương");
+      onError(err instanceof Error ? err.message : "Không cập nhật được chi nhánh");
     } finally {
       setBusyId("");
     }
@@ -1184,7 +1217,47 @@ function MirrorsPanel({
 
   async function copyQr(url: string) {
     await navigator.clipboard.writeText(url);
-    onMessage("Đã copy link QR.");
+    onMessage("Đã sao chép liên kết QR.");
+  }
+
+  async function regenerateSalonQr() {
+    setBusyId("salon-qr");
+    try {
+      setSalonQrUrl(await rotateSalonQr(salonId));
+      onMessage("Đã tạo lại QR chung. QR chi nhánh vẫn giữ nguyên.");
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Không tạo lại được QR salon");
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  async function regenerateBranchQr(branch: SalonBranch) {
+    setBusyId(branch.id);
+    try {
+      const qrUrl = await rotateBranchQr(salonId, branch.id);
+      setBranches((current) =>
+        current.map((item) => (item.id === branch.id ? { ...item, qrUrl } : item)),
+      );
+      onMessage("Đã tạo lại QR chi nhánh. QR chung của salon vẫn giữ nguyên.");
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Không tạo lại được QR chi nhánh");
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  async function migrateLegacyData() {
+    setBusyId("migration");
+    try {
+      await migrateSalonBranches(salonId);
+      await refresh();
+      onMessage("Đã gắn dữ liệu cũ vào Chi nhánh chính. Có thể chạy lại mà không tạo trùng.");
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Không chuyển được dữ liệu cũ");
+    } finally {
+      setBusyId("");
+    }
   }
 
   return (
@@ -1192,55 +1265,99 @@ function MirrorsPanel({
       <div className="section-heading">
         <QrCode size={22} aria-hidden="true" />
         <div>
-          <h2>Quản lý gương QR</h2>
-          <p className="muted">Mỗi gương/ghế có một link QR riêng để khách check-in đúng vị trí.</p>
+          <h2>Chi nhánh và QR</h2>
+          <p className="muted">Một QR chung cho salon và một QR riêng cho mỗi chi nhánh.</p>
         </div>
       </div>
 
-      <div className="inline-form">
+      {salonQrUrl ? (
+        <ManagedQrCard
+          title="QR chung của salon"
+          description="Khách quét để chọn chi nhánh; nếu chỉ có một chi nhánh, app tự chọn."
+          qrUrl={salonQrUrl}
+          active
+          busy={busyId === "salon-qr"}
+          onCopy={copyQr}
+          onRegenerate={() =>
+            onConfirm({
+              title: "Tạo lại QR chung?",
+              description: "QR chung cũ sẽ ngừng hoạt động. QR của từng chi nhánh không thay đổi.",
+              confirmLabel: "Tạo QR chung mới",
+              tone: "danger",
+              onConfirm: regenerateSalonQr,
+            })
+          }
+        />
+      ) : null}
+
+      <div className="staff-create-grid">
         <input
           value={name}
           onChange={(event) => setName(event.target.value)}
-          placeholder="Ví dụ: Gương 1, Gương 2, Ghế VIP"
+          placeholder="Tên chi nhánh"
+        />
+        <input
+          value={address}
+          onChange={(event) => setAddress(event.target.value)}
+          placeholder="Địa chỉ"
+        />
+        <input
+          value={phone}
+          onChange={(event) => setPhone(event.target.value)}
+          placeholder="Số điện thoại"
         />
         <button
           className="primary-button"
           disabled={busyId === "new" || !name.trim()}
-          onClick={addMirror}
+          onClick={addBranch}
         >
           <QrCode size={18} aria-hidden="true" />
-          Tạo QR
+          Thêm chi nhánh
         </button>
       </div>
+
+      <button
+        className="secondary-button"
+        disabled={busyId === "migration"}
+        onClick={migrateLegacyData}
+      >
+        <RefreshCcw size={18} aria-hidden="true" />
+        Chuyển dữ liệu Gương 1 cũ
+      </button>
 
       <div className="ops-list">
         {loading ? (
           <div className="empty-state compact-empty">
             <QrCode size={28} aria-hidden="true" />
-            <strong>Đang tải gương</strong>
-            <p>Danh sách QR sẽ hiện sau vài giây.</p>
+            <strong>Đang tải chi nhánh</strong>
+            <p>Danh sách sẽ hiện sau vài giây.</p>
           </div>
-        ) : mirrors.length === 0 ? (
+        ) : branches.length === 0 ? (
           <div className="empty-state compact-empty">
             <QrCode size={28} aria-hidden="true" />
-            <strong>Chưa có gương QR</strong>
-            <p>Tạo gương đầu tiên để khách có link check-in.</p>
+            <strong>Chưa có chi nhánh</strong>
+            <p>Tạo chi nhánh đầu tiên hoặc chuyển dữ liệu Gương 1 cũ.</p>
           </div>
         ) : (
-          mirrors.map((mirror) => (
-            <MirrorCard
-              key={mirror.id}
-              mirror={mirror}
-              busy={busyId === mirror.id}
+          branches.map((branch) => (
+            <ManagedQrCard
+              key={branch.id}
+              title={branch.name}
+              description={branch.address || "Chưa có địa chỉ"}
+              qrUrl={branch.qrUrl}
+              active={branch.isActive}
+              branch={branch}
+              busy={busyId === branch.id}
               onCopy={copyQr}
-              onSave={saveMirror}
-              onRegenerate={(selectedMirror) =>
+              onSave={(payload) => saveBranch(branch, payload)}
+              onToggle={() => saveBranch(branch, { isActive: !branch.isActive })}
+              onRegenerate={() =>
                 onConfirm({
-                  title: "Tạo lại QR mới?",
-                  description: `QR cũ của ${selectedMirror.name} sẽ ngừng dùng ngay. Khách cần quét QR mới để check-in.`,
+                  title: "Tạo lại QR chi nhánh?",
+                  description: `QR cũ của ${branch.name} sẽ ngừng hoạt động. QR chung của salon không thay đổi.`,
                   confirmLabel: "Tạo QR mới",
                   tone: "danger",
-                  onConfirm: () => saveMirror(selectedMirror, { regenerateQr: true }),
+                  onConfirm: () => regenerateBranchQr(branch),
                 })
               }
             />
@@ -1251,30 +1368,44 @@ function MirrorsPanel({
   );
 }
 
-function MirrorCard({
-  mirror,
+function ManagedQrCard({
+  title,
+  description,
+  qrUrl,
+  active,
+  branch,
   busy,
   onCopy,
   onSave,
+  onToggle,
   onRegenerate,
 }: {
-  mirror: SalonMirror;
+  title: string;
+  description: string;
+  qrUrl: string;
+  active: boolean;
+  branch?: SalonBranch;
   busy: boolean;
   onCopy: (url: string) => void;
-  onSave: (mirror: SalonMirror, payload: Partial<SalonMirror> & { regenerateQr?: boolean }) => void;
-  onRegenerate: (mirror: SalonMirror) => void;
+  onSave?: (payload: Partial<SalonBranch>) => void;
+  onToggle?: () => void;
+  onRegenerate: () => void;
 }) {
-  const [name, setName] = useState(mirror.name);
+  const [name, setName] = useState(branch?.name || title);
+  const [address, setAddress] = useState(branch?.address || "");
+  const [phone, setPhone] = useState(branch?.phone || "");
   const [qrImageUrl, setQrImageUrl] = useState("");
 
   useEffect(() => {
-    setName(mirror.name);
-  }, [mirror.name]);
+    setName(branch?.name || title);
+    setAddress(branch?.address || "");
+    setPhone(branch?.phone || "");
+  }, [branch?.address, branch?.name, branch?.phone, title]);
 
   useEffect(() => {
     let cancelled = false;
 
-    QRCode.toDataURL(mirror.qrUrl, {
+    QRCode.toDataURL(qrUrl, {
       width: 256,
       margin: 2,
       color: {
@@ -1296,7 +1427,7 @@ function MirrorCard({
     return () => {
       cancelled = true;
     };
-  }, [mirror.qrUrl]);
+  }, [qrUrl]);
 
   function printQr() {
     if (!qrImageUrl) {
@@ -1314,20 +1445,18 @@ function MirrorCard({
       <html lang="vi">
         <head>
           <meta charset="utf-8" />
-          <title>${escapeHtml(mirror.name)} - HAIRCUT QR</title>
+          <title>${escapeHtml(title)} - HAIRCUT QR</title>
           <style>
             body { font-family: Arial, sans-serif; margin: 28px; color: #0b1712; text-align: center; }
             h1 { margin: 0 0 8px; font-size: 28px; }
             p { margin: 0 0 18px; color: #4c5a53; font-weight: 700; }
             img { width: 280px; height: 280px; }
-            small { display: block; margin-top: 18px; overflow-wrap: anywhere; color: #66736d; }
           </style>
         </head>
         <body>
-          <h1>${escapeHtml(mirror.name)}</h1>
-          <p>Quet QR de check-in HAIRCUT</p>
+          <h1>${escapeHtml(title)}</h1>
+          <p>Quét QR để check-in HAIRCUT</p>
           <img src="${qrImageUrl}" alt="" />
-          <small>${escapeHtml(mirror.qrUrl)}</small>
           <script>window.onload = () => window.print();</script>
         </body>
       </html>
@@ -1338,9 +1467,9 @@ function MirrorCard({
   return (
     <article className="ops-card static-card management-card">
       <div className="management-card-header">
-        <span className="ops-card-title">{mirror.name}</span>
-        <span className={mirror.isActive ? "pill" : "pill muted-pill"}>
-          {mirror.isActive ? "Đang bật" : "Đã tắt"}
+        <span className="ops-card-title">{title}</span>
+        <span className={active ? "pill" : "pill muted-pill"}>
+          {active ? "Đang hoạt động" : "Đã khóa"}
         </span>
       </div>
       <div className="qr-preview-card">
@@ -1352,51 +1481,65 @@ function MirrorCard({
           </div>
         )}
         <div className="qr-print-meta">
-          <strong>{mirror.name}</strong>
-          <span>QR check-in cho khach tai guong/ghe nay</span>
+          <strong>{title}</strong>
+          <span>{description}</span>
         </div>
       </div>
-      <label className="field compact-field">
-        <span>Tên gương/ghế</span>
-        <input value={name} onChange={(event) => setName(event.target.value)} />
-      </label>
-      <p className="qr-url">{mirror.qrUrl}</p>
+      {branch ? (
+        <div className="staff-edit-grid">
+          <input
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="Tên chi nhánh"
+          />
+          <input
+            value={address}
+            onChange={(event) => setAddress(event.target.value)}
+            placeholder="Địa chỉ"
+          />
+          <input
+            value={phone}
+            onChange={(event) => setPhone(event.target.value)}
+            placeholder="Số điện thoại"
+          />
+        </div>
+      ) : null}
       <div className="button-row wrap-row">
-        <button className="secondary-button" onClick={() => onCopy(mirror.qrUrl)}>
+        <button className="secondary-button" onClick={() => onCopy(qrUrl)}>
           <Copy size={18} aria-hidden="true" />
-          Copy link
+          Sao chép liên kết
         </button>
         {qrImageUrl ? (
           <a
             className="secondary-button"
             href={qrImageUrl}
-            download={`${safeFileName(mirror.name)}-qr.png`}
+            download={`${safeFileName(title)}-qr.png`}
           >
             <Download size={18} aria-hidden="true" />
-            Tai QR
+            Tải QR
           </a>
         ) : null}
         <button className="secondary-button" disabled={!qrImageUrl} onClick={printQr}>
           <Printer size={18} aria-hidden="true" />
           In QR
         </button>
-        <button
-          className="secondary-button"
-          disabled={busy}
-          onClick={() => onSave(mirror, { name })}
-        >
-          <Save size={18} aria-hidden="true" />
-          Lưu tên
-        </button>
-        <button
-          className="secondary-button"
-          disabled={busy}
-          onClick={() => onSave(mirror, { isActive: !mirror.isActive })}
-        >
-          <Power size={18} aria-hidden="true" />
-          {mirror.isActive ? "Tắt QR" : "Bật QR"}
-        </button>
-        <button className="secondary-button" disabled={busy} onClick={() => onRegenerate(mirror)}>
+        {branch && onSave ? (
+          <button
+            className="secondary-button"
+            disabled={busy}
+            onClick={() => onSave({ name, address, phone })}
+          >
+            <Save size={18} aria-hidden="true" />
+            Lưu
+          </button>
+        ) : null}
+        {branch && onToggle ? (
+          <button className="secondary-button" disabled={busy} onClick={onToggle}>
+            <Power size={18} aria-hidden="true" />
+            {active ? "Khóa chi nhánh" : "Mở chi nhánh"}
+          </button>
+        ) : null}
+        <button className="secondary-button" disabled={busy} onClick={onRegenerate}>
           <RefreshCcw size={18} aria-hidden="true" />
           Tạo QR mới
         </button>
@@ -1438,6 +1581,8 @@ function StaffManagementPanel({
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [canRedeemRewards, setCanRedeemRewards] = useState(false);
+  const [branches, setBranches] = useState<SalonBranch[]>([]);
+  const [selectedBranchId, setSelectedBranchId] = useState("");
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState("");
 
@@ -1457,6 +1602,16 @@ function StaffManagementPanel({
     );
   }, [salonId]);
 
+  useEffect(() => {
+    getBranchQrSettings(salonId)
+      .then((settings) => {
+        const activeBranches = settings.branches.filter((branch) => branch.isActive);
+        setBranches(activeBranches);
+        setSelectedBranchId((current) => current || activeBranches[0]?.id || "");
+      })
+      .catch((err) => onError(err instanceof Error ? err.message : "Không tải được chi nhánh"));
+  }, [salonId]);
+
   async function addStaff() {
     setBusyId("new");
     onMessage("");
@@ -1469,6 +1624,7 @@ function StaffManagementPanel({
         name,
         phone,
         canRedeemRewards,
+        branchIds: [selectedBranchId],
       });
       const createdUid = createdStaff.uid;
       if (createdUid) {
@@ -1481,6 +1637,8 @@ function StaffManagementPanel({
           role: "staff",
           isActive: true,
           canRedeemRewards,
+          branchId: selectedBranchId,
+          branchIds: [selectedBranchId],
           inviteStatus: "pending",
         };
         setStaff((current) =>
@@ -1536,6 +1694,7 @@ function StaffManagementPanel({
         phone: payload.phone,
         isActive: payload.isActive,
         canRedeemRewards: payload.canRedeemRewards,
+        branchIds: payload.branchIds,
       });
       setStaff((current) =>
         current
@@ -1576,6 +1735,17 @@ function StaffManagementPanel({
           onChange={(event) => setPhone(event.target.value)}
           placeholder="SĐT nội bộ"
         />
+        <select
+          value={selectedBranchId}
+          onChange={(event) => setSelectedBranchId(event.target.value)}
+        >
+          <option value="">Chọn chi nhánh làm việc</option>
+          {branches.map((branch) => (
+            <option key={branch.id} value={branch.id}>
+              {branch.name}
+            </option>
+          ))}
+        </select>
         <label className="toggle-row inline-toggle">
           <input
             type="checkbox"
@@ -1586,7 +1756,7 @@ function StaffManagementPanel({
         </label>
         <button
           className="primary-button"
-          disabled={busyId === "new" || !email.trim() || !name.trim()}
+          disabled={busyId === "new" || !email.trim() || !name.trim() || !selectedBranchId}
           onClick={addStaff}
         >
           <UserPlus size={18} aria-hidden="true" />
@@ -1612,6 +1782,7 @@ function StaffManagementPanel({
             <StaffCard
               key={staffMember.uid}
               staff={staffMember}
+              branches={branches}
               busy={busyId === staffMember.uid}
               onSave={saveStaff}
               onRenewInvite={resendInvite}
@@ -1625,22 +1796,26 @@ function StaffManagementPanel({
 
 function StaffCard({
   staff,
+  branches,
   busy,
   onSave,
   onRenewInvite,
 }: {
   staff: StaffProfile;
+  branches: SalonBranch[];
   busy: boolean;
   onSave: (staff: StaffProfile, payload: Partial<StaffProfile>) => void;
   onRenewInvite: (staff: StaffProfile) => void;
 }) {
   const [name, setName] = useState(staff.name);
   const [phone, setPhone] = useState(staff.phone);
+  const [branchId, setBranchId] = useState(staff.branchId || staff.branchIds[0] || "");
 
   useEffect(() => {
     setName(staff.name);
     setPhone(staff.phone);
-  }, [staff.name, staff.phone]);
+    setBranchId(staff.branchId || staff.branchIds[0] || "");
+  }, [staff.branchId, staff.branchIds, staff.name, staff.phone]);
 
   return (
     <article className="ops-card static-card management-card">
@@ -1654,7 +1829,6 @@ function StaffCard({
       <small>
         {staff.inviteStatus === "pending" ? "Chờ nhân viên đặt mật khẩu" : "Tài khoản đã kích hoạt"}
       </small>
-      <small>UID: {staff.uid}</small>
       <div className="staff-edit-grid">
         <input
           value={name}
@@ -1666,12 +1840,19 @@ function StaffCard({
           onChange={(event) => setPhone(event.target.value)}
           placeholder="SĐT nội bộ"
         />
+        <select value={branchId} onChange={(event) => setBranchId(event.target.value)}>
+          {branches.map((branch) => (
+            <option key={branch.id} value={branch.id}>
+              {branch.name}
+            </option>
+          ))}
+        </select>
       </div>
       <div className="button-row wrap-row">
         <button
           className="secondary-button"
           disabled={busy}
-          onClick={() => onSave(staff, { name, phone })}
+          onClick={() => onSave(staff, { name, phone, branchId, branchIds: [branchId] })}
         >
           <Save size={18} aria-hidden="true" />
           Lưu
@@ -1924,6 +2105,15 @@ function WheelConfigPanel({
     });
   }
 
+  function updateSlotType(index: number, type: "reward" | "no_prize") {
+    onChange({
+      ...config,
+      slots: config.slots.map((slot, slotIndex) =>
+        slotIndex === index ? { ...slot, type } : slot,
+      ),
+    });
+  }
+
   return (
     <div className="panel">
       <div className="detail-stack">
@@ -1970,6 +2160,16 @@ function WheelConfigPanel({
                 onChange={(event) => updateSlot(index, event.target.value)}
                 placeholder={`Ô ${index + 1}`}
               />
+              <select
+                aria-label={`Loại ô ${index + 1}`}
+                value={slot.type}
+                onChange={(event) =>
+                  updateSlotType(index, event.target.value === "no_prize" ? "no_prize" : "reward")
+                }
+              >
+                <option value="reward">Có quà</option>
+                <option value="no_prize">Không trúng</option>
+              </select>
               <label>
                 <input
                   type="checkbox"

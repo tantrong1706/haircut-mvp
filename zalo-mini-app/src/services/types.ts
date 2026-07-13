@@ -1,9 +1,13 @@
 export type TabKey = "home" | "history" | "wheel" | "rewards";
 
+export type QrType = "salon" | "branch" | "legacy-mirror";
+
 export type QrContext = {
+  qrType: QrType;
   salonId: string;
+  branchId: string;
   mirrorId: string;
-  qrToken: string;
+  qrToken?: string;
 };
 
 export type CustomerProfile = {
@@ -17,6 +21,8 @@ export type CustomerProfile = {
 export type AppSession = {
   qr: QrContext;
   sessionId: string;
+  branchName?: string;
+  branchAddress?: string;
   mirrorName?: string;
   zaloUserId: string;
   sessionStatus?: "waiting" | "serving" | "pending_approval" | "completed" | "cancelled";
@@ -47,12 +53,14 @@ export type SpinResult = {
   rewardName: string;
   rewardCode: string;
   pointsAfter: number;
+  isWinning: boolean;
   selectedIndex?: number;
 };
 
 export type LuckyWheelSlot = {
   label: string;
   active: boolean;
+  type: "reward" | "no_prize";
 };
 
 export type LuckyWheelConfig = {
@@ -65,11 +73,11 @@ export const defaultLuckyWheelConfig: LuckyWheelConfig = {
   requiredPoints: 5,
   deductPointsAfterSpin: true,
   slots: [
-    { label: "Giảm 10%", active: true },
-    { label: "Gội đầu miễn phí", active: true },
-    { label: "Tặng sáp tóc", active: true },
-    { label: "Giảm 20%", active: true },
-    { label: "Chúc bạn may mắn lần sau", active: true },
-    { label: "Hấp dầu miễn phí", active: true },
+    { label: "Giảm 10%", active: true, type: "reward" },
+    { label: "Gội đầu miễn phí", active: true, type: "reward" },
+    { label: "Tặng sáp tóc", active: true, type: "reward" },
+    { label: "Giảm 20%", active: true, type: "reward" },
+    { label: "Chúc bạn may mắn lần sau", active: true, type: "no_prize" },
+    { label: "Hấp dầu miễn phí", active: true, type: "reward" },
   ],
 };

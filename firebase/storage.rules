@@ -26,6 +26,22 @@ service firebase.storage {
         && userDoc().data.role == "owner";
     }
 
+    function canAccessBranch(salonId, branchId) {
+      return isOwner(salonId)
+        || (
+          isActiveMember(salonId)
+          && userDoc().data.role == "staff"
+          && (
+            (
+              "branchIds" in userDoc().data
+              && userDoc().data.branchIds is list
+              && branchId in userDoc().data.branchIds
+            )
+            || ("branchId" in userDoc().data && userDoc().data.branchId == branchId)
+          )
+        );
+    }
+
     function customerExists(customerId) {
       return firestore.exists(/databases/(default)/documents/customers/$(customerId));
     }
@@ -53,6 +69,7 @@ service firebase.storage {
         && sessionExists(sessionId)
         && sessionDoc(sessionId).data.salonId == salonId
         && sessionDoc(sessionId).data.customerId == customerId
+        && canAccessBranch(salonId, sessionDoc(sessionId).data.branchId)
         && sessionDoc(sessionId).data.assignedStaffId == request.auth.uid;
     }
 
@@ -69,6 +86,7 @@ service firebase.storage {
         && request.resource.metadata.salonId == salonId
         && request.resource.metadata.customerId == customerId
         && request.resource.metadata.sessionId == sessionId
+        && request.resource.metadata.branchId == sessionDoc(sessionId).data.branchId
         && request.resource.metadata.uploaderUid == request.auth.uid;
     }
 
@@ -86,7 +104,10 @@ service firebase.storage {
         && isAllowedHaircutPhoto(salonId, customerId, sessionId);
       allow update: if false;
       allow delete: if isOwner(salonId)
-        || isAssignedSessionMember(salonId, customerId, sessionId);
+        || (
+          isAssignedServingMember(salonId, customerId, sessionId)
+          && resource.metadata.uploaderUid == request.auth.uid
+        );
     }
 
     match /salons/{salonId}/owner_avatars/{ownerUid}/{fileName} {

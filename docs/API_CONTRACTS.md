@@ -9,6 +9,7 @@ Luồng khách Zalo không tin `zaloUserId` do client tự gửi. Client lấy `
 ```env
 ZALO_MINI_APP_ID=...
 ZALO_APP_SECRET=...
+QR_SIGNING_SECRET=...
 ```
 
 ## createSalon
@@ -29,12 +30,13 @@ Cần đăng nhập Firebase. Output:
 ```json
 {
   "salonId": "...",
-  "mirrorId": "...",
-  "qrUrl": "..."
+  "branchId": "...",
+  "salonQrUrl": "...",
+  "branchQrUrl": "..."
 }
 ```
 
-Hàm này tự tạo hồ sơ owner, vòng quay mặc định và `Gương 1` để chủ salon có QR đầu tiên ngay sau khi đăng ký.
+Hàm này tự tạo hồ sơ owner, vòng quay mặc định, `Chi nhánh chính`, QR chung và QR chi nhánh.
 
 ## createStaffProfile
 
@@ -47,7 +49,8 @@ Input:
   "password": "matkhau-tam",
   "name": "Thợ Nam",
   "phone": "0900000001",
-  "canRedeemRewards": true
+  "canRedeemRewards": true,
+  "branchIds": ["..."]
 }
 ```
 
@@ -55,7 +58,7 @@ Chỉ chủ salon được gọi. Server tạo tài khoản Firebase Auth cho nh
 
 ## updateStaffProfile / listStaffProfiles
 
-Owner quản lý tên, số nội bộ, trạng thái kích hoạt và quyền đổi mã quà của nhân viên.
+Owner quản lý tên, số nội bộ, trạng thái kích hoạt, chi nhánh phân công và quyền đổi mã quà.
 
 ## updateOwnerAvatar
 
@@ -70,9 +73,19 @@ Input:
 
 Chỉ owner của đúng salon được gọi. Gửi `avatarUrl` rỗng để xóa avatar. Server cập nhật cả `users/{uid}.avatarUrl` và `photoURL` trong Firebase Auth.
 
-## createMirror / updateMirror
+## listBranches / createBranch / updateBranch
 
-Owner tạo, bật/tắt, đổi tên hoặc tạo lại `qrToken` cho từng gương/ghế.
+Owner xem, tạo, sửa và khóa chi nhánh. Staff chỉ nhận những chi nhánh được phân công.
+
+## rotateSalonQr / rotateBranchQr
+
+Mỗi API chỉ tăng phiên bản QR đúng phạm vi của mình. Xoay QR salon không ảnh hưởng QR chi nhánh và
+xoay QR chi nhánh không ảnh hưởng QR salon.
+
+## resolveCustomerQr / migrateSalonBranches
+
+`resolveCustomerQr` xác minh QR và trả chi nhánh phù hợp. `migrateSalonBranches` tạo Chi nhánh chính,
+gắn `branchId` vào dữ liệu cũ và có thể chạy lại mà không tạo trùng.
 
 ## registerCustomerFromZalo
 
@@ -81,7 +94,9 @@ Input:
 ```json
 {
   "salonId": "...",
-  "mirrorId": "...",
+  "qrType": "salon | branch | legacy-mirror",
+  "branchId": "...",
+  "mirrorId": "... chỉ dành cho QR cũ",
   "qrToken": "...",
   "zaloAccessToken": "...",
   "name": "Nguyễn Văn A",
@@ -103,6 +118,7 @@ Output:
 ```
 
 `name` là tên hiển thị khách xác nhận tại salon. `zaloUserId` trong output là ID đã xác minh từ Zalo.
+Token chỉ dùng trong request này, không được trả về, lưu trong session hay ghi vào Firestore.
 
 ## submitPointRequest
 
@@ -119,6 +135,7 @@ Input:
 ```
 
 Owner hoặc staff được gọi. Server luôn cố định cộng 1 điểm, không tin số điểm do client tự gửi.
+Server lấy `branchId` từ phiên đã xác minh; client không được tự chọn chi nhánh cho yêu cầu điểm.
 
 ## approvePointRequest / rejectPointRequest
 

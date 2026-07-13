@@ -5,8 +5,15 @@ import { HomePage } from "./HomePage";
 import type { AppSession } from "../services/types";
 
 const session: AppSession = {
-  qr: { salonId: "salon-a", mirrorId: "Gương VIP", qrToken: "token" },
+  qr: {
+    qrType: "legacy-mirror",
+    salonId: "salon-a",
+    branchId: "branch-a",
+    mirrorId: "Gương VIP",
+    qrToken: "token",
+  },
   sessionId: "session-a",
+  branchName: "Chi nhánh trung tâm",
   zaloUserId: "zalo-a",
   sessionStatus: "serving",
   assignedStaffName: "Nam",

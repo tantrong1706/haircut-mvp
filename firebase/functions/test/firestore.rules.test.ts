@@ -23,6 +23,8 @@ import { afterAll, beforeAll, beforeEach, describe, it } from "vitest";
 const projectId = process.env.GCLOUD_PROJECT || "demo-haircut";
 const salonA = "salon-a";
 const salonB = "salon-b";
+const branchA = "branch-a";
+const branchB = "branch-b";
 let testEnv: RulesTestEnvironment;
 
 beforeAll(async () => {
@@ -44,20 +46,31 @@ beforeEach(async () => {
     const db = context.firestore();
     await Promise.all([
       setDoc(doc(db, "users", "owner-a"), member(salonA, "owner")),
-      setDoc(doc(db, "users", "staff-a"), member(salonA, "staff")),
-      setDoc(doc(db, "users", "staff-other-a"), member(salonA, "staff")),
+      setDoc(doc(db, "users", "staff-a"), member(salonA, "staff", [branchA])),
+      setDoc(doc(db, "users", "staff-other-a"), member(salonA, "staff", [branchB])),
       setDoc(doc(db, "users", "owner-b"), member(salonB, "owner")),
       setDoc(doc(db, "salons", salonA), { name: "Salon A", ownerId: "owner-a" }),
       setDoc(doc(db, "salons", salonB), { name: "Salon B", ownerId: "owner-b" }),
+      setDoc(doc(db, "branches", branchA), {
+        salonId: salonA,
+        name: "Chi nhánh A",
+        isActive: true,
+      }),
+      setDoc(doc(db, "branches", branchB), {
+        salonId: salonA,
+        name: "Chi nhánh B",
+        isActive: true,
+      }),
       setDoc(doc(db, "customers", "customer-a"), customer(salonA)),
       setDoc(doc(db, "customers", "customer-b"), customer(salonB)),
       setDoc(doc(db, "customers", "customer-photo"), {
         ...customer(salonA),
         allowPhoto: true,
       }),
-      setDoc(doc(db, "chair_sessions", "session-a"), session(salonA, "customer-a")),
+      setDoc(doc(db, "chair_sessions", "session-a"), session(salonA, branchA, "customer-a")),
+      setDoc(doc(db, "chair_sessions", "session-b"), session(salonA, branchB, "customer-a")),
       setDoc(doc(db, "chair_sessions", "session-photo"), {
-        ...session(salonA, "customer-photo"),
+        ...session(salonA, branchA, "customer-photo"),
         status: "serving",
         assignedStaffId: "staff-a",
       }),
@@ -86,14 +99,38 @@ describe("Firestore production rules", () => {
     await assertFails(getDocs(query(collection(db, "reward_history"), limit(20))));
   });
 
+  it("mặc định từ chối collection và đường dẫn Storage chưa khai báo", async () => {
+    const ownerDb = testEnv.authenticatedContext("owner-a").firestore();
+    const ownerStorage = testEnv.authenticatedContext("owner-a").storage();
+
+    await assertFails(getDoc(doc(ownerDb, "internal_config", "secret")));
+    await assertFails(
+      uploadBytes(ref(ownerStorage, "internal/unlisted.txt"), new Uint8Array([1]), {
+        contentType: "text/plain",
+      }),
+    );
+  });
+
   it("chỉ cho thành viên đang hoạt động đọc dữ liệu salon của mình", async () => {
     const staffDb = testEnv.authenticatedContext("staff-a").firestore();
+    const ownerDb = testEnv.authenticatedContext("owner-a").firestore();
 
-    await assertSucceeds(getDoc(doc(staffDb, "customers", "customer-a")));
-    await assertFails(getDoc(doc(staffDb, "customers", "customer-b")));
-    await assertSucceeds(
+    await assertFails(getDoc(doc(staffDb, "customers", "customer-a")));
+    await assertFails(
       getDocs(query(collection(staffDb, "customers"), where("salonId", "==", salonA))),
     );
+    await assertSucceeds(getDoc(doc(ownerDb, "customers", "customer-a")));
+    await assertFails(getDoc(doc(staffDb, "customers", "customer-b")));
+    await assertFails(getDoc(doc(staffDb, "haircut_records", "record-a")));
+  });
+
+  it("chặn staff đọc hàng chờ của chi nhánh không được phân công", async () => {
+    const staffDb = testEnv.authenticatedContext("staff-a").firestore();
+
+    await assertSucceeds(getDoc(doc(staffDb, "chair_sessions", "session-a")));
+    await assertFails(getDoc(doc(staffDb, "chair_sessions", "session-b")));
+    await assertSucceeds(getDoc(doc(staffDb, "branches", branchA)));
+    await assertFails(getDoc(doc(staffDb, "branches", branchB)));
   });
 
   it("chặn nhân viên tự tạo yêu cầu điểm hoặc sửa phiên", async () => {
@@ -151,6 +188,7 @@ describe("Firestore production rules", () => {
         salonId: salonA,
         customerId: "customer-photo",
         sessionId: "session-photo",
+        branchId: branchA,
         uploaderUid: "staff-a",
       },
     };
@@ -158,6 +196,7 @@ describe("Firestore production rules", () => {
     await assertSucceeds(uploadBytes(allowed, bytes, validMetadata));
     await assertSucceeds(getBytes(allowed));
     await assertFails(uploadBytes(wrongStaff, bytes, validMetadata));
+    await assertFails(deleteObject(wrongStaff));
     await assertFails(
       uploadBytes(deniedConsent, bytes, {
         ...validMetadata,
@@ -168,6 +207,7 @@ describe("Firestore production rules", () => {
         },
       }),
     );
+    await assertSucceeds(deleteObject(allowed));
   });
 
   it("từ chối ảnh có metadata giả hoặc định dạng không hợp lệ", async () => {
@@ -213,18 +253,18 @@ describe("Firestore production rules", () => {
   });
 });
 
-function member(salonId: string, role: "owner" | "staff") {
-  return { salonId, role, name: role, isActive: true };
+function member(salonId: string, role: "owner" | "staff", branchIds: string[] = []) {
+  return { salonId, role, name: role, isActive: true, branchIds };
 }
 
 function customer(salonId: string) {
   return { salonId, name: "Khách", points: 3, allowPhoto: false };
 }
 
-function session(salonId: string, customerId: string) {
-  return { salonId, customerId, status: "waiting" };
+function session(salonId: string, branchId: string, customerId: string) {
+  return { salonId, branchId, customerId, status: "waiting" };
 }
 
 function privateRecord(salonId: string, customerId: string) {
-  return { salonId, customerId, status: "unused", rewardCode: "HC-SECRET" };
+  return { salonId, branchId: branchA, customerId, status: "unused", rewardCode: "HC-SECRET" };
 }

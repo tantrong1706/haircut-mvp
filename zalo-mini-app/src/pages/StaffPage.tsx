@@ -11,13 +11,16 @@ import {
   Trash2,
   UserRoundCheck,
   UsersRound,
+  XCircle,
 } from "lucide-react";
 import { RedeemRewardPanel } from "../components/RedeemRewardPanel";
 import { BrandLogo } from "../components/BrandLogo";
 import {
   StaffSession,
+  cancelServiceSession,
   claimServiceSession,
   formatDateTime,
+  getBranchQrSettings,
   getSalonProfile,
   listenActiveSessions,
   submitPointRequest,
@@ -42,10 +45,15 @@ export function StaffPage({ currentUser }: Props) {
     return currentUser.salonId.trim();
   }, [currentUser.salonId]);
   const [sessions, setSessions] = useState<StaffSession[]>([]);
+  const [branches, setBranches] = useState<Array<{ id: string; name: string }>>([]);
+  const [branchFilter, setBranchFilter] = useState(
+    currentUser.role === "owner" ? "all" : currentUser.branchId || currentUser.branchIds?.[0] || "",
+  );
   const [selectedId, setSelectedId] = useState("");
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(false);
   const [claimingId, setClaimingId] = useState("");
+  const [cancellingId, setCancellingId] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [pointPerVisit, setPointPerVisit] = useState(1);
   const [salonName, setSalonName] = useState("");
@@ -73,6 +81,10 @@ export function StaffPage({ currentUser }: Props) {
     Boolean(selectedSession.assignedStaffId) &&
     !isAssignedToCurrentUser;
   const canRedeemRewards = currentUser.role === "owner" || currentUser.canRedeemRewards === true;
+  const currentBranchName =
+    branchFilter === "all"
+      ? "Tất cả chi nhánh"
+      : branches.find((branch) => branch.id === branchFilter)?.name || "Chi nhánh được phân công";
 
   useEffect(() => {
     if (!salonId) {
@@ -81,8 +93,24 @@ export function StaffPage({ currentUser }: Props) {
       return undefined;
     }
 
+    const branchIds =
+      currentUser.role === "owner"
+        ? branchFilter === "all"
+          ? null
+          : [branchFilter]
+        : branchFilter
+          ? [branchFilter]
+          : currentUser.branchIds || [];
+    if (branchIds !== null && branchIds.length === 0) {
+      setLoaded(true);
+      setSessions([]);
+      setError("Tài khoản chưa được phân công chi nhánh.");
+      return undefined;
+    }
+
     return listenActiveSessions(
       salonId,
+      branchIds,
       (nextSessions) => {
         setSessions(nextSessions);
         setLoaded(true);
@@ -93,7 +121,22 @@ export function StaffPage({ currentUser }: Props) {
         setError(message);
       },
     );
-  }, [salonId]);
+  }, [branchFilter, currentUser.branchIds, currentUser.role, salonId]);
+
+  useEffect(() => {
+    if (!salonId) {
+      return;
+    }
+    getBranchQrSettings(salonId)
+      .then((settings) => {
+        const accessible = settings.branches.map(({ id, name }) => ({ id, name }));
+        setBranches(accessible);
+        if (currentUser.role === "staff" && accessible[0]) {
+          setBranchFilter((current) => current || accessible[0].id);
+        }
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : "Không tải được chi nhánh"));
+  }, [currentUser.role, salonId]);
 
   useEffect(() => {
     if (!salonId) {
@@ -209,6 +252,7 @@ export function StaffPage({ currentUser }: Props) {
           () =>
             uploadHaircutPhoto({
               salonId,
+              branchId: session.branchId,
               customerId: session.customerId,
               sessionId: session.id,
               file,
@@ -303,6 +347,41 @@ export function StaffPage({ currentUser }: Props) {
     }
   }
 
+  async function handleCancel(reason: "cancelled" | "no_show") {
+    if (!selectedSession || cancellingId) {
+      return;
+    }
+    const prompt =
+      reason === "no_show"
+        ? "Xác nhận khách không đến và đóng lượt này?"
+        : "Xác nhận hủy lượt đang phục vụ?";
+    if (!window.confirm(prompt)) {
+      return;
+    }
+
+    setCancellingId(selectedSession.id);
+    setMessage("");
+    setError("");
+    try {
+      await withMonitoringTrace(
+        "staff_cancel_session",
+        () => cancelServiceSession({ salonId, session: selectedSession, reason }),
+        { salon_id: salonId, branch_id: selectedSession.branchId, cancellation_reason: reason },
+      );
+      setSessions((current) => current.filter((session) => session.id !== selectedSession.id));
+      setPhotosBySession((current) => {
+        const next = { ...current };
+        delete next[selectedSession.id];
+        return next;
+      });
+      setMessage(reason === "no_show" ? "Đã đóng lượt khách không đến." : "Đã hủy lượt cắt.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không hủy được lượt cắt");
+    } finally {
+      setCancellingId("");
+    }
+  }
+
   function addQuickNote(nextNote: string) {
     setNote((current) => {
       const trimmed = current.trim();
@@ -324,10 +403,24 @@ export function StaffPage({ currentUser }: Props) {
           <p className="eyebrow">Nhân viên</p>
           <h1>Khách đang chờ</h1>
           <span>
-            {currentUser.name || "Nhân viên"} · {salonName || "Salon của bạn"}
+            {currentUser.name || "Nhân viên"} · {salonName || "Salon của bạn"} · {currentBranchName}
           </span>
         </div>
       </header>
+
+      {branches.length > 0 ? (
+        <label className="field compact-field">
+          <span>Chi nhánh hiện tại</span>
+          <select value={branchFilter} onChange={(event) => setBranchFilter(event.target.value)}>
+            {currentUser.role === "owner" ? <option value="all">Tất cả chi nhánh</option> : null}
+            {branches.map((branch) => (
+              <option key={branch.id} value={branch.id}>
+                {branch.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
 
       <div className="metrics-row compact-metrics">
         <Metric icon={<UsersRound size={20} />} label="Đang chờ" value={waitingCount} />
@@ -377,8 +470,7 @@ export function StaffPage({ currentUser }: Props) {
                 </div>
                 <span>{customerLine(session)}</span>
                 <small>
-                  {mirrorLabel(session.mirrorId, session.mirrorName)} ·{" "}
-                  {formatDateTime(session.createdAtMs)}
+                  {session.branchName || "Chi nhánh"} · {formatDateTime(session.createdAtMs)}
                 </small>
               </button>
             ))
@@ -393,9 +485,7 @@ export function StaffPage({ currentUser }: Props) {
           >
             <div className="detail-heading">
               <div>
-                <p className="eyebrow">
-                  {mirrorLabel(selectedSession.mirrorId, selectedSession.mirrorName)}
-                </p>
+                <p className="eyebrow">{selectedSession.branchName || "Chi nhánh"}</p>
                 <h2>{selectedSession.customer?.name || "Khách hàng"}</h2>
               </div>
               <span className="pill">{selectedSession.customer?.points ?? 0} điểm</span>
@@ -553,39 +643,63 @@ export function StaffPage({ currentUser }: Props) {
             </section>
 
             {selectedSession.status === "waiting" ? (
-              <button
-                className="primary-button"
-                disabled={claimingId === selectedSession.id}
-                onClick={handleClaim}
-              >
-                <UserRoundCheck size={20} aria-hidden="true" />
-                {claimingId === selectedSession.id ? "Đang nhận khách..." : "Nhận khách"}
-              </button>
+              <div className="button-row wrap-row">
+                <button
+                  className="primary-button"
+                  disabled={
+                    claimingId === selectedSession.id || cancellingId === selectedSession.id
+                  }
+                  onClick={handleClaim}
+                >
+                  <UserRoundCheck size={20} aria-hidden="true" />
+                  {claimingId === selectedSession.id ? "Đang nhận khách..." : "Nhận khách"}
+                </button>
+                <button
+                  className="secondary-button"
+                  disabled={cancellingId === selectedSession.id}
+                  onClick={() => void handleCancel("no_show")}
+                >
+                  <XCircle size={19} aria-hidden="true" />
+                  {cancellingId === selectedSession.id ? "Đang đóng lượt..." : "Khách không đến"}
+                </button>
+              </div>
             ) : (
-              <button
-                className="primary-button"
-                disabled={
-                  loading ||
-                  photoBusy ||
-                  hasRevokedPhotoConsent ||
-                  !canEditService ||
-                  note.trim().length === 0
-                }
-                onClick={handleSubmit}
-              >
-                {isPendingApproval ? (
-                  "Đang chờ chủ duyệt"
-                ) : isAssignedToAnother ? (
-                  `Đang do ${selectedSession.assignedStaffName || "nhân viên khác"} phục vụ`
-                ) : loading ? (
-                  "Đang gửi..."
-                ) : (
-                  <>
-                    <Send size={20} aria-hidden="true" />
-                    Gửi cộng {pointPerVisit} điểm
-                  </>
-                )}
-              </button>
+              <div className="button-row wrap-row">
+                <button
+                  className="primary-button"
+                  disabled={
+                    loading ||
+                    photoBusy ||
+                    hasRevokedPhotoConsent ||
+                    !canEditService ||
+                    note.trim().length === 0
+                  }
+                  onClick={handleSubmit}
+                >
+                  {isPendingApproval ? (
+                    "Đang chờ chủ duyệt"
+                  ) : isAssignedToAnother ? (
+                    `Đang do ${selectedSession.assignedStaffName || "nhân viên khác"} phục vụ`
+                  ) : loading ? (
+                    "Đang gửi..."
+                  ) : (
+                    <>
+                      <Send size={20} aria-hidden="true" />
+                      Gửi cộng {pointPerVisit} điểm
+                    </>
+                  )}
+                </button>
+                {canEditService ? (
+                  <button
+                    className="secondary-button"
+                    disabled={cancellingId === selectedSession.id || loading || photoBusy}
+                    onClick={() => void handleCancel("cancelled")}
+                  >
+                    <XCircle size={19} aria-hidden="true" />
+                    {cancellingId === selectedSession.id ? "Đang hủy..." : "Hủy lượt"}
+                  </button>
+                ) : null}
+              </div>
             )}
           </div>
         ) : null}
@@ -626,17 +740,6 @@ function customerLine(session: StaffSession) {
 
   const phone = customer.phoneLast4 ? `******${customer.phoneLast4}` : "Chưa có SĐT";
   return `${phone} · ${customer.points} điểm`;
-}
-
-function mirrorLabel(mirrorId: string, mirrorName?: string) {
-  if (mirrorName?.trim()) {
-    return mirrorName.trim();
-  }
-  if (mirrorId.includes("mirror-1")) {
-    return "Gương 1";
-  }
-
-  return mirrorId || "Gương";
 }
 
 function statusLabel(status: StaffSession["status"]) {

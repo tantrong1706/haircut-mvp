@@ -10,7 +10,7 @@ describe("normalizeLuckyWheelConfig", () => {
 
     expect(config.requiredPoints).toBe(1);
     expect(config.slots).toHaveLength(6);
-    expect(config.slots[0]).toEqual({ label: "Quà VIP", active: true });
+    expect(config.slots[0]).toEqual({ label: "Quà VIP", active: true, type: "reward" });
   });
 
   it("chỉ trả về ô đang bật và có tên", () => {
@@ -24,5 +24,13 @@ describe("normalizeLuckyWheelConfig", () => {
 
     expect(activeWheelSlots(config).map((slot) => slot.label)).toContain("Quà 1");
     expect(activeWheelSlots(config).map((slot) => slot.label)).not.toContain("Quà 3");
+  });
+
+  it("nhận diện ô không trúng cũ mà không tạo nhầm quà", () => {
+    const config = normalizeLuckyWheelConfig({
+      slots: [{ label: "Chúc bạn may mắn lần sau", active: true }],
+    });
+
+    expect(config.slots[0].type).toBe("no_prize");
   });
 });

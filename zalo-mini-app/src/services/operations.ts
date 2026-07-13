@@ -35,21 +35,27 @@ export type CustomerSummary = {
 export type StaffSession = {
   id: string;
   salonId: string;
+  branchId: string;
+  branchName: string;
+  branchAddress: string;
   mirrorId: string;
   mirrorName: string;
   customerId: string;
-  zaloUserId: string;
   status: "waiting" | "serving" | "pending_approval" | "completed" | "cancelled";
   assignedStaffId: string;
   assignedStaffName: string;
   claimedAtMs: number | null;
   createdAtMs: number | null;
+  expiresAtMs: number | null;
+  cancellationReason: string;
   customer?: CustomerSummary;
 };
 
 export type PointRequest = {
   id: string;
   salonId: string;
+  branchId: string;
+  branchName: string;
   sessionId: string;
   customerId: string;
   staffName: string;
@@ -107,6 +113,21 @@ export type SalonMirror = {
   createdAtMs: number | null;
 };
 
+export type SalonBranch = {
+  id: string;
+  salonId: string;
+  name: string;
+  address: string;
+  phone: string;
+  qrUrl: string;
+  isActive: boolean;
+};
+
+export type BranchQrSettings = {
+  salonQrUrl: string;
+  branches: SalonBranch[];
+};
+
 export type StaffProfile = {
   uid: string;
   salonId: string;
@@ -116,6 +137,8 @@ export type StaffProfile = {
   role: "staff";
   isActive: boolean;
   canRedeemRewards: boolean;
+  branchId: string;
+  branchIds: string[];
   inviteStatus: "pending" | "accepted";
 };
 
@@ -159,6 +182,7 @@ export type RewardCodeInfo = {
 
 export type DeleteCustomerDataResult = {
   customerId: string;
+  status: "completed";
   deletedRecords: number;
   deletedRewards: number;
   deletedRequests: number;
@@ -168,49 +192,78 @@ export type DeleteCustomerDataResult = {
 
 export function listenActiveSessions(
   salonId: string,
+  branchIds: string[] | null,
   onChange: (sessions: StaffSession[]) => void,
   onError: (message: string) => void,
 ) {
   const db = getFirebaseDb();
 
   if (!isFirebaseConfigured() || !db) {
-    onChange(mockSessions());
+    onChange(
+      branchIds === null
+        ? mockSessions()
+        : mockSessions().filter((session) => branchIds.includes(session.branchId)),
+    );
     return () => undefined;
   }
 
-  const q = query(
-    collection(db, "chair_sessions"),
-    where("salonId", "==", salonId),
-    where("status", "in", ["waiting", "serving", "pending_approval"]),
-    orderBy("createdAt", "desc"),
-    firestoreLimit(100),
-  );
+  const targets = branchIds === null ? [null] : [...new Set(branchIds.filter(Boolean))];
+  if (targets.length === 0) {
+    onChange([]);
+    return () => undefined;
+  }
 
-  return onSnapshot(
-    q,
-    async (snapshot) => {
-      try {
-        const sessions = snapshot.docs
-          .map(mapSession)
-          .filter(
-            (session) =>
-              session.status === "waiting" ||
+  const sessionsByTarget = new Map<string, StaffSession[]>();
+  const emit = () => {
+    try {
+      const nowMs = Date.now();
+      const sessions = [...sessionsByTarget.values()]
+        .flat()
+        .filter(
+          (session) =>
+            (session.status === "waiting" ||
               session.status === "serving" ||
-              session.status === "pending_approval",
-          )
-          .sort((a, b) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0));
+              session.status === "pending_approval") &&
+            (session.expiresAtMs === null || session.expiresAtMs > nowMs),
+        )
+        .sort((a, b) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0));
+      onChange(sessions);
+    } catch (error) {
+      onError(errorMessage(error));
+    }
+  };
 
-        onChange(await attachCustomers(sessions));
-      } catch (error) {
-        onError(errorMessage(error));
-      }
-    },
-    (error) => onError(error.message),
-  );
+  const unsubscribers = targets.map((branchId) => {
+    const constraints = [
+      where("salonId", "==", salonId),
+      ...(branchId ? [where("branchId", "==", branchId)] : []),
+      where("status", "in", ["waiting", "serving", "pending_approval"]),
+      orderBy("createdAt", "desc"),
+      firestoreLimit(100),
+    ];
+    const q = query(collection(db, "chair_sessions"), ...constraints);
+    const key = branchId || "all";
+
+    return onSnapshot(
+      q,
+      (snapshot) => {
+        try {
+          sessionsByTarget.set(key, snapshot.docs.map(mapSession));
+          emit();
+        } catch (error) {
+          onError(errorMessage(error));
+        }
+      },
+      (error) => onError(error.message),
+    );
+  });
+
+  return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
 }
 
 export function listenPendingPointRequests(
   salonId: string,
+  branchId: string | null,
   onChange: (requests: PointRequest[]) => void,
   onError: (message: string) => void,
 ) {
@@ -221,13 +274,14 @@ export function listenPendingPointRequests(
     return () => undefined;
   }
 
-  const q = query(
-    collection(db, "point_requests"),
+  const constraints = [
     where("salonId", "==", salonId),
+    ...(branchId ? [where("branchId", "==", branchId)] : []),
     where("status", "==", "pending"),
     orderBy("createdAt", "desc"),
     firestoreLimit(100),
-  );
+  ];
+  const q = query(collection(db, "point_requests"), ...constraints);
 
   return onSnapshot(
     q,
@@ -247,11 +301,14 @@ export function listenPendingPointRequests(
   );
 }
 
-export async function getOwnerOverview(salonId: string): Promise<OwnerOverview> {
-  return callFunctionOrFallback<{ salonId: string }, OwnerOverview>(
+export async function getOwnerOverview(
+  salonId: string,
+  branchId: string | null = null,
+): Promise<OwnerOverview> {
+  return callFunctionOrFallback<{ salonId: string; branchId?: string }, OwnerOverview>(
     "getOwnerOverview",
-    { salonId },
-    () => getOwnerOverviewDirect(salonId),
+    { salonId, ...(branchId ? { branchId } : {}) },
+    () => getOwnerOverviewDirect(salonId, branchId),
   );
 }
 
@@ -299,7 +356,10 @@ export async function updateSalonProfile(input: {
   );
 }
 
-async function getOwnerOverviewDirect(salonId: string): Promise<OwnerOverview> {
+async function getOwnerOverviewDirect(
+  salonId: string,
+  branchId: string | null,
+): Promise<OwnerOverview> {
   const db = getFirebaseDb();
 
   if (!isFirebaseConfigured() || !db) {
@@ -323,17 +383,48 @@ async function getOwnerOverviewDirect(salonId: string): Promise<OwnerOverview> {
   const start30Ms = nowMs - 30 * 24 * 60 * 60 * 1000;
   const inactiveCutoffMs = nowMs - 30 * 24 * 60 * 60 * 1000;
 
-  const [sessionsSnap, requestsSnap, rewardsSnap, customersSnap] = await Promise.all([
-    getDocs(query(collection(db, "chair_sessions"), where("salonId", "==", salonId))),
-    getDocs(query(collection(db, "point_requests"), where("salonId", "==", salonId))),
-    getDocs(query(collection(db, "reward_history"), where("salonId", "==", salonId))),
-    getDocs(query(collection(db, "customers"), where("salonId", "==", salonId))),
+  const [recordsSnap, requestsSnap, rewardsSnap, customersSnap] = await Promise.all([
+    getDocs(
+      query(
+        collection(db, "haircut_records"),
+        where("salonId", "==", salonId),
+        ...(branchId ? [where("branchId", "==", branchId)] : []),
+      ),
+    ),
+    getDocs(
+      query(
+        collection(db, "point_requests"),
+        where("salonId", "==", salonId),
+        ...(branchId ? [where("branchId", "==", branchId)] : []),
+      ),
+    ),
+    getDocs(
+      query(
+        collection(db, "reward_history"),
+        where("salonId", "==", salonId),
+        ...(branchId ? [where("branchId", "==", branchId)] : []),
+      ),
+    ),
+    getDocs(
+      query(
+        collection(db, "customers"),
+        where("salonId", "==", salonId),
+        ...(branchId ? [where("lastBranchId", "==", branchId)] : []),
+      ),
+    ),
   ]);
 
-  const sessionTimes = sessionsSnap.docs.map((item) => toMillis(item.data().createdAt) ?? 0);
-  const customersToday = sessionTimes.filter((createdAt) => createdAt >= startMs).length;
-  const customers7Days = sessionTimes.filter((createdAt) => createdAt >= start7Ms).length;
-  const customers30Days = sessionTimes.filter((createdAt) => createdAt >= start30Ms).length;
+  const completedRecords = recordsSnap.docs.map((item) => ({
+    customerId: String(item.data().customerId || ""),
+    createdAtMs: toMillis(item.data().createdAt),
+  }));
+  const countUnique = (sinceMs: number) =>
+    new Set(
+      completedRecords
+        .filter((record) => (record.createdAtMs ?? 0) >= sinceMs)
+        .map((record) => record.customerId)
+        .filter(Boolean),
+    ).size;
   const inactiveCustomers = customersSnap.docs
     .map((item): InactiveCustomer => {
       const data = item.data();
@@ -355,11 +446,6 @@ async function getOwnerOverviewDirect(salonId: string): Promise<OwnerOverview> {
     .sort((a, b) => b.daysSinceLastVisit - a.daysSinceLastVisit)
     .slice(0, 5);
 
-  const customersTodayLegacy = sessionsSnap.docs.filter((item) => {
-    const createdAt = toMillis(item.data().createdAt);
-    return Number(createdAt ?? 0) >= startMs;
-  }).length;
-
   const requests = requestsSnap.docs.map((item) => item.data());
   const pendingRequests = requests.filter((request) => request.status === "pending").length;
   const pointsApprovedToday = requests
@@ -380,9 +466,9 @@ async function getOwnerOverviewDirect(salonId: string): Promise<OwnerOverview> {
   const unusedRewards = rewards.filter((reward) => reward.status === "unused").length;
 
   return {
-    customersToday: customersToday || customersTodayLegacy,
-    customers7Days,
-    customers30Days,
+    customersToday: countUnique(startMs),
+    customers7Days: countUnique(start7Ms),
+    customers30Days: countUnique(start30Ms),
     pendingRequests,
     pointsApprovedToday,
     spinsToday,
@@ -500,6 +586,85 @@ export async function updateMirror(input: {
   );
 }
 
+export async function getBranchQrSettings(salonId: string): Promise<BranchQrSettings> {
+  if (!isFirebaseConfigured()) {
+    return mockBranchQrSettings(salonId);
+  }
+  const result = await callFunction<
+    { salonId: string },
+    { salonQrUrl: string; branches: unknown[] }
+  >("listBranches", { salonId });
+  return {
+    salonQrUrl: String(result.salonQrUrl || ""),
+    branches: result.branches.map((branch) => normalizeBranch(salonId, branch)),
+  };
+}
+
+export async function createBranch(input: {
+  salonId: string;
+  name: string;
+  address?: string;
+  phone?: string;
+}): Promise<SalonBranch> {
+  if (!isFirebaseConfigured()) {
+    return mockBranchQrSettings(input.salonId).branches[0];
+  }
+  const result = await callFunction<typeof input, unknown>("createBranch", input);
+  return normalizeBranch(input.salonId, result);
+}
+
+export async function updateBranch(input: {
+  salonId: string;
+  branchId: string;
+  name?: string;
+  address?: string;
+  phone?: string;
+  isActive?: boolean;
+}): Promise<SalonBranch> {
+  if (!isFirebaseConfigured()) {
+    return {
+      ...mockBranchQrSettings(input.salonId).branches[0],
+      name: input.name || "Chi nhánh chính",
+      address: input.address || "",
+      phone: input.phone || "",
+      isActive: input.isActive ?? true,
+    };
+  }
+  const result = await callFunction<typeof input, unknown>("updateBranch", input);
+  return normalizeBranch(input.salonId, result, input.branchId);
+}
+
+export async function rotateSalonQr(salonId: string): Promise<string> {
+  if (!isFirebaseConfigured()) {
+    return mockBranchQrSettings(salonId).salonQrUrl;
+  }
+  const result = await callFunction<{ salonId: string }, { qrUrl: string }>("rotateSalonQr", {
+    salonId,
+  });
+  return String(result.qrUrl || "");
+}
+
+export async function rotateBranchQr(salonId: string, branchId: string): Promise<string> {
+  if (!isFirebaseConfigured()) {
+    return mockBranchQrSettings(salonId).branches[0].qrUrl;
+  }
+  const result = await callFunction<{ salonId: string; branchId: string }, { qrUrl: string }>(
+    "rotateBranchQr",
+    { salonId, branchId },
+  );
+  return String(result.qrUrl || "");
+}
+
+export async function migrateSalonBranches(salonId: string) {
+  if (!isFirebaseConfigured()) {
+    return { branchId: "demo-branch-main", branchName: "Chi nhánh chính", counts: {} };
+  }
+  return callFunction<
+    { salonId: string },
+    { branchId: string; branchName: string; counts: Record<string, number> }
+  >("migrateSalonBranches", { salonId });
+}
+
 export async function getStaffProfiles(salonId: string): Promise<StaffProfile[]> {
   return callFunctionOrFallback<{ salonId: string }, { staff: StaffProfile[] }>(
     "listStaffProfiles",
@@ -546,6 +711,7 @@ export async function createStaffProfile(input: {
   name: string;
   phone?: string;
   canRedeemRewards: boolean;
+  branchIds: string[];
 }): Promise<{ uid: string; email: string; inviteEmailSent: boolean }> {
   const email = input.email.trim().toLowerCase();
   const name = input.name.trim();
@@ -569,6 +735,7 @@ export async function createStaffProfile(input: {
       name: string;
       phone?: string;
       canRedeemRewards: boolean;
+      branchIds: string[];
     },
     { uid: string; email: string }
   >("createStaffProfile", {
@@ -577,6 +744,7 @@ export async function createStaffProfile(input: {
     name,
     phone: input.phone?.trim() || undefined,
     canRedeemRewards: input.canRedeemRewards,
+    branchIds: input.branchIds,
   });
 
   return {
@@ -611,6 +779,7 @@ export async function updateStaffProfile(input: {
   phone?: string;
   isActive?: boolean;
   canRedeemRewards?: boolean;
+  branchIds?: string[];
 }) {
   return callWriteFunctionOrFallback("updateStaffProfile", input, () =>
     updateStaffProfileDirect(input),
@@ -659,11 +828,13 @@ export async function deleteCustomerData(input: {
     throw new Error("Thiếu hồ sơ khách cần xóa");
   }
 
-  return callWriteFunctionOrFallback<
-    { salonId: string; customerId: string },
-    DeleteCustomerDataResult
-  >("deleteCustomerData", { salonId: input.salonId, customerId }, () =>
-    deleteCustomerDataDirect(input.salonId, customerId),
+  if (!isFirebaseConfigured()) {
+    return deleteCustomerDataDirect(input.salonId, customerId);
+  }
+
+  return callFunction<{ salonId: string; customerId: string }, DeleteCustomerDataResult>(
+    "deleteCustomerData",
+    { salonId: input.salonId, customerId },
   );
 }
 
@@ -724,6 +895,72 @@ export async function claimServiceSession(input: {
   );
 }
 
+export async function cancelServiceSession(input: {
+  salonId: string;
+  session: StaffSession;
+  reason: "cancelled" | "no_show";
+  note?: string;
+}) {
+  return callWriteFunctionOrFallback(
+    "cancelServiceSession",
+    {
+      salonId: input.salonId,
+      sessionId: input.session.id,
+      reason: input.reason,
+      note: input.note?.trim() || "",
+    },
+    () => cancelServiceSessionDirect(input),
+  );
+}
+
+async function cancelServiceSessionDirect(input: {
+  salonId: string;
+  session: StaffSession;
+  reason: "cancelled" | "no_show";
+  note?: string;
+}) {
+  const db = getFirebaseDb();
+  const signedStaff = await getSignedStaffForDirectWrite();
+  if (!isFirebaseConfigured() || !db) {
+    return { ok: true, status: "cancelled", cancellationReason: input.reason };
+  }
+
+  const sessionRef = doc(db, "chair_sessions", input.session.id);
+  await runTransaction(db, async (transaction) => {
+    const sessionSnap = await transaction.get(sessionRef);
+    if (!sessionSnap.exists() || sessionSnap.data().salonId !== input.salonId) {
+      throw new Error("Không tìm thấy lượt cắt");
+    }
+    const session = sessionSnap.data();
+    const branchId = String(session.branchId || "");
+    const canAccessBranch =
+      signedStaff.role === "owner" || signedStaff.branchIds.includes(branchId);
+    const canCancel =
+      signedStaff.role === "owner" ||
+      (canAccessBranch && session.status === "waiting") ||
+      (canAccessBranch &&
+        session.status === "serving" &&
+        session.assignedStaffId === signedStaff.uid);
+    if (!canCancel) {
+      throw new Error("Bạn không được hủy lượt cắt này");
+    }
+    transaction.set(
+      sessionRef,
+      {
+        status: "cancelled",
+        isOpen: false,
+        cancellationReason: input.reason,
+        cancellationNote: input.note?.trim() || "",
+        cancelledAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true },
+    );
+  });
+
+  return { ok: true, status: "cancelled", cancellationReason: input.reason };
+}
+
 async function claimServiceSessionDirect(input: {
   salonId: string;
   session: StaffSession;
@@ -757,6 +994,12 @@ async function claimServiceSessionDirect(input: {
     }
 
     const data = sessionSnap.data();
+    if (
+      signedStaff.role === "staff" &&
+      !signedStaff.branchIds.includes(String(data.branchId || ""))
+    ) {
+      throw new Error("Bạn không được phân công tại chi nhánh này");
+    }
     if (data.status === "serving") {
       if (data.assignedStaffId !== signedStaff.uid) {
         throw new Error(`Khách đã được ${String(data.assignedStaffName || "nhân viên khác")} nhận`);
@@ -822,6 +1065,12 @@ async function submitPointRequestDirect(input: {
     if (sessionData.salonId !== input.salonId || customerId !== input.session.customerId) {
       throw new Error("Phiên phục vụ không thuộc đúng salon hoặc khách hàng");
     }
+    if (
+      signedStaff.role === "staff" &&
+      !signedStaff.branchIds.includes(String(sessionData.branchId || ""))
+    ) {
+      throw new Error("Bạn không được phân công tại chi nhánh này");
+    }
     if (sessionData.status !== "serving") {
       throw new Error(
         sessionData.status === "waiting"
@@ -852,6 +1101,8 @@ async function submitPointRequestDirect(input: {
 
     transaction.set(requestRef, {
       salonId: input.salonId,
+      branchId: String(sessionData.branchId || ""),
+      branchName: String(sessionData.branchName || ""),
       customerId,
       sessionId: input.session.id,
       staffId: signedStaff.uid,
@@ -891,15 +1142,23 @@ async function getSignedStaffForDirectWrite() {
   const uid = auth?.currentUser?.uid || "";
 
   if (!db || !uid) {
-    return { uid, name: "Nhân viên" };
+    return { uid, name: "Nhân viên", role: "staff", branchIds: [] as string[] };
   }
 
   const snap = await getDoc(doc(db, "users", uid));
   const name = snap.exists() ? String(snap.data().name || "") : "";
+  const data = snap.exists() ? snap.data() : {};
+  const branchIds = Array.isArray(data.branchIds)
+    ? data.branchIds.filter((value): value is string => typeof value === "string")
+    : data.branchId
+      ? [String(data.branchId)]
+      : [];
 
   return {
     uid,
     name: name || "Nhân viên",
+    role: data.role === "owner" ? "owner" : "staff",
+    branchIds,
   };
 }
 
@@ -969,6 +1228,8 @@ async function approvePointRequestDirect(request: PointRequest) {
 
     transaction.set(recordRef, {
       salonId: requestData.salonId,
+      branchId: String(requestData.branchId || request.branchId),
+      branchName: String(requestData.branchName || request.branchName),
       customerId: requestData.customerId,
       staffId: requestData.staffId || "",
       staffName: requestData.staffName || "",
@@ -1248,6 +1509,8 @@ async function getStaffProfilesDirect(salonId: string): Promise<{ staff: StaffPr
           role: "staff",
           isActive: true,
           canRedeemRewards: true,
+          branchId: "demo-branch-main",
+          branchIds: ["demo-branch-main"],
           inviteStatus: "accepted",
         },
       ],
@@ -1268,6 +1531,7 @@ async function updateStaffProfileDirect(input: {
   phone?: string;
   isActive?: boolean;
   canRedeemRewards?: boolean;
+  branchIds?: string[];
 }) {
   const db = getFirebaseDb();
 
@@ -1297,6 +1561,10 @@ async function updateStaffProfileDirect(input: {
   }
   if (typeof input.canRedeemRewards === "boolean") {
     payload.canRedeemRewards = input.canRedeemRewards;
+  }
+  if (input.branchIds?.length) {
+    payload.branchId = input.branchIds[0];
+    payload.branchIds = input.branchIds;
   }
 
   await setDoc(staffRef, payload, { merge: true });
@@ -1358,6 +1626,7 @@ async function deleteCustomerDataDirect(
   if (!isFirebaseConfigured() || !db) {
     return {
       customerId,
+      status: "completed",
       deletedRecords: 0,
       deletedRewards: 0,
       deletedRequests: 0,
@@ -1381,6 +1650,7 @@ async function deleteCustomerDataDirect(
 
   return {
     customerId,
+    status: "completed",
     deletedRecords,
     deletedRewards,
     deletedRequests,
@@ -1564,6 +1834,12 @@ function mapStaffProfile(docSnap: QueryDocumentSnapshot<DocumentData>): StaffPro
     role: "staff",
     isActive: Boolean(data.isActive),
     canRedeemRewards: Boolean(data.canRedeemRewards),
+    branchId: String(data.branchId || ""),
+    branchIds: Array.isArray(data.branchIds)
+      ? data.branchIds.filter((value): value is string => typeof value === "string")
+      : data.branchId
+        ? [String(data.branchId)]
+        : [],
     inviteStatus: data.inviteStatus === "pending" ? "pending" : "accepted",
   };
 }
@@ -1598,19 +1874,35 @@ function mapCustomerRewardSummary(
 
 function mapSession(docSnap: QueryDocumentSnapshot<DocumentData>): StaffSession {
   const data = docSnap.data();
+  const summary =
+    typeof data.customerSummary === "object" && data.customerSummary !== null
+      ? data.customerSummary
+      : {};
+  const customerId = String(data.customerId || "");
 
   return {
     id: docSnap.id,
     salonId: String(data.salonId || ""),
+    branchId: String(data.branchId || ""),
+    branchName: String(data.branchName || data.mirrorName || "Chi nhánh"),
+    branchAddress: String(data.branchAddress || ""),
     mirrorId: String(data.mirrorId || ""),
     mirrorName: String(data.mirrorName || ""),
-    customerId: String(data.customerId || ""),
-    zaloUserId: String(data.zaloUserId || ""),
+    customerId,
     status: normalizeSessionStatus(data.status, data.assignedStaffId),
     assignedStaffId: String(data.assignedStaffId || ""),
     assignedStaffName: String(data.assignedStaffName || ""),
     claimedAtMs: toMillis(data.claimedAt),
     createdAtMs: toMillis(data.createdAt),
+    expiresAtMs: toMillis(data.expiresAt),
+    cancellationReason: String(data.cancellationReason || ""),
+    customer: {
+      id: customerId,
+      name: String(summary.name || "Khách hàng"),
+      phoneLast4: String(summary.phoneLast4 || ""),
+      points: Math.max(0, Number(summary.points ?? 0)),
+      allowPhoto: Boolean(summary.allowPhoto),
+    },
   };
 }
 
@@ -1623,6 +1915,8 @@ function mapPointRequest(docSnap: QueryDocumentSnapshot<DocumentData>): PointReq
   return {
     id: docSnap.id,
     salonId,
+    branchId: String(data.branchId || ""),
+    branchName: String(data.branchName || "Chi nhánh"),
     sessionId,
     customerId,
     staffName: String(data.staffName || ""),
@@ -1672,17 +1966,6 @@ function trustedPointRequestPhotoUrls(
       return false;
     }
   });
-}
-
-async function attachCustomers(sessions: StaffSession[]) {
-  const pairs = await Promise.all(
-    sessions.map(async (session) => ({
-      ...session,
-      customer: await getCustomer(session.customerId),
-    })),
-  );
-
-  return pairs;
 }
 
 async function attachCustomersToRequests(requests: PointRequest[]) {
@@ -1803,6 +2086,41 @@ function buildQrUrl(salonId: string, mirrorId: string, qrToken: string) {
   return `${window.location.origin}/?${params.toString()}`;
 }
 
+function normalizeBranch(salonId: string, value: unknown, fallbackId = ""): SalonBranch {
+  const data = isRecord(value) ? value : {};
+  return {
+    id: String(data.id || data.branchId || fallbackId),
+    salonId,
+    name: String(data.name || "Chi nhánh"),
+    address: String(data.address || ""),
+    phone: String(data.phone || ""),
+    qrUrl: String(data.qrUrl || ""),
+    isActive: data.isActive !== false,
+  };
+}
+
+function mockBranchQrSettings(salonId: string): BranchQrSettings {
+  const salonToken = "demo-salon-token";
+  const branchToken = "demo-branch-token";
+  const branchId = "demo-branch-main";
+  const miniAppId = String(import.meta.env.VITE_ZALO_MINI_APP_ID || "");
+  const base = miniAppId ? `https://zalo.me/s/${miniAppId}` : window.location.origin;
+  return {
+    salonQrUrl: `${base}/?qrType=salon&salonId=${salonId}&qrToken=${salonToken}`,
+    branches: [
+      {
+        id: branchId,
+        salonId,
+        name: "Chi nhánh chính",
+        address: "",
+        phone: "",
+        isActive: true,
+        qrUrl: `${base}/?qrType=branch&salonId=${salonId}&branchId=${branchId}&qrToken=${branchToken}`,
+      },
+    ],
+  };
+}
+
 function randomToken() {
   if (window.crypto?.randomUUID) {
     return window.crypto.randomUUID().replace(/-/g, "");
@@ -1834,15 +2152,19 @@ function mockSessions(): StaffSession[] {
     {
       id: "mock-session",
       salonId: "demo-salon",
+      branchId: "demo-branch-main",
+      branchName: "Chi nhánh chính",
+      branchAddress: "",
       mirrorId: "demo-mirror-1",
       mirrorName: "Gương 1",
       customerId: "mock-customer",
-      zaloUserId: "mock-local-zalo-user",
       status: "waiting",
       assignedStaffId: "",
       assignedStaffName: "",
       claimedAtMs: null,
       createdAtMs: Date.now(),
+      expiresAtMs: Date.now() + SESSION_POINT_REQUEST_WINDOW_MS,
+      cancellationReason: "",
       customer: {
         id: "mock-customer",
         name: "Nguyễn Văn A",

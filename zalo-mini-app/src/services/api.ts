@@ -30,6 +30,8 @@ import { activeWheelSlots, normalizeLuckyWheelConfig } from "./wheel";
 import { getZaloAccessToken, ZaloIdentity } from "./zalo";
 export { parseQrContext } from "./qr";
 
+const SESSION_POINT_REQUEST_WINDOW_MS = 12 * 60 * 60 * 1000;
+
 type RegisterInput = QrContext & {
   zaloAccessToken: string;
   zaloUserId?: string;
@@ -42,9 +44,9 @@ type RegisterInput = QrContext & {
 type RegisterCustomerFunctionResult = {
   customerId: string;
   sessionId: string;
-  mirrorId?: string;
-  mirrorName?: string;
-  qrToken?: string;
+  branchId: string;
+  branchName?: string;
+  branchAddress?: string;
   sessionStatus?: AppSession["sessionStatus"];
   assignedStaffName?: string;
   claimedAtMs?: number | null;
@@ -75,11 +77,33 @@ type CustomerRewardsFunctionResult = {
 
 type CustomerSessionFunctionResult = {
   sessionStatus: AppSession["sessionStatus"];
+  branchId?: string;
+  branchName?: string;
+  branchAddress?: string;
   mirrorName?: string;
   assignedStaffName?: string;
   claimedAtMs?: number | null;
   customer: CustomerProfile;
   wheelConfig: LuckyWheelConfig;
+};
+
+export type CustomerQrBranch = {
+  id: string;
+  name: string;
+  address: string;
+  phone: string;
+  isActive: boolean;
+};
+
+export type CustomerQrResolution = {
+  qrType: QrContext["qrType"];
+  salonId: string;
+  salonName: string;
+  branchId: string | null;
+  branchName: string;
+  branchAddress: string;
+  selectionRequired: boolean;
+  branches: CustomerQrBranch[];
 };
 
 export function listenSessionLiveUpdates(
@@ -123,6 +147,8 @@ export function listenSessionLiveUpdates(
           sessionStatus: state.sessionStatus,
           assignedStaffName: state.assignedStaffName,
           claimedAtMs: state.claimedAtMs,
+          branchName: state.branchName || currentSession.branchName,
+          branchAddress: state.branchAddress || currentSession.branchAddress,
           mirrorName: state.mirrorName || currentSession.mirrorName,
           customer: state.customer,
         };
@@ -187,7 +213,14 @@ export function listenSessionLiveUpdates(
         ),
         assignedStaffName: String(snapshot.data().assignedStaffName || ""),
         claimedAtMs: toMillis(snapshot.data().claimedAt),
-        mirrorName: String(snapshot.data().mirrorName || currentSession.mirrorName || ""),
+        branchName: String(snapshot.data().branchName || currentSession.branchName || ""),
+        branchAddress: String(snapshot.data().branchAddress || currentSession.branchAddress || ""),
+        mirrorName: String(
+          snapshot.data().branchName ||
+            snapshot.data().mirrorName ||
+            currentSession.mirrorName ||
+            "",
+        ),
       });
       onSynced?.(Date.now());
     },
@@ -233,6 +266,8 @@ async function getCustomerSessionState(
     sessionStatus: normalizeSessionStatus(result.sessionStatus, result.assignedStaffName),
     assignedStaffName: result.assignedStaffName || "",
     claimedAtMs: result.claimedAtMs ?? null,
+    branchName: result.branchName || session.branchName || "",
+    branchAddress: result.branchAddress || session.branchAddress || "",
     mirrorName: result.mirrorName || session.mirrorName || "",
     customer: mapCustomerProfile(
       result.customer.customerId || session.customer.customerId,
@@ -280,6 +315,35 @@ export async function registerCustomer(input: RegisterInput): Promise<AppSession
   return buildSessionFromRegisterResult(input, result);
 }
 
+export async function resolveCustomerQr(qr: QrContext): Promise<CustomerQrResolution> {
+  if (!qr.qrToken) {
+    throw new Error("QR không có mã xác thực");
+  }
+  if (!isFirebaseConfigured()) {
+    const branchId = qr.branchId || "demo-branch-main";
+    return {
+      qrType: qr.qrType,
+      salonId: qr.salonId,
+      salonName: "HAIRCUT Studio",
+      branchId,
+      branchName: "Chi nhánh chính",
+      branchAddress: "",
+      selectionRequired: false,
+      branches: [
+        {
+          id: branchId,
+          name: "Chi nhánh chính",
+          address: "",
+          phone: "",
+          isActive: true,
+        },
+      ],
+    };
+  }
+
+  return callFunction<QrContext, CustomerQrResolution>("resolveCustomerQr", qr);
+}
+
 async function registerCustomerDirect(
   input: RegisterInput,
 ): Promise<RegisterCustomerFunctionResult> {
@@ -292,9 +356,13 @@ async function registerCustomerDirect(
   const phoneDigits = normalizePhone(input.phone);
   const zaloUserId =
     input.zaloUserId || `direct-${(await sha256Hex(input.zaloAccessToken)).slice(0, 24)}`;
+  const branchId = input.branchId;
+  if (!branchId) {
+    throw new Error("Vui lòng chọn chi nhánh trước khi tạo lượt");
+  }
   const customerId = await stableDocumentId(`${input.salonId}:${zaloUserId}`);
   const dailySessionId = await stableDocumentId(
-    `${input.salonId}:${input.mirrorId}:${customerId}:${localDateKey()}`,
+    `${input.salonId}:${branchId}:${customerId}:${localDateKey()}`,
   );
   const customerRef = doc(db, "customers", customerId);
   const dailySessionRef = doc(db, "chair_sessions", dailySessionId);
@@ -308,29 +376,49 @@ async function registerCustomerDirect(
     ]);
     let sessionRef = dailySessionRef;
     let sessionStatus: AppSession["sessionStatus"] = "waiting";
+    const existingCustomer = customerSnap.exists() ? customerSnap.data() : {};
+    const points = Math.max(0, Number(existingCustomer.points ?? 0));
+    const effectivePhoneLast4 = phoneDigits
+      ? phoneDigits.slice(-4)
+      : String(existingCustomer.phoneLast4 || "");
+    const customerSummary = {
+      name,
+      phoneLast4: effectivePhoneLast4,
+      points,
+      allowPhoto: input.allowPhoto,
+    };
+    const expiresAt = new Date(Date.now() + SESSION_POINT_REQUEST_WINDOW_MS);
 
     if (dailySessionSnap.exists()) {
       const currentStatus = normalizeSessionStatus(
         dailySessionSnap.data().status,
         dailySessionSnap.data().assignedStaffId,
       );
-      if (
+      const existingExpiresAtMs = toMillis(dailySessionSnap.data().expiresAt);
+      const isOpenStatus =
         currentStatus === "waiting" ||
         currentStatus === "serving" ||
-        currentStatus === "pending_approval"
-      ) {
+        currentStatus === "pending_approval";
+      if (isOpenStatus && (existingExpiresAtMs === null || existingExpiresAtMs > Date.now())) {
         sessionStatus = currentStatus;
-        transaction.set(dailySessionRef, { updatedAt: serverTimestamp() }, { merge: true });
+        transaction.set(
+          dailySessionRef,
+          { customerSummary, updatedAt: serverTimestamp() },
+          { merge: true },
+        );
       } else {
         sessionRef = fallbackSessionRef;
         transaction.set(sessionRef, {
           salonId: input.salonId,
-          mirrorId: input.mirrorId,
-          mirrorName: input.mirrorId,
-          qrToken: input.qrToken,
+          branchId,
+          branchName: branchId,
+          qrType: input.qrType,
+          legacyMirrorId: input.mirrorId || null,
           customerId,
-          zaloUserId,
+          customerSummary,
           status: "waiting",
+          isOpen: true,
+          expiresAt,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         });
@@ -338,12 +426,15 @@ async function registerCustomerDirect(
     } else {
       transaction.set(sessionRef, {
         salonId: input.salonId,
-        mirrorId: input.mirrorId,
-        mirrorName: input.mirrorId,
-        qrToken: input.qrToken,
+        branchId,
+        branchName: branchId,
+        qrType: input.qrType,
+        legacyMirrorId: input.mirrorId || null,
         customerId,
-        zaloUserId,
+        customerSummary,
         status: "waiting",
+        isOpen: true,
+        expiresAt,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
@@ -355,21 +446,21 @@ async function registerCustomerDirect(
       source: "zalo_direct",
       name,
       nameSearch: normalizeSearchText(name),
-      phone: phoneDigits || null,
-      phoneLast4: phoneDigits ? phoneDigits.slice(-4) : null,
-      birthday: input.birthday || null,
+      ...(phoneDigits ? { phone: phoneDigits, phoneLast4: phoneDigits.slice(-4) } : {}),
+      ...(input.birthday?.trim() ? { birthday: input.birthday.trim() } : {}),
       allowPhoto: input.allowPhoto,
       activeSessionId: sessionRef.id,
-      lastMirrorId: input.mirrorId,
+      lastBranchId: branchId,
       updatedAt: serverTimestamp(),
-      lastVisitAt: serverTimestamp(),
     };
-    const points = customerSnap.exists() ? Number(customerSnap.data().points ?? 0) : 0;
 
     if (customerSnap.exists()) {
       transaction.set(customerRef, baseCustomer, { merge: true });
     } else {
       transaction.set(customerRef, {
+        phone: null,
+        phoneLast4: null,
+        birthday: null,
         ...baseCustomer,
         points: 0,
         createdAt: serverTimestamp(),
@@ -386,9 +477,9 @@ async function registerCustomerDirect(
   return {
     customerId,
     sessionId: directResult.sessionId,
-    mirrorId: input.mirrorId,
-    mirrorName: input.mirrorId,
-    qrToken: input.qrToken,
+    branchId,
+    branchName: branchId,
+    branchAddress: "",
     sessionStatus: directResult.sessionStatus,
     points: directResult.points,
     zaloUserId,
@@ -401,7 +492,10 @@ export async function spinWheel(session: AppSession): Promise<SpinResult> {
   }
 
   const zaloAccessToken = await getZaloAccessToken();
-  return callCustomerFunctionOrDirect<{ salonId: string; zaloAccessToken: string }, SpinResult>(
+  const result = await callCustomerFunctionOrDirect<
+    { salonId: string; zaloAccessToken: string },
+    SpinResult
+  >(
     "spinLuckyWheelFromZalo",
     {
       salonId: session.qr.salonId,
@@ -409,6 +503,10 @@ export async function spinWheel(session: AppSession): Promise<SpinResult> {
     },
     () => spinWheelDirect(session),
   );
+  return {
+    ...result,
+    isWinning: result.isWinning ?? Boolean(result.rewardCode),
+  };
 }
 
 async function spinWheelDirect(session: AppSession): Promise<SpinResult> {
@@ -419,21 +517,26 @@ async function spinWheelDirect(session: AppSession): Promise<SpinResult> {
       0,
       session.customer.points - defaultLuckyWheelConfig.requiredPoints,
     );
+    const selectedSlot = activeSlots[selectedIndex];
+    const isWinning = selectedSlot?.type !== "no_prize";
     const reward = {
       rewardId: `reward-${Date.now()}`,
-      rewardName: activeSlots[selectedIndex]?.label || "Gội đầu miễn phí",
-      rewardCode: makeRewardCode(),
+      rewardName: selectedSlot?.label || "Gội đầu miễn phí",
+      rewardCode: isWinning ? makeRewardCode() : "",
       pointsAfter,
+      isWinning,
       selectedIndex,
     };
 
-    saveMockReward({
-      id: reward.rewardId,
-      rewardName: reward.rewardName,
-      rewardCode: reward.rewardCode,
-      status: "unused",
-      createdAt: new Date().toISOString(),
-    });
+    if (isWinning) {
+      saveMockReward({
+        id: reward.rewardId,
+        rewardName: reward.rewardName,
+        rewardCode: reward.rewardCode,
+        status: "unused",
+        createdAt: new Date().toISOString(),
+      });
+    }
 
     localStorage.setItem("haircut_mock_points", String(pointsAfter));
     return reward;
@@ -475,8 +578,10 @@ async function spinWheelDirect(session: AppSession): Promise<SpinResult> {
     }
 
     const selectedIndex = Math.floor(Math.random() * activeSlots.length);
-    const rewardName = activeSlots[selectedIndex].label;
-    const rewardCode = makeRewardCode();
+    const selectedSlot = activeSlots[selectedIndex];
+    const rewardName = selectedSlot.label;
+    const isWinning = selectedSlot.type === "reward";
+    const rewardCode = isWinning ? makeRewardCode() : "";
     const pointsAfter = wheelConfig.deductPointsAfterSpin
       ? currentPoints - wheelConfig.requiredPoints
       : currentPoints;
@@ -491,11 +596,11 @@ async function spinWheelDirect(session: AppSession): Promise<SpinResult> {
     transaction.set(rewardRef, {
       salonId: session.qr.salonId,
       customerId: session.customer.customerId,
-      zaloUserId: session.zaloUserId,
       rewardName,
-      rewardCode,
+      rewardCode: isWinning ? rewardCode : null,
+      isWinning,
       selectedIndex,
-      status: "unused",
+      status: isWinning ? "unused" : "no_prize",
       pointsUsed: wheelConfig.deductPointsAfterSpin ? wheelConfig.requiredPoints : 0,
       createdAt: serverTimestamp(),
     });
@@ -505,6 +610,7 @@ async function spinWheelDirect(session: AppSession): Promise<SpinResult> {
       rewardName,
       rewardCode,
       pointsAfter,
+      isWinning,
       selectedIndex,
     };
   });
@@ -709,12 +815,15 @@ function mockRegisterCustomer(input: RegisterInput): AppSession {
 
   return {
     qr: {
+      qrType: input.qrType,
       salonId: input.salonId,
+      branchId: input.branchId,
       mirrorId: input.mirrorId,
-      qrToken: input.qrToken,
     },
     sessionId: "mock-session",
-    mirrorName: input.mirrorId,
+    branchName: input.branchId || "Chi nhánh chính",
+    branchAddress: "",
+    mirrorName: input.branchId || input.mirrorId,
     zaloUserId: "mock-local-zalo-user",
     sessionStatus: "waiting",
     customer: {
@@ -735,12 +844,15 @@ function buildSessionFromRegisterResult(
 
   return {
     qr: {
+      qrType: input.qrType,
       salonId: input.salonId,
-      mirrorId: result.mirrorId || input.mirrorId,
-      qrToken: result.qrToken || input.qrToken,
+      branchId: result.branchId || input.branchId,
+      mirrorId: input.mirrorId,
     },
     sessionId: result.sessionId,
-    mirrorName: result.mirrorName || "",
+    branchName: result.branchName || "",
+    branchAddress: result.branchAddress || "",
+    mirrorName: result.branchName || "",
     zaloUserId: result.zaloUserId,
     sessionStatus: result.sessionStatus || "waiting",
     assignedStaffName: result.assignedStaffName || "",

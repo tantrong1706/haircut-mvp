@@ -1,18 +1,18 @@
 # HAIRCUT
 
-HAIRCUT là hệ thống chăm sóc và giữ chân khách hàng cho salon tóc. Khách check-in bằng QR/Zalo Mini App; nhân viên ghi nhận dịch vụ; chủ salon duyệt điểm, quản lý gương, nhân viên, khách, vòng quay và mã quà.
+HAIRCUT là hệ thống chăm sóc và giữ chân khách hàng cho salon tóc. Khách check-in bằng QR/Zalo Mini App; nhân viên vận hành hàng chờ theo chi nhánh; chủ salon duyệt điểm, quản lý chi nhánh, nhân viên, khách, vòng quay và mã quà.
 
 ## Luồng chính
 
-1. Chủ salon đăng ký tại `/owner`; hệ thống tạo salon, hồ sơ owner, gương đầu tiên và vòng quay mặc định.
-2. Chủ tạo QR riêng cho từng gương/ghế và gửi lời mời để nhân viên tự đặt mật khẩu.
-3. Khách quét QR trong Zalo, xác nhận tên và tạo lượt cắt.
-4. Nhân viên mở `/staff`, nhận khách, hoàn tất dịch vụ, ghi chú và gửi yêu cầu cộng điểm.
-5. Chủ duyệt hoặc từ chối; khách tự thấy trạng thái, điểm, lịch sử và quà được cập nhật.
+1. Chủ đăng ký tại `/owner`, xác minh email rồi đăng nhập để tạo salon và chi nhánh chính.
+2. Mỗi salon có một QR chung; mỗi chi nhánh có một QR riêng. Chủ phân công nhân viên theo chi nhánh.
+3. QR salon cho khách chọn chi nhánh, hoặc tự chọn khi chỉ có một chi nhánh hoạt động; QR chi nhánh mở thẳng đúng địa điểm.
+4. Khách xác nhận thông tin và tạo lượt; nhân viên tại chi nhánh đó nhận khách, ghi chú và gửi yêu cầu cộng điểm.
+5. Chủ xem toàn salon hoặc lọc theo chi nhánh để duyệt/từ chối; khách thấy điểm, lịch sử và quà được cập nhật.
 
 Salon của owner/staff luôn lấy từ tài khoản Firebase Auth, không lấy từ URL. Dữ liệu khách và mọi nghiệp vụ ghi đều đi qua Cloud Functions; Firestore Rules mặc định từ chối truy cập ngoài quyền được cấp.
 
-Luồng lượt cắt dùng các trạng thái rõ ràng: `waiting → serving → pending_approval → completed/cancelled`. Functions ràng buộc chỉ nhân viên đã nhận khách mới được gửi yêu cầu điểm; API khách Zalo có hạn mức chống spam theo token/IP đã băm.
+Luồng lượt cắt dùng các trạng thái rõ ràng: `waiting → serving → pending_approval → completed/cancelled`. Phiên có hạn sử dụng, hỗ trợ hủy/no-show và được dọn tự động; Functions ràng buộc chỉ nhân viên đã nhận khách mới được gửi yêu cầu điểm. Ô `no_prize` của vòng quay chỉ ghi nhận lượt quay, không sinh mã quà.
 
 ## Địa chỉ
 

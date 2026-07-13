@@ -14,6 +14,7 @@ import {
   type PerformanceTrace,
 } from "firebase/performance";
 import { getFirebaseApp, getFunctionWriteMode, isFirebaseConfigured } from "./firebase";
+import { parseQrContext } from "./qr";
 
 type SentryModule = typeof import("@sentry/react");
 type MonitoringValue = string | number | boolean | null | undefined;
@@ -25,6 +26,7 @@ let sentryPromise: Promise<SentryModule | null> | null = null;
 let started = false;
 
 export function initMonitoring() {
+  parseQrContext();
   if (started || isMonitoringDisabled()) {
     return;
   }
@@ -63,7 +65,7 @@ export function trackEvent(name: string, params: MonitoringParams = {}) {
 }
 
 export function captureError(error: unknown, context: MonitoringParams = {}) {
-  console.error(error);
+  console.error(redactedError(error));
 
   if (isMonitoringDisabled()) {
     return;
@@ -271,8 +273,28 @@ async function createSentryClient(): Promise<SentryModule | null> {
           delete event.user.username;
           delete event.user.ip_address;
         }
+        if (event.request?.url) {
+          event.request.url = redactSensitiveUrl(event.request.url);
+        }
+        if (event.message) {
+          event.message = redactSensitiveText(event.message);
+        }
+        event.exception?.values?.forEach((value) => {
+          if (value.value) {
+            value.value = redactSensitiveText(value.value);
+          }
+        });
 
         return event;
+      },
+      beforeBreadcrumb(breadcrumb) {
+        if (breadcrumb.message) {
+          breadcrumb.message = redactSensitiveText(breadcrumb.message);
+        }
+        if (breadcrumb.data?.url && typeof breadcrumb.data.url === "string") {
+          breadcrumb.data.url = redactSensitiveUrl(breadcrumb.data.url);
+        }
+        return breadcrumb;
       },
     });
 
@@ -283,12 +305,12 @@ async function createSentryClient(): Promise<SentryModule | null> {
   }
 }
 
-function cleanParams(params: MonitoringParams) {
+export function cleanParams(params: MonitoringParams) {
   return Object.entries(params).reduce<Record<string, string | number | boolean | null>>(
     (result, [key, value]) => {
       const cleanKey = key.replace(/[^a-zA-Z0-9_]/g, "_").slice(0, 40);
 
-      if (!cleanKey) {
+      if (!cleanKey || /(token|secret|proof)/i.test(cleanKey)) {
         return result;
       }
 
@@ -302,6 +324,31 @@ function cleanParams(params: MonitoringParams) {
     },
     {},
   );
+}
+
+export function redactSensitiveUrl(value: string) {
+  try {
+    const url = new URL(value, window.location.origin);
+    ["qrToken", "access_token", "appsecret_proof"].forEach((key) => {
+      if (url.searchParams.has(key)) {
+        url.searchParams.set(key, "[redacted]");
+      }
+    });
+    return url.toString();
+  } catch {
+    return value.replace(/([?&](?:qrToken|access_token|appsecret_proof)=)[^&#]*/gi, "$1[redacted]");
+  }
+}
+
+export function redactSensitiveText(value: string) {
+  return value.replace(/([?&](?:qrToken|access_token|appsecret_proof)=)[^&#\s]*/gi, "$1[redacted]");
+}
+
+function redactedError(error: unknown) {
+  const normalized = toError(error);
+  const safe = new Error(redactSensitiveText(normalized.message));
+  safe.name = normalized.name;
+  return safe;
 }
 
 function toError(error: unknown) {

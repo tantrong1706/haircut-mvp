@@ -30,22 +30,29 @@ users/{uid}
   role: owner | staff
   isActive: boolean
   canRedeemRewards: boolean
+  branchId: string?
+  branchIds: string[]
   createdAt: timestamp
   updatedAt: timestamp
 ```
 
-## mirrors
+## branches
 
 ```text
-mirrors/{mirrorId}
+branches/{branchId}
   salonId: string
   name: string
-  qrToken: string
-  qrUrl: string
+  address: string?
+  phone: string?
   isActive: boolean
+  qrVersion: number
   createdAt: timestamp
   updatedAt: timestamp
 ```
+
+`salons/{salonId}.salonQrVersion` điều khiển QR chung. Token QR salon/chi nhánh được ký tại
+Functions bằng `QR_SIGNING_SECRET`; Firestore không lưu token thô. `mirrors` được giữ nguyên chỉ để
+QR Gương 1 cũ hoạt động trong giai đoạn chuyển đổi và mỗi mirror cũ được gắn `branchId`.
 
 ## customers
 
@@ -71,8 +78,11 @@ customers/{customerId}
 ```text
 chair_sessions/{sessionId}
   salonId: string
-  mirrorId: string
-  qrToken: string?
+  branchId: string
+  branchName: string
+  branchAddress: string?
+  qrType: salon | branch | legacy-mirror
+  legacyMirrorId: string?
   customerId: string
   zaloUserId: string?
   status: waiting | serving | completed | cancelled
@@ -89,8 +99,8 @@ active_service_sessions/{hash(salonId + customerId)}
   salonId: string
   customerId: string
   sessionId: string
-  mirrorId: string
-  qrToken: string?
+  branchId: string
+  branchName: string
   status: waiting | serving
   createdAt: timestamp
   updatedAt: timestamp
@@ -101,6 +111,8 @@ active_service_sessions/{hash(salonId + customerId)}
 ```text
 point_requests/{requestId}
   salonId: string
+  branchId: string
+  branchName: string
   sessionId: string
   customerId: string
   staffId: string?
@@ -119,6 +131,8 @@ point_requests/{requestId}
 ```text
 haircut_records/{recordId}
   salonId: string
+  branchId: string
+  branchName: string
   customerId: string
   staffId: string?
   staffName: string?

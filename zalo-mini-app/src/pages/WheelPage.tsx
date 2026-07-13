@@ -74,6 +74,7 @@ export function WheelPage({ session, onSessionChange }: Props) {
       trackEvent("lucky_wheel_spin_completed", {
         salon_id: session.qr.salonId,
         selected_index: selectedIndex,
+        is_winning: spinResult.isWinning,
         points_after: spinResult.pointsAfter,
       });
     } catch (err) {
@@ -162,12 +163,22 @@ export function WheelPage({ session, onSessionChange }: Props) {
       {error ? <p className="alert error">{error}</p> : null}
 
       {result ? (
-        <div className="reward-result">
-          <Gift size={32} aria-hidden="true" />
-          <p>Chúc mừng, bạn nhận được</p>
+        <div className={`reward-result${result.isWinning ? "" : " no-prize"}`}>
+          {result.isWinning ? (
+            <Gift size={32} aria-hidden="true" />
+          ) : (
+            <Sparkles size={32} aria-hidden="true" />
+          )}
+          <p>{result.isWinning ? "Chúc mừng, bạn nhận được" : "Kết quả lượt quay"}</p>
           <strong>{result.rewardName}</strong>
-          <span>Mã quà: {result.rewardCode}</span>
-          <small>Hãy đưa mã này cho nhân viên khi sử dụng.</small>
+          {result.isWinning ? (
+            <>
+              <span>Mã quà: {result.rewardCode}</span>
+              <small>Hãy đưa mã này cho nhân viên khi sử dụng.</small>
+            </>
+          ) : (
+            <small>Lượt này không tạo mã quà. Hẹn bạn ở lần quay tiếp theo.</small>
+          )}
         </div>
       ) : null}
     </section>

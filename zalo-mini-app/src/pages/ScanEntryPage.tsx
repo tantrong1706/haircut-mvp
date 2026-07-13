@@ -10,7 +10,12 @@ import {
   UserRound,
 } from "lucide-react";
 import { BrandLogo } from "../components/BrandLogo";
-import { buildRegisterInput, registerCustomer } from "../services/api";
+import {
+  CustomerQrResolution,
+  buildRegisterInput,
+  registerCustomer,
+  resolveCustomerQr,
+} from "../services/api";
 import { captureError, trackEvent, withMonitoringTrace } from "../services/monitoring";
 import { hasQrContext, parseQrContext } from "../services/qr";
 import { isZaloMiniAppRuntime } from "../services/runtime";
@@ -26,6 +31,10 @@ export function ScanEntryPage({ onReady }: Props) {
   const [phone, setPhone] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [loadingIdentity, setLoadingIdentity] = useState(true);
+  const [loadingQr, setLoadingQr] = useState(true);
+  const [qrResolution, setQrResolution] = useState<CustomerQrResolution | null>(null);
+  const [selectedBranchId, setSelectedBranchId] = useState("");
+  const [qrError, setQrError] = useState("");
   const [zaloRequired, setZaloRequired] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,8 +43,42 @@ export function ScanEntryPage({ onReady }: Props) {
   const mountedRef = useRef(false);
 
   const qr = useMemo(() => parseQrContext(), []);
-  const hasQr = useMemo(() => hasQrContext(), []);
+  const hasQr = useMemo(() => hasQrContext(qr), [qr]);
   const isZaloRuntime = useMemo(() => isZaloMiniAppRuntime(), []);
+  const selectedBranch = qrResolution?.branches.find((branch) => branch.id === selectedBranchId);
+
+  useEffect(() => {
+    if (!hasQr) {
+      setLoadingQr(false);
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingQr(true);
+    setQrError("");
+    resolveCustomerQr(qr)
+      .then((resolution) => {
+        if (cancelled) {
+          return;
+        }
+        setQrResolution(resolution);
+        setSelectedBranchId(resolution.branchId || "");
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setQrError(err instanceof Error ? err.message : "Không xác minh được QR");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoadingQr(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [hasQr, qr]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -90,7 +133,7 @@ export function ScanEntryPage({ onReady }: Props) {
         captureError(err, {
           area: "zalo_identity",
           salon_id: qr.salonId,
-          mirror_id: qr.mirrorId,
+          branch_id: selectedBranchId,
         });
 
         if (mountedRef.current) {
@@ -116,13 +159,17 @@ export function ScanEntryPage({ onReady }: Props) {
       setError("Vui lòng nhập tên hiển thị tại salon để nhân viên dễ nhận khách.");
       return;
     }
+    if (!qrResolution || !selectedBranchId || !selectedBranch) {
+      setError("Vui lòng chọn một chi nhánh đang hoạt động.");
+      return;
+    }
 
     setLoading(true);
     setError(null);
 
     trackEvent("customer_checkin_started", {
       salon_id: qr.salonId,
-      mirror_id: qr.mirrorId,
+      branch_id: selectedBranchId,
       has_phone: Boolean(phone.trim()),
       allow_photo: allowPhoto,
     });
@@ -139,7 +186,7 @@ export function ScanEntryPage({ onReady }: Props) {
         () =>
           registerCustomer(
             buildRegisterInput(
-              qr,
+              { ...qr, branchId: selectedBranchId },
               {
                 ...confirmedIdentity,
                 name: confirmedName,
@@ -150,13 +197,13 @@ export function ScanEntryPage({ onReady }: Props) {
           ),
         {
           salon_id: qr.salonId,
-          mirror_id: qr.mirrorId,
+          branch_id: selectedBranchId,
         },
       );
 
       trackEvent("customer_checkin_created", {
         salon_id: qr.salonId,
-        mirror_id: qr.mirrorId,
+        branch_id: selectedBranchId,
         session_status: session.sessionStatus,
       });
 
@@ -165,7 +212,7 @@ export function ScanEntryPage({ onReady }: Props) {
       captureError(err, {
         area: "customer_checkin",
         salon_id: qr.salonId,
-        mirror_id: qr.mirrorId,
+        branch_id: selectedBranchId,
       });
 
       setError(err instanceof Error ? err.message : "Không thể tạo hồ sơ khách");
@@ -186,18 +233,17 @@ export function ScanEntryPage({ onReady }: Props) {
           <p className="eyebrow">Check-in</p>
           <h1>Quét QR tại salon</h1>
 
-          <p className="muted">Khách cần quét đúng QR ở gương/ghế để tạo lượt cắt.</p>
+          <p className="muted">Khách cần quét QR chung của salon hoặc QR tại chi nhánh.</p>
         </header>
 
         <div className="panel missing-qr-panel">
           <QrCode size={38} aria-hidden="true" />
 
           <div>
-            <h2>Chưa có QR gương</h2>
+            <h2>Chưa có QR salon</h2>
 
             <p className="muted">
-              Nếu bạn là chủ salon, vào trang quản lý để tạo QR cho từng gương rồi đưa link đó cho
-              khách.
+              Nếu bạn là chủ salon, vào mục Chi nhánh để tải QR chung hoặc QR của từng chi nhánh.
             </p>
           </div>
         </div>
@@ -210,7 +256,7 @@ export function ScanEntryPage({ onReady }: Props) {
 
             <div>
               <strong>Trang chủ salon</strong>
-              <small>Tạo QR, nhân viên, vòng quay</small>
+              <small>Quản lý chi nhánh, nhân viên và QR</small>
             </div>
           </button>
 
@@ -235,11 +281,13 @@ export function ScanEntryPage({ onReady }: Props) {
         <div className="hero-topline">
           <BrandLogo />
 
-          <span className="soft-chip">{mirrorLabel(qr.mirrorId)}</span>
+          <span className="soft-chip">
+            {selectedBranch?.name || qrResolution?.salonName || "Đang xác minh"}
+          </span>
         </div>
 
         <p className="eyebrow">Check-in</p>
-        <h1>{mirrorLabel(qr.mirrorId)}</h1>
+        <h1>{qrResolution?.salonName || "HAIRCUT"}</h1>
 
         <p className="muted">Xác nhận để salon nhận đúng khách và cộng điểm sau khi cắt.</p>
       </header>
@@ -288,13 +336,39 @@ export function ScanEntryPage({ onReady }: Props) {
             </div>
 
             <div>
-              <span>Vị trí hiện tại</span>
+              <span>Chi nhánh phục vụ</span>
 
-              <strong>{mirrorLabel(qr.mirrorId)}</strong>
-
-              <small>Phiên phục vụ sẽ gắn với đúng gương/ghế này.</small>
+              {loadingQr ? <strong>Đang xác minh QR...</strong> : null}
+              {!loadingQr && qrResolution?.selectionRequired ? (
+                <label className="field compact-field">
+                  <span>Chọn chi nhánh</span>
+                  <select
+                    value={selectedBranchId}
+                    onChange={(event) => setSelectedBranchId(event.target.value)}
+                    disabled={loading}
+                  >
+                    <option value="">Chọn nơi bạn đang có mặt</option>
+                    {qrResolution.branches.map((branch) => (
+                      <option key={branch.id} value={branch.id}>
+                        {branch.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+              {selectedBranch ? (
+                <>
+                  <strong>{selectedBranch.name}</strong>
+                  <small>{selectedBranch.address || "Địa chỉ do salon xác nhận"}</small>
+                </>
+              ) : null}
+              {!loadingQr && qrResolution && qrResolution.branches.length === 0 ? (
+                <small>Salon chưa có chi nhánh đang hoạt động.</small>
+              ) : null}
             </div>
           </div>
+
+          {qrError ? <p className="alert error">{qrError}</p> : null}
 
           <div className="panel form-panel">
             <label className="field">
@@ -353,7 +427,14 @@ export function ScanEntryPage({ onReady }: Props) {
 
           <button
             className="primary-button"
-            disabled={loading || loadingIdentity || displayName.trim().length === 0}
+            disabled={
+              loading ||
+              loadingQr ||
+              loadingIdentity ||
+              !selectedBranchId ||
+              Boolean(qrError) ||
+              displayName.trim().length === 0
+            }
             onClick={continueWithZalo}
           >
             {loading ? (
@@ -375,16 +456,6 @@ function normalizeDisplayName(name: string) {
   return name.replace(/\s+/g, " ").trim();
 }
 
-function mirrorLabel(mirrorId: string) {
-  const previewMirrorId = String(import.meta.env.VITE_PREVIEW_MIRROR_ID || "").trim();
-
-  if (mirrorId.includes("mirror-1") || (previewMirrorId && mirrorId === previewMirrorId)) {
-    return "Gương 1";
-  }
-
-  return mirrorId || "Gương";
-}
-
 function zaloOpenUrl(qr: ReturnType<typeof parseQrContext>) {
   /*
    * Trong bản Development không tự chuyển về
@@ -401,11 +472,21 @@ function zaloOpenUrl(qr: ReturnType<typeof parseQrContext>) {
     return "";
   }
 
+  if (!qr.qrToken) {
+    return "";
+  }
+
   const params = new URLSearchParams({
+    qrType: qr.qrType,
     salonId: qr.salonId,
-    mirrorId: qr.mirrorId,
     qrToken: qr.qrToken,
   });
+  if (qr.branchId) {
+    params.set("branchId", qr.branchId);
+  }
+  if (qr.mirrorId) {
+    params.set("mirrorId", qr.mirrorId);
+  }
 
   return `https://zalo.me/s/${miniAppId}?${params.toString()}`;
 }

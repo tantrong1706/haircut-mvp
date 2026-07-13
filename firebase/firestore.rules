@@ -31,6 +31,26 @@ service cloud.firestore {
         && (appUser().role == "owner" || appUser().role == "staff");
     }
 
+    function isOwner(salonId) {
+      return isActiveMember(salonId) && appUser().role == "owner";
+    }
+
+    function canAccessBranch(salonId, branchId) {
+      return isOwner(salonId)
+        || (
+          isActiveMember(salonId)
+          && appUser().role == "staff"
+          && (
+            (
+              "branchIds" in appUser()
+              && appUser().branchIds is list
+              && branchId in appUser().branchIds
+            )
+            || ("branchId" in appUser() && appUser().branchId == branchId)
+          )
+        );
+    }
+
     match /users/{uid} {
       allow read: if signedIn()
         && (
@@ -50,37 +70,42 @@ service cloud.firestore {
     }
 
     match /mirrors/{mirrorId} {
-      allow read: if isStaffOrOwner(resource.data.salonId);
+      allow read: if isOwner(resource.data.salonId);
+      allow create, update, delete: if false;
+    }
+
+    match /branches/{branchId} {
+      allow read: if canAccessBranch(resource.data.salonId, branchId);
       allow create, update, delete: if false;
     }
 
     match /customers/{customerId} {
-      allow read: if isStaffOrOwner(resource.data.salonId);
+      allow read: if isOwner(resource.data.salonId);
       allow create, update, delete: if false;
     }
 
     match /chair_sessions/{sessionId} {
-      allow read: if isStaffOrOwner(resource.data.salonId);
+      allow read: if canAccessBranch(resource.data.salonId, resource.data.branchId);
       allow create, update, delete: if false;
     }
 
     match /point_requests/{requestId} {
-      allow read: if isStaffOrOwner(resource.data.salonId);
+      allow read: if isOwner(resource.data.salonId);
       allow create, update, delete: if false;
     }
 
     match /haircut_records/{recordId} {
-      allow read: if isStaffOrOwner(resource.data.salonId);
+      allow read: if isOwner(resource.data.salonId);
       allow create, update, delete: if false;
     }
 
     match /lucky_wheel/{salonId} {
-      allow read: if isStaffOrOwner(salonId);
+      allow read: if isOwner(salonId);
       allow create, update, delete: if false;
     }
 
     match /reward_history/{rewardId} {
-      allow read: if isStaffOrOwner(resource.data.salonId);
+      allow read: if isOwner(resource.data.salonId);
       allow create, update, delete: if false;
     }
 

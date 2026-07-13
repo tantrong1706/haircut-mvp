@@ -371,7 +371,8 @@ small {
 }
 
 .field input,
-.field textarea {
+.field textarea,
+.field select {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -379,9 +380,15 @@ small {
   color: var(--ink);
 }
 
-.field input {
+.field input,
+.field select {
   min-height: 48px;
   padding: 0 12px;
+}
+
+.owner-branch-filter {
+  max-width: 360px;
+  margin: 0 0 14px auto;
 }
 
 .field textarea {
@@ -2087,7 +2094,7 @@ small {
 
 .wheel-slot-row {
   display: grid;
-  grid-template-columns: 28px 1fr auto;
+  grid-template-columns: 28px minmax(0, 1fr) 150px auto;
   align-items: center;
   gap: 8px;
 }
@@ -2098,7 +2105,8 @@ small {
 }
 
 .wheel-slot-row input[type="text"],
-.wheel-slot-row input:not([type]) {
+.wheel-slot-row input:not([type]),
+.wheel-slot-row > select {
   min-height: 42px;
   min-width: 0;
   border: 1px solid var(--line);
@@ -2208,6 +2216,7 @@ small {
     grid-template-columns: 24px 1fr;
   }
 
+  .wheel-slot-row > select,
   .wheel-slot-row label {
     grid-column: 2;
   }

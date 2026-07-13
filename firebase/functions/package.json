@@ -11,7 +11,7 @@
     "format": "prettier src test --write",
     "format:check": "prettier src test --check",
     "test": "vitest",
-    "test:unit": "vitest run test/security.test.ts test/customerSearch.test.ts test/customerPhotos.test.ts",
+    "test:unit": "vitest run test/security.test.ts test/businessRules.test.ts test/customerSearch.test.ts test/customerPhotos.test.ts test/zaloContract.test.ts",
     "test:rules": "vitest run test/firestore.rules.test.ts",
     "seed:demo": "npm run build && node lib/seedDemo.js",
     "serve": "npm run build && firebase emulators:start --only functions,firestore,storage",

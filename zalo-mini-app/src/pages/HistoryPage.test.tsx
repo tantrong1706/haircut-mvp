@@ -12,7 +12,13 @@ vi.mock("../services/api", () => ({
 }));
 
 const session: AppSession = {
-  qr: { salonId: "salon-a", mirrorId: "mirror-a", qrToken: "qr-token" },
+  qr: {
+    qrType: "legacy-mirror",
+    salonId: "salon-a",
+    branchId: "branch-a",
+    mirrorId: "mirror-a",
+    qrToken: "qr-token",
+  },
   sessionId: "session-a",
   zaloUserId: "zalo-a",
   customer: {
