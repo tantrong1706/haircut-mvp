@@ -27,13 +27,13 @@
     "check": "npm run lint && npm run format:check && npm run test:run && npm run build:zmp"
   },
   "dependencies": {
-    "@sentry/react": "^10.63.0",
+    "@sentry/react": "^10.65.0",
     "firebase": "^11.10.0",
-    "lucide-react": "^1.21.0",
+    "lucide-react": "^1.24.0",
     "qrcode": "^1.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "zmp-sdk": "^2.43.0"
+    "zmp-sdk": "^2.51.6"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
