@@ -8,9 +8,16 @@
 
 $ErrorActionPreference = "Stop"
 $env:FIREBASE_CLI_DISABLE_UPDATE_CHECK = "true"
+$env:FUNCTIONS_DISCOVERY_TIMEOUT = "60"
 $root = Resolve-Path (Join-Path $PSScriptRoot "..")
 $firebaseDir = Join-Path $root "firebase"
 $firebaserc = Join-Path $firebaseDir ".firebaserc"
+
+function Assert-NativeSuccess([string]$Step) {
+  if ($LASTEXITCODE -ne 0) {
+    throw "$Step thất bại với mã thoát $LASTEXITCODE"
+  }
+}
 
 if (-not (Get-Command firebase -ErrorAction SilentlyContinue)) {
   throw "Chưa cài Firebase CLI. Hãy chạy .\scripts\setup.ps1 -InstallFirebaseCli trước."
@@ -29,7 +36,9 @@ if ($deploysHosting) {
   Push-Location $appDir
   try {
     npm ci
+    Assert-NativeSuccess "Cài dependency frontend"
     npm run build
+    Assert-NativeSuccess "Build frontend"
   } finally {
     Pop-Location
   }
@@ -53,7 +62,9 @@ if ($IncludeFunctions) {
   Push-Location (Join-Path $firebaseDir "functions")
   try {
     npm ci
+    Assert-NativeSuccess "Cài dependency Functions"
     npm run build
+    Assert-NativeSuccess "Build Functions"
   } finally {
     Pop-Location
   }
@@ -63,13 +74,25 @@ Push-Location $firebaseDir
 try {
   if ($OnlyRules) {
     firebase deploy --only firestore:rules,firestore:indexes
+    Assert-NativeSuccess "Deploy Firestore rules/indexes"
   } elseif ($OnlyHosting) {
     firebase deploy --only hosting
+    Assert-NativeSuccess "Deploy Hosting"
   } else {
-    if ($IncludeFunctions) { firebase deploy --only functions }
-    if ($IncludeFirestore) { firebase deploy --only firestore:rules,firestore:indexes }
-    if ($IncludeStorage) { firebase deploy --only storage }
+    if ($IncludeFunctions) {
+      firebase deploy --only functions
+      Assert-NativeSuccess "Deploy Functions"
+    }
+    if ($IncludeFirestore) {
+      firebase deploy --only firestore:rules,firestore:indexes
+      Assert-NativeSuccess "Deploy Firestore rules/indexes"
+    }
+    if ($IncludeStorage) {
+      firebase deploy --only storage
+      Assert-NativeSuccess "Deploy Storage rules"
+    }
     firebase deploy --only hosting
+    Assert-NativeSuccess "Deploy Hosting"
   }
 } finally {
   Pop-Location

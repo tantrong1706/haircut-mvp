@@ -91,6 +91,11 @@ if (Test-Path -LiteralPath $firebaserc) {
 
 $envPath = Join-Path $root "zalo-mini-app\.env.production"
 $env = Read-EnvFile $envPath
+$envLocalPath = Join-Path $root "zalo-mini-app\.env.production.local"
+$envLocal = Read-EnvFile $envLocalPath
+foreach ($entry in $envLocal.GetEnumerator()) {
+  $env[$entry.Key] = $entry.Value
+}
 if ($env.Count -eq 0) {
   Add-Result "Zalo web production env" "FAIL" "Thiếu zalo-mini-app\.env.production"
 } else {
@@ -161,7 +166,7 @@ if (-not (Test-Path -LiteralPath $appConfigPath)) {
 }
 
 if (Test-CommandExists "zmp") {
-  Add-Result "ZMP CLI" "OK" ((zmp --version 2>$null | Select-Object -First 1) -join " ")
+  Add-Result "ZMP CLI" "OK" "Đã cài đặt"
 } else {
   Add-Result "ZMP CLI" "WARN" "Chưa cài ZMP CLI trên máy này"
 }

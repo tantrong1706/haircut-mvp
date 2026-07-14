@@ -2,9 +2,9 @@
 
 ## 1. Trạng thái
 
-**READY FOR MANUAL DEPLOY**
+**NOT READY FOR ZALO SUBMISSION**
 
-Code local đã qua lint, format, typecheck/build ZMP, 99 unit/rules/integration tests và 15 lượt E2E trên desktop Chrome, Android Chromium và iPhone WebKit. Trạng thái này cho phép deploy thủ công lên Firebase và Zalo Testing; chưa được bấm gửi xét duyệt trước khi hoàn tất các mục **MANUAL ACTIONS**.
+Code local đã qua lint, format, typecheck/build ZMP, 99 unit/rules/integration tests và 15 lượt E2E trên desktop Chrome, Android Chromium và iPhone WebKit. Firebase production, migration, dữ liệu xét duyệt và Zalo Testing **Version 5** đã hoàn tất; ảnh đại diện HAIRCUT cũng đã được cập nhật trên Zalo Developer Portal. Chưa bấm gửi xét duyệt trước khi kiểm thử thật và chụp đủ ảnh trên Android lẫn iPhone.
 
 ## 2. File đã sửa
 
@@ -15,7 +15,7 @@ Code local đã qua lint, format, typecheck/build ZMP, 99 unit/rules/integration
 - Frontend services: `api.ts`, `auth.ts`, `customerPhotos.ts`, `monitoring.ts`, `operations.ts`, `qr.ts`, `sessionStore.ts`, `types.ts`, `wheel.ts` và test liên quan trong `zalo-mini-app/src/services`, gồm test scrub telemetry và production không sinh QR demo.
 - Giao diện/cấu hình: `zalo-mini-app/src/styles/global.css`, `zalo-mini-app/app-config.json`.
 
-Không commit, push hoặc deploy trong tác vụ này.
+Không lưu mật khẩu, token QR hoặc phiên ZMP vào Git. Thông tin nhạy cảm của tài khoản xét duyệt chỉ nằm trong các file local bị `.gitignore` loại trừ.
 
 ## 3. Tính năng đã hoàn thành
 
@@ -111,10 +111,7 @@ Không deploy Rules yêu cầu `branchId` trước khi migration và index hoàn
 
 ## 8. MANUAL ACTIONS
 
-- Đăng nhập Firebase/Zalo, xác nhận App ID `2038116772828167300` và cấu hình `ZALO_APP_SECRET`, `QR_SIGNING_SECRET` trong Secret Manager.
-- Export Firestore, deploy Functions, chạy migration cho từng salon thật và kiểm tra chạy lần hai không tạo trùng.
-- Điền email/điện thoại hỗ trợ thật vào Privacy và hồ sơ Zalo.
-- Tạo salon, owner đã xác minh email, staff và ít nhất hai chi nhánh làm dữ liệu kiểm thử; điền tài khoản/mật khẩu test vào hồ sơ.
-- Deploy theo thứ tự ở mục 7; kiểm tra dashboard, hàng chờ và dữ liệu cập nhật không cần F5.
-- Tạo QR salon/chi nhánh Testing, quét bằng Zalo thật trên Android và iPhone; kiểm tra QR xoay, chi nhánh khóa, ảnh consent, hủy/no-show, duyệt điểm, vòng quay và xóa dữ liệu retry.
-- Chụp/tải đủ ảnh màn hình, xác nhận URL Privacy công khai, sau đó mới bấm gửi xét duyệt và phát hành Production.
+- Điền mật khẩu từ `docs/ZALO_REVIEW_ACCOUNTS.md.local` vào hồ sơ xét duyệt; không commit hoặc gửi file này công khai.
+- Quét QR Testing bằng Zalo thật trên Android và iPhone; kiểm tra chọn chi nhánh, hàng chờ, ảnh consent, hủy/no-show, duyệt điểm, vòng quay và đổi quà.
+- Chụp/tải đủ ảnh màn hình thực tế trong Zalo, đính kèm QR Testing còn hiệu lực và dùng bộ ảnh web tham khảo trong `docs/zalo-review-screenshots.local`.
+- Kiểm tra lại tên, mô tả, ảnh đại diện và thông tin hỗ trợ trên Zalo Portal, rồi mới bấm gửi xét duyệt và phát hành Production.

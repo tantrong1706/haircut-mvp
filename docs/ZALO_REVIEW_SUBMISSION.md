@@ -7,8 +7,8 @@
 - **Mô tả:** HAIRCUT giúp khách check-in tại salon tóc, theo dõi điểm, lịch sử cắt, vòng quay và mã quà. Chủ salon quản lý toàn hệ thống; nhân viên vận hành đúng chi nhánh được phân công.
 - **Mục đích:** Kết nối khách, nhân viên và chủ salon trong quy trình tạo lượt cắt, xác nhận dịch vụ, duyệt điểm và chăm sóc khách hàng minh bạch.
 - **Chính sách quyền riêng tư:** <https://haircut-c7d12.web.app/privacy>
-- **Email hỗ trợ:** `[ĐIỀN EMAIL HỖ TRỢ THẬT]`
-- **Điện thoại hỗ trợ:** `[ĐIỀN SỐ ĐIỆN THOẠI HỖ TRỢ THẬT]`
+- **Email hỗ trợ:** `tantrong1706@gmail.com`
+- **Điện thoại hỗ trợ:** `0838098761`
 
 ## Nội dung ngắn cho Zalo Portal
 
@@ -16,16 +16,16 @@ HAIRCUT là Mini App chăm sóc khách hàng cho salon tóc. Khách mở ứng d
 
 ## Tài khoản và dữ liệu kiểm thử
 
-| Mục | Giá trị cần điền |
-| --- | --- |
-| Trang owner | `https://haircut-c7d12.web.app/owner` |
-| Email owner test | `[ĐIỀN EMAIL OWNER TEST]` |
-| Mật khẩu owner test | `[ĐIỀN MẬT KHẨU OWNER TEST]` |
-| Trang staff | `https://haircut-c7d12.web.app/staff` |
-| Email staff test | `[ĐIỀN EMAIL STAFF TEST]` |
-| Mật khẩu staff test | `[ĐIỀN MẬT KHẨU STAFF TEST]` |
-| QR salon/chi nhánh còn hiệu lực | `[ĐÍNH KÈM ẢNH QR TESTING - KHÔNG GHI TOKEN RA TÀI LIỆU]` |
-| Bộ ảnh giao diện | `[ĐÍNH KÈM ẢNH CHỤP MÀN HÌNH]` |
+| Mục                             | Giá trị cần điền                                                                |
+| ------------------------------- | ------------------------------------------------------------------------------- |
+| Trang owner                     | `https://haircut-c7d12.web.app/owner`                                           |
+| Email owner test                | `tantrong1706+haircut.review.owner@gmail.com`                                   |
+| Mật khẩu owner test             | Xem file local `docs/ZALO_REVIEW_ACCOUNTS.md.local`                             |
+| Trang staff                     | `https://haircut-c7d12.web.app/staff`                                           |
+| Email staff test                | `tantrong1706+haircut.review.staff@gmail.com`                                   |
+| Mật khẩu staff test             | Xem file local `docs/ZALO_REVIEW_ACCOUNTS.md.local`                             |
+| QR salon/chi nhánh còn hiệu lực | Ảnh QR local đã tạo; Zalo Testing đang ở **Version 5**                          |
+| Bộ ảnh giao diện                | Có trong `docs/zalo-review-screenshots.local`; vẫn cần ảnh chụp thật trong Zalo |
 
 Tài khoản owner phải xác minh email. Owner, staff, salon, chi nhánh và QR kiểm thử phải thuộc cùng bộ dữ liệu.
 
@@ -75,12 +75,14 @@ Dữ liệu được dùng để vận hành lượt cắt, tích điểm, lịc
 - [x] QR salon/chi nhánh dùng token ký, có phiên bản xoay và không lộ token qua telemetry.
 - [x] Firestore/Storage mặc định từ chối ngoài quyền; staff bị giới hạn theo salon/chi nhánh.
 - [x] Bản production không tự dùng salon hoặc QR demo khi thiếu ngữ cảnh hợp lệ.
-- [ ] Điền email, điện thoại hỗ trợ thật trên Privacy và hồ sơ.
-- [ ] Xác nhận App ID và quyền hồ sơ trên Zalo Developer Portal.
-- [ ] Deploy Functions, indexes, Rules, Storage Rules và Hosting đúng thứ tự sau migration.
-- [ ] Tạo/xác minh owner test, staff test, salon và ít nhất hai chi nhánh có dữ liệu phù hợp.
-- [ ] Điền tài khoản test và đính kèm QR testing còn hiệu lực.
+- [x] Điền email, điện thoại hỗ trợ thật trên Privacy và hồ sơ.
+- [x] Xác nhận Mini App ID `2038116772828167300` và quyền deploy trên Zalo Developer Portal.
+- [x] Deploy Functions, indexes, Rules, Storage Rules và Hosting đúng thứ tự sau migration.
+- [x] Tạo/xác minh owner test, staff test, salon và ít nhất hai chi nhánh có dữ liệu phù hợp.
+- [x] Deploy Zalo Testing thành công ở **Version 5** và cập nhật ảnh đại diện HAIRCUT.
+- [x] Chuẩn bị tài khoản test và QR salon/chi nhánh trong các file local bị Git bỏ qua.
+- [ ] Điền mật khẩu tài khoản test và đính kèm QR testing vào hồ sơ Zalo.
 - [ ] Quét QR thật và kiểm thử trọn luồng trên Android lẫn iPhone.
 - [ ] Chụp, kiểm tra và tải đủ ảnh màn hình lên hồ sơ.
-- [ ] Xác nhận URL Privacy công khai hiển thị thông tin hỗ trợ thật.
+- [x] Xác nhận URL Privacy công khai hiển thị thông tin hỗ trợ thật.
 - [ ] Bấm gửi xét duyệt trên Zalo Portal.
