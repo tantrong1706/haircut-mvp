@@ -350,24 +350,34 @@ export async function resolveCustomerQr(qr: QrContext): Promise<CustomerQrResolu
     throw new Error("QR không có mã xác thực");
   }
   if (!isFirebaseConfigured()) {
-    const branchId = qr.branchId || "demo-branch-main";
+    const previewBranches = [
+      {
+        id: "demo-branch-main",
+        name: "Chi nhánh Trung tâm",
+        address: "123 Nguyễn Huệ, Quận 1, TP.HCM",
+        phone: "0838098761",
+        isActive: true,
+      },
+      {
+        id: "demo-branch-two",
+        name: "Chi nhánh Riverside",
+        address: "28 Bến Vân Đồn, Quận 4, TP.HCM",
+        phone: "0838098761",
+        isActive: true,
+      },
+    ];
+    const selectionRequired = qr.qrType === "salon" && !qr.branchId;
+    const branchId = selectionRequired ? "" : qr.branchId || previewBranches[0].id;
+    const selectedBranch = previewBranches.find((branch) => branch.id === branchId);
     return {
       qrType: qr.qrType,
       salonId: qr.salonId,
       salonName: "HAIRCUT Studio",
       branchId,
-      branchName: "Chi nhánh chính",
-      branchAddress: "",
-      selectionRequired: false,
-      branches: [
-        {
-          id: branchId,
-          name: "Chi nhánh chính",
-          address: "",
-          phone: "",
-          isActive: true,
-        },
-      ],
+      branchName: selectedBranch?.name || "",
+      branchAddress: selectedBranch?.address || "",
+      selectionRequired,
+      branches: previewBranches,
     };
   }
 
@@ -542,7 +552,14 @@ export async function spinWheel(session: AppSession): Promise<SpinResult> {
 async function spinWheelDirect(session: AppSession): Promise<SpinResult> {
   if (!isFirebaseConfigured()) {
     const activeSlots = activeWheelSlots(defaultLuckyWheelConfig);
-    const selectedIndex = Math.min(1, activeSlots.length - 1);
+    const forcedIndex =
+      import.meta.env.VITE_APP_ENV === "test"
+        ? Number(localStorage.getItem("haircut_mock_spin_index"))
+        : Number.NaN;
+    const selectedIndex =
+      Number.isInteger(forcedIndex) && forcedIndex >= 0 && forcedIndex < activeSlots.length
+        ? forcedIndex
+        : Math.min(1, activeSlots.length - 1);
     const pointsAfter = Math.max(
       0,
       session.customer.points - defaultLuckyWheelConfig.requiredPoints,

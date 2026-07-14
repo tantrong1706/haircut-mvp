@@ -67,6 +67,14 @@ Dữ liệu được dùng để vận hành lượt cắt, tích điểm, lịc
 - Điểm, lịch sử, vòng quay, kết quả có quà và không trúng, danh sách mã quà.
 - Trang chính sách quyền riêng tư trên điện thoại.
 
+Bộ ảnh web tham khảo đã được tạo trong `docs/zalo-review-screenshots.local`:
+
+- **Owner/staff:** `02a`, `02`, `03`, `04`, `05`, `06`, `07a`, `07b`.
+- **Khách:** `09`, `10`, `11`, `12`, `13`, `14`, `14b`, `15`, `16`, `17`, `18`.
+- **Bổ sung:** `01`, `08`, `08b`.
+
+Ảnh khách được dựng bằng build xem trước có cùng luồng và dữ liệu mẫu an toàn, không thay thế ảnh chụp thật trong Zalo. Trước khi nộp vẫn phải chụp hộp thoại xin quyền hồ sơ và ít nhất một lượt kiểm thử hoàn chỉnh trên Android lẫn iPhone.
+
 ## Checklist trước khi gửi
 
 - [x] App ID trong source/tài liệu là `2038116772828167300`.

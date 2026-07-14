@@ -14,6 +14,7 @@ const productionEnvSchema = z.object({
   VITE_ZALO_MINI_APP_ID: z.literal("2038116772828167300"),
   VITE_FUNCTION_WRITE_MODE: z.literal("required"),
   VITE_APP_ENV: z.literal("production"),
+  VITE_ZALO_PREVIEW: z.literal("false").optional(),
 });
 
 export default defineConfig(({ mode }) => {

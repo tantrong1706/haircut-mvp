@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getZaloIdentity } from "./zalo";
 
 const mocks = vi.hoisted(() => ({
@@ -23,6 +23,10 @@ describe("getZaloIdentity", () => {
     mocks.getAccessToken.mockResolvedValue("access-token-test");
   });
 
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it("không tự gán tên chung khi khách từ chối quyền hồ sơ", async () => {
     mocks.getUserInfo.mockRejectedValue(new Error("permission denied"));
 
@@ -41,5 +45,15 @@ describe("getZaloIdentity", () => {
       zaloUserId: "zalo-a",
       name: "Anh Tân",
     });
+  });
+
+  it("dùng danh tính mô phỏng chỉ trong chế độ xem trước", async () => {
+    vi.stubEnv("VITE_ZALO_PREVIEW", "true");
+
+    await expect(getZaloIdentity()).resolves.toMatchObject({
+      zaloUserId: "preview-zalo-user",
+      name: "Khách xem trước",
+    });
+    expect(mocks.getAccessToken).not.toHaveBeenCalled();
   });
 });

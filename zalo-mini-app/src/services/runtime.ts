@@ -3,6 +3,10 @@ export function isZaloMiniAppRuntime() {
     return false;
   }
 
+  if (import.meta.env.VITE_ZALO_PREVIEW === "true") {
+    return true;
+  }
+
   const runtimeWindow = window as Window & { ZJSBridge?: unknown };
   const userAgent = navigator.userAgent.toLowerCase();
   const hostname = window.location.hostname.toLowerCase();

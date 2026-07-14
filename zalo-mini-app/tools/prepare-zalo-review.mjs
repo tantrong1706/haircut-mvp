@@ -149,6 +149,14 @@ if (
 
 await signOut(auth);
 
+await seedReviewBusinessData({
+  salonId,
+  branch: staffBranch,
+  staffUid: staffProfile.uid,
+  staffName: staffProfile.name || "Nhân viên xét duyệt",
+  ownerUid: ownerCredential.user.uid,
+});
+
 const qrFiles = [];
 if (branchResult.salonQrUrl) {
   const salonQrPath = resolve(appDir, "qr-salon-review-dev.png");
@@ -295,6 +303,270 @@ function gcloudAccessToken() {
     throw new Error("Google Cloud CLI chưa đăng nhập.");
   }
   return cachedAccessToken;
+}
+
+async function seedReviewBusinessData(input) {
+  const now = Date.now();
+  const expiresAt = new Date(now + 10 * 60 * 60 * 1000);
+  const branch = {
+    id: String(input.branch.id),
+    name: String(input.branch.name || "Chi nhánh Trung tâm"),
+    address: String(input.branch.address || "123 Nguyễn Huệ, Quận 1, TP.HCM"),
+  };
+  const customers = [
+    {
+      id: "zalo-review-customer-waiting",
+      name: "Anh Hoàng",
+      phone: "0900001001",
+      points: 4,
+      allowPhoto: false,
+      activeSessionId: "zalo-review-session-waiting",
+    },
+    {
+      id: "zalo-review-customer-serving",
+      name: "Linh Chi",
+      phone: "0900001002",
+      points: 7,
+      allowPhoto: true,
+      activeSessionId: "zalo-review-session-serving",
+    },
+    {
+      id: "zalo-review-customer-pending",
+      name: "Minh Anh",
+      phone: "0900001003",
+      points: 9,
+      allowPhoto: false,
+      activeSessionId: "zalo-review-session-pending",
+    },
+    {
+      id: "zalo-review-customer-completed",
+      name: "Quang Huy",
+      phone: "0900001004",
+      points: 12,
+      allowPhoto: true,
+      activeSessionId: "",
+    },
+  ];
+
+  await Promise.all(
+    customers.map((customer, index) =>
+      writeFirestoreDocument("customers", customer.id, {
+        salonId: input.salonId,
+        zaloUserId: `zalo-review-${index + 1}`,
+        source: "zalo_review_seed",
+        name: customer.name,
+        nameSearch: customer.name
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .toLowerCase(),
+        phone: customer.phone,
+        phoneLast4: customer.phone.slice(-4),
+        points: customer.points,
+        allowPhoto: customer.allowPhoto,
+        activeSessionId: customer.activeSessionId || null,
+        lastBranchId: branch.id,
+        lastVisitAt: index === 3 ? new Date(now - 24 * 60 * 60 * 1000) : null,
+        createdAt: new Date(now - (index + 1) * 24 * 60 * 60 * 1000),
+        updatedAt: new Date(now),
+      }),
+    ),
+  );
+
+  const sessionDefinitions = [
+    {
+      id: "zalo-review-session-waiting",
+      customer: customers[0],
+      status: "waiting",
+      assignedStaffId: "",
+      assignedStaffName: "",
+      createdAt: new Date(now - 60 * 1000),
+    },
+    {
+      id: "zalo-review-session-serving",
+      customer: customers[1],
+      status: "serving",
+      assignedStaffId: input.staffUid,
+      assignedStaffName: input.staffName,
+      createdAt: new Date(now - 3 * 60 * 1000),
+    },
+    {
+      id: "zalo-review-session-pending",
+      customer: customers[2],
+      status: "pending_approval",
+      assignedStaffId: input.staffUid,
+      assignedStaffName: input.staffName,
+      createdAt: new Date(now - 6 * 60 * 1000),
+    },
+    {
+      id: "zalo-review-session-completed",
+      customer: customers[3],
+      status: "completed",
+      assignedStaffId: input.staffUid,
+      assignedStaffName: input.staffName,
+      createdAt: new Date(now - 30 * 60 * 1000),
+    },
+  ];
+
+  await Promise.all(
+    sessionDefinitions.map((session) =>
+      writeFirestoreDocument("chair_sessions", session.id, {
+        salonId: input.salonId,
+        branchId: branch.id,
+        branchName: branch.name,
+        branchAddress: branch.address,
+        qrType: "branch",
+        legacyMirrorId: null,
+        customerId: session.customer.id,
+        customerSummary: {
+          name: session.customer.name,
+          phoneLast4: session.customer.phone.slice(-4),
+          points: session.customer.points,
+          allowPhoto: session.customer.allowPhoto,
+        },
+        status: session.status,
+        isOpen: session.status !== "completed",
+        assignedStaffId: session.assignedStaffId || null,
+        assignedStaffName: session.assignedStaffName || null,
+        claimedAt: session.assignedStaffId ? session.createdAt : null,
+        expiresAt,
+        createdAt: session.createdAt,
+        updatedAt: new Date(now),
+      }),
+    ),
+  );
+
+  await Promise.all([
+    writeFirestoreDocument("point_requests", "zalo-review-session-pending", {
+      salonId: input.salonId,
+      branchId: branch.id,
+      branchName: branch.name,
+      sessionId: "zalo-review-session-pending",
+      customerId: customers[2].id,
+      staffId: input.staffUid,
+      staffName: input.staffName,
+      note: "Fade thấp, tỉa gọn hai bên và giữ độ dài phần mái.",
+      photoUrls: [],
+      pointsRequested: 1,
+      pointsAdded: 1,
+      customerSummary: {
+        name: customers[2].name,
+        phoneLast4: customers[2].phone.slice(-4),
+        points: customers[2].points,
+        allowPhoto: customers[2].allowPhoto,
+      },
+      status: "pending",
+      createdAt: new Date(now - 5 * 60 * 1000),
+      updatedAt: new Date(now),
+    }),
+    writeFirestoreDocument("point_requests", "zalo-review-session-completed", {
+      salonId: input.salonId,
+      branchId: branch.id,
+      branchName: branch.name,
+      sessionId: "zalo-review-session-completed",
+      customerId: customers[3].id,
+      staffId: input.staffUid,
+      staffName: input.staffName,
+      note: "Giữ form cũ, tỉa mái và vệ sinh đường viền.",
+      photoUrls: [],
+      pointsRequested: 1,
+      pointsAdded: 1,
+      status: "approved",
+      approvedBy: input.ownerUid,
+      approvedAt: new Date(now - 20 * 60 * 1000),
+      createdAt: new Date(now - 25 * 60 * 1000),
+      updatedAt: new Date(now),
+    }),
+    writeFirestoreDocument("haircut_records", "zalo-review-session-completed", {
+      salonId: input.salonId,
+      branchId: branch.id,
+      branchName: branch.name,
+      sessionId: "zalo-review-session-completed",
+      customerId: customers[3].id,
+      staffId: input.staffUid,
+      staffName: input.staffName,
+      note: "Giữ form cũ, tỉa mái và vệ sinh đường viền.",
+      photoUrls: [],
+      pointsAdded: 1,
+      createdAt: new Date(now - 20 * 60 * 1000),
+    }),
+    writeFirestoreDocument("reward_history", "zalo-review-reward-unused", {
+      salonId: input.salonId,
+      branchId: branch.id,
+      customerId: customers[3].id,
+      rewardName: "Gội đầu miễn phí",
+      rewardCode: "HC-REVIEW-CHUADUNG",
+      isWinning: true,
+      status: "unused",
+      pointsUsed: 5,
+      expiresAt: new Date(now + 30 * 24 * 60 * 60 * 1000),
+      createdAt: new Date(now - 15 * 60 * 1000),
+    }),
+    writeFirestoreDocument("reward_history", "zalo-review-reward-used", {
+      salonId: input.salonId,
+      branchId: branch.id,
+      customerId: customers[3].id,
+      rewardName: "Giảm 10% dịch vụ",
+      rewardCode: "HC-REVIEW-DADUNG",
+      isWinning: true,
+      status: "used",
+      pointsUsed: 5,
+      usedBy: input.staffUid,
+      usedAt: new Date(now - 2 * 24 * 60 * 60 * 1000),
+      createdAt: new Date(now - 5 * 24 * 60 * 60 * 1000),
+    }),
+  ]);
+
+  console.log("Review business data: 4 customers, 4 sessions, 2 point requests, 2 rewards");
+}
+
+async function writeFirestoreDocument(collectionName, documentId, data) {
+  const documentPath = `${encodeURIComponent(collectionName)}/${encodeURIComponent(documentId)}`;
+  const response = await fetch(
+    `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/databases/(default)/documents/${documentPath}`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${gcloudAccessToken()}`,
+        "Content-Type": "application/json",
+        "x-goog-user-project": projectId,
+      },
+      body: JSON.stringify({ fields: firestoreFields(data) }),
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`Firestore Admin trả về HTTP ${response.status}.`);
+  }
+}
+
+function firestoreFields(value) {
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([, fieldValue]) => fieldValue !== undefined)
+      .map(([key, fieldValue]) => [key, firestoreValue(fieldValue)]),
+  );
+}
+
+function firestoreValue(value) {
+  if (value === null) {
+    return { nullValue: null };
+  }
+  if (value instanceof Date) {
+    return { timestampValue: value.toISOString() };
+  }
+  if (Array.isArray(value)) {
+    return { arrayValue: { values: value.map(firestoreValue) } };
+  }
+  if (typeof value === "boolean") {
+    return { booleanValue: value };
+  }
+  if (typeof value === "number") {
+    return Number.isInteger(value) ? { integerValue: String(value) } : { doubleValue: value };
+  }
+  if (typeof value === "object") {
+    return { mapValue: { fields: firestoreFields(value) } };
+  }
+  return { stringValue: String(value) };
 }
 
 async function writeQr(path, value) {
