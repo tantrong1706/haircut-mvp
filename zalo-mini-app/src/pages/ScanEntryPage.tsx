@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   Camera,
+  CheckCircle2,
+  ChevronDown,
   MessageCircle,
   Phone,
   QrCode,
@@ -30,6 +32,7 @@ export function ScanEntryPage({ onReady }: Props) {
   const [allowPhoto, setAllowPhoto] = useState(false);
   const [phone, setPhone] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState("");
   const [loadingIdentity, setLoadingIdentity] = useState(true);
   const [loadingQr, setLoadingQr] = useState(true);
   const [qrResolution, setQrResolution] = useState<CustomerQrResolution | null>(null);
@@ -39,7 +42,6 @@ export function ScanEntryPage({ onReady }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const nameTouchedRef = useRef(false);
   const mountedRef = useRef(false);
 
   const qr = useMemo(() => parseQrContext(), []);
@@ -125,9 +127,13 @@ export function ScanEntryPage({ onReady }: Props) {
           return;
         }
 
-        if (!nameTouchedRef.current) {
-          setDisplayName(normalizeDisplayName(nextIdentity.name));
+        const nextDisplayName = normalizeDisplayName(nextIdentity.name);
+        if (!nextDisplayName) {
+          throw new Error("Chưa nhận được tên Zalo. Vui lòng cho phép đọc hồ sơ rồi thử lại.");
         }
+
+        setDisplayName(nextDisplayName);
+        setAvatarUrl(nextIdentity.avatar || "");
       })
       .catch((err) => {
         captureError(err, {
@@ -297,11 +303,12 @@ export function ScanEntryPage({ onReady }: Props) {
           <MessageCircle size={34} aria-hidden="true" />
 
           <div>
-            <h2>Cần mở trong Zalo</h2>
+            <h2>{isZaloRuntime ? "Chưa nhận được thông tin Zalo" : "Cần mở trong Zalo"}</h2>
 
             <p className="muted">
-              HAIRCUT cần xác nhận danh tính Zalo trước khi tạo lượt cắt. Vui lòng quét lại QR tại
-              salon.
+              {isZaloRuntime
+                ? "Cho phép HAIRCUT đọc tên hiển thị để salon nhận đúng khách."
+                : "HAIRCUT cần mở trong Zalo để xác nhận danh tính trước khi tạo lượt cắt."}
             </p>
           </div>
 
@@ -319,7 +326,7 @@ export function ScanEntryPage({ onReady }: Props) {
             {isZaloRuntime ? (
               <button className="secondary-button" onClick={loadZaloIdentity}>
                 <RefreshCcw size={18} aria-hidden="true" />
-                Thử lại
+                Thử lấy lại thông tin
               </button>
             ) : null}
           </div>
@@ -370,58 +377,87 @@ export function ScanEntryPage({ onReady }: Props) {
 
           {qrError ? <p className="alert error">{qrError}</p> : null}
 
-          <div className="panel form-panel">
-            <label className="field">
-              <span>
-                <UserRound size={18} aria-hidden="true" />
-                Tên hiển thị tại salon
-              </span>
+          <div className="panel zalo-profile-card" aria-live="polite">
+            <div className="zalo-profile-avatar" aria-hidden="true">
+              {avatarUrl ? (
+                <img src={avatarUrl} alt="" referrerPolicy="no-referrer" />
+              ) : (
+                <UserRound />
+              )}
+            </div>
 
-              <input
-                value={displayName}
-                onChange={(event) => {
-                  nameTouchedRef.current = true;
-                  setDisplayName(event.target.value);
-                }}
-                placeholder={loadingIdentity ? "Đang lấy tên Zalo..." : "Ví dụ: Anh Tân"}
-                disabled={loading}
+            <div className="zalo-profile-copy">
+              <span>Thông tin từ Zalo</span>
+              <strong>{loadingIdentity ? "Đang nhận thông tin..." : displayName}</strong>
+              <small>Salon sẽ dùng tên này để nhận đúng khách.</small>
+            </div>
+
+            {!loadingIdentity && displayName ? (
+              <CheckCircle2
+                className="zalo-profile-ready"
+                size={24}
+                aria-label="Đã nhận thông tin"
               />
-
-              <small>Mặc định lấy từ Zalo, bạn có thể sửa để nhân viên dễ gọi đúng tên.</small>
-            </label>
-
-            <label className="field">
-              <span>
-                <Phone size={18} aria-hidden="true" />
-                Số điện thoại
-              </span>
-
-              <input
-                inputMode="tel"
-                value={phone}
-                onChange={(event) => setPhone(event.target.value)}
-                placeholder="Nhập nếu muốn salon dễ nhận ra bạn"
-                disabled={loading}
-              />
-
-              <small>Không bắt buộc. Salon chỉ hiển thị 4 số cuối cho nhân viên.</small>
-            </label>
-
-            <label className="toggle-row photo-consent">
-              <input
-                type="checkbox"
-                checked={allowPhoto}
-                onChange={(event) => setAllowPhoto(event.target.checked)}
-                disabled={loading}
-              />
-
-              <Camera size={18} aria-hidden="true" />
-
-              <span>Đồng ý lưu ảnh kiểu tóc cho lần sau</span>
-            </label>
-
-            <p className="field-note">Dữ liệu chỉ dùng cho chăm sóc khách hàng tại salon này.</p>
+            ) : null}
           </div>
+
+          <details className="panel entry-options">
+            <summary>
+              <span>
+                <strong>Thông tin tùy chọn</strong>
+                <small>Sửa tên, thêm số điện thoại hoặc đồng ý lưu ảnh</small>
+              </span>
+              <ChevronDown size={20} aria-hidden="true" />
+            </summary>
+
+            <div className="entry-options-content">
+              <label className="field">
+                <span>
+                  <UserRound size={18} aria-hidden="true" />
+                  Tên hiển thị tại salon
+                </span>
+
+                <input
+                  value={displayName}
+                  onChange={(event) => setDisplayName(event.target.value)}
+                  placeholder={loadingIdentity ? "Đang lấy tên Zalo..." : "Ví dụ: Anh Tân"}
+                  disabled={loading}
+                />
+              </label>
+
+              <label className="field">
+                <span>
+                  <Phone size={18} aria-hidden="true" />
+                  Số điện thoại
+                </span>
+
+                <input
+                  inputMode="tel"
+                  value={phone}
+                  onChange={(event) => setPhone(event.target.value)}
+                  placeholder="Không bắt buộc"
+                  disabled={loading}
+                />
+
+                <small>Nhân viên chỉ thấy 4 số cuối.</small>
+              </label>
+
+              <label className="toggle-row photo-consent">
+                <input
+                  type="checkbox"
+                  checked={allowPhoto}
+                  onChange={(event) => setAllowPhoto(event.target.checked)}
+                  disabled={loading}
+                />
+
+                <Camera size={18} aria-hidden="true" />
+
+                <span>Đồng ý lưu ảnh kiểu tóc cho lần sau</span>
+              </label>
+
+              <p className="field-note">Dữ liệu chỉ dùng để phục vụ bạn tại salon này.</p>
+            </div>
+          </details>
 
           {error ? <p className="alert error">{error}</p> : null}
 
@@ -438,11 +474,11 @@ export function ScanEntryPage({ onReady }: Props) {
             onClick={continueWithZalo}
           >
             {loading ? (
-              "Đang xử lý..."
+              "Đang tạo lượt..."
             ) : (
               <>
-                <MessageCircle size={20} aria-hidden="true" />
-                Xác nhận và tạo lượt cắt
+                <CheckCircle2 size={20} aria-hidden="true" />
+                Xác nhận vào hàng chờ
               </>
             )}
           </button>

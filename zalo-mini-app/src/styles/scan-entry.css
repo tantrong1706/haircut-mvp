@@ -107,6 +107,125 @@
   font-weight: 700;
 }
 
+.entry-page .zalo-profile-card {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 13px;
+  padding: 16px;
+}
+
+.entry-page .zalo-profile-avatar {
+  width: 54px;
+  height: 54px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 17px;
+  background: linear-gradient(135deg, #0e7659, #d69b2d);
+  color: #ffffff;
+  box-shadow: 0 10px 24px rgba(21, 25, 23, 0.14);
+}
+
+.entry-page .zalo-profile-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.entry-page .zalo-profile-copy {
+  min-width: 0;
+}
+
+.entry-page .zalo-profile-copy span,
+.entry-page .zalo-profile-copy strong,
+.entry-page .zalo-profile-copy small {
+  display: block;
+}
+
+.entry-page .zalo-profile-copy span {
+  margin-bottom: 2px;
+  color: var(--green-strong);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.entry-page .zalo-profile-copy strong {
+  overflow-wrap: anywhere;
+  color: #151917;
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.entry-page .zalo-profile-copy small {
+  margin-top: 3px;
+  color: rgba(21, 25, 23, 0.58);
+  font-weight: 700;
+}
+
+.entry-page .zalo-profile-ready {
+  color: var(--green-strong);
+}
+
+.entry-page .entry-options {
+  padding: 0;
+  overflow: hidden;
+}
+
+.entry-page .entry-options summary {
+  min-height: 66px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.entry-page .entry-options summary::-webkit-details-marker {
+  display: none;
+}
+
+.entry-page .entry-options summary span,
+.entry-page .entry-options summary strong,
+.entry-page .entry-options summary small {
+  display: block;
+}
+
+.entry-page .entry-options summary strong {
+  color: #151917;
+  font-size: 15px;
+}
+
+.entry-page .entry-options summary small {
+  margin-top: 3px;
+  color: rgba(21, 25, 23, 0.58);
+  font-weight: 700;
+}
+
+.entry-page .entry-options summary > svg {
+  flex: 0 0 auto;
+  color: var(--green-strong);
+  transition: transform 0.18s ease;
+}
+
+.entry-page .entry-options[open] summary > svg {
+  transform: rotate(180deg);
+}
+
+.entry-page .entry-options-content {
+  display: grid;
+  gap: 14px;
+  padding: 0 16px 16px;
+  border-top: 1px solid rgba(21, 25, 23, 0.08);
+}
+
+.entry-page .entry-options-content > :first-child {
+  margin-top: 16px;
+}
+
 .entry-page .quick-actions {
   gap: 10px;
 }
@@ -218,5 +337,16 @@
 
   .entry-page .quick-actions button {
     min-height: 68px;
+  }
+
+  .entry-page .zalo-profile-card {
+    grid-template-columns: 48px minmax(0, 1fr) auto;
+    gap: 11px;
+  }
+
+  .entry-page .zalo-profile-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 15px;
   }
 }

@@ -42,7 +42,7 @@ test.describe("Bộ ảnh xét duyệt Zalo", () => {
     await expect(page.getByLabel("Tên hiển thị tại salon")).toHaveValue("Khách xem trước");
     await page.evaluate(() => window.scrollTo(0, 0));
     await capture(page, "14-qr-chi-nhanh-xac-nhan-khach.png");
-    const confirmCheckIn = page.getByRole("button", { name: "Xác nhận và tạo lượt cắt" });
+    const confirmCheckIn = page.getByRole("button", { name: "Xác nhận vào hàng chờ" });
     await confirmCheckIn.evaluate((element) =>
       element.scrollIntoView({ block: "end", behavior: "instant" }),
     );
