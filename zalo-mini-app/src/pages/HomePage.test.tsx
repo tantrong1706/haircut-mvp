@@ -35,6 +35,14 @@ describe("HomePage", () => {
     expect(screen.getByRole("heading", { name: "Anh Tân" })).toBeInTheDocument();
     expect(screen.getByText("Nam đang phục vụ bạn.")).toBeInTheDocument();
     expect(screen.getByText("7")).toBeInTheDocument();
+    expect(screen.getByText("Bạn đã đủ điểm để quay.")).toBeInTheDocument();
+    expect(screen.getByRole("progressbar", { name: "Tiến độ vòng quay" })).toHaveAttribute(
+      "aria-valuenow",
+      "5",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Quay ngay" }));
+    expect(onTabChange).toHaveBeenCalledWith("wheel");
 
     await user.click(screen.getByRole("button", { name: /Lịch sử/i }));
     expect(onTabChange).toHaveBeenCalledWith("history");
@@ -45,7 +53,11 @@ describe("HomePage", () => {
     const onRetrySync = vi.fn();
     render(
       <HomePage
-        session={{ ...session, sessionStatus: "pending_approval" }}
+        session={{
+          ...session,
+          sessionStatus: "pending_approval",
+          customer: { ...session.customer, points: 3 },
+        }}
         syncStatus="error"
         syncMessage="Kết nối hệ thống đang chậm"
         onRetrySync={onRetrySync}
@@ -55,6 +67,8 @@ describe("HomePage", () => {
     );
 
     expect(screen.getByText("Đang chờ chủ salon duyệt điểm.")).toBeInTheDocument();
+    expect(screen.getByText("Thêm 2 điểm để mở lượt quay.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Xem vòng quay" })).toBeInTheDocument();
     expect(screen.getByText("Kết nối hệ thống đang chậm")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Thử lại/i }));
     expect(onRetrySync).toHaveBeenCalledOnce();

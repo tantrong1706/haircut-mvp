@@ -4,13 +4,14 @@ import {
   Gift,
   Hourglass,
   RefreshCcw,
-  Scissors,
   Sparkles,
   type LucideIcon,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { BrandLogo } from "../components/BrandLogo";
-import { AppSession, TabKey } from "../services/types";
+import { getCustomerWheelConfig } from "../services/api";
+import { AppSession, defaultLuckyWheelConfig, TabKey } from "../services/types";
+import { activeWheelSlots } from "../services/wheel";
 
 type Props = {
   session: AppSession;
@@ -28,7 +29,6 @@ const actions: Array<{
   Icon: LucideIcon;
 }> = [
   { tab: "history", title: "Lịch sử", Icon: CalendarClock },
-  { tab: "wheel", title: "Vòng quay", Icon: Sparkles },
   { tab: "rewards", title: "Quà", Icon: Gift },
 ];
 
@@ -43,6 +43,28 @@ export function HomePage({
 }: Props) {
   const { customer } = session;
   const status = session.sessionStatus || "waiting";
+  const [wheelConfig, setWheelConfig] = useState(defaultLuckyWheelConfig);
+  const wheelSlots = useMemo(() => activeWheelSlots(wheelConfig), [wheelConfig]);
+  const missingPoints = Math.max(0, wheelConfig.requiredPoints - customer.points);
+  const wheelProgress = Math.min(
+    100,
+    Math.round((customer.points / wheelConfig.requiredPoints) * 100),
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    getCustomerWheelConfig(session)
+      .then((config) => {
+        if (!cancelled) {
+          setWheelConfig(config);
+        }
+      })
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session.qr.salonId, session.sessionId]);
 
   return (
     <section className="page customer-home">
@@ -76,6 +98,62 @@ export function HomePage({
         <span className="last-sync-time">Cập nhật lúc {formatSyncTime(lastSyncedAtMs)}</span>
       ) : null}
 
+      <section className="home-wheel-card" aria-label="Điểm và vòng quay may mắn">
+        <div className="home-wheel-copy">
+          <span>Điểm hiện có</span>
+          <div className="home-points-value">
+            <strong>{customer.points}</strong>
+            <small>điểm</small>
+          </div>
+          <p>
+            {missingPoints === 0
+              ? "Bạn đã đủ điểm để quay."
+              : `Thêm ${missingPoints} điểm để mở lượt quay.`}
+          </p>
+        </div>
+
+        <div
+          className="home-wheel-preview"
+          style={{ background: wheelPreviewBackground(wheelSlots.length) }}
+          aria-hidden="true"
+        >
+          <div>
+            <Sparkles size={25} />
+            <span>HAIRCUT</span>
+          </div>
+        </div>
+
+        <div className="home-wheel-progress">
+          <div>
+            <span>Tiến độ lượt quay</span>
+            <strong>
+              {Math.min(customer.points, wheelConfig.requiredPoints)}/{wheelConfig.requiredPoints}
+            </strong>
+          </div>
+          <div
+            className="home-wheel-progress-track"
+            role="progressbar"
+            aria-label="Tiến độ vòng quay"
+            aria-valuemin={0}
+            aria-valuemax={wheelConfig.requiredPoints}
+            aria-valuenow={Math.min(customer.points, wheelConfig.requiredPoints)}
+          >
+            <span style={{ width: `${wheelProgress}%` }} />
+          </div>
+        </div>
+
+        <div className="home-prize-preview" aria-label="Một số phần thưởng">
+          {wheelSlots.slice(0, 3).map((slot) => (
+            <span key={slot.label}>{slot.label}</span>
+          ))}
+        </div>
+
+        <button className="home-wheel-button" type="button" onClick={() => onTabChange("wheel")}>
+          <Sparkles size={20} aria-hidden="true" />
+          {missingPoints === 0 ? "Quay ngay" : "Xem vòng quay"}
+        </button>
+      </section>
+
       <div className="status-card">
         <StatusStep
           done
@@ -106,27 +184,6 @@ export function HomePage({
         />
       </div>
 
-      <div className="points-panel premium-points member-card">
-        <div>
-          <span>Điểm</span>
-          <strong>{customer.points}</strong>
-        </div>
-        <div className="member-card-mark" aria-hidden="true">
-          <Scissors size={34} strokeWidth={2.1} />
-        </div>
-      </div>
-
-      <div className="summary-grid">
-        <div className="summary-item">
-          <span>SĐT</span>
-          <strong>{customer.phoneLast4 ? `******${customer.phoneLast4}` : "Chưa có"}</strong>
-        </div>
-        <div className="summary-item">
-          <span>Ảnh tóc</span>
-          <strong>{customer.allowPhoto ? "Đã đồng ý" : "Không lưu"}</strong>
-        </div>
-      </div>
-
       <div className="quick-actions compact-actions">
         {actions.map(({ tab, title, Icon }) => (
           <button key={tab} onClick={() => onTabChange(tab)}>
@@ -138,9 +195,11 @@ export function HomePage({
         ))}
       </div>
 
-      <button className="secondary-button" type="button" onClick={onResetSession}>
-        Tạo lượt mới
-      </button>
+      {status === "completed" || status === "cancelled" ? (
+        <button className="secondary-button" type="button" onClick={onResetSession}>
+          Tạo lượt mới
+        </button>
+      ) : null}
     </section>
   );
 }
@@ -245,4 +304,16 @@ function formatSyncTime(value: number) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function wheelPreviewBackground(slotCount: number) {
+  const colors = ["#13815f", "#f4b942", "#ef6c4d", "#4f75d8", "#7357aa", "#2a9aa0"];
+  const safeCount = Math.max(1, slotCount);
+  const slice = 100 / safeCount;
+  const stops = Array.from({ length: safeCount }, (_, index) => {
+    const color = colors[index % colors.length];
+    return `${color} ${index * slice}% ${(index + 1) * slice}%`;
+  });
+
+  return `conic-gradient(${stops.join(", ")})`;
 }
