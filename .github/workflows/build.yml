@@ -127,9 +127,15 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: apps/manager-mobile/package-lock.json
+          cache-dependency-path: |
+            apps/manager-mobile/package-lock.json
+            zalo-mini-app/package-lock.json
 
-      - name: Install dependencies
+      - name: Install shared frontend dependencies
+        working-directory: zalo-mini-app
+        run: npm ci
+
+      - name: Install Manager dependencies
         working-directory: apps/manager-mobile
         run: npm ci
 
