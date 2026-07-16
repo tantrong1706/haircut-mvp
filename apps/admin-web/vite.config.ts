@@ -3,7 +3,6 @@ import { defineConfig } from "vite";
 
 export default defineConfig({
   plugins: [react()],
-  envDir: "../../zalo-mini-app",
   server: { port: 5175 },
   build: {
     sourcemap: false,
