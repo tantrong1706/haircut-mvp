@@ -10,6 +10,7 @@ import {
 import { initializeApp } from "firebase-admin/app";
 import {
   AggregateField,
+  DocumentReference,
   DocumentData,
   FieldPath,
   FieldValue,
@@ -46,6 +47,14 @@ import {
   isValidSalonAvatarMetadata,
   salonAvatarObjectPath,
 } from "./domains/salons/branding";
+import {
+  runSalonDeletionJob,
+  type SalonDeletionAdapter,
+  type SalonDeletionAuditAction,
+  type SalonDeletionJobPatch,
+  type SalonDeletionJobState,
+  type SalonDeletionStatus,
+} from "./domains/salons/deletionJob";
 import {
   MAX_HAIRCUT_PHOTOS,
   MAX_HAIRCUT_PHOTO_SIZE,
@@ -4933,7 +4942,7 @@ export const requestSalonDeletion = onCall(functionOptions, async (request) => {
     if (actualName.localeCompare(confirmedSalonName.trim(), "vi", { sensitivity: "base" }) !== 0) {
       throw new HttpsError("invalid-argument", "Tên salon xác nhận chưa đúng");
     }
-    if (jobSnap.data()?.status === "requested") {
+    if (jobSnap.data()?.status === "requested" || jobSnap.data()?.status === "pending") {
       return {
         status: "requested" as const,
         executeAfterMs: timestampMillis(jobSnap.data()?.executeAfter) ?? executeAfter.toMillis(),
@@ -5478,14 +5487,9 @@ async function deleteSalonCollection(collectionName: string, salonId: string) {
   return deleted;
 }
 
-async function executeSalonDeletion(salonId: string) {
-  const userSnap = await db.collection("users").where("salonId", "==", salonId).get();
-  const authUids = userSnap.docs.map((document) => document.id);
-  await storage.bucket().deleteFiles({ prefix: `salons/${salonId}/`, force: true });
-
+async function deleteSalonFirestoreData(salonId: string) {
   const collections = [
     "active_service_sessions",
-    "audit_events",
     "branches",
     "chair_sessions",
     "customer_deletion_jobs",
@@ -5497,6 +5501,7 @@ async function executeSalonDeletion(salonId: string) {
     "point_requests",
     "reward_history",
     "support_requests",
+    "users",
   ];
   let deletedDocuments = 0;
   for (const collectionName of collections) {
@@ -5510,25 +5515,94 @@ async function executeSalonDeletion(salonId: string) {
     await settingsBatch.commit();
     deletedDocuments += settingsSnap.size;
   }
-  const finalBatch = db.batch();
-  finalBatch.delete(db.collection("lucky_wheel").doc(salonId));
-  finalBatch.delete(
+  const cleanupBatch = db.batch();
+  cleanupBatch.delete(db.collection("lucky_wheel").doc(salonId));
+  cleanupBatch.delete(
     db
       .collection("_customer_search_migrations")
       .doc(createHash("sha256").update(`name-prefixes-v1:${salonId}`).digest("hex")),
   );
-  userSnap.docs.forEach((document) => finalBatch.delete(document.ref));
-  finalBatch.delete(db.collection("salons").doc(salonId));
-  await finalBatch.commit();
-  deletedDocuments += userSnap.size + 2;
+  await cleanupBatch.commit();
+  return deletedDocuments + 2;
+}
 
-  for (let index = 0; index < authUids.length; index += 1000) {
-    const result = await getAuth().deleteUsers(authUids.slice(index, index + 1000));
-    if (result.failureCount > 0) {
-      throw new Error("auth_delete_failed");
-    }
+function salonDeletionAdapter(salonId: string, jobRef: DocumentReference): SalonDeletionAdapter {
+  return {
+    async loadJob() {
+      const snapshot = await jobRef.get();
+      if (!snapshot.exists) throw new Error("deletion_job_not_found");
+      return snapshot.data() as SalonDeletionJobState;
+    },
+    async updateJob(patch) {
+      await jobRef.set(salonDeletionJobUpdate(patch), { merge: true });
+    },
+    async collectAuthUids() {
+      const users = await db.collection("users").where("salonId", "==", salonId).get();
+      return users.docs.map((document) => document.id);
+    },
+    async deleteAuthUser(uid) {
+      await getAuth().deleteUser(uid);
+    },
+    async deleteFirestoreData() {
+      return deleteSalonFirestoreData(salonId);
+    },
+    async deleteStorageData() {
+      await storage.bucket().deleteFiles({ prefix: `salons/${salonId}/`, force: true });
+    },
+    async deleteSalonDocument() {
+      await db.collection("salons").doc(salonId).delete();
+    },
+    async writeAudit(action, metadata) {
+      await writeSalonDeletionAudit(salonId, action, metadata);
+    },
+  };
+}
+
+function salonDeletionJobUpdate(patch: SalonDeletionJobPatch) {
+  const { retryAfterMs, completedAt, ...fields } = patch;
+  const update: Record<string, unknown> = {
+    ...fields,
+    updatedAt: Timestamp.now(),
+  };
+  for (const [key, value] of Object.entries(update)) {
+    if (value === undefined) update[key] = FieldValue.delete();
   }
-  return { deletedDocuments, deletedUsers: authUids.length };
+  if (typeof retryAfterMs === "number") {
+    update.executeAfter = Timestamp.fromMillis(Date.now() + retryAfterMs);
+    update.lastFailedAt = Timestamp.now();
+  }
+  if (completedAt) {
+    update.completedAt = Timestamp.now();
+    update.leaseUntil = FieldValue.delete();
+    update.lastFailedAt = FieldValue.delete();
+  }
+  return update;
+}
+
+async function writeSalonDeletionAudit(
+  salonId: string,
+  action: SalonDeletionAuditAction,
+  metadata?: Record<string, unknown>,
+) {
+  const discriminator = String(metadata?.accountRef || metadata?.phase || "job");
+  const eventId = createHash("sha256")
+    .update(`${salonId}:${action}:${discriminator}`)
+    .digest("hex");
+  await db
+    .collection("audit_events")
+    .doc(eventId)
+    .set(
+      auditEventData({
+        salonId,
+        actorId: "system",
+        actorRole: "system",
+        action,
+        targetType: "salon_deletion_job",
+        targetId: salonId,
+        metadata,
+      }),
+      { merge: true },
+    );
 }
 
 export const processSalonDeletionJobs = onSchedule(
@@ -5543,7 +5617,15 @@ export const processSalonDeletionJobs = onSchedule(
     const now = Timestamp.now();
     const jobsSnap = await db
       .collection("salon_deletion_jobs")
-      .where("status", "==", "requested")
+      .where("status", "in", [
+        "requested",
+        "pending",
+        "collecting_accounts",
+        "deleting_auth_accounts",
+        "deleting_firestore_data",
+        "deleting_storage_data",
+        "failed",
+      ] satisfies SalonDeletionStatus[])
       .where("executeAfter", "<=", now)
       .limit(3)
       .get();
@@ -5552,9 +5634,19 @@ export const processSalonDeletionJobs = onSchedule(
       const acquired = await db.runTransaction(async (tx) => {
         const current = await tx.get(candidate.ref);
         const leaseUntilMs = timestampMillis(current.data()?.leaseUntil) ?? 0;
+        const status = String(current.data()?.status || "");
+        const retryableStatuses: SalonDeletionStatus[] = [
+          "requested",
+          "pending",
+          "collecting_accounts",
+          "deleting_auth_accounts",
+          "deleting_firestore_data",
+          "deleting_storage_data",
+          "failed",
+        ];
         if (
           !current.exists ||
-          current.data()?.status !== "requested" ||
+          !retryableStatuses.includes(status as SalonDeletionStatus) ||
           (timestampMillis(current.data()?.executeAfter) ?? Number.POSITIVE_INFINITY) >
             now.toMillis() ||
           leaseUntilMs > now.toMillis()
@@ -5576,20 +5668,11 @@ export const processSalonDeletionJobs = onSchedule(
 
       const salonId = String(candidate.data().salonId || candidate.id);
       try {
-        const result = await executeSalonDeletion(salonId);
-        await candidate.ref.set(
-          {
-            status: "completed",
-            ...result,
-            completedAt: Timestamp.now(),
-            leaseUntil: FieldValue.delete(),
-            updatedAt: Timestamp.now(),
-          },
-          { merge: true },
-        );
+        await runSalonDeletionJob(salonDeletionAdapter(salonId, candidate.ref));
       } catch (error) {
         await candidate.ref.set(
           {
+            status: "failed",
             leaseUntil: FieldValue.delete(),
             lastErrorCode: String((error as { code?: unknown })?.code || "deletion_failed").slice(
               0,
