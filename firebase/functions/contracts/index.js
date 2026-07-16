@@ -86,6 +86,7 @@ const ApiErrorCode = Object.freeze({
   RATE_LIMITED: "RATE_LIMITED",
   FEATURE_DISABLED: "FEATURE_DISABLED",
   MAINTENANCE_MODE: "MAINTENANCE_MODE",
+  ADMIN_WRITE_DISABLED: "ADMIN_WRITE_DISABLED",
   INTERNAL_ERROR: "INTERNAL_ERROR",
 });
 const ApiErrorCodeSchema = z.enum(Object.values(ApiErrorCode));

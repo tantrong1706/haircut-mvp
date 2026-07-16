@@ -20,33 +20,7 @@ describe("adminApi", () => {
     });
   });
 
-  it("gửi lý do khi đổi trạng thái salon", async () => {
-    mockedCall.mockResolvedValueOnce({
-      salonId: "salon-a",
-      previousStatus: "active",
-      status: "suspended",
-    });
-
-    await adminApi.updateSalonStatus({
-      salonId: "salon-a",
-      status: "suspended",
-      reason: "Kiểm tra gian lận",
-    });
-
-    expect(mockedCall).toHaveBeenCalledWith("updateSystemAdminSalonStatus", {
-      salonId: "salon-a",
-      status: "suspended",
-      reason: "Kiểm tra gian lận",
-    });
-  });
-
-  it("không gửi salonId khi cập nhật feature flags toàn hệ thống", async () => {
-    mockedCall.mockResolvedValueOnce({ salonId: null, features: {} });
-
-    await adminApi.updateFeatures({ features: { maintenanceMode: true } });
-
-    expect(mockedCall).toHaveBeenCalledWith("updateSystemFeatureFlags", {
-      features: { maintenanceMode: true },
-    });
+  it("không xuất bất kỳ thao tác ghi nào trong bản read-only", () => {
+    expect(Object.keys(adminApi)).toEqual(["overview", "salons", "features", "auditEvents"]);
   });
 });

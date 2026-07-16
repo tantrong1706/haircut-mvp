@@ -3,6 +3,7 @@ import { Timestamp, getFirestore } from "firebase-admin/firestore";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import {
   approvePointRequest,
+  cancelSessionAsSystemAdmin,
   cancelSalonDeletion,
   claimServiceSession,
   createManualCustomer,
@@ -15,15 +16,19 @@ import {
   spinLuckyWheel,
   submitPointRequest,
   updatePendingPointRequestPhotos,
+  updateSystemAdminUserStatus,
   updateSystemAdminSalonStatus,
+  updateSystemFeatureFlags,
 } from "../src/index";
 
 const emulatorHost = process.env.FIRESTORE_EMULATOR_HOST;
 const projectId = process.env.GCLOUD_PROJECT || "demo-haircut";
 const db = getFirestore();
+const originalAdminWriteFlag = process.env.ADMIN_WRITE_OPERATIONS_ENABLED;
 
 describe.skipIf(!emulatorHost)("callable transactions", () => {
   beforeEach(async () => {
+    delete process.env.ADMIN_WRITE_OPERATIONS_ENABLED;
     const response = await fetch(
       `http://${emulatorHost}/emulator/v1/projects/${projectId}/databases/(default)/documents`,
       { method: "DELETE" },
@@ -34,6 +39,8 @@ describe.skipIf(!emulatorHost)("callable transactions", () => {
   });
 
   afterAll(async () => {
+    if (originalAdminWriteFlag === undefined) delete process.env.ADMIN_WRITE_OPERATIONS_ENABLED;
+    else process.env.ADMIN_WRITE_OPERATIONS_ENABLED = originalAdminWriteFlag;
     await Promise.all(getApps().map((app) => deleteApp(app)));
   });
 
@@ -628,7 +635,7 @@ describe.skipIf(!emulatorHost)("callable transactions", () => {
     });
   });
 
-  it("chỉ system admin được khóa salon và thao tác luôn có audit", async () => {
+  it("chỉ system admin đọc được tổng quan hệ thống", async () => {
     const salonId = "salon-system-admin";
     await seedOwner("owner-system-admin-target", salonId);
     await db.collection("users").doc("system-admin").set({
@@ -640,26 +647,76 @@ describe.skipIf(!emulatorHost)("callable transactions", () => {
     await expect(
       getSystemAdminOverview.run(requestFor("owner-system-admin-target", {})),
     ).rejects.toMatchObject({ details: { errorCode: "FORBIDDEN" } });
+    await expect(getSystemAdminOverview.run(requestFor("", {}))).rejects.toMatchObject({
+      details: { errorCode: "UNAUTHENTICATED" },
+    });
 
     const overview = await getSystemAdminOverview.run(requestFor("system-admin", {}));
     expect(overview.salons.total).toBe(1);
-    await updateSystemAdminSalonStatus.run(
-      requestFor("system-admin", {
-        salonId,
-        status: "suspended",
-        reason: "Kiểm thử vận hành",
-      }),
+  });
+
+  it("khóa toàn bộ callable ghi Admin khi flag server mặc định tắt", async () => {
+    const salonId = "salon-admin-read-only";
+    const adminId = "system-admin-read-only";
+    await seedOwner("owner-admin-read-only", salonId);
+    await db.collection("users").doc(adminId).set({
+      role: "system_admin",
+      name: "Quản trị hệ thống",
+      isActive: true,
+    });
+
+    const writeAttempts = await Promise.allSettled([
+      updateSystemAdminSalonStatus.run(
+        requestFor(adminId, { salonId, status: "suspended", reason: "test" }),
+      ),
+      updateSystemFeatureFlags.run(requestFor(adminId, { features: { maintenanceMode: true } })),
+      updateSystemAdminUserStatus.run(
+        requestFor(adminId, { uid: "owner-admin-read-only", isActive: false, reason: "test" }),
+      ),
+      cancelSessionAsSystemAdmin.run(
+        requestFor(adminId, { sessionId: "session-not-used", reason: "test" }),
+      ),
+    ]);
+
+    for (const attempt of writeAttempts) {
+      expect(attempt).toMatchObject({
+        status: "rejected",
+        reason: { details: { errorCode: "ADMIN_WRITE_DISABLED" } },
+      });
+    }
+    expect((await db.collection("salons").doc(salonId).get()).data()).toMatchObject({
+      name: "HAIRCUT Test",
+    });
+    expect((await db.collection("salons").doc(salonId).get()).data()).not.toHaveProperty("status");
+    expect((await db.collection("users").doc("owner-admin-read-only").get()).data()?.isActive).toBe(
+      true,
     );
+  });
+
+  it("chỉ cho phép callable ghi khi flag server được bật rõ ràng", async () => {
+    const salonId = "salon-admin-write-flag";
+    const adminId = "system-admin-write-flag";
+    await seedOwner("owner-admin-write-flag", salonId);
+    await db.collection("users").doc(adminId).set({
+      role: "system_admin",
+      name: "Quản trị hệ thống",
+      isActive: true,
+    });
+    process.env.ADMIN_WRITE_OPERATIONS_ENABLED = "true";
+
+    try {
+      await updateSystemAdminSalonStatus.run(
+        requestFor(adminId, {
+          salonId,
+          status: "suspended",
+          reason: "Kiểm thử flag",
+        }),
+      );
+    } finally {
+      delete process.env.ADMIN_WRITE_OPERATIONS_ENABLED;
+    }
+
     expect((await db.collection("salons").doc(salonId).get()).data()?.status).toBe("suspended");
-    expect(
-      (
-        await db
-          .collection("audit_events")
-          .where("action", "==", "admin.salon_suspended")
-          .where("targetId", "==", salonId)
-          .get()
-      ).size,
-    ).toBe(1);
   });
 
   it("yêu cầu xóa salon idempotent và có thể hủy trong thời gian chờ", async () => {

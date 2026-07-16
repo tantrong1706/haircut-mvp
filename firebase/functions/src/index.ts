@@ -481,6 +481,16 @@ function currentUid(auth: { uid?: string } | undefined): string {
   return auth.uid;
 }
 
+function assertAdminWriteOperationsEnabled() {
+  if (process.env.ADMIN_WRITE_OPERATIONS_ENABLED !== "true") {
+    throw apiError(
+      "failed-precondition",
+      ApiErrorCode.ADMIN_WRITE_DISABLED,
+      "Admin đang ở chế độ chỉ đọc",
+    );
+  }
+}
+
 function assertRecentAuthentication(
   auth: { token?: Record<string, unknown> } | undefined,
   maxAgeMs = 5 * 60 * 1000,
@@ -5201,6 +5211,7 @@ export const listSystemAdminSalons = onCall(functionOptions, async (request) => 
 export const updateSystemAdminSalonStatus = onCall(functionOptions, async (request) => {
   const uid = currentUid(request.auth);
   await assertSystemAdmin(uid);
+  assertAdminWriteOperationsEnabled();
   const salonId = limitedString(request.data?.salonId, "salonId", 128);
   await enforceAuthenticatedRateLimit("adminMutation", uid, salonId);
   const statusResult = SalonStatusSchema.safeParse(request.data?.status);
@@ -5258,6 +5269,7 @@ export const updateSystemAdminSalonStatus = onCall(functionOptions, async (reque
 export const updateSystemFeatureFlags = onCall(functionOptions, async (request) => {
   const uid = currentUid(request.auth);
   await assertSystemAdmin(uid);
+  assertAdminWriteOperationsEnabled();
   const targetSalonId = optionalLimitedString(request.data?.salonId, "salonId", 128);
   await enforceAuthenticatedRateLimit("adminMutation", uid, targetSalonId || "__system__");
   const patch = parseFeaturePatch(request.data?.features);
@@ -5332,6 +5344,7 @@ export const getSystemFeatureFlags = onCall(functionOptions, async (request) => 
 export const updateSystemAdminUserStatus = onCall(functionOptions, async (request) => {
   const uid = currentUid(request.auth);
   await assertSystemAdmin(uid);
+  assertAdminWriteOperationsEnabled();
   const targetUid = limitedString(request.data?.uid, "uid", 128);
   await enforceAuthenticatedRateLimit("adminMutation", uid, "__system__");
   const isActive = requireBoolean(request.data?.isActive, "isActive");
@@ -5381,6 +5394,7 @@ export const updateSystemAdminUserStatus = onCall(functionOptions, async (reques
 export const cancelSessionAsSystemAdmin = onCall(functionOptions, async (request) => {
   const uid = currentUid(request.auth);
   await assertSystemAdmin(uid);
+  assertAdminWriteOperationsEnabled();
   const sessionId = limitedString(request.data?.sessionId, "sessionId", 128);
   await enforceAuthenticatedRateLimit("adminMutation", uid, "__system__");
   const reason = limitedString(request.data?.reason, "reason", 300);
