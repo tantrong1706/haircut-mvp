@@ -14,15 +14,15 @@ import { Network } from "@capacitor/network";
 import { Share } from "@capacitor/share";
 import { SplashScreen } from "@capacitor/splash-screen";
 import { CustomProvider, initializeAppCheck } from "firebase/app-check";
-import {
-  callFunction,
-  getFirebaseApp,
-} from "../../../zalo-mini-app/src/services/firebase";
+import { callFunction, getFirebaseApp } from "../../../zalo-mini-app/src/services/firebase";
 import type { ManagerUser } from "./ManagerApp";
+import { ManagerBootstrapError, createSingleFlight } from "./managerBootstrap";
 
 const PUSH_TOKEN_KEY = "push_token";
 const BIOMETRIC_KEY = "biometric_enabled";
 let nativeFirebaseInitialized = false;
+let activeNativeCleanup: (() => void | Promise<void>) | null = null;
+let nativeInitializationConsumers = 0;
 
 export function isNativeManager() {
   return Capacitor.isNativePlatform();
@@ -32,94 +32,144 @@ export async function initializeNativeFirebaseSecurity() {
   if (!isNativeManager() || nativeFirebaseInitialized) return;
   const app = getFirebaseApp();
   if (!app) {
-    throw new Error("Firebase chưa được cấu hình cho HAIRCUT Manager.");
+    throw new ManagerBootstrapError("MANAGER_FIREBASE_INIT_FAILED");
   }
 
-  await FirebaseAppCheck.initialize({ isTokenAutoRefreshEnabled: true });
-  const provider = new CustomProvider({
-    getToken: async () => {
-      const result = await FirebaseAppCheck.getToken({ forceRefresh: false });
-      return {
-        token: result.token,
-        expireTimeMillis: result.expireTimeMillis ?? Date.now() + 60 * 60 * 1000,
-      };
-    },
-  });
-  initializeAppCheck(app, { provider, isTokenAutoRefreshEnabled: true });
-  nativeFirebaseInitialized = true;
+  try {
+    await FirebaseAppCheck.initialize({ isTokenAutoRefreshEnabled: true });
+    const provider = new CustomProvider({
+      getToken: async () => {
+        const result = await FirebaseAppCheck.getToken({ forceRefresh: false });
+        return {
+          token: result.token,
+          expireTimeMillis: result.expireTimeMillis ?? Date.now() + 60 * 60 * 1000,
+        };
+      },
+    });
+    initializeAppCheck(app, { provider, isTokenAutoRefreshEnabled: true });
+    nativeFirebaseInitialized = true;
+  } catch {
+    throw new ManagerBootstrapError("MANAGER_APP_CHECK_FAILED");
+  }
 }
 
-export async function initializeNativeManager(input: {
+type NativeManagerInput = {
   user: ManagerUser;
   onOnlineChange: (online: boolean) => void;
   onLockedChange: (locked: boolean) => void;
   onNativeReady: (value: boolean) => void;
-}) {
+};
+
+const initializeNativeManagerOnce = createSingleFlight(async (input: NativeManagerInput) => {
   if (!isNativeManager()) {
     input.onNativeReady(false);
     return () => undefined;
   }
 
-  await initializeNativeFirebaseSecurity();
-  input.onNativeReady(true);
-  await SecureStorage.setKeyPrefix("haircut_manager_");
-  await SplashScreen.hide();
-  const network = await Network.getStatus();
-  input.onOnlineChange(network.connected);
+  if (activeNativeCleanup) await activeNativeCleanup();
   const handles: PluginListenerHandle[] = [];
+  try {
+    await initializeNativeFirebaseSecurity();
+    await SecureStorage.setKeyPrefix("haircut_manager_");
+    const network = await Network.getStatus();
+    input.onOnlineChange(network.connected);
+    input.onNativeReady(true);
 
-  handles.push(
-    await Network.addListener("networkStatusChange", (status) => {
-      input.onOnlineChange(status.connected);
-    }),
-  );
-  handles.push(
-    await CapacitorApp.addListener("appUrlOpen", ({ url }) => {
-      dispatchManagerRoute(routeFromUrl(url));
-    }),
-  );
-  handles.push(
-    await CapacitorApp.addListener("appStateChange", ({ isActive }) => {
-      if (isActive) {
-        void authenticateIfEnabled(input.onLockedChange);
+    handles.push(
+      await Network.addListener("networkStatusChange", (status) => {
+        input.onOnlineChange(status.connected);
+      }),
+    );
+    handles.push(
+      await CapacitorApp.addListener("appUrlOpen", ({ url }) => {
+        dispatchManagerRoute(routeFromUrl(url));
+      }),
+    );
+    handles.push(
+      await CapacitorApp.addListener("appStateChange", ({ isActive }) => {
+        if (isActive) {
+          void authenticateIfEnabled(input.onLockedChange);
+        }
+      }),
+    );
+    handles.push(
+      await FirebaseMessaging.addListener("tokenReceived", ({ token }) => {
+        void registerPushToken(input.user, token);
+      }),
+    );
+    handles.push(
+      await FirebaseMessaging.addListener("notificationActionPerformed", (event) => {
+        const data = event.notification.data as Record<string, unknown> | undefined;
+        dispatchManagerRoute(String(data?.route || ""));
+      }),
+    );
+
+    window.__haircutBeforeSignOut = async () => {
+      const token = await SecureStorage.get(PUSH_TOKEN_KEY);
+      try {
+        if (typeof token === "string" && token) {
+          await callFunction("unregisterManagerDeviceToken", { token });
+        }
+      } finally {
+        await FirebaseMessaging.deleteToken().catch(() => undefined);
+        await SecureStorage.remove(PUSH_TOKEN_KEY);
       }
-    }),
-  );
-  handles.push(
-    await FirebaseMessaging.addListener("tokenReceived", ({ token }) => {
-      void registerPushToken(input.user, token);
-    }),
-  );
-  handles.push(
-    await FirebaseMessaging.addListener("notificationActionPerformed", (event) => {
-      const data = event.notification.data as Record<string, unknown> | undefined;
-      dispatchManagerRoute(String(data?.route || ""));
-    }),
-  );
+    };
+    window.__haircutNativeShare = async (url: string, title: string) => {
+      await Share.share({ title, text: "Mã QR HAIRCUT", url, dialogTitle: "Chia sẻ QR" });
+    };
 
-  window.__haircutBeforeSignOut = async () => {
-    const token = await SecureStorage.get(PUSH_TOKEN_KEY);
-    try {
-      if (typeof token === "string" && token) {
-        await callFunction("unregisterManagerDeviceToken", { token });
-      }
-    } finally {
-      await FirebaseMessaging.deleteToken().catch(() => undefined);
-      await SecureStorage.remove(PUSH_TOKEN_KEY);
-    }
-  };
-  window.__haircutNativeShare = async (url: string, title: string) => {
-    await Share.share({ title, text: "Mã QR HAIRCUT", url, dialogTitle: "Chia sẻ QR" });
-  };
+    await requestPushPermission(input.user);
+    await authenticateIfEnabled(input.onLockedChange);
 
-  await requestPushPermission(input.user);
-  await authenticateIfEnabled(input.onLockedChange);
-
-  return async () => {
+    let cleaned = false;
+    const cleanup = async () => {
+      if (cleaned) return;
+      cleaned = true;
+      delete window.__haircutBeforeSignOut;
+      delete window.__haircutNativeShare;
+      await Promise.all(handles.map((handle) => handle.remove()));
+      if (activeNativeCleanup === cleanup) activeNativeCleanup = null;
+    };
+    activeNativeCleanup = cleanup;
+    return cleanup;
+  } catch (error) {
     delete window.__haircutBeforeSignOut;
     delete window.__haircutNativeShare;
-    await Promise.all(handles.map((handle) => handle.remove()));
-  };
+    await Promise.all(handles.map((handle) => handle.remove().catch(() => undefined)));
+    if (error instanceof ManagerBootstrapError) throw error;
+    throw new ManagerBootstrapError("MANAGER_NATIVE_PLUGIN_FAILED");
+  }
+});
+
+export function initializeNativeManager(input: NativeManagerInput) {
+  nativeInitializationConsumers += 1;
+  return initializeNativeManagerOnce(input)
+    .then(() => {
+      let released = false;
+      return async () => {
+        if (released) return;
+        released = true;
+        nativeInitializationConsumers = Math.max(0, nativeInitializationConsumers - 1);
+        if (nativeInitializationConsumers === 0 && activeNativeCleanup) {
+          await activeNativeCleanup();
+        }
+      };
+    })
+    .catch((error) => {
+      nativeInitializationConsumers = Math.max(0, nativeInitializationConsumers - 1);
+      throw error;
+    });
+}
+
+export async function safelyHideSplashScreen() {
+  if (!isNativeManager()) return true;
+  try {
+    await SplashScreen.hide();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function scanRewardCode() {
