@@ -1,18 +1,14 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
-  Camera,
   ClipboardPenLine,
   Clock3,
-  ImagePlus,
-  LoaderCircle,
   Send,
-  ShieldCheck,
   TicketCheck,
-  Trash2,
   UserRoundCheck,
   UsersRound,
   XCircle,
 } from "lucide-react";
+import { HaircutPhotoCapture } from "../components/HaircutPhotoCapture";
 import { RedeemRewardPanel } from "../components/RedeemRewardPanel";
 import { BrandLogo } from "../components/BrandLogo";
 import {
@@ -80,6 +76,15 @@ export function StaffPage({ currentUser }: Props) {
     selectedSession?.status === "serving" &&
     Boolean(selectedSession.assignedStaffId) &&
     !isAssignedToCurrentUser;
+  const photoDisabledReason = !canEditService
+    ? selectedSession?.status === "waiting"
+      ? "Nhận khách trước khi chụp ảnh."
+      : selectedSession?.status === "pending_approval"
+        ? "Ảnh đã được gửi sang chủ salon duyệt."
+        : isAssignedToAnother
+          ? `Lượt này đang do ${selectedSession?.assignedStaffName || "nhân viên khác"} phụ trách.`
+          : "Chỉ người đang phụ trách lượt cắt mới được chụp ảnh."
+    : "";
   const canRedeemRewards = currentUser.role === "owner" || currentUser.canRedeemRewards === true;
   const currentBranchName =
     branchFilter === "all"
@@ -516,6 +521,21 @@ export function StaffPage({ currentUser }: Props) {
               </div>
             </div>
 
+            <HaircutPhotoCapture
+              photos={selectedPhotos}
+              consentGranted={customerAllowsPhoto}
+              busy={photoBusy}
+              disabled={!canEditService}
+              disabledReason={
+                hasRevokedPhotoConsent
+                  ? "Khách đã rút quyền lưu ảnh. Hãy xóa ảnh trước khi gửi duyệt."
+                  : photoDisabledReason
+              }
+              maxPhotos={MAX_HAIRCUT_PHOTOS}
+              onFilesSelected={handlePhotoFiles}
+              onRemove={removePhoto}
+            />
+
             <label className="field">
               <span>
                 <ClipboardPenLine size={18} aria-hidden="true" />
@@ -540,107 +560,6 @@ export function StaffPage({ currentUser }: Props) {
                 disabled={!canEditService}
               />
             </label>
-
-            <section className="staff-photo-panel" aria-label="Ảnh kiểu tóc">
-              <div className="staff-photo-heading">
-                <div>
-                  <span>Ảnh kiểu tóc</span>
-                  <strong>
-                    {selectedPhotos.length}/{MAX_HAIRCUT_PHOTOS} ảnh
-                  </strong>
-                </div>
-                {photoBusy ? (
-                  <LoaderCircle className="spin-icon" size={20} aria-hidden="true" />
-                ) : null}
-              </div>
-
-              {!customerAllowsPhoto ? (
-                <div className="photo-consent-notice">
-                  <ShieldCheck size={20} aria-hidden="true" />
-                  <span>
-                    {selectedPhotos.length > 0
-                      ? "Khách đã rút quyền lưu ảnh. Hãy xóa ảnh trước khi gửi duyệt."
-                      : "Khách chưa đồng ý lưu ảnh. Không chụp hoặc tải ảnh lên."}
-                  </span>
-                </div>
-              ) : (
-                <div className="staff-photo-actions">
-                  <label
-                    className={
-                      !canEditService || photoBusy || selectedPhotos.length >= MAX_HAIRCUT_PHOTOS
-                        ? "photo-action disabled"
-                        : "photo-action"
-                    }
-                  >
-                    <Camera size={19} aria-hidden="true" />
-                    <span>Chụp ảnh</span>
-                    <input
-                      aria-label="Chụp ảnh kiểu tóc"
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp"
-                      capture="environment"
-                      disabled={
-                        !canEditService || photoBusy || selectedPhotos.length >= MAX_HAIRCUT_PHOTOS
-                      }
-                      onChange={(event) => {
-                        const files = Array.from(event.target.files ?? []);
-                        event.target.value = "";
-                        void handlePhotoFiles(files);
-                      }}
-                    />
-                  </label>
-
-                  <label
-                    className={
-                      !canEditService || photoBusy || selectedPhotos.length >= MAX_HAIRCUT_PHOTOS
-                        ? "photo-action secondary disabled"
-                        : "photo-action secondary"
-                    }
-                  >
-                    <ImagePlus size={19} aria-hidden="true" />
-                    <span>Chọn ảnh</span>
-                    <input
-                      aria-label="Chọn ảnh kiểu tóc từ máy"
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp"
-                      multiple
-                      disabled={
-                        !canEditService || photoBusy || selectedPhotos.length >= MAX_HAIRCUT_PHOTOS
-                      }
-                      onChange={(event) => {
-                        const files = Array.from(event.target.files ?? []);
-                        event.target.value = "";
-                        void handlePhotoFiles(files);
-                      }}
-                    />
-                  </label>
-                </div>
-              )}
-
-              {selectedPhotos.length > 0 ? (
-                <div className="haircut-photo-grid staff-photo-grid">
-                  {selectedPhotos.map((photo, index) => (
-                    <div className="haircut-photo" key={photo.id}>
-                      <img src={photo.url} alt={`Ảnh kiểu tóc ${index + 1}`} />
-                      <button
-                        type="button"
-                        aria-label={`Xóa ảnh kiểu tóc ${index + 1}`}
-                        disabled={photoBusy}
-                        onClick={() => void removePhoto(photo)}
-                      >
-                        <Trash2 size={16} aria-hidden="true" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              ) : customerAllowsPhoto ? (
-                <small>
-                  {canEditService
-                    ? "Chụp ảnh sau khi hoàn tất để lưu đúng kiểu tóc của khách."
-                    : "Nhận khách trước khi chụp ảnh."}
-                </small>
-              ) : null}
-            </section>
 
             {selectedSession.status === "waiting" ? (
               <div className="button-row wrap-row">

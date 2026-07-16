@@ -7,8 +7,10 @@ import {
   createManualCustomer,
   redeemRewardCode,
   restoreRewardCode,
+  searchSalonCustomers,
   spinLuckyWheel,
   submitPointRequest,
+  updatePendingPointRequestPhotos,
 } from "../src/index";
 
 const emulatorHost = process.env.FIRESTORE_EMULATOR_HOST;
@@ -118,6 +120,100 @@ describe.skipIf(!emulatorHost)("callable transactions", () => {
     await expect(
       approvePointRequest.run(requestFor("owner-flow", { salonId, requestId: sessionId })),
     ).rejects.toMatchObject({ code: "failed-precondition" });
+  });
+
+  it("chỉ owner được cập nhật ảnh của yêu cầu đang chờ duyệt", async () => {
+    const salonId = "salon-owner-photo";
+    const branchId = "branch-owner-photo";
+    const customerId = "customer-owner-photo";
+    const sessionId = "session-owner-photo";
+    await seedOwner("owner-photo", salonId, { customerCount: 1 });
+    await db
+      .collection("users")
+      .doc("staff-photo")
+      .set({
+        salonId,
+        role: "staff",
+        name: "Nhân viên ảnh",
+        isActive: true,
+        branchIds: [branchId],
+      });
+    await db.collection("customers").doc(customerId).set({
+      salonId,
+      name: "Khách ảnh",
+      points: 0,
+      allowPhoto: true,
+    });
+    await db.collection("chair_sessions").doc(sessionId).set({
+      salonId,
+      branchId,
+      customerId,
+      status: "pending_approval",
+    });
+    await db
+      .collection("point_requests")
+      .doc(sessionId)
+      .set({
+        salonId,
+        branchId,
+        sessionId,
+        customerId,
+        status: "pending",
+        photoUrls: [
+          "https://firebasestorage.googleapis.com/v0/b/demo-haircut/o/" +
+            encodeURIComponent(
+              `salons/${salonId}/customers/${customerId}/haircuts/${sessionId}/photo-existing1234.jpg`,
+            ),
+        ],
+        customerSummary: { name: "Khách ảnh", allowPhoto: true },
+      });
+
+    await expect(
+      updatePendingPointRequestPhotos.run(
+        requestFor("staff-photo", { salonId, requestId: sessionId, photoUrls: [] }),
+      ),
+    ).rejects.toMatchObject({ code: "permission-denied" });
+
+    await updatePendingPointRequestPhotos.run(
+      requestFor("owner-photo", { salonId, requestId: sessionId, photoUrls: [] }),
+    );
+    expect((await db.collection("point_requests").doc(sessionId).get()).data()?.photoUrls).toEqual(
+      [],
+    );
+  });
+
+  it("chỉ owner nhận số điện thoại đầy đủ khi tìm khách", async () => {
+    const salonId = "salon-customer-phone";
+    await seedOwner("owner-customer-phone", salonId, { customerCount: 1 });
+    await db.collection("users").doc("staff-customer-phone").set({
+      salonId,
+      role: "staff",
+      name: "Nhân viên",
+      isActive: true,
+      branchIds: [],
+    });
+    await db.collection("customers").doc("customer-phone").set({
+      salonId,
+      name: "Khách có số",
+      phone: "84912345678",
+      phoneLast4: "5678",
+      points: 2,
+      allowPhoto: false,
+    });
+
+    const ownerResult = await searchSalonCustomers.run(
+      requestFor("owner-customer-phone", { salonId, term: "5678" }),
+    );
+    const staffResult = await searchSalonCustomers.run(
+      requestFor("staff-customer-phone", { salonId, term: "5678" }),
+    );
+
+    expect(ownerResult.customers[0]).toMatchObject({
+      phone: "84912345678",
+      phoneLast4: "5678",
+    });
+    expect(staffResult.customers[0]).toMatchObject({ phoneLast4: "5678" });
+    expect(staffResult.customers[0]).not.toHaveProperty("phone");
   });
 
   it("quay, đổi và hoàn tác quà giữ đúng điểm và trạng thái", async () => {

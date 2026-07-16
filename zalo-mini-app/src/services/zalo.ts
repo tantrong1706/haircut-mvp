@@ -83,7 +83,7 @@ export async function requestPhoneToken(): Promise<string | null> {
   try {
     const { getPhoneNumber } = await import("zmp-sdk/apis");
     const { token } = await getPhoneNumber();
-    return token;
+    return String(token || "").trim() || null;
   } catch {
     return null;
   }

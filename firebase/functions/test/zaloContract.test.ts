@@ -38,4 +38,14 @@ describe("hợp đồng xác minh Zalo", () => {
     expect(verificationIndex).toBeGreaterThanOrEqual(0);
     expect(businessIndex).toBeGreaterThan(verificationIndex);
   });
+
+  it("giải mã phone token ở backend trước khi lưu khách", () => {
+    const body = callableBody("registerCustomerFromZalo");
+    const decodeIndex = body.indexOf("decodeZaloPhoneNumber(accessToken, phoneToken, appSecret");
+    const contactIndex = body.indexOf("buildCustomerContactPatch");
+
+    expect(decodeIndex).toBeGreaterThanOrEqual(0);
+    expect(contactIndex).toBeGreaterThan(decodeIndex);
+    expect(body).toContain('phoneLast4: String(customerSnap.data()?.phoneLast4 || "")');
+  });
 });

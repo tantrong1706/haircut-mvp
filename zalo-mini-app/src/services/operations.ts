@@ -27,6 +27,7 @@ const SESSION_POINT_REQUEST_WINDOW_MS = 12 * 60 * 60 * 1000;
 export type CustomerSummary = {
   id: string;
   name: string;
+  phone?: string;
   phoneLast4: string;
   points: number;
   allowPhoto: boolean;
@@ -81,6 +82,7 @@ export type OwnerOverview = {
 export type InactiveCustomer = {
   id: string;
   name: string;
+  phone?: string;
   phoneLast4: string;
   points: number;
   lastVisitAtMs: number | null;
@@ -293,24 +295,7 @@ export function listenPendingPointRequests(
           .filter((request) => request.status === "pending")
           .sort((a, b) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0));
 
-        const legacyRequests = requests.filter((request) => !request.customer);
-        if (legacyRequests.length === 0) {
-          onChange(requests);
-          return;
-        }
-
-        const legacyCustomers = new Map(
-          (await attachCustomersToRequests(legacyRequests)).map((request) => [
-            request.id,
-            request.customer,
-          ]),
-        );
-        onChange(
-          requests.map((request) => ({
-            ...request,
-            customer: request.customer ?? legacyCustomers.get(request.id),
-          })),
-        );
+        onChange(await attachCustomersToRequests(requests));
       } catch (error) {
         onError(errorMessage(error));
       }
@@ -454,6 +439,7 @@ async function getOwnerOverviewDirect(
       return {
         id: item.id,
         name: String(data.name || "Khách hàng"),
+        phone: String(data.phone || ""),
         phoneLast4: String(data.phoneLast4 || ""),
         points: Number(data.points ?? 0),
         lastVisitAtMs,
@@ -896,6 +882,14 @@ export async function submitPointRequest(input: {
     },
     () => submitPointRequestDirect({ ...input, pointsRequested }),
   );
+}
+
+export async function updatePendingPointRequestPhotos(input: {
+  salonId: string;
+  requestId: string;
+  photoUrls: string[];
+}): Promise<{ photoUrls: string[] }> {
+  return callFunction("updatePendingPointRequestPhotos", input);
 }
 
 export async function claimServiceSession(input: {
@@ -1626,6 +1620,7 @@ async function searchSalonCustomersDirect(
       return {
         id: docSnap.id,
         name: String(data.name || "Khách hàng"),
+        phone: String(data.phone || ""),
         phoneLast4: String(data.phoneLast4 || ""),
         points: Number(data.points ?? 0),
         allowPhoto: Boolean(data.allowPhoto),
@@ -2015,10 +2010,13 @@ function trustedPointRequestPhotoUrls(
 
 async function attachCustomersToRequests(requests: PointRequest[]) {
   const pairs = await Promise.all(
-    requests.map(async (request) => ({
-      ...request,
-      customer: await getCustomer(request.customerId),
-    })),
+    requests.map(async (request) => {
+      const customer = await getCustomer(request.customerId);
+      return {
+        ...request,
+        customer: customer ?? request.customer,
+      };
+    }),
   );
 
   return pairs;
@@ -2042,6 +2040,7 @@ async function getCustomer(customerId: string): Promise<CustomerSummary | undefi
   return {
     id: snap.id,
     name: String(data.name || "Khách hàng"),
+    phone: String(data.phone || ""),
     phoneLast4: String(data.phoneLast4 || ""),
     points: Number(data.points ?? 0),
     allowPhoto: Boolean(data.allowPhoto),

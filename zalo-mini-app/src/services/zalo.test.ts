@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getZaloIdentity } from "./zalo";
+import { getZaloIdentity, requestPhoneToken } from "./zalo";
 
 const mocks = vi.hoisted(() => ({
   getAccessToken: vi.fn(),
+  getPhoneNumber: vi.fn(),
   getUserInfo: vi.fn(),
   isZaloMiniAppRuntime: vi.fn(),
 }));
@@ -13,6 +14,7 @@ vi.mock("./runtime", () => ({
 
 vi.mock("zmp-sdk/apis", () => ({
   getAccessToken: mocks.getAccessToken,
+  getPhoneNumber: mocks.getPhoneNumber,
   getUserInfo: mocks.getUserInfo,
 }));
 
@@ -55,5 +57,24 @@ describe("getZaloIdentity", () => {
       name: "Khách xem trước",
     });
     expect(mocks.getAccessToken).not.toHaveBeenCalled();
+  });
+});
+
+describe("requestPhoneToken", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.isZaloMiniAppRuntime.mockReturnValue(true);
+  });
+
+  it("trả phone token khi khách đồng ý chia sẻ số Zalo", async () => {
+    mocks.getPhoneNumber.mockResolvedValue({ token: " phone-token-test " });
+
+    await expect(requestPhoneToken()).resolves.toBe("phone-token-test");
+  });
+
+  it("trả null khi khách từ chối quyền số điện thoại", async () => {
+    mocks.getPhoneNumber.mockRejectedValue(new Error("permission denied"));
+
+    await expect(requestPhoneToken()).resolves.toBeNull();
   });
 });

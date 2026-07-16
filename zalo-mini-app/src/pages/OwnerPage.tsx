@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import QRCode from "qrcode";
 import { BrandLogo } from "../components/BrandLogo";
+import { HaircutPhotoCapture, type HaircutPhotoItem } from "../components/HaircutPhotoCapture";
 import { RedeemRewardPanel } from "../components/RedeemRewardPanel";
 import {
   CustomerLookupResult,
@@ -54,10 +55,16 @@ import {
   saveLuckyWheelConfig,
   searchSalonCustomers,
   updateBranch,
+  updatePendingPointRequestPhotos,
   updateSalonProfile,
   updateStaffProfile,
 } from "../services/operations";
 import { AppUser, updateOwnerAvatar, uploadOwnerAvatarFile } from "../services/auth";
+import {
+  MAX_HAIRCUT_PHOTOS,
+  deleteHaircutPhoto,
+  uploadHaircutPhoto,
+} from "../services/customerPhotos";
 import { trackEvent, withMonitoringTrace } from "../services/monitoring";
 import { LuckyWheelConfig, defaultLuckyWheelConfig } from "../services/types";
 
@@ -88,6 +95,7 @@ export function OwnerPage({ currentUser }: Props) {
   const [salonProfile, setSalonProfile] = useState<SalonProfile | null>(null);
   const [wheelConfig, setWheelConfig] = useState<LuckyWheelConfig>(defaultLuckyWheelConfig);
   const [busyId, setBusyId] = useState("");
+  const [photoBusyId, setPhotoBusyId] = useState("");
   const [loadingOverview, setLoadingOverview] = useState(true);
   const [savingSalonProfile, setSavingSalonProfile] = useState(false);
   const [savingWheel, setSavingWheel] = useState(false);
@@ -303,6 +311,97 @@ export function OwnerPage({ currentUser }: Props) {
     }
   }
 
+  async function addOwnerPhotos(request: PointRequest, files: File[]) {
+    if (photoBusyId || request.customer?.allowPhoto !== true || files.length === 0) {
+      return;
+    }
+
+    const availableSlots = MAX_HAIRCUT_PHOTOS - request.photoUrls.length;
+    if (availableSlots <= 0) {
+      setError(`Mỗi lượt chỉ lưu tối đa ${MAX_HAIRCUT_PHOTOS} ảnh.`);
+      return;
+    }
+    if (files.length > availableSlots) {
+      setError(`Bạn chỉ có thể thêm ${availableSlots} ảnh nữa cho lượt này.`);
+      return;
+    }
+
+    setPhotoBusyId(request.id);
+    setMessage("");
+    setError("");
+    const uploadedPhotos: Array<{ path: string; url: string }> = [];
+
+    try {
+      for (const file of files) {
+        const uploaded = await withMonitoringTrace(
+          "owner_upload_haircut_photo",
+          () =>
+            uploadHaircutPhoto({
+              salonId,
+              branchId: request.branchId,
+              customerId: request.customerId,
+              sessionId: request.sessionId,
+              file,
+            }),
+          { salon_id: salonId, file_size: file.size, file_type: file.type },
+        );
+        uploadedPhotos.push(uploaded);
+      }
+
+      const nextPhotoUrls = [...request.photoUrls, ...uploadedPhotos.map((photo) => photo.url)];
+      await updatePendingPointRequestPhotos({
+        salonId,
+        requestId: request.id,
+        photoUrls: nextPhotoUrls,
+      });
+      setRequests((current) =>
+        current.map((item) =>
+          item.id === request.id ? { ...item, photoUrls: nextPhotoUrls } : item,
+        ),
+      );
+      setMessage(`Đã lưu ${uploadedPhotos.length} ảnh cho ${request.customer?.name || "khách"}.`);
+    } catch (err) {
+      await Promise.allSettled(uploadedPhotos.map((photo) => deleteHaircutPhoto(photo.path)));
+      setError(err instanceof Error ? err.message : "Không lưu được ảnh kiểu tóc");
+    } finally {
+      setPhotoBusyId("");
+    }
+  }
+
+  async function removeOwnerPhoto(request: PointRequest, photo: HaircutPhotoItem) {
+    if (photoBusyId) {
+      return;
+    }
+
+    setPhotoBusyId(request.id);
+    setMessage("");
+    setError("");
+    const nextPhotoUrls = request.photoUrls.filter((photoUrl) => photoUrl !== photo.url);
+
+    try {
+      await updatePendingPointRequestPhotos({
+        salonId,
+        requestId: request.id,
+        photoUrls: nextPhotoUrls,
+      });
+      setRequests((current) =>
+        current.map((item) =>
+          item.id === request.id ? { ...item, photoUrls: nextPhotoUrls } : item,
+        ),
+      );
+      try {
+        await deleteHaircutPhoto(photo.url);
+      } catch {
+        trackEvent("owner_haircut_photo_cleanup_deferred", { salon_id: salonId });
+      }
+      setMessage("Đã gỡ ảnh khỏi yêu cầu duyệt.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không gỡ được ảnh kiểu tóc");
+    } finally {
+      setPhotoBusyId("");
+    }
+  }
+
   async function saveWheel() {
     setSavingWheel(true);
     setMessage("");
@@ -451,7 +550,7 @@ export function OwnerPage({ currentUser }: Props) {
         <OwnerTabButton
           active={activeTab === "approvals"}
           icon={<ClipboardCheck size={18} />}
-          label="Duyệt"
+          label="Duyệt & ảnh"
           onClick={() => setActiveTab("approvals")}
         />
         <OwnerTabButton
@@ -522,7 +621,15 @@ export function OwnerPage({ currentUser }: Props) {
           />
         </>
       ) : activeTab === "approvals" ? (
-        <ApprovalsPanel requests={requests} busyId={busyId} onApprove={approve} onReject={reject} />
+        <ApprovalsPanel
+          requests={requests}
+          busyId={busyId}
+          photoBusyId={photoBusyId}
+          onApprove={approve}
+          onReject={reject}
+          onAddPhotos={addOwnerPhotos}
+          onRemovePhoto={removeOwnerPhoto}
+        />
       ) : activeTab === "branches" ? (
         <BranchesPanel
           salonId={salonId}
@@ -973,8 +1080,7 @@ function OverviewPanel({
                 <div>
                   <strong>{customer.name}</strong>
                   <span>
-                    {customer.phoneLast4 ? `******${customer.phoneLast4}` : "Chưa có SĐT"} ·{" "}
-                    {customer.points} điểm
+                    {ownerPhoneLabel(customer)} · {customer.points} điểm
                   </span>
                 </div>
                 <div>
@@ -991,11 +1097,11 @@ function OverviewPanel({
         <button type="button" onClick={() => onOpenTab("approvals")}>
           <ClipboardCheck size={20} aria-hidden="true" />
           <span>
-            <strong>Duyệt điểm</strong>
+            <strong>Duyệt điểm & ảnh</strong>
             <small>
               {data.pendingRequests > 0
-                ? `${data.pendingRequests} yêu cầu đang chờ`
-                : "Chưa có yêu cầu mới"}
+                ? `${data.pendingRequests} khách đang chờ duyệt`
+                : "Chụp bổ sung khi có yêu cầu mới"}
             </small>
           </span>
         </button>
@@ -1061,16 +1167,35 @@ function formatInactiveDays(days: number) {
   return `${days} ngày`;
 }
 
+function ownerPhoneLabel(customer: { phone?: string; phoneLast4: string }) {
+  const digits = String(customer.phone || "").replace(/\D/g, "");
+
+  if (digits.startsWith("84") && digits.length >= 10) {
+    return `0${digits.slice(2)}`;
+  }
+  if (digits) {
+    return digits;
+  }
+
+  return customer.phoneLast4 ? `******${customer.phoneLast4}` : "Chưa có SĐT";
+}
+
 function ApprovalsPanel({
   requests,
   busyId,
+  photoBusyId,
   onApprove,
   onReject,
+  onAddPhotos,
+  onRemovePhoto,
 }: {
   requests: PointRequest[];
   busyId: string;
+  photoBusyId: string;
   onApprove: (request: PointRequest) => void;
   onReject: (request: PointRequest) => void;
+  onAddPhotos: (request: PointRequest, files: File[]) => void | Promise<void>;
+  onRemovePhoto: (request: PointRequest, photo: HaircutPhotoItem) => void | Promise<void>;
 }) {
   return (
     <div className="ops-list">
@@ -1078,32 +1203,29 @@ function ApprovalsPanel({
         <div className="empty-state">
           <ClipboardCheck size={30} aria-hidden="true" />
           <strong>Chưa có yêu cầu cộng điểm</strong>
-          <p>Khi nhân viên gửi yêu cầu sau khi cắt, chủ salon sẽ duyệt tại đây.</p>
+          <p>Khi nhân viên gửi yêu cầu, chủ salon có thể bổ sung ảnh rồi duyệt tại đây.</p>
         </div>
       ) : (
         requests.map((request) => (
           <article className="ops-card static-card approval-card" key={request.id}>
             <span className="ops-card-title">{request.customer?.name || "Khách hàng"}</span>
-            <span>
-              SĐT:{" "}
-              {request.customer?.phoneLast4 ? `******${request.customer.phoneLast4}` : "Chưa có"}
-            </span>
+            <span>SĐT: {request.customer ? ownerPhoneLabel(request.customer) : "Chưa có"}</span>
             <span>Thợ: {request.staffName || "Nhân viên"}</span>
             <span>Chi nhánh: {request.branchName || "Chi nhánh"}</span>
             <p>{request.note || "Không có ghi chú"}</p>
-            {request.customer?.allowPhoto === true && request.photoUrls.length > 0 ? (
-              <div className="haircut-photo-grid approval-photo-grid" aria-label="Ảnh kiểu tóc">
-                {request.photoUrls.map((photoUrl, index) => (
-                  <div className="haircut-photo" key={photoUrl}>
-                    <img
-                      src={photoUrl}
-                      alt={`Ảnh kiểu tóc ${index + 1} của ${request.customer?.name || "khách hàng"}`}
-                      loading="lazy"
-                    />
-                  </div>
-                ))}
-              </div>
-            ) : null}
+            <HaircutPhotoCapture
+              title="Ảnh khách sau cắt"
+              photos={request.photoUrls.map((photoUrl) => ({ id: photoUrl, url: photoUrl }))}
+              consentGranted={request.customer?.allowPhoto === true}
+              busy={photoBusyId === request.id}
+              disabled={busyId === request.id || Boolean(photoBusyId)}
+              disabledReason="Chụp hoặc chọn ảnh trước khi duyệt điểm."
+              captureLabel={`Chụp ảnh kiểu tóc cho ${request.customer?.name || "khách hàng"}`}
+              galleryLabel={`Chọn ảnh kiểu tóc cho ${request.customer?.name || "khách hàng"}`}
+              maxPhotos={MAX_HAIRCUT_PHOTOS}
+              onFilesSelected={(files) => onAddPhotos(request, files)}
+              onRemove={(photo) => onRemovePhoto(request, photo)}
+            />
             <small>
               +{request.pointsAdded} điểm · {formatDateTime(request.createdAtMs)}
             </small>
@@ -1111,7 +1233,7 @@ function ApprovalsPanel({
             <div className="button-row">
               <button
                 className="primary-button compact"
-                disabled={busyId === request.id}
+                disabled={busyId === request.id || photoBusyId === request.id}
                 onClick={() => onApprove(request)}
               >
                 <CheckCircle2 size={18} aria-hidden="true" />
@@ -1119,7 +1241,7 @@ function ApprovalsPanel({
               </button>
               <button
                 className="secondary-button"
-                disabled={busyId === request.id}
+                disabled={busyId === request.id || photoBusyId === request.id}
                 onClick={() => onReject(request)}
               >
                 <XCircle size={18} aria-hidden="true" />
@@ -2027,7 +2149,7 @@ function CustomerSearchPanel({
                 <span className="ops-card-title">{customer.name}</span>
                 <span className="pill">{customer.points} điểm</span>
               </div>
-              <span>SĐT: {customer.phoneLast4 ? `******${customer.phoneLast4}` : "Chưa có"}</span>
+              <span>SĐT: {ownerPhoneLabel(customer)}</span>
               <span>Lần ghé gần nhất: {formatDateTime(customer.lastVisitAtMs) || "Chưa có"}</span>
 
               <div className="customer-insight-grid">

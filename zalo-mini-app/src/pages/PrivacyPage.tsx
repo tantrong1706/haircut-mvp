@@ -90,6 +90,9 @@ export function PrivacyPage() {
             </>
           ) : null}
         </p>
+        <p>
+          <a href="/terms">Đọc Điều khoản sử dụng của HAIRCUT</a>
+        </p>
       </div>
     </section>
   );

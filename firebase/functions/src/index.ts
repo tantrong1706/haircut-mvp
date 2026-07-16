@@ -11,7 +11,7 @@ import {
 import { getAuth } from "firebase-admin/auth";
 import { getStorage } from "firebase-admin/storage";
 import { defineSecret } from "firebase-functions/params";
-import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { HttpsError, onCall, onRequest } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import {
   buildCustomerContactPatch,
@@ -48,6 +48,12 @@ import {
   shouldReuseActiveSession,
 } from "./security";
 import { ZaloRequestError, fetchZaloJson } from "./zaloClient";
+import { decodeZaloPhoneNumber } from "./zaloPhone";
+import {
+  createZaloPrivacyWebhookHandler,
+  type ZaloPrivacyEvent,
+  type ZaloPrivacyProcessingResult,
+} from "./zaloPrivacyWebhook";
 
 initializeApp();
 
@@ -55,6 +61,7 @@ const db = getFirestore();
 const storage = getStorage();
 const functionOptions = { region: "asia-southeast1" };
 const zaloAppSecret = defineSecret("ZALO_APP_SECRET");
+const zaloOpenApiKey = defineSecret("ZALO_OPEN_API_KEY");
 const qrSigningSecret = defineSecret("QR_SIGNING_SECRET");
 const qrFunctionOptions = {
   ...functionOptions,
@@ -1957,7 +1964,33 @@ export const registerCustomerFromZalo = onCall(zaloQrFunctionOptions, async (req
   const name =
     optionalLimitedString(request.data?.name, "name", 80) ??
     String(zaloProfile.name ?? "Khách hàng").slice(0, 80);
-  const phone = optionalLimitedString(request.data?.phone, "phone", 30);
+  const suppliedPhone = optionalLimitedString(request.data?.phone, "phone", 30);
+  const phoneToken = optionalLimitedString(request.data?.phoneToken, "phoneToken", 2048);
+  let phone = suppliedPhone;
+
+  if (phoneToken) {
+    const accessToken = requireString(request.data?.zaloAccessToken, "zaloAccessToken");
+    const appSecret =
+      zaloAppSecret.value() || process.env.ZALO_APP_SECRET || process.env.ZALO_SECRET_KEY || "";
+
+    if (!appSecret || appSecret.includes("your-")) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Máy chủ chưa được cấu hình để nhận số điện thoại từ Zalo",
+      );
+    }
+
+    try {
+      phone = await decodeZaloPhoneNumber(accessToken, phoneToken, appSecret, {
+        endpoint: process.env.ZALO_PHONE_ENDPOINT,
+      });
+    } catch {
+      throw new HttpsError(
+        "failed-precondition",
+        "Không lấy được số điện thoại từ Zalo. Vui lòng bấm xác nhận lại.",
+      );
+    }
+  }
   const birthday = optionalLimitedString(request.data?.birthday, "birthday", 20);
   const contactPatch = buildCustomerContactPatch({
     phone,
@@ -2156,6 +2189,7 @@ export const registerCustomerFromZalo = onCall(zaloQrFunctionOptions, async (req
     sessionStatus: returnedStatus,
     points: customerSnap.data()?.points ?? 0,
     zaloUserId,
+    phoneLast4: String(customerSnap.data()?.phoneLast4 || ""),
   };
 });
 
@@ -2308,6 +2342,126 @@ export const submitPointRequest = onCall(functionOptions, async (request) => {
   });
 
   return { requestId: requestRef.id };
+});
+
+export const updatePendingPointRequestPhotos = onCall(functionOptions, async (request) => {
+  const uid = currentUid(request.auth);
+  const salonId = requireString(request.data?.salonId, "salonId");
+  const requestId = requireString(request.data?.requestId, "requestId");
+  const photoUrls = safePhotoUrls(request.data?.photoUrls);
+  await assertSalonRole(uid, salonId, ["owner"]);
+
+  const requestRef = db.collection("point_requests").doc(requestId);
+  const requestSnap = await requestRef.get();
+  const pointRequest = requestSnap.data();
+  if (!requestSnap.exists || pointRequest?.salonId !== salonId) {
+    throw new HttpsError("not-found", "Không tìm thấy yêu cầu cộng điểm");
+  }
+  if (pointRequest.status !== "pending") {
+    throw new HttpsError("failed-precondition", "Yêu cầu này đã được xử lý");
+  }
+
+  const sessionId = String(pointRequest.sessionId || requestId);
+  const customerId = String(pointRequest.customerId || "");
+  const branchId = String(pointRequest.branchId || "");
+  if (!sessionId || !customerId || !branchId) {
+    throw new HttpsError("failed-precondition", "Yêu cầu chưa có đủ thông tin lượt cắt");
+  }
+
+  const sessionRef = db.collection("chair_sessions").doc(sessionId);
+  const customerRef = db.collection("customers").doc(customerId);
+  const [sessionSnap, customerSnap] = await Promise.all([sessionRef.get(), customerRef.get()]);
+  if (
+    !sessionSnap.exists ||
+    sessionSnap.data()?.salonId !== salonId ||
+    sessionSnap.data()?.branchId !== branchId ||
+    sessionSnap.data()?.customerId !== customerId ||
+    sessionSnap.data()?.status !== "pending_approval"
+  ) {
+    throw new HttpsError("failed-precondition", "Lượt cắt không còn chờ chủ salon duyệt");
+  }
+  if (!customerSnap.exists || customerSnap.data()?.salonId !== salonId) {
+    throw new HttpsError("failed-precondition", "Không tìm thấy hồ sơ khách trong salon");
+  }
+  if (photoUrls.length > 0 && customerSnap.data()?.allowPhoto !== true) {
+    throw new HttpsError("failed-precondition", "Khách chưa đồng ý lưu ảnh kiểu tóc");
+  }
+
+  const existingPhotoUrls = safePhotoUrls(pointRequest.photoUrls);
+  const addedPhotoUrls = photoUrls.filter((photoUrl) => !existingPhotoUrls.includes(photoUrl));
+  await assertSubmittedHaircutPhotos({
+    photoUrls: addedPhotoUrls,
+    salonId,
+    branchId,
+    customerId,
+    sessionId,
+    uploaderUid: uid,
+  });
+
+  await db.runTransaction(async (tx) => {
+    const [currentRequestSnap, currentSessionSnap, currentCustomerSnap] = await Promise.all([
+      tx.get(requestRef),
+      tx.get(sessionRef),
+      tx.get(customerRef),
+    ]);
+    const currentRequest = currentRequestSnap.data();
+    const currentSession = currentSessionSnap.data();
+    const currentCustomer = currentCustomerSnap.data();
+
+    if (
+      !currentRequestSnap.exists ||
+      currentRequest?.salonId !== salonId ||
+      currentRequest?.branchId !== branchId ||
+      currentRequest?.customerId !== customerId ||
+      String(currentRequest?.sessionId || requestId) !== sessionId ||
+      currentRequest?.status !== "pending"
+    ) {
+      throw new HttpsError("failed-precondition", "Yêu cầu này không còn chờ duyệt");
+    }
+    if (
+      !currentSessionSnap.exists ||
+      currentSession?.salonId !== salonId ||
+      currentSession?.branchId !== branchId ||
+      currentSession?.status !== "pending_approval" ||
+      currentSession?.customerId !== customerId
+    ) {
+      throw new HttpsError("failed-precondition", "Lượt cắt không còn chờ chủ salon duyệt");
+    }
+    if (
+      !currentCustomerSnap.exists ||
+      currentCustomer?.salonId !== salonId ||
+      (photoUrls.length > 0 && currentCustomer?.allowPhoto !== true)
+    ) {
+      throw new HttpsError("failed-precondition", "Khách chưa đồng ý lưu ảnh kiểu tóc");
+    }
+
+    const currentPhotoUrls = safePhotoUrls(currentRequest.photoUrls);
+    const allowedPhotoUrls = new Set([...currentPhotoUrls, ...addedPhotoUrls]);
+    if (photoUrls.some((photoUrl) => !allowedPhotoUrls.has(photoUrl))) {
+      throw new HttpsError("invalid-argument", "Danh sách có ảnh chưa được xác thực");
+    }
+
+    const customerSummary =
+      currentRequest.customerSummary && typeof currentRequest.customerSummary === "object"
+        ? currentRequest.customerSummary
+        : {};
+    tx.set(
+      requestRef,
+      {
+        photoUrls,
+        customerSummary: {
+          ...customerSummary,
+          allowPhoto: Boolean(currentCustomer.allowPhoto),
+        },
+        photosUpdatedBy: uid,
+        photosUpdatedAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      },
+      { merge: true },
+    );
+  });
+
+  return { photoUrls };
 });
 
 export const claimServiceSession = onCall(functionOptions, async (request) => {
@@ -2819,6 +2973,7 @@ export const getOwnerOverview = onCall(functionOptions, async (request) => {
       return {
         id: doc.id,
         name: String(customer.name ?? "Khách hàng"),
+        phone: String(customer.phone ?? ""),
         phoneLast4: String(customer.phoneLast4 ?? ""),
         points: Number(customer.points ?? 0),
         lastVisitAtMs,
@@ -3142,7 +3297,7 @@ export const searchSalonCustomers = onCall(functionOptions, async (request) => {
   const pageSize = Number.isFinite(requestedPageSize)
     ? Math.min(Math.max(Math.floor(requestedPageSize), 5), 20)
     : 10;
-  await assertSalonRole(uid, salonId, ["owner", "staff"]);
+  const user = await assertSalonRole(uid, salonId, ["owner", "staff"]);
 
   const normalizedTerm = normalizeSearchText(term);
   if (normalizedTerm.length < 2) {
@@ -3183,6 +3338,7 @@ export const searchSalonCustomers = onCall(functionOptions, async (request) => {
     return {
       id: doc.id,
       name: String(data.name ?? ""),
+      ...(user.role === "owner" ? { phone: String(data.phone ?? "") } : {}),
       phoneLast4: String(data.phoneLast4 ?? ""),
       points: Number(data.points ?? 0),
       allowPhoto: Boolean(data.allowPhoto),
@@ -3248,6 +3404,25 @@ export const deleteCustomerData = onCall(functionOptions, async (request) => {
   const salonId = requireString(request.data?.salonId, "salonId");
   const customerId = requireString(request.data?.customerId, "customerId");
   await assertSalonRole(uid, salonId, ["owner"]);
+
+  return runCustomerDeletionJob({
+    salonId,
+    customerId,
+    requestedBy: uid,
+    requestSource: "owner",
+  });
+});
+
+type CustomerDeletionJobInput = {
+  salonId: string;
+  customerId: string;
+  requestedBy: string;
+  requestSource: "owner" | "zalo_privacy_webhook";
+  sourceEventId?: string;
+};
+
+async function runCustomerDeletionJob(input: CustomerDeletionJobInput) {
+  const { salonId, customerId, requestedBy, requestSource, sourceEventId } = input;
   await ensureSalonCustomerCount(salonId);
 
   const customerRef = db.collection("customers").doc(customerId);
@@ -3269,7 +3444,12 @@ export const deleteCustomerData = onCall(functionOptions, async (request) => {
     {
       salonId,
       customerId,
-      requestedBy: uid,
+      kind: "customer_deletion",
+      requestedBy: existingJob.requestedBy ?? requestedBy,
+      requestSource: existingJob.requestSource ?? requestSource,
+      lastRequestedBy: requestedBy,
+      lastRequestSource: requestSource,
+      sourceEventId: sourceEventId ?? existingJob.sourceEventId ?? null,
       status: "running",
       attempts: FieldValue.increment(1),
       updatedAt: FieldValue.serverTimestamp(),
@@ -3385,7 +3565,7 @@ export const deleteCustomerData = onCall(functionOptions, async (request) => {
   }
 
   return customerDeletionResult(customerId, { ...totals, status });
-});
+}
 
 async function deleteCustomerCollectionDocs(
   collectionName: string,
@@ -3436,6 +3616,137 @@ function customerDeletionResult(customerId: string, data: DocumentData) {
     deletedStorageFiles: Number(data.deletedStorageFiles ?? 0),
   };
 }
+
+async function processZaloPrivacyDeletionEvent(
+  event: ZaloPrivacyEvent,
+  eventId: string,
+): Promise<ZaloPrivacyProcessingResult> {
+  const eventRef = db.collection("customer_deletion_jobs").doc(eventId);
+  let duplicate = false;
+  let existingJobCount = 0;
+
+  await db.runTransaction(async (tx) => {
+    const eventSnap = await tx.get(eventRef);
+    const existing = eventSnap.data() ?? {};
+    existingJobCount = Math.max(0, Number(existing.jobCount ?? 0));
+
+    if (existing.status === "completed") {
+      duplicate = true;
+      tx.set(
+        eventRef,
+        {
+          deliveries: FieldValue.increment(1),
+          updatedAt: Timestamp.now(),
+        },
+        { merge: true },
+      );
+      return;
+    }
+
+    tx.set(
+      eventRef,
+      {
+        kind: "zalo_privacy_event",
+        appId: event.appId,
+        eventName: event.eventName,
+        zaloTimestamp: event.timestamp,
+        status: "running",
+        attempts: FieldValue.increment(1),
+        deliveries: FieldValue.increment(1),
+        updatedAt: Timestamp.now(),
+        createdAt: existing.createdAt ?? Timestamp.now(),
+      },
+      { merge: true },
+    );
+  });
+
+  if (duplicate) {
+    return { duplicate: true, jobCount: existingJobCount };
+  }
+
+  try {
+    const [eventSnap, customersSnap] = await Promise.all([
+      eventRef.get(),
+      db.collection("customers").where("zaloUserId", "==", event.userId).get(),
+    ]);
+    const eventData = eventSnap.data() ?? {};
+    const persistedJobIds = Array.isArray(eventData.customerJobIds)
+      ? eventData.customerJobIds.filter(
+          (value: unknown): value is string => typeof value === "string",
+        )
+      : [];
+    const knownJobIds = new Set<string>(persistedJobIds);
+
+    for (const customerSnap of customersSnap.docs) {
+      const salonId = String(customerSnap.data().salonId ?? "").trim();
+      if (!salonId) {
+        throw new Error("customer_without_salon");
+      }
+      knownJobIds.add(customerDeletionJobRefFor(salonId, customerSnap.id).id);
+    }
+
+    // Persist the deterministic targets before deleting customer documents so retries can resume.
+    await eventRef.set(
+      {
+        customerJobIds: [...knownJobIds],
+        jobCount: knownJobIds.size,
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+
+    for (const customerSnap of customersSnap.docs) {
+      const salonId = String(customerSnap.data().salonId ?? "").trim();
+      await runCustomerDeletionJob({
+        salonId,
+        customerId: customerSnap.id,
+        requestedBy: "zalo-privacy-webhook",
+        requestSource: "zalo_privacy_webhook",
+        sourceEventId: eventId,
+      });
+    }
+
+    await eventRef.set(
+      {
+        customerJobIds: [...knownJobIds],
+        jobCount: knownJobIds.size,
+        status: "completed",
+        updatedAt: FieldValue.serverTimestamp(),
+        completedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+    return { duplicate: false, jobCount: knownJobIds.size };
+  } catch {
+    await eventRef.set(
+      {
+        status: "partial",
+        failureCode: "deletion_incomplete",
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+    throw new Error("zalo_privacy_deletion_incomplete");
+  }
+}
+
+export const zaloPrivacyWebhook = onRequest(
+  {
+    ...functionOptions,
+    secrets: [zaloOpenApiKey],
+    timeoutSeconds: 300,
+    concurrency: 20,
+    maxInstances: 10,
+  },
+  async (request, response) => {
+    const handler = createZaloPrivacyWebhookHandler({
+      miniAppId: String(process.env.ZALO_MINI_APP_ID || "").trim(),
+      apiKey: zaloOpenApiKey.value(),
+      processEvent: processZaloPrivacyDeletionEvent,
+    });
+    await handler(request, response);
+  },
+);
 
 async function backfillOperationalSessions(
   collectionName: "chair_sessions" | "active_service_sessions",

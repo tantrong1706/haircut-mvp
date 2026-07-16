@@ -107,7 +107,7 @@ describe("StaffPage", () => {
     mocks.cancelServiceSession.mockResolvedValue({ ok: true, status: "cancelled" });
     mocks.uploadHaircutPhoto.mockResolvedValue({
       id: "photo-a",
-      path: "salons/salon-a/customers/customer-a/haircuts/session-a/photo-a.jpg",
+      path: "salons/salon-a/customers/customer-a/haircuts/session-a/photo-123456789abc.jpg",
       url: "https://firebasestorage.googleapis.com/photo-a.jpg",
     });
     mocks.deleteHaircutPhoto.mockResolvedValue(undefined);

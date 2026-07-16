@@ -22,7 +22,7 @@ import { captureError, trackEvent, withMonitoringTrace } from "../services/monit
 import { hasQrContext, parseQrContext } from "../services/qr";
 import { isZaloMiniAppRuntime } from "../services/runtime";
 import type { AppSession } from "../services/types";
-import { getZaloIdentity } from "../services/zalo";
+import { getZaloIdentity, requestPhoneToken } from "../services/zalo";
 
 type Props = {
   onReady: (session: AppSession) => void;
@@ -186,6 +186,7 @@ export function ScanEntryPage({ onReady }: Props) {
        * bấm tạo lượt cắt, không dùng token cũ.
        */
       const confirmedIdentity = await getZaloIdentity();
+      const phoneToken = phone.trim() ? undefined : (await requestPhoneToken()) || undefined;
 
       const session = await withMonitoringTrace(
         "customer_checkin",
@@ -199,6 +200,7 @@ export function ScanEntryPage({ onReady }: Props) {
               },
               allowPhoto,
               phone || undefined,
+              phoneToken,
             ),
           ),
         {
@@ -435,11 +437,11 @@ export function ScanEntryPage({ onReady }: Props) {
                   inputMode="tel"
                   value={phone}
                   onChange={(event) => setPhone(event.target.value)}
-                  placeholder="Không bắt buộc"
+                  placeholder="Tự lấy từ Zalo khi xác nhận"
                   disabled={loading}
                 />
 
-                <small>Nhân viên chỉ thấy 4 số cuối.</small>
+                <small>Zalo sẽ hỏi bạn trước; nhân viên chỉ thấy 4 số cuối.</small>
               </label>
 
               <label className="toggle-row photo-consent">

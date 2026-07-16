@@ -5,10 +5,30 @@
 - Firebase public config và Zalo Mini App ID nằm trong `.env.production`.
 - Firebase Auth phải bật Email/Password; domain Hosting phải nằm trong Authorized domains và mẫu email đặt lại mật khẩu phải dùng thương hiệu HAIRCUT.
 - `ZALO_APP_SECRET` phải nằm trong Firebase Secret Manager.
+- `ZALO_APP_ID` là App ID của ứng dụng Zalo liên kết với OA và được đặt trong `firebase/functions/.env`; đây không phải Mini App ID.
+- `ZALO_MINI_APP_ID` là Mini App ID và được đặt trong `firebase/functions/.env`.
+- `ZALO_OPEN_API_KEY` là API Key trong phần Open APIs của Zalo Mini App, phải nằm trong Firebase Secret Manager và không được ghi vào `.env`, log hoặc repository.
 - `QR_SIGNING_SECRET` phải nằm trong Firebase Secret Manager, dài tối thiểu 32 ký tự và không được dùng lại `ZALO_APP_SECRET`.
 - Chỉ đặt `REQUIRE_ZALO_APP_CHECK=true` sau khi App Check đã chạy ổn trong cả Zalo Android và iPhone; để trống trong giai đoạn tương thích.
 - `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT` chỉ đặt ở môi trường deploy/GitHub Secrets.
 - Khi đủ ba biến Sentry, Vite tạo source map ẩn, upload rồi xóa file map khỏi `dist`.
+
+## Webhook quyền dữ liệu Zalo
+
+- URL cấu hình trên Zalo sau khi deploy: `https://asia-southeast1-haircut-c7d12.cloudfunctions.net/zaloPrivacyWebhook`.
+- Function nhận sự kiện `user.revoke.consent`, xác thực header `X-ZEvent-Signature` bằng SHA-256 trên các giá trị payload đã sắp xếp theo tên field và Open API Key theo tài liệu Zalo.
+- Function không ghi log payload, chữ ký, access token, Open API Key hoặc mã định danh người dùng. Mỗi sự kiện tạo một job định danh trong `customer_deletion_jobs`, dùng lại luồng xóa khách hiện có và có thể tiếp tục an toàn khi Zalo gửi lại.
+- Trước lần deploy đầu tiên, đặt `ZALO_MINI_APP_ID=2038116772828167300` trong `firebase/functions/.env`, lấy API Key tại trang Open APIs của Zalo Mini App rồi chạy:
+
+```powershell
+cd C:\tantrong\haircut-mvp\firebase
+firebase functions:secrets:set ZALO_OPEN_API_KEY
+firebase deploy --only functions:zaloPrivacyWebhook
+cd ..
+.\scripts\deploy-firebase.ps1 -OnlyHosting
+```
+
+- Sau deploy, nhập URL webhook trên vào cấu hình ứng dụng Zalo và gửi một sự kiện kiểm thử từ cổng Zalo. Trang Điều khoản sử dụng công khai tại `https://haircut-c7d12.web.app/terms`.
 
 ## Thứ tự deploy
 
@@ -21,7 +41,8 @@
 
 ## Kiểm tra sau deploy
 
-- `/`, `/owner`, `/staff`, `/privacy` trả HTTP 200.
+- `/`, `/owner`, `/staff`, `/privacy`, `/terms` trả HTTP 200.
+- Webhook từ chối request sai chữ ký, chấp nhận `user.revoke.consent` hợp lệ và trả cùng kết quả an toàn khi Zalo gửi lại.
 - Owner tạo/sửa/khóa chi nhánh, xoay QR và lọc dashboard mà không cần F5.
 - QR salon cho chọn chi nhánh; QR chi nhánh mở thẳng đúng tên và địa chỉ; QR Gương 1 cũ vẫn hoạt động trong giai đoạn chuyển đổi.
 - Staff gửi một yêu cầu điểm duy nhất cho một phiên.

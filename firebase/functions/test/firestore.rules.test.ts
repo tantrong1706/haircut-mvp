@@ -84,6 +84,16 @@ beforeEach(async () => {
         status: "serving",
         assignedStaffId: "staff-a",
       }),
+      setDoc(doc(db, "chair_sessions", "session-owner-photo"), {
+        ...session(salonA, branchA, "customer-photo"),
+        status: "pending_approval",
+        assignedStaffId: "staff-a",
+      }),
+      setDoc(doc(db, "chair_sessions", "session-owner-no-consent"), {
+        ...session(salonA, branchA, "customer-a"),
+        status: "pending_approval",
+        assignedStaffId: "staff-a",
+      }),
       setDoc(doc(db, "haircut_records", "record-a"), privateRecord(salonA, "customer-a")),
       setDoc(doc(db, "reward_history", "reward-a"), privateRecord(salonA, "customer-a")),
       setDoc(doc(db, "lucky_wheel", salonA), { salonId: salonA, requiredPoints: 5, slots: [] }),
@@ -245,6 +255,55 @@ describe("Firestore production rules", () => {
       }),
     );
     await assertSucceeds(deleteObject(allowed));
+  });
+
+  it("cho owner bổ sung ảnh ở lượt chờ duyệt nhưng vẫn bắt buộc khách đồng ý", async () => {
+    const ownerStorage = testEnv.authenticatedContext("owner-a").storage();
+    const staffStorage = testEnv.authenticatedContext("staff-a").storage();
+    const otherOwnerStorage = testEnv.authenticatedContext("owner-b").storage();
+    const path =
+      `salons/${salonA}/customers/customer-photo/haircuts/session-owner-photo/` +
+      "photo-owner-12345678.jpg";
+    const noConsentPath =
+      `salons/${salonA}/customers/customer-a/haircuts/session-owner-no-consent/` +
+      "photo-owner-87654321.jpg";
+    const bytes = new Uint8Array([1, 2, 3]);
+    const metadata = {
+      contentType: "image/jpeg",
+      customMetadata: {
+        salonId: salonA,
+        customerId: "customer-photo",
+        sessionId: "session-owner-photo",
+        branchId: branchA,
+        uploaderUid: "owner-a",
+      },
+    };
+
+    await assertSucceeds(uploadBytes(ref(ownerStorage, path), bytes, metadata));
+    await assertSucceeds(getBytes(ref(ownerStorage, path)));
+    await assertFails(
+      uploadBytes(ref(staffStorage, path), bytes, {
+        ...metadata,
+        customMetadata: { ...metadata.customMetadata, uploaderUid: "staff-a" },
+      }),
+    );
+    await assertFails(
+      uploadBytes(ref(otherOwnerStorage, path), bytes, {
+        ...metadata,
+        customMetadata: { ...metadata.customMetadata, uploaderUid: "owner-b" },
+      }),
+    );
+    await assertFails(
+      uploadBytes(ref(ownerStorage, noConsentPath), bytes, {
+        ...metadata,
+        customMetadata: {
+          ...metadata.customMetadata,
+          customerId: "customer-a",
+          sessionId: "session-owner-no-consent",
+        },
+      }),
+    );
+    await assertSucceeds(deleteObject(ref(ownerStorage, path)));
   });
 
   it("từ chối ảnh có metadata giả hoặc định dạng không hợp lệ", async () => {

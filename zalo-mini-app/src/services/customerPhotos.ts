@@ -3,7 +3,7 @@ import { getFirebaseAuth, getFirebaseStorage } from "./firebase";
 
 const MAX_SOURCE_SIZE = 12 * 1024 * 1024;
 const MAX_UPLOAD_SIZE = 3 * 1024 * 1024;
-const MAX_DIMENSION = 1600;
+const MAX_DIMENSION = 2048;
 const ALLOWED_SOURCE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 export const MAX_HAIRCUT_PHOTOS = 3;
@@ -26,7 +26,7 @@ export async function uploadHaircutPhoto(input: {
   const currentUser = auth?.currentUser;
 
   if (!currentUser || !storage) {
-    throw new Error("Bạn cần đăng nhập nhân viên để tải ảnh kiểu tóc");
+    throw new Error("Bạn cần đăng nhập tài khoản salon để tải ảnh kiểu tóc");
   }
 
   const salonId = safeDocumentId(input.salonId, "salon");
@@ -64,11 +64,26 @@ export async function uploadHaircutPhoto(input: {
 
 export async function deleteHaircutPhoto(path: string) {
   const storage = getFirebaseStorage();
-  if (!storage || !path.startsWith("salons/")) {
+  if (!storage) {
     throw new Error("Không tìm thấy ảnh cần xóa");
   }
 
-  await deleteObject(ref(storage, path));
+  let photoRef;
+  try {
+    photoRef = ref(storage, path);
+  } catch {
+    throw new Error("Không tìm thấy ảnh cần xóa");
+  }
+
+  if (
+    !/^salons\/[^/]+\/customers\/[^/]+\/haircuts\/[^/]+\/photo-[A-Za-z0-9-]{12,80}\.jpg$/.test(
+      photoRef.fullPath,
+    )
+  ) {
+    throw new Error("Đường dẫn ảnh kiểu tóc không hợp lệ");
+  }
+
+  await deleteObject(photoRef);
 }
 
 function validateSourceFile(file: File) {
@@ -109,9 +124,14 @@ async function resizeHaircutPhoto(file: File): Promise<Blob> {
 
   context.fillStyle = "#ffffff";
   context.fillRect(0, 0, width, height);
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
   context.drawImage(image, 0, 0, width, height);
 
-  let blob = await canvasToBlob(canvas, 0.84);
+  let blob = await canvasToBlob(canvas, 0.9);
+  if (blob.size > MAX_UPLOAD_SIZE) {
+    blob = await canvasToBlob(canvas, 0.78);
+  }
   if (blob.size > MAX_UPLOAD_SIZE) {
     blob = await canvasToBlob(canvas, 0.68);
   }

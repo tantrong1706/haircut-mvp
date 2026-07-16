@@ -21,6 +21,9 @@ const OwnerPage = lazy(() =>
 const PrivacyPage = lazy(() =>
   import("./pages/PrivacyPage").then((module) => ({ default: module.PrivacyPage })),
 );
+const TermsPage = lazy(() =>
+  import("./pages/TermsPage").then((module) => ({ default: module.TermsPage })),
+);
 const RewardsPage = lazy(() =>
   import("./pages/RewardsPage").then((module) => ({ default: module.RewardsPage })),
 );
@@ -53,7 +56,7 @@ function PageLoading() {
 
 export default function App() {
   const path = window.location.pathname;
-  const isCustomerRoute = !["/staff", "/owner", "/admin", "/privacy"].some((route) =>
+  const isCustomerRoute = !["/staff", "/owner", "/admin", "/privacy", "/terms"].some((route) =>
     path.startsWith(route),
   );
   const currentQr = useMemo(() => parseQrContext(), []);
@@ -215,6 +218,18 @@ export default function App() {
         <main className="app-main wide-main">
           <Suspense fallback={<PageLoading />}>
             <PrivacyPage />
+          </Suspense>
+        </main>
+      </div>
+    );
+  }
+
+  if (path.startsWith("/terms")) {
+    return (
+      <div className="app-shell ops-shell">
+        <main className="app-main wide-main">
+          <Suspense fallback={<PageLoading />}>
+            <TermsPage />
           </Suspense>
         </main>
       </div>

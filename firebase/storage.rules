@@ -78,6 +78,14 @@ service firebase.storage {
         && sessionDoc(sessionId).data.status == "serving";
     }
 
+    function isOwnerPendingApprovalSession(salonId, customerId, sessionId) {
+      return isOwner(salonId)
+        && sessionExists(sessionId)
+        && sessionDoc(sessionId).data.salonId == salonId
+        && sessionDoc(sessionId).data.customerId == customerId
+        && sessionDoc(sessionId).data.status == "pending_approval";
+    }
+
     function isAllowedHaircutPhoto(salonId, customerId, sessionId) {
       return request.resource != null
         && request.resource.size > 0
@@ -99,7 +107,8 @@ service firebase.storage {
     match /salons/{salonId}/customers/{customerId}/haircuts/{sessionId}/{fileName} {
       allow read: if customerAllowsPhoto(salonId, customerId)
         && (isOwner(salonId) || isAssignedSessionMember(salonId, customerId, sessionId));
-      allow create: if isAssignedServingMember(salonId, customerId, sessionId)
+      allow create: if (isAssignedServingMember(salonId, customerId, sessionId)
+          || isOwnerPendingApprovalSession(salonId, customerId, sessionId))
         && customerAllowsPhoto(salonId, customerId)
         && isAllowedHaircutPhoto(salonId, customerId, sessionId);
       allow update: if false;

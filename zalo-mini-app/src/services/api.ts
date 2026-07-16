@@ -35,6 +35,7 @@ const SESSION_POINT_REQUEST_WINDOW_MS = 12 * 60 * 60 * 1000;
 type RegisterInput = QrContext & {
   zaloAccessToken: string;
   zaloUserId?: string;
+  phoneToken?: string;
   name: string;
   phone?: string;
   birthday?: string;
@@ -52,6 +53,7 @@ type RegisterCustomerFunctionResult = {
   claimedAtMs?: number | null;
   points: number;
   zaloUserId: string;
+  phoneLast4?: string;
 };
 
 type CustomerHistoryFunctionResult = {
@@ -853,11 +855,13 @@ export function buildRegisterInput(
   identity: ZaloIdentity,
   allowPhoto: boolean,
   phone?: string,
+  phoneToken?: string,
 ): RegisterInput {
   return {
     ...qr,
     zaloAccessToken: identity.accessToken,
     zaloUserId: identity.zaloUserId,
+    phoneToken,
     name: identity.name,
     phone,
     allowPhoto,
@@ -915,7 +919,8 @@ function buildSessionFromRegisterResult(
     customer: {
       customerId: result.customerId,
       name: input.name || "Khách hàng",
-      phoneLast4: phoneDigits ? phoneDigits.slice(-4) : input.phone?.slice(-4) || "",
+      phoneLast4:
+        result.phoneLast4 || (phoneDigits ? phoneDigits.slice(-4) : input.phone?.slice(-4) || ""),
       points: Number(result.points ?? 0),
       allowPhoto: input.allowPhoto,
     },
