@@ -14,9 +14,9 @@ import { Network } from "@capacitor/network";
 import { Share } from "@capacitor/share";
 import { SplashScreen } from "@capacitor/splash-screen";
 import { CustomProvider, initializeAppCheck } from "firebase/app-check";
-import { callFunction, getFirebaseApp } from "../../../zalo-mini-app/src/services/firebase";
 import type { ManagerUser } from "./ManagerApp";
 import { ManagerBootstrapError, createSingleFlight } from "./managerBootstrap";
+import { callManagerFunction, getManagerFirebaseApp } from "./services/firebase";
 
 const PUSH_TOKEN_KEY = "push_token";
 const BIOMETRIC_KEY = "biometric_enabled";
@@ -30,7 +30,7 @@ export function isNativeManager() {
 
 export async function initializeNativeFirebaseSecurity() {
   if (!isNativeManager() || nativeFirebaseInitialized) return;
-  const app = getFirebaseApp();
+  const app = getManagerFirebaseApp();
   if (!app) {
     throw new ManagerBootstrapError("MANAGER_FIREBASE_INIT_FAILED");
   }
@@ -108,7 +108,7 @@ const initializeNativeManagerOnce = createSingleFlight(async (input: NativeManag
       const token = await SecureStorage.get(PUSH_TOKEN_KEY);
       try {
         if (typeof token === "string" && token) {
-          await callFunction("unregisterManagerDeviceToken", { token });
+          await callManagerFunction("unregisterManagerDeviceToken", { token });
         }
       } finally {
         await FirebaseMessaging.deleteToken().catch(() => undefined);
@@ -241,7 +241,7 @@ async function requestPushPermission(user: ManagerUser) {
 
 async function registerPushToken(user: ManagerUser, token: string) {
   if (!token) return;
-  await callFunction("registerManagerDeviceToken", {
+  await callManagerFunction("registerManagerDeviceToken", {
     salonId: user.salonId,
     platform: Capacitor.getPlatform(),
     token,

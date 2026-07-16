@@ -1,6 +1,8 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { ManagerApp } from "./ManagerApp";
+import { safelyHideSplashScreen } from "./nativeRuntime";
+import { trackEvent } from "./services/monitoring";
 import "../../../zalo-mini-app/src/styles/global.css";
 import "../../../zalo-mini-app/src/styles/staff.css";
 import "../../../zalo-mini-app/src/styles/owner.css";
@@ -12,3 +14,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     <ManagerApp />
   </React.StrictMode>,
 );
+
+void safelyHideSplashScreen().then((hidden) => {
+  if (!hidden) trackEvent("manager_splash_hide_failed", { area: "manager_root" });
+});

@@ -9,9 +9,9 @@ import {
   WifiOff,
   X,
 } from "lucide-react";
-import { captureError, trackEvent } from "../../../zalo-mini-app/src/services/monitoring";
 import type { ManagerUser } from "./ManagerApp";
 import { runManagerBootstrap } from "./managerBootstrap";
+import { captureError, trackEvent } from "./services/monitoring";
 import {
   biometricLockEnabled,
   disableBiometricLock,
