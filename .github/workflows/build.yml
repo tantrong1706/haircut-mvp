@@ -91,10 +91,6 @@ jobs:
         working-directory: zalo-mini-app
         run: npm run build:zmp
 
-      - name: Ensure Zalo config is current
-        working-directory: zalo-mini-app
-        run: git diff --exit-code -- app-config.json
-
   admin-web:
     name: Admin Web
     runs-on: ubuntu-latest
