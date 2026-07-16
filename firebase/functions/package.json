@@ -4,16 +4,20 @@
   "private": true,
   "main": "lib/index.js",
   "scripts": {
-    "build": "tsc",
-    "typecheck": "tsc --noEmit",
+    "sync:contracts": "node scripts/sync-contracts.mjs --write",
+    "check:contracts": "node scripts/sync-contracts.mjs --check",
+    "audit:tenant-data": "node scripts/migrate-tenant-fields.mjs",
+    "build": "npm run check:contracts && tsc",
+    "typecheck": "npm run check:contracts && tsc --noEmit",
     "lint": "eslint src test --max-warnings=0",
     "lint:fix": "npm run lint -- --fix",
     "format": "prettier src test --write",
     "format:check": "prettier src test --check",
     "test": "vitest",
-    "test:unit": "vitest run test/security.test.ts test/businessRules.test.ts test/customerSearch.test.ts test/customerPhotos.test.ts test/zaloClient.test.ts test/zaloPhone.test.ts test/zaloContract.test.ts test/zaloPrivacyWebhook.test.ts",
+    "test:unit": "vitest run test/contracts.test.ts test/security.test.ts test/businessRules.test.ts test/customerSearch.test.ts test/customerPhotos.test.ts test/salonBranding.test.ts test/tenantMigration.test.ts test/zaloClient.test.ts test/zaloPhone.test.ts test/zaloContract.test.ts test/zaloPrivacyWebhook.test.ts",
     "test:rules": "vitest run test/firestore.rules.test.ts",
-    "test:integration": "vitest run test/callables.integration.test.ts",
+    "test:integration": "vitest run --no-file-parallelism --testTimeout=20000 test/callables.integration.test.ts test/salonBranding.integration.test.ts",
+    "test:salon-branding:integration": "vitest run test/salonBranding.integration.test.ts",
     "seed:demo": "npm run build && node lib/seedDemo.js",
     "serve": "npm run build && firebase emulators:start --only functions,firestore,storage",
     "deploy": "firebase deploy --only functions",
@@ -23,8 +27,10 @@
     "node": "22"
   },
   "dependencies": {
+    "@haircut/contracts": "file:./contracts",
     "firebase-admin": "^13.10.0",
-    "firebase-functions": "^7.2.5"
+    "firebase-functions": "^7.2.5",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^5.0.1",

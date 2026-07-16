@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { BadgeCheck, Copy, ScanLine, Search, ShieldCheck, TicketCheck, X } from "lucide-react";
 import {
   RedeemRewardResult,
@@ -12,12 +12,19 @@ import { trackEvent, withMonitoringTrace } from "../services/monitoring";
 
 type Props = {
   salonId: string;
+  branchId?: string;
   disabled?: boolean;
   note?: string;
   allowRestore?: boolean;
 };
 
-export function RedeemRewardPanel({ salonId, disabled, note, allowRestore = false }: Props) {
+export function RedeemRewardPanel({
+  salonId,
+  branchId,
+  disabled,
+  note,
+  allowRestore = false,
+}: Props) {
   const [rewardCode, setRewardCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(false);
@@ -27,6 +34,23 @@ export function RedeemRewardPanel({ salonId, disabled, note, allowRestore = fals
   const [message, setMessage] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [restoring, setRestoring] = useState(false);
+
+  useEffect(() => {
+    const receiveScannedCode = (event: Event) => {
+      const code = String((event as CustomEvent<string>).detail || "")
+        .trim()
+        .toUpperCase();
+      if (!code) return;
+      setRewardCode(code);
+      setInfo(null);
+      setResult(null);
+      setConfirming(false);
+      setMessage("Đã nhận mã từ camera. Hãy kiểm tra trước khi xác nhận.");
+      setError("");
+    };
+    window.addEventListener("haircut:reward-code-scanned", receiveScannedCode);
+    return () => window.removeEventListener("haircut:reward-code-scanned", receiveScannedCode);
+  }, []);
 
   async function checkCode() {
     setChecking(true);
@@ -66,7 +90,7 @@ export function RedeemRewardPanel({ salonId, disabled, note, allowRestore = fals
     try {
       const nextResult = await withMonitoringTrace(
         "reward_code_redeem",
-        () => redeemRewardCode({ salonId, rewardCode }),
+        () => redeemRewardCode({ salonId, branchId, rewardCode }),
         {
           salon_id: salonId,
         },
@@ -294,6 +318,9 @@ function statusText(status: RewardCodeInfo["status"]) {
   }
   if (status === "expired") {
     return "Mã đã hết hạn";
+  }
+  if (status === "revoked") {
+    return "Mã đã bị hủy";
   }
   return "Mã còn hiệu lực";
 }

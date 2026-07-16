@@ -2,6 +2,16 @@ import { describe, expect, it } from "vitest";
 import { friendlyFirebaseFunctionError } from "./firebase";
 
 describe("friendlyFirebaseFunctionError", () => {
+  it("ưu tiên error code nghiệp vụ ổn định thay vì so khớp câu thông báo", () => {
+    expect(
+      friendlyFirebaseFunctionError({
+        code: "functions/failed-precondition",
+        message: "Nội dung backend có thể thay đổi",
+        details: { errorCode: "SESSION_ALREADY_CLAIMED" },
+      }),
+    ).toBe("Khách đã được một nhân viên khác nhận.");
+  });
+
   it("giữ thông báo unauthenticated từ backend", () => {
     expect(
       friendlyFirebaseFunctionError({

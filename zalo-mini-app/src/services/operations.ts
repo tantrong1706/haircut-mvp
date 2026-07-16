@@ -94,6 +94,7 @@ export type SalonProfile = {
   name: string;
   address: string;
   phone: string;
+  avatarUrl: string;
   pointPerVisit: number;
   freeCustomerLimit: number;
 };
@@ -103,6 +104,7 @@ export type RedeemRewardResult = {
   rewardCode: string;
   rewardName: string;
   customerName?: string;
+  alreadyRedeemed?: boolean;
 };
 
 export type SalonMirror = {
@@ -176,7 +178,7 @@ export type RewardCodeInfo = {
   rewardId?: string;
   rewardCode: string;
   rewardName?: string;
-  status: "unused" | "used" | "expired" | "not_found";
+  status: "unused" | "used" | "expired" | "revoked" | "not_found";
   customerName?: string;
   createdAtMs?: number | null;
   usedAtMs?: number | null;
@@ -490,6 +492,7 @@ async function getSalonProfileDirect(salonId: string): Promise<SalonProfile> {
       name: "HAIRCUT Studio",
       address: "",
       phone: "",
+      avatarUrl: "",
       pointPerVisit: 1,
       freeCustomerLimit: 50,
     };
@@ -503,6 +506,7 @@ async function getSalonProfileDirect(salonId: string): Promise<SalonProfile> {
       name: "Salon",
       address: "",
       phone: "",
+      avatarUrl: "",
       pointPerVisit: 1,
       freeCustomerLimit: 50,
     };
@@ -514,6 +518,7 @@ async function getSalonProfileDirect(salonId: string): Promise<SalonProfile> {
     name: String(data.name || "Salon"),
     address: String(data.address || ""),
     phone: String(data.phone || ""),
+    avatarUrl: String(data.avatarUrl || ""),
     pointPerVisit: Number(data.pointPerVisit ?? 1),
     freeCustomerLimit: Number(data.freeCustomerLimit ?? 50),
   };
@@ -534,6 +539,7 @@ async function updateSalonProfileDirect(input: {
       name: input.name,
       address: input.address,
       phone: input.phone,
+      avatarUrl: "",
       pointPerVisit: input.pointPerVisit,
       freeCustomerLimit: 50,
     };
@@ -1337,6 +1343,7 @@ export async function saveLuckyWheelConfig(salonId: string, config: LuckyWheelCo
 export async function redeemRewardCode(input: {
   salonId: string;
   rewardCode: string;
+  branchId?: string;
 }): Promise<RedeemRewardResult> {
   const rewardCode = normalizeRewardCode(input.rewardCode);
 
@@ -1344,22 +1351,28 @@ export async function redeemRewardCode(input: {
     throw new Error("Vui lòng nhập mã quà");
   }
 
-  return callWriteFunctionOrFallback(
+  const pendingOperation = getOrCreatePendingOperationKey(
+    `redeem:${input.salonId}:${localScopeHash(rewardCode)}`,
+  );
+  const result = await callWriteFunctionOrFallback(
     "redeemRewardCode",
     {
       salonId: input.salonId,
       rewardCode,
+      branchId: input.branchId,
+      idempotencyKey: pendingOperation.key,
     },
     () => redeemRewardCodeDirect(input.salonId, rewardCode),
-  ).then((result) => {
-    const maybeResult = result as Partial<RedeemRewardResult> | undefined;
-    return {
-      rewardId: maybeResult?.rewardId || "",
-      rewardCode,
-      rewardName: maybeResult?.rewardName || "",
-      customerName: maybeResult?.customerName || "",
-    };
-  });
+  );
+  localStorage.removeItem(pendingOperation.storageKey);
+  const maybeResult = result as Partial<RedeemRewardResult> | undefined;
+  return {
+    rewardId: maybeResult?.rewardId || "",
+    rewardCode,
+    rewardName: maybeResult?.rewardName || "",
+    customerName: maybeResult?.customerName || "",
+    alreadyRedeemed: maybeResult?.alreadyRedeemed === true,
+  };
 }
 
 export async function restoreRewardCode(input: { salonId: string; rewardCode: string }) {
@@ -1420,7 +1433,7 @@ async function redeemRewardCodeDirect(
     updatedAt: serverTimestamp(),
   });
 
-  const customer = await getCustomer(String(reward.customerId || ""));
+  const customer = await getCustomer(String(reward.customerId || ""), salonId);
 
   return {
     rewardId: rewardDoc.id,
@@ -1789,7 +1802,7 @@ async function lookupRewardCodeDirect(
 
   const rewardDoc = snap.docs[0];
   const reward = rewardDoc.data();
-  const customer = await getCustomer(String(reward.customerId || ""));
+  const customer = await getCustomer(String(reward.customerId || ""), salonId);
 
   return {
     found: true,
@@ -2011,7 +2024,7 @@ function trustedPointRequestPhotoUrls(
 async function attachCustomersToRequests(requests: PointRequest[]) {
   const pairs = await Promise.all(
     requests.map(async (request) => {
-      const customer = await getCustomer(request.customerId);
+      const customer = await getCustomer(request.customerId, request.salonId);
       return {
         ...request,
         customer: customer ?? request.customer,
@@ -2022,7 +2035,10 @@ async function attachCustomersToRequests(requests: PointRequest[]) {
   return pairs;
 }
 
-async function getCustomer(customerId: string): Promise<CustomerSummary | undefined> {
+async function getCustomer(
+  customerId: string,
+  salonId: string,
+): Promise<CustomerSummary | undefined> {
   const db = getFirebaseDb();
 
   if (!db || !customerId) {
@@ -2031,7 +2047,7 @@ async function getCustomer(customerId: string): Promise<CustomerSummary | undefi
 
   const snap = await getDoc(doc(db, "customers", customerId));
 
-  if (!snap.exists()) {
+  if (!snap.exists() || snap.data().salonId !== salonId) {
     return undefined;
   }
 
@@ -2171,6 +2187,26 @@ function randomToken() {
   }
 
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+function localScopeHash(value: string) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function getOrCreatePendingOperationKey(scope: string) {
+  const storageKey = `haircut_pending_operation:${scope}`;
+  const existing = localStorage.getItem(storageKey);
+  if (existing && /^[A-Za-z0-9_-]{16,128}$/.test(existing)) {
+    return { storageKey, key: existing };
+  }
+  const key = randomToken();
+  localStorage.setItem(storageKey, key);
+  return { storageKey, key };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

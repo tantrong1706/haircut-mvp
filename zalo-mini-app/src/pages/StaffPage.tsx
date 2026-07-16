@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { HaircutPhotoCapture } from "../components/HaircutPhotoCapture";
 import { RedeemRewardPanel } from "../components/RedeemRewardPanel";
+import { AccountDeletionPanel } from "../components/AccountDeletionPanel";
 import { BrandLogo } from "../components/BrandLogo";
 import {
   StaffSession,
@@ -623,7 +624,14 @@ export function StaffPage({ currentUser }: Props) {
           </div>
         ) : null}
 
-        {canRedeemRewards ? <RedeemRewardPanel salonId={salonId} /> : null}
+        {canRedeemRewards ? (
+          <RedeemRewardPanel
+            salonId={salonId}
+            branchId={branchFilter === "all" ? undefined : branchFilter}
+          />
+        ) : null}
+
+        <AccountDeletionPanel currentUser={currentUser} />
 
         {message ? <p className="alert success">{message}</p> : null}
         {error ? <p className="alert error">{error}</p> : null}

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppSession } from "../services/types";
@@ -65,6 +65,7 @@ describe("ScanEntryPage", () => {
       qrType: "branch",
       salonId: "salon-a",
       salonName: "HAIRCUT Studio",
+      salonAvatarUrl: "https://example.test/salon-avatar.webp",
       branchId: "branch-a",
       branchName: "Chi nhánh Trung tâm",
       branchAddress: "123 Nguyễn Huệ, Quận 1, TP.HCM",
@@ -96,7 +97,7 @@ describe("ScanEntryPage", () => {
     render(<ScanEntryPage onReady={onReady} />);
 
     expect(await screen.findByText("Anh Tân")).toBeInTheDocument();
-    expect(screen.getByText("123 Nguyễn Huệ, Quận 1, TP.HCM")).toBeInTheDocument();
+    expect(screen.getAllByText("123 Nguyễn Huệ, Quận 1, TP.HCM")).not.toHaveLength(0);
     expect(screen.getByText("Thông tin tùy chọn").closest("details")).not.toHaveAttribute("open");
 
     await user.click(screen.getByRole("button", { name: "Xác nhận vào hàng chờ" }));
@@ -111,6 +112,15 @@ describe("ScanEntryPage", () => {
       "phone-token-test",
     );
     expect(mocks.requestPhoneToken).toHaveBeenCalledTimes(1);
+  });
+
+  it("hiển thị ảnh salon và quay về logo mặc định khi ảnh lỗi", async () => {
+    const { container } = render(<ScanEntryPage onReady={vi.fn()} />);
+    const salonAvatar = await screen.findByAltText("Ảnh đại diện HAIRCUT Studio");
+
+    expect(salonAvatar).toHaveAttribute("src", "https://example.test/salon-avatar.webp");
+    fireEvent.error(salonAvatar);
+    expect(container.querySelector(".salon-identity-avatar .brand-mark")).toBeInTheDocument();
   });
 
   it("không xin phone token khi khách đã tự nhập số điện thoại", async () => {

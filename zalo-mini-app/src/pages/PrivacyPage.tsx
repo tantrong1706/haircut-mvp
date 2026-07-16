@@ -92,6 +92,8 @@ export function PrivacyPage() {
         </p>
         <p>
           <a href="/terms">Đọc Điều khoản sử dụng của HAIRCUT</a>
+          <br />
+          <a href="/delete-account">Yêu cầu xóa tài khoản hoặc salon</a>
         </p>
       </div>
     </section>

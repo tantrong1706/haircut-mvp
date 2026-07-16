@@ -49,6 +49,7 @@ beforeEach(async () => {
       setDoc(doc(db, "users", "staff-a"), member(salonA, "staff", [branchA])),
       setDoc(doc(db, "users", "staff-other-a"), member(salonA, "staff", [branchB])),
       setDoc(doc(db, "users", "owner-b"), member(salonB, "owner")),
+      setDoc(doc(db, "users", "owner-suspended"), member("salon-suspended", "owner")),
       setDoc(doc(db, "users", "inactive-a"), {
         ...member(salonA, "staff", [branchA]),
         isActive: false,
@@ -61,6 +62,12 @@ beforeEach(async () => {
       }),
       setDoc(doc(db, "salons", salonA), { name: "Salon A", ownerId: "owner-a" }),
       setDoc(doc(db, "salons", salonB), { name: "Salon B", ownerId: "owner-b" }),
+      setDoc(doc(db, "salons", "salon-suspended"), {
+        name: "Salon đã khóa",
+        ownerId: "owner-suspended",
+        status: "suspended",
+        isActive: false,
+      }),
       setDoc(doc(db, "branches", branchA), {
         salonId: salonA,
         name: "Chi nhánh A",
@@ -79,6 +86,10 @@ beforeEach(async () => {
       }),
       setDoc(doc(db, "chair_sessions", "session-a"), session(salonA, branchA, "customer-a")),
       setDoc(doc(db, "chair_sessions", "session-b"), session(salonA, branchB, "customer-a")),
+      setDoc(
+        doc(db, "chair_sessions", "session-suspended"),
+        session("salon-suspended", "branch-suspended", "customer-suspended"),
+      ),
       setDoc(doc(db, "chair_sessions", "session-photo"), {
         ...session(salonA, branchA, "customer-photo"),
         status: "serving",
@@ -96,6 +107,29 @@ beforeEach(async () => {
       }),
       setDoc(doc(db, "haircut_records", "record-a"), privateRecord(salonA, "customer-a")),
       setDoc(doc(db, "reward_history", "reward-a"), privateRecord(salonA, "customer-a")),
+      setDoc(doc(db, "active_service_sessions", "active-a"), {
+        salonId: salonA,
+        branchId: branchA,
+        customerId: "customer-a",
+        sessionId: "session-a",
+      }),
+      setDoc(doc(db, "audit_events", "audit-a"), {
+        salonId: salonA,
+        branchId: branchA,
+        actorUid: "staff-a",
+        action: "session.claimed",
+      }),
+      setDoc(doc(db, "device_tokens", "token-a"), {
+        salonId: salonA,
+        uid: "staff-a",
+        token: "private-device-token",
+      }),
+      setDoc(doc(db, "support_requests", "support-a"), {
+        salonId: salonA,
+        branchId: branchA,
+        requestedBy: "owner-a",
+        status: "open",
+      }),
       setDoc(doc(db, "lucky_wheel", salonA), { salonId: salonA, requiredPoints: 5, slots: [] }),
       setDoc(doc(db, "_public_rate_limits", "private-counter"), {
         count: 1,
@@ -162,6 +196,13 @@ describe("Firestore production rules", () => {
     await assertFails(getDoc(doc(fakeRoleDb, "salons", salonA)));
   });
 
+  it("chặn toàn bộ thành viên khi salon bị khóa", async () => {
+    const ownerDb = testEnv.authenticatedContext("owner-suspended").firestore();
+
+    await assertFails(getDoc(doc(ownerDb, "salons", "salon-suspended")));
+    await assertFails(getDoc(doc(ownerDb, "chair_sessions", "session-suspended")));
+  });
+
   it("bắt buộc query hàng chờ giới hạn đúng salon và chi nhánh", async () => {
     const staffDb = testEnv.authenticatedContext("staff-a").firestore();
     const scopedQuery = query(
@@ -215,6 +256,25 @@ describe("Firestore production rules", () => {
 
     await assertFails(getDoc(doc(ownerDb, "_public_rate_limits", "private-counter")));
     await assertFails(setDoc(doc(ownerDb, "_public_rate_limits", "forged-counter"), { count: 0 }));
+  });
+
+  it("giữ collection vận hành ở chế độ server-only", async () => {
+    const ownerDb = testEnv.authenticatedContext("owner-a").firestore();
+    const staffDb = testEnv.authenticatedContext("staff-a").firestore();
+    const serverOnlyDocuments = [
+      ["active_service_sessions", "active-a"],
+      ["audit_events", "audit-a"],
+      ["device_tokens", "token-a"],
+      ["support_requests", "support-a"],
+    ] as const;
+
+    for (const [collectionName, documentId] of serverOnlyDocuments) {
+      await assertFails(getDoc(doc(ownerDb, collectionName, documentId)));
+      await assertFails(getDoc(doc(staffDb, collectionName, documentId)));
+      await assertFails(
+        setDoc(doc(ownerDb, collectionName, `forged-${documentId}`), { salonId: salonA }),
+      );
+    }
   });
 
   it("chỉ cho nhân viên phụ trách tải ảnh vào đúng lượt khách đã đồng ý", async () => {
@@ -365,6 +425,64 @@ describe("Firestore production rules", () => {
     await assertFails(getBytes(ref(otherOwnerStorage, ownAvatar.fullPath)));
     await assertFails(deleteObject(ref(otherOwnerStorage, ownAvatar.fullPath)));
     await assertSucceeds(deleteObject(ownAvatar));
+  });
+
+  it("chỉ owner đúng salon được quản lý ảnh đại diện salon hợp lệ", async () => {
+    const ownerStorage = testEnv.authenticatedContext("owner-a").storage();
+    const staffStorage = testEnv.authenticatedContext("staff-a").storage();
+    const otherOwnerStorage = testEnv.authenticatedContext("owner-b").storage();
+    const avatarPath = `salons/${salonA}/branding/avatar.webp`;
+    const bytes = new Uint8Array([1, 2, 3]);
+    const metadata = {
+      contentType: "image/webp",
+      customMetadata: { salonId: salonA, ownerUid: "owner-a" },
+    };
+
+    await assertSucceeds(uploadBytes(ref(ownerStorage, avatarPath), bytes, metadata));
+    await assertSucceeds(getBytes(ref(ownerStorage, avatarPath)));
+    await assertFails(uploadBytes(ref(staffStorage, avatarPath), bytes, metadata));
+    await assertFails(
+      uploadBytes(ref(otherOwnerStorage, avatarPath), bytes, {
+        ...metadata,
+        customMetadata: { salonId: salonA, ownerUid: "owner-b" },
+      }),
+    );
+    await assertFails(
+      uploadBytes(ref(ownerStorage, avatarPath), bytes, {
+        ...metadata,
+        customMetadata: { salonId: salonB, ownerUid: "owner-a" },
+      }),
+    );
+    await assertFails(
+      uploadBytes(ref(ownerStorage, avatarPath), bytes, {
+        ...metadata,
+        contentType: "image/png",
+      }),
+    );
+    await assertFails(
+      uploadBytes(ref(ownerStorage, `salons/${salonA}/branding/logo.webp`), bytes, metadata),
+    );
+    await assertFails(getBytes(ref(otherOwnerStorage, avatarPath)));
+    await assertFails(deleteObject(ref(otherOwnerStorage, avatarPath)));
+    await assertSucceeds(deleteObject(ref(ownerStorage, avatarPath)));
+  });
+
+  it("tắt upload ảnh theo feature flag riêng của salon", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), "salons", salonA, "settings", "features"), {
+        photoUploadEnabled: false,
+        maintenanceMode: false,
+      });
+    });
+    const ownerStorage = testEnv.authenticatedContext("owner-a").storage();
+    const avatarPath = `salons/${salonA}/branding/avatar.webp`;
+
+    await assertFails(
+      uploadBytes(ref(ownerStorage, avatarPath), new Uint8Array([1, 2, 3]), {
+        contentType: "image/webp",
+        customMetadata: { salonId: salonA, ownerUid: "owner-a" },
+      }),
+    );
   });
 });
 

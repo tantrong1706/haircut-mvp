@@ -15,6 +15,7 @@ import {
   RefreshCcw,
   Save,
   Search,
+  Share2,
   Settings2,
   ShieldCheck,
   SlidersHorizontal,
@@ -27,8 +28,10 @@ import {
 } from "lucide-react";
 import QRCode from "qrcode";
 import { BrandLogo } from "../components/BrandLogo";
+import { AccountDeletionPanel } from "../components/AccountDeletionPanel";
 import { HaircutPhotoCapture, type HaircutPhotoItem } from "../components/HaircutPhotoCapture";
 import { RedeemRewardPanel } from "../components/RedeemRewardPanel";
+import { SalonBrandingPanel } from "../features/owner/branding/SalonBrandingPanel";
 import {
   CustomerLookupResult,
   SalonBranch,
@@ -66,9 +69,11 @@ import {
   uploadHaircutPhoto,
 } from "../services/customerPhotos";
 import { trackEvent, withMonitoringTrace } from "../services/monitoring";
+import { removeSalonAvatar, uploadSalonAvatarFile } from "../services/salonBranding";
 import { LuckyWheelConfig, defaultLuckyWheelConfig } from "../services/types";
 
-type OwnerTab = "overview" | "approvals" | "branches" | "staff" | "customers" | "wheel" | "redeem";
+type OwnerTab =
+  "overview" | "approvals" | "branches" | "staff" | "customers" | "wheel" | "redeem" | "settings";
 
 type ConfirmRequest = {
   title: string;
@@ -91,6 +96,16 @@ export function OwnerPage({ currentUser }: Props) {
   const [requests, setRequests] = useState<PointRequest[]>([]);
   const [ownerBranches, setOwnerBranches] = useState<SalonBranch[]>([]);
   const [branchFilter, setBranchFilter] = useState("all");
+
+  useEffect(() => {
+    const navigate = (event: Event) => {
+      const route = String((event as CustomEvent<string>).detail || "");
+      const nextTab = ownerTabFromRoute(route);
+      if (nextTab) setActiveTab(nextTab);
+    };
+    window.addEventListener("haircut:navigate", navigate);
+    return () => window.removeEventListener("haircut:navigate", navigate);
+  }, []);
   const [overview, setOverview] = useState<OwnerOverview | null>(null);
   const [salonProfile, setSalonProfile] = useState<SalonProfile | null>(null);
   const [wheelConfig, setWheelConfig] = useState<LuckyWheelConfig>(defaultLuckyWheelConfig);
@@ -101,6 +116,7 @@ export function OwnerPage({ currentUser }: Props) {
   const [savingWheel, setSavingWheel] = useState(false);
   const [ownerAvatarUrl, setOwnerAvatarUrl] = useState(currentUser.avatarUrl || "");
   const [savingAvatar, setSavingAvatar] = useState(false);
+  const [savingSalonAvatar, setSavingSalonAvatar] = useState(false);
   const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [message, setMessage] = useState("");
@@ -492,6 +508,64 @@ export function OwnerPage({ currentUser }: Props) {
     }
   }
 
+  async function uploadSalonAvatar(file: File) {
+    if (savingSalonAvatar) {
+      return;
+    }
+
+    setSavingSalonAvatar(true);
+    setMessage("");
+    setError("");
+    try {
+      const result = await withMonitoringTrace(
+        "owner_upload_salon_avatar",
+        () => uploadSalonAvatarFile({ salonId, file }),
+        { salon_id: salonId, file_size: file.size, file_type: file.type },
+      );
+      setSalonProfile((current) =>
+        current ? { ...current, avatarUrl: result.salonAvatarUrl } : current,
+      );
+      trackEvent("owner_salon_avatar_saved", {
+        salon_id: salonId,
+        has_avatar: true,
+      });
+      setMessage("Đã cập nhật ảnh đại diện salon.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không tải được ảnh đại diện salon");
+    } finally {
+      setSavingSalonAvatar(false);
+    }
+  }
+
+  async function clearSalonAvatar() {
+    if (savingSalonAvatar) {
+      return;
+    }
+
+    setSavingSalonAvatar(true);
+    setMessage("");
+    setError("");
+    try {
+      const result = await withMonitoringTrace(
+        "owner_remove_salon_avatar",
+        () => removeSalonAvatar(salonId),
+        { salon_id: salonId },
+      );
+      setSalonProfile((current) =>
+        current ? { ...current, avatarUrl: result.salonAvatarUrl } : current,
+      );
+      trackEvent("owner_salon_avatar_saved", {
+        salon_id: salonId,
+        has_avatar: false,
+      });
+      setMessage("Đã xóa ảnh đại diện salon và dùng lại logo mặc định.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không xóa được ảnh đại diện salon");
+    } finally {
+      setSavingSalonAvatar(false);
+    }
+  }
+
   async function runConfirmRequest() {
     const request = confirmRequest;
 
@@ -583,6 +657,12 @@ export function OwnerPage({ currentUser }: Props) {
           label="Quà"
           onClick={() => setActiveTab("redeem")}
         />
+        <OwnerTabButton
+          active={activeTab === "settings"}
+          icon={<Settings2 size={18} />}
+          label="Cài đặt"
+          onClick={() => setActiveTab("settings")}
+        />
       </div>
 
       {activeTab === "overview" || activeTab === "approvals" ? (
@@ -601,6 +681,13 @@ export function OwnerPage({ currentUser }: Props) {
 
       {activeTab === "overview" ? (
         <>
+          <SalonBrandingPanel
+            salonName={salonProfile?.name || "Salon"}
+            avatarUrl={salonProfile?.avatarUrl || ""}
+            saving={savingSalonAvatar}
+            onUpload={uploadSalonAvatar}
+            onClear={clearSalonAvatar}
+          />
           <OwnerProfilePanel
             currentUser={currentUser}
             avatarUrl={ownerAvatarUrl}
@@ -653,8 +740,14 @@ export function OwnerPage({ currentUser }: Props) {
           onChange={setWheelConfig}
           onSave={saveWheel}
         />
+      ) : activeTab === "redeem" ? (
+        <RedeemRewardPanel
+          salonId={salonId}
+          branchId={branchFilter === "all" ? undefined : branchFilter}
+          allowRestore
+        />
       ) : (
-        <RedeemRewardPanel salonId={salonId} allowRestore />
+        <AccountDeletionPanel currentUser={currentUser} />
       )}
 
       {message ? <p className="alert success">{message}</p> : null}
@@ -1644,6 +1737,15 @@ function ManagedQrCard({
         </div>
       ) : null}
       <div className="button-row wrap-row">
+        {window.__haircutNativeShare ? (
+          <button
+            className="secondary-button"
+            onClick={() => void window.__haircutNativeShare?.(qrUrl, title)}
+          >
+            <Share2 size={18} aria-hidden="true" />
+            Chia sẻ QR
+          </button>
+        ) : null}
         <button className="secondary-button" onClick={() => onCopy(qrUrl)}>
           <Copy size={18} aria-hidden="true" />
           Sao chép liên kết
@@ -1685,6 +1787,18 @@ function ManagedQrCard({
       </div>
     </article>
   );
+}
+
+function ownerTabFromRoute(route: string): OwnerTab | null {
+  if (route.startsWith("/approvals")) return "approvals";
+  if (route.startsWith("/branches")) return "branches";
+  if (route.startsWith("/staff")) return "staff";
+  if (route.startsWith("/customers")) return "customers";
+  if (route.startsWith("/wheel")) return "wheel";
+  if (route.startsWith("/rewards")) return "redeem";
+  if (route.startsWith("/settings") || route.startsWith("/delete-account")) return "settings";
+  if (route.startsWith("/overview") || route.startsWith("/queue")) return "overview";
+  return null;
 }
 
 function safeFileName(value: string) {

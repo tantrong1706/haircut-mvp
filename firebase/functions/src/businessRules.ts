@@ -122,8 +122,8 @@ export function effectiveRewardStatus(
   status: unknown,
   expiresAtMs: number | null,
   nowMs: number,
-): "unused" | "used" | "expired" | "no_prize" {
-  if (status === "used" || status === "expired" || status === "no_prize") {
+): "unused" | "used" | "expired" | "revoked" | "no_prize" {
+  if (status === "used" || status === "expired" || status === "revoked" || status === "no_prize") {
     return status;
   }
   return expiresAtMs !== null && expiresAtMs <= nowMs ? "expired" : "unused";

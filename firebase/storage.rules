@@ -15,10 +15,52 @@ service firebase.storage {
         && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid));
     }
 
+    function salonPath(salonId) {
+      return /databases/(default)/documents/salons/$(salonId);
+    }
+
+    function salonOperational(salonId) {
+      return firestore.exists(salonPath(salonId))
+        && (
+          !("isActive" in firestore.get(salonPath(salonId)).data)
+          || firestore.get(salonPath(salonId)).data.isActive == true
+        )
+        && (
+          !("status" in firestore.get(salonPath(salonId)).data)
+          || firestore.get(salonPath(salonId)).data.status == "active"
+        );
+    }
+
+    function photoUploadEnabled(salonId) {
+      let systemPath = /databases/(default)/documents/system_config/features;
+      let salonFeaturePath = /databases/(default)/documents/salons/$(salonId)/settings/features;
+      return (
+          !firestore.exists(systemPath)
+          || !("maintenanceMode" in firestore.get(systemPath).data)
+          || firestore.get(systemPath).data.maintenanceMode == false
+        )
+        && (
+          !firestore.exists(systemPath)
+          || !("photoUploadEnabled" in firestore.get(systemPath).data)
+          || firestore.get(systemPath).data.photoUploadEnabled == true
+        )
+        && (
+          !firestore.exists(salonFeaturePath)
+          || !("maintenanceMode" in firestore.get(salonFeaturePath).data)
+          || firestore.get(salonFeaturePath).data.maintenanceMode == false
+        )
+        && (
+          !firestore.exists(salonFeaturePath)
+          || !("photoUploadEnabled" in firestore.get(salonFeaturePath).data)
+          || firestore.get(salonFeaturePath).data.photoUploadEnabled == true
+        );
+    }
+
     function isActiveMember(salonId) {
       return userExists()
         && userDoc().data.salonId == salonId
-        && userDoc().data.isActive == true;
+        && userDoc().data.isActive == true
+        && salonOperational(salonId);
     }
 
     function isOwner(salonId) {
@@ -104,12 +146,22 @@ service firebase.storage {
         && request.resource.contentType.matches('image/(jpeg|png|webp)');
     }
 
+    function isAllowedSalonAvatarUpload(salonId) {
+      return request.resource != null
+        && request.resource.size > 0
+        && request.resource.size <= 3 * 1024 * 1024
+        && request.resource.contentType == "image/webp"
+        && request.resource.metadata.salonId == salonId
+        && request.resource.metadata.ownerUid == request.auth.uid;
+    }
+
     match /salons/{salonId}/customers/{customerId}/haircuts/{sessionId}/{fileName} {
       allow read: if customerAllowsPhoto(salonId, customerId)
         && (isOwner(salonId) || isAssignedSessionMember(salonId, customerId, sessionId));
       allow create: if (isAssignedServingMember(salonId, customerId, sessionId)
           || isOwnerPendingApprovalSession(salonId, customerId, sessionId))
         && customerAllowsPhoto(salonId, customerId)
+        && photoUploadEnabled(salonId)
         && isAllowedHaircutPhoto(salonId, customerId, sessionId);
       allow update: if false;
       allow delete: if isOwner(salonId)
@@ -122,11 +174,22 @@ service firebase.storage {
     match /salons/{salonId}/owner_avatars/{ownerUid}/{fileName} {
       allow read: if isActiveMember(salonId);
       allow create, update: if isOwner(salonId)
+        && photoUploadEnabled(salonId)
         && request.auth.uid == ownerUid
         && fileName.matches('avatar(\\.(jpg|jpeg|png|webp))?')
         && isAllowedAvatarUpload();
       allow delete: if isOwner(salonId)
         && request.auth.uid == ownerUid;
+    }
+
+    match /salons/{salonId}/branding/{fileName} {
+      allow read: if isActiveMember(salonId);
+      allow create, update: if isOwner(salonId)
+        && photoUploadEnabled(salonId)
+        && fileName == "avatar.webp"
+        && isAllowedSalonAvatarUpload(salonId);
+      allow delete: if isOwner(salonId)
+        && fileName == "avatar.webp";
     }
   }
 }

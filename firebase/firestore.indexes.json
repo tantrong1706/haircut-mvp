@@ -1,6 +1,14 @@
 {
   "indexes": [
     {
+      "collectionGroup": "salon_deletion_jobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "executeAfter", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "chair_sessions",
       "queryScope": "COLLECTION",
       "fields": [
@@ -221,6 +229,18 @@
     }
   ],
   "fieldOverrides": [
+    {
+      "collectionGroup": "idempotency_keys",
+      "fieldPath": "expiresAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "_authenticated_rate_limits",
+      "fieldPath": "expiresAt",
+      "ttl": true,
+      "indexes": []
+    },
     {
       "collectionGroup": "_public_rate_limits",
       "fieldPath": "expiresAt",

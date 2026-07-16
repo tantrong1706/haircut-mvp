@@ -95,6 +95,52 @@ jobs:
         working-directory: zalo-mini-app
         run: git diff --exit-code -- app-config.json
 
+  admin-web:
+    name: Admin Web
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Setup Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/admin-web/package-lock.json
+
+      - name: Install dependencies
+        working-directory: apps/admin-web
+        run: npm ci
+
+      - name: Typecheck, lint, unit test and build
+        working-directory: apps/admin-web
+        run: npm run check
+
+  manager-mobile:
+    name: Manager Mobile Web Bundle
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Setup Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/manager-mobile/package-lock.json
+
+      - name: Install dependencies
+        working-directory: apps/manager-mobile
+        run: npm ci
+
+      - name: Typecheck, unit test and build
+        working-directory: apps/manager-mobile
+        run: npm run check
+
   browser-tests:
     name: Browser flows
     runs-on: ubuntu-latest

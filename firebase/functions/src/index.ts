@@ -1,4 +1,12 @@
 import { createHash, createHmac, randomBytes } from "node:crypto";
+import {
+  ApiErrorCode,
+  DeviceTokenSchema,
+  SalonStatusSchema,
+  SystemFeaturesSchema,
+  normalizeSystemFeatures,
+  type SystemFeatures,
+} from "@haircut/contracts";
 import { initializeApp } from "firebase-admin/app";
 import {
   AggregateField,
@@ -9,10 +17,12 @@ import {
   getFirestore,
 } from "firebase-admin/firestore";
 import { getAuth } from "firebase-admin/auth";
+import { getMessaging } from "firebase-admin/messaging";
 import { getStorage } from "firebase-admin/storage";
 import { defineSecret } from "firebase-functions/params";
 import { HttpsError, onCall, onRequest } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
+import { onDocumentCreated, onDocumentUpdated } from "firebase-functions/v2/firestore";
 import {
   buildCustomerContactPatch,
   canCreateCustomerWithinPlan,
@@ -31,6 +41,11 @@ import {
   wheelRewardOutcome,
 } from "./businessRules";
 import { buildNameSearchPrefixes, normalizeSearchText } from "./customerSearch";
+import {
+  isExpectedSalonAvatarPath,
+  isValidSalonAvatarMetadata,
+  salonAvatarObjectPath,
+} from "./domains/salons/branding";
 import {
   MAX_HAIRCUT_PHOTOS,
   MAX_HAIRCUT_PHOTO_SIZE,
@@ -54,12 +69,34 @@ import {
   type ZaloPrivacyEvent,
   type ZaloPrivacyProcessingResult,
 } from "./zaloPrivacyWebhook";
+import {
+  assertSalonIsOperational,
+  createAuthorization,
+  salonStatus,
+  type UserRole,
+} from "./authz/authorization";
+import { auditEventData } from "./domains/audit/auditEvent";
+import { apiError } from "./shared/errors";
 
 initializeApp();
 
 const db = getFirestore();
 const storage = getStorage();
-const functionOptions = { region: "asia-southeast1" };
+const {
+  assertBranchAccess,
+  assertBranchIsOperational,
+  assertSalonRole,
+  assertSalonRoleIncludingInactiveSalon,
+  assertSystemAdmin,
+  getAppUser,
+} = createAuthorization(db);
+const functionOptions = {
+  region: "asia-southeast1",
+  timeoutSeconds: 60,
+  concurrency: 40,
+  maxInstances: 50,
+  enforceAppCheck: process.env.ENFORCE_APP_CHECK === "true",
+};
 const zaloAppSecret = defineSecret("ZALO_APP_SECRET");
 const zaloOpenApiKey = defineSecret("ZALO_OPEN_API_KEY");
 const qrSigningSecret = defineSecret("QR_SIGNING_SECRET");
@@ -93,21 +130,18 @@ const PUBLIC_RATE_LIMITS = {
   spinLuckyWheelFromZalo: { windowMs: 60_000, tokenLimit: 4, ipLimit: 40 },
 } as const;
 
+const AUTHENTICATED_RATE_LIMITS = {
+  submitPointRequest: 20,
+  approvePointRequest: 60,
+  rejectPointRequest: 60,
+  redeemRewardCode: 30,
+  spinLuckyWheel: 20,
+  claimServiceSession: 60,
+  adminMutation: 40,
+} as const;
+
 type PublicEndpoint = keyof typeof PUBLIC_RATE_LIMITS;
-
-type UserRole = "owner" | "staff";
-
-type AppUser = {
-  salonId: string;
-  name: string;
-  phone?: string;
-  role: UserRole;
-  isActive: boolean;
-  canRedeemRewards?: boolean;
-  inviteStatus?: "pending" | "accepted";
-  branchId?: string;
-  branchIds?: string[];
-};
+type AuthenticatedEndpoint = keyof typeof AUTHENTICATED_RATE_LIMITS;
 
 type LuckyWheelSlot = {
   label: string;
@@ -134,11 +168,18 @@ const zaloProfileCache = new Map<string, { profile: ZaloProfile; expiresAtMs: nu
 
 function requireString(value: unknown, field: string): string {
   if (typeof value !== "string" || value.trim().length === 0) {
-    throw new HttpsError("invalid-argument", `Thiếu trường bắt buộc: ${field}`);
+    throw apiError(
+      "invalid-argument",
+      ApiErrorCode.INVALID_REQUEST,
+      `Thiếu trường bắt buộc: ${field}`,
+      { field },
+    );
   }
   const trimmed = value.trim();
   if (trimmed.length > 2_000) {
-    throw new HttpsError("invalid-argument", `${field} quá dài`);
+    throw apiError("invalid-argument", ApiErrorCode.INVALID_REQUEST, `${field} quá dài`, {
+      field,
+    });
   }
   return trimmed;
 }
@@ -148,7 +189,7 @@ function optionalString(value: unknown): string | undefined {
     return undefined;
   }
   if (typeof value !== "string") {
-    throw new HttpsError("invalid-argument", "Giá trị phải là chuỗi");
+    throw apiError("invalid-argument", ApiErrorCode.INVALID_REQUEST, "Giá trị phải là chuỗi");
   }
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
@@ -351,6 +392,49 @@ function avatarUrlString(value: unknown, salonId: string, ownerUid: string): str
   return trimmed;
 }
 
+function trustedStoredSalonAvatarUrl(value: unknown, salonId: string): string {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  const trimmed = value.trim();
+  const objectName = storageObjectNameFromDownloadUrl(trimmed, storage.bucket().name);
+  return objectName && isExpectedSalonAvatarPath(objectName, salonId) ? trimmed : "";
+}
+
+function salonAvatarUrlString(
+  value: unknown,
+  salonId: string,
+): {
+  salonAvatarUrl: string;
+  objectName: string | null;
+} {
+  if (value === undefined || value === null || value === "") {
+    return { salonAvatarUrl: "", objectName: null };
+  }
+  if (typeof value !== "string") {
+    throw new HttpsError("invalid-argument", "Ảnh đại diện salon không hợp lệ");
+  }
+
+  const salonAvatarUrl = value.trim();
+  if (!salonAvatarUrl) {
+    return { salonAvatarUrl: "", objectName: null };
+  }
+  if (salonAvatarUrl.length > 700) {
+    throw new HttpsError("invalid-argument", "Đường dẫn ảnh đại diện salon quá dài");
+  }
+
+  const objectName = storageObjectNameFromDownloadUrl(salonAvatarUrl, storage.bucket().name);
+  if (!objectName || !isExpectedSalonAvatarPath(objectName, salonId)) {
+    throw new HttpsError(
+      "invalid-argument",
+      "Ảnh đại diện phải được tải lên đúng thư mục của salon",
+    );
+  }
+
+  return { salonAvatarUrl, objectName };
+}
+
 function requireBoolean(value: unknown, field: string): boolean {
   if (typeof value !== "boolean") {
     throw new HttpsError("invalid-argument", `${field} phải là đúng/sai`);
@@ -373,52 +457,219 @@ function requireBoundedPositiveNumber(value: unknown, field: string, max: number
   return result;
 }
 
+function requireIdempotencyKey(value: unknown): string {
+  const key = limitedString(value, "idempotencyKey", 128);
+  if (!/^[A-Za-z0-9_-]{16,128}$/.test(key)) {
+    throw new HttpsError("invalid-argument", "Mã chống gửi lặp không hợp lệ");
+  }
+  return key;
+}
+
 function currentUid(auth: { uid?: string } | undefined): string {
   if (!auth?.uid) {
-    throw new HttpsError("unauthenticated", "Bạn cần đăng nhập");
+    throw apiError("unauthenticated", ApiErrorCode.UNAUTHENTICATED, "Bạn cần đăng nhập");
   }
   return auth.uid;
 }
 
-async function getAppUser(uid: string): Promise<AppUser> {
-  const snap = await db.collection("users").doc(uid).get();
-  if (!snap.exists) {
-    throw new HttpsError("permission-denied", "Không tìm thấy hồ sơ phân quyền");
-  }
-  const user = snap.data() as AppUser;
-  if (!user.isActive) {
-    throw new HttpsError("permission-denied", "Tài khoản đã bị tắt");
-  }
-  if (user.role === "staff" && user.inviteStatus === "pending") {
-    await snap.ref.set(
-      {
-        inviteStatus: "accepted",
-        inviteAcceptedAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-      },
-      { merge: true },
+function assertRecentAuthentication(
+  auth: { token?: Record<string, unknown> } | undefined,
+  maxAgeMs = 5 * 60 * 1000,
+) {
+  const authTimeSeconds = Number(auth?.token?.auth_time ?? 0);
+  if (
+    !Number.isFinite(authTimeSeconds) ||
+    authTimeSeconds <= 0 ||
+    Date.now() - authTimeSeconds * 1000 > maxAgeMs
+  ) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Vui lòng nhập lại mật khẩu trước khi xóa tài khoản hoặc salon",
+      { errorCode: "RECENT_LOGIN_REQUIRED" },
     );
-    user.inviteStatus = "accepted";
   }
-  return user;
 }
 
-async function assertSalonRole(
-  uid: string,
+async function getSystemFeatures(salonId: string): Promise<SystemFeatures> {
+  const [systemSnap, salonSnap] = await Promise.all([
+    db.collection("system_config").doc("features").get(),
+    db.collection("salons").doc(salonId).collection("settings").doc("features").get(),
+  ]);
+  return normalizeSystemFeatures(systemSnap.data(), salonSnap.data());
+}
+
+async function assertFeatureEnabled(
   salonId: string,
-  allowedRoles: UserRole[],
-): Promise<AppUser> {
-  const user = await getAppUser(uid);
-  if (user.salonId !== salonId || !allowedRoles.includes(user.role)) {
-    throw new HttpsError("permission-denied", "Không có quyền với salon này");
+  feature: keyof Pick<
+    SystemFeatures,
+    | "checkinEnabled"
+    | "luckyWheelEnabled"
+    | "rewardRedeemEnabled"
+    | "photoUploadEnabled"
+    | "pointApprovalEnabled"
+  >,
+  disabledMessage: string,
+  appVersionInput?: unknown,
+) {
+  const features = await getSystemFeatures(salonId);
+  assertSupportedAppVersion(features, appVersionInput);
+  if (features.maintenanceMode) {
+    throw new HttpsError("unavailable", "Hệ thống đang bảo trì. Vui lòng thử lại sau.", {
+      errorCode: ApiErrorCode.MAINTENANCE_MODE,
+    });
   }
-  return user;
+  if (!features[feature]) {
+    throw new HttpsError("failed-precondition", disabledMessage, {
+      errorCode: ApiErrorCode.FEATURE_DISABLED,
+      feature,
+    });
+  }
+  return features;
 }
 
-function assertBranchAccess(user: AppUser, branchId: string) {
-  if (!canUserAccessBranch(user, branchId)) {
-    throw new HttpsError("permission-denied", "Bạn không được phân công tại chi nhánh này");
+function assertSupportedAppVersion(features: SystemFeatures, value: unknown) {
+  const minimum = parseAppVersion(features.minimumSupportedAppVersion);
+  if (!minimum) return;
+  const current = parseAppVersion(value);
+  if (!current || compareAppVersions(current, minimum) < 0) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Phiên bản ứng dụng đã quá cũ. Vui lòng cập nhật.",
+      {
+        errorCode: ApiErrorCode.APP_VERSION_UNSUPPORTED,
+        minimumSupportedAppVersion: features.minimumSupportedAppVersion,
+        recommendedAppVersion: features.recommendedAppVersion,
+      },
+    );
   }
+}
+
+function parseAppVersion(value: unknown): [number, number, number] | null {
+  if (typeof value !== "string") return null;
+  const match = value.trim().match(/^(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/);
+  if (!match) return null;
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+function compareAppVersions(left: [number, number, number], right: [number, number, number]) {
+  for (let index = 0; index < 3; index += 1) {
+    if (left[index] !== right[index]) return left[index] - right[index];
+  }
+  return 0;
+}
+
+function parseFeaturePatch(value: unknown): Partial<SystemFeatures> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new HttpsError("invalid-argument", "Cấu hình tính năng không hợp lệ");
+  }
+  const input = value as Record<string, unknown>;
+  const booleanKeys = [
+    "checkinEnabled",
+    "luckyWheelEnabled",
+    "rewardRedeemEnabled",
+    "photoUploadEnabled",
+    "pointApprovalEnabled",
+    "maintenanceMode",
+  ] as const;
+  const versionKeys = ["minimumSupportedAppVersion", "recommendedAppVersion"] as const;
+  const allowedKeys = new Set<string>([...booleanKeys, ...versionKeys]);
+  if (Object.keys(input).some((key) => !allowedKeys.has(key))) {
+    throw new HttpsError("invalid-argument", "Cấu hình chứa trường không được hỗ trợ");
+  }
+
+  const patch: Partial<SystemFeatures> = {};
+  booleanKeys.forEach((key) => {
+    if (key in input) {
+      if (typeof input[key] !== "boolean") {
+        throw new HttpsError("invalid-argument", `${key} phải là đúng/sai`);
+      }
+      patch[key] = input[key];
+    }
+  });
+  versionKeys.forEach((key) => {
+    if (key in input) {
+      if (typeof input[key] !== "string" || String(input[key]).trim().length > 32) {
+        throw new HttpsError("invalid-argument", `${key} không hợp lệ`);
+      }
+      patch[key] = String(input[key]).trim();
+    }
+  });
+  if (Object.keys(patch).length === 0) {
+    throw new HttpsError("invalid-argument", "Chưa có cấu hình nào để cập nhật");
+  }
+  return patch;
+}
+
+function deviceTokenId(token: string) {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+async function sendManagerPush(input: {
+  salonId: string;
+  title: string;
+  body: string;
+  data: Record<string, string>;
+  role?: UserRole;
+  uid?: string;
+  branchId?: string;
+}) {
+  const tokensSnap = await db
+    .collection("device_tokens")
+    .where("salonId", "==", input.salonId)
+    .where("isActive", "==", true)
+    .limit(500)
+    .get();
+  const tokenDocs = tokensSnap.docs.filter((tokenDoc) => {
+    const token = tokenDoc.data();
+    if (input.uid && token.uid !== input.uid) {
+      return false;
+    }
+    if (input.role && token.role !== input.role) {
+      return false;
+    }
+    if (input.branchId && token.role === "staff" && !Array.isArray(token.branchIds)) {
+      return false;
+    }
+    if (input.branchId && token.role === "staff" && !token.branchIds.includes(input.branchId)) {
+      return false;
+    }
+    return typeof token.token === "string" && token.token.length >= 16;
+  });
+  const uniqueTokens = [...new Set(tokenDocs.map((tokenDoc) => String(tokenDoc.data().token)))];
+  if (uniqueTokens.length === 0) {
+    return { sent: 0, failed: 0 };
+  }
+
+  const response = await getMessaging().sendEachForMulticast({
+    tokens: uniqueTokens,
+    notification: { title: input.title, body: input.body },
+    data: input.data,
+  });
+  const invalidCodes = new Set([
+    "messaging/invalid-registration-token",
+    "messaging/registration-token-not-registered",
+  ]);
+  const cleanup = db.batch();
+  let cleanupCount = 0;
+  response.responses.forEach((result, index) => {
+    if (!result.success && invalidCodes.has(String(result.error?.code || ""))) {
+      const token = uniqueTokens[index];
+      cleanup.set(
+        db.collection("device_tokens").doc(deviceTokenId(token)),
+        {
+          isActive: false,
+          disabledReason: "invalid_registration",
+          updatedAt: Timestamp.now(),
+        },
+        { merge: true },
+      );
+      cleanupCount += 1;
+    }
+  });
+  if (cleanupCount > 0) {
+    await cleanup.commit();
+  }
+  return { sent: response.successCount, failed: response.failureCount };
 }
 
 async function resolveStaffBranchIds(salonId: string, value: unknown): Promise<string[]> {
@@ -519,8 +770,9 @@ async function enforcePublicRequestPolicy(
 
     snapshots.forEach((snapshot, index) => {
       if (Number(snapshot.data()?.count ?? 0) >= scopes[index].limit) {
-        throw new HttpsError(
+        throw apiError(
           "resource-exhausted",
+          ApiErrorCode.RATE_LIMITED,
           "Bạn thao tác quá nhanh. Vui lòng chờ một phút rồi thử lại.",
         );
       }
@@ -541,6 +793,40 @@ async function enforcePublicRequestPolicy(
         { merge: true },
       );
     });
+  });
+}
+
+async function enforceAuthenticatedRateLimit(
+  endpoint: AuthenticatedEndpoint,
+  uid: string,
+  salonId: string,
+) {
+  const windowMs = 60_000;
+  const windowStart = Math.floor(Date.now() / windowMs) * windowMs;
+  const id = createHash("sha256")
+    .update(`${endpoint}:${uid}:${salonId}:${windowStart}`)
+    .digest("hex");
+  const ref = db.collection("_authenticated_rate_limits").doc(id);
+  const limit = AUTHENTICATED_RATE_LIMITS[endpoint];
+  await db.runTransaction(async (tx) => {
+    const snapshot = await tx.get(ref);
+    if (Number(snapshot.data()?.count ?? 0) >= limit) {
+      throw new HttpsError("resource-exhausted", "Bạn thao tác quá nhanh. Vui lòng thử lại sau.", {
+        errorCode: ApiErrorCode.RATE_LIMITED,
+      });
+    }
+    tx.set(
+      ref,
+      {
+        endpoint,
+        uidHash: createHash("sha256").update(uid).digest("hex"),
+        salonIdHash: createHash("sha256").update(salonId).digest("hex"),
+        count: FieldValue.increment(1),
+        expiresAt: Timestamp.fromMillis(windowStart + 2 * windowMs),
+        updatedAt: Timestamp.now(),
+      },
+      { merge: true },
+    );
   });
 }
 
@@ -745,29 +1031,6 @@ function randomToken(bytes = 20): string {
   return randomBytes(bytes).toString("hex");
 }
 
-function auditEventData(input: {
-  salonId: string;
-  actorId: string;
-  action: string;
-  targetType: string;
-  targetId: string;
-  before?: Record<string, unknown>;
-  after?: Record<string, unknown>;
-  createdAt?: Timestamp;
-}) {
-  return {
-    salonId: input.salonId,
-    actorId: input.actorId,
-    action: input.action,
-    targetType: input.targetType,
-    targetId: input.targetId,
-    before: input.before ?? null,
-    after: input.after ?? null,
-    correlationId: randomToken(12),
-    createdAt: input.createdAt ?? Timestamp.now(),
-  };
-}
-
 function rewardCode(seed?: string): string {
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
   const suffix = seed
@@ -830,11 +1093,13 @@ type CustomerQrResolution = {
   qrType: "salon" | "branch" | "legacy-mirror";
   salonId: string;
   salonName: string;
+  salonAvatarUrl: string;
   branchId: string | null;
   branchName: string;
   branchAddress: string;
   selectionRequired: boolean;
   branches: Array<ReturnType<typeof publicBranch>>;
+  features: SystemFeatures;
   legacyMirrorId?: string;
 };
 
@@ -853,11 +1118,14 @@ async function resolveCustomerQrData(data: unknown): Promise<CustomerQrResolutio
         : "salon";
   const salonSnap = await db.collection("salons").doc(salonId).get();
 
-  if (!salonSnap.exists || salonSnap.data()?.isActive === false) {
+  if (!salonSnap.exists) {
     throw new HttpsError("not-found", "Salon không tồn tại hoặc đã ngừng hoạt động");
   }
 
   const salonName = String(salonSnap.data()?.name || "Salon");
+  const salonAvatarUrl = trustedStoredSalonAvatarUrl(salonSnap.data()?.avatarUrl, salonId);
+  assertSalonIsOperational(salonSnap.data());
+  const features = await getSystemFeatures(salonId);
   const secret = qrSigningSecret.value();
   if (secret.length < 32) {
     throw new HttpsError("failed-precondition", "QR của salon chưa được cấu hình");
@@ -890,11 +1158,13 @@ async function resolveCustomerQrData(data: unknown): Promise<CustomerQrResolutio
       qrType,
       salonId,
       salonName,
+      salonAvatarUrl,
       branchId: branch.id,
       branchName: branch.name,
       branchAddress: branch.address,
       selectionRequired: false,
       branches: [branch],
+      features,
       legacyMirrorId: mirrorSnap.id,
     };
   }
@@ -927,11 +1197,13 @@ async function resolveCustomerQrData(data: unknown): Promise<CustomerQrResolutio
       qrType,
       salonId,
       salonName,
+      salonAvatarUrl,
       branchId: branch.id,
       branchName: branch.name,
       branchAddress: branch.address,
       selectionRequired: false,
       branches: [branch],
+      features,
     };
   }
 
@@ -963,11 +1235,13 @@ async function resolveCustomerQrData(data: unknown): Promise<CustomerQrResolutio
     qrType,
     salonId,
     salonName,
+    salonAvatarUrl,
     branchId: selected?.id ?? null,
     branchName: selected?.name ?? "",
     branchAddress: selected?.address ?? "",
     selectionRequired: selection.mode === "choose",
     branches,
+    features,
   };
 }
 
@@ -1005,10 +1279,25 @@ function startOfTodayBangkokMs(): number {
   return startUtcMs - offsetMs;
 }
 
-async function spinWheelForCustomer(salonId: string, customerId: string): Promise<SpinWheelResult> {
+async function spinWheelForCustomer(
+  salonId: string,
+  customerId: string,
+  idempotencyKey: string,
+  appVersion: unknown,
+): Promise<SpinWheelResult> {
+  await assertFeatureEnabled(
+    salonId,
+    "luckyWheelEnabled",
+    "Vòng quay đang tạm ngừng. Vui lòng quay lại sau.",
+    appVersion,
+  );
   const wheelRef = db.collection("lucky_wheel").doc(salonId);
   const customerRef = db.collection("customers").doc(customerId);
-  const rewardRef = db.collection("reward_history").doc();
+  const operationId = createHash("sha256")
+    .update(`spin:${salonId}:${customerId}:${idempotencyKey}`)
+    .digest("hex");
+  const operationRef = db.collection("idempotency_keys").doc(operationId);
+  const rewardRef = db.collection("reward_history").doc(operationId);
   const now = Timestamp.now();
 
   let selectedReward = "";
@@ -1018,7 +1307,28 @@ async function spinWheelForCustomer(salonId: string, customerId: string): Promis
   let pointsAfter = 0;
 
   await db.runTransaction(async (tx) => {
-    const [wheelSnap, customerSnap] = await Promise.all([tx.get(wheelRef), tx.get(customerRef)]);
+    const [operationSnap, wheelSnap, customerSnap] = await Promise.all([
+      tx.get(operationRef),
+      tx.get(wheelRef),
+      tx.get(customerRef),
+    ]);
+    if (operationSnap.exists) {
+      const operation = operationSnap.data();
+      if (
+        operation?.operation !== "wheel.spin" ||
+        operation?.salonId !== salonId ||
+        operation?.customerId !== customerId
+      ) {
+        throw new HttpsError("already-exists", "Mã chống gửi lặp đã được sử dụng");
+      }
+      const response = operation.response as Partial<SpinWheelResult> | undefined;
+      selectedReward = String(response?.rewardName || "");
+      selectedCode = String(response?.rewardCode || "");
+      isWinning = response?.isWinning === true;
+      selectedIndex = Number(response?.selectedIndex ?? 0);
+      pointsAfter = Number(response?.pointsAfter ?? 0);
+      return;
+    }
     if (!wheelSnap.exists) {
       throw new HttpsError("not-found", "Vòng quay chưa được cấu hình");
     }
@@ -1085,6 +1395,21 @@ async function spinWheelForCustomer(salonId: string, customerId: string): Promis
         updatedAt: now,
       });
     }
+    tx.set(operationRef, {
+      operation: "wheel.spin",
+      salonId,
+      customerId,
+      response: {
+        rewardId: rewardRef.id,
+        rewardName: selectedReward,
+        rewardCode: selectedCode,
+        isWinning,
+        pointsAfter,
+        selectedIndex,
+      },
+      createdAt: now,
+      expiresAt: Timestamp.fromMillis(now.toMillis() + 7 * 24 * 60 * 60 * 1000),
+    });
   });
 
   return {
@@ -1773,6 +2098,68 @@ export const updateOwnerAvatar = onCall(functionOptions, async (request) => {
   return { avatarUrl };
 });
 
+export const updateSalonAvatar = onCall(functionOptions, async (request) => {
+  const uid = currentUid(request.auth);
+  const salonId = requireString(request.data?.salonId, "salonId");
+  await assertSalonRole(uid, salonId, ["owner"]);
+
+  const { salonAvatarUrl, objectName } = salonAvatarUrlString(
+    request.data?.salonAvatarUrl,
+    salonId,
+  );
+  const salonRef = db.collection("salons").doc(salonId);
+  const salonSnap = await salonRef.get();
+  if (!salonSnap.exists) {
+    throw new HttpsError("not-found", "Không tìm thấy salon");
+  }
+
+  if (objectName) {
+    try {
+      const [metadata] = await storage.bucket().file(objectName).getMetadata();
+      if (!isValidSalonAvatarMetadata(metadata, { salonId, ownerUid: uid })) {
+        throw new HttpsError(
+          "invalid-argument",
+          "Ảnh đại diện salon không đúng định dạng hoặc thông tin tải lên",
+        );
+      }
+    } catch (error) {
+      if (error instanceof HttpsError) {
+        throw error;
+      }
+      throw new HttpsError("invalid-argument", "Không tìm thấy ảnh đại diện vừa tải lên");
+    }
+  }
+
+  const previousAvatarUrl = trustedStoredSalonAvatarUrl(salonSnap.data()?.avatarUrl, salonId);
+  const now = Timestamp.now();
+  const avatarBatch = db.batch();
+  avatarBatch.set(salonRef, { avatarUrl: salonAvatarUrl || null, updatedAt: now }, { merge: true });
+  avatarBatch.set(
+    db.collection("audit_events").doc(),
+    auditEventData({
+      salonId,
+      actorId: uid,
+      action: salonAvatarUrl ? "salon.avatar_updated" : "salon.avatar_removed",
+      targetType: "salon",
+      targetId: salonId,
+      before: { hasAvatar: Boolean(previousAvatarUrl) },
+      after: { hasAvatar: Boolean(salonAvatarUrl) },
+      createdAt: now,
+    }),
+  );
+  await avatarBatch.commit();
+
+  if (!salonAvatarUrl && previousAvatarUrl) {
+    try {
+      await storage.bucket().file(salonAvatarObjectPath(salonId)).delete({ ignoreNotFound: true });
+    } catch {
+      console.warn("Không xóa được object ảnh đại diện salon sau khi gỡ liên kết");
+    }
+  }
+
+  return { salonAvatarUrl };
+});
+
 export const getSalonProfile = onCall(functionOptions, async (request) => {
   const uid = currentUid(request.auth);
   const salonId = requireString(request.data?.salonId, "salonId");
@@ -1789,6 +2176,7 @@ export const getSalonProfile = onCall(functionOptions, async (request) => {
     name: salon?.name ?? "Salon",
     address: salon?.address ?? "",
     phone: salon?.phone ?? "",
+    avatarUrl: trustedStoredSalonAvatarUrl(salon?.avatarUrl, salonId),
     pointPerVisit: Number(salon?.pointPerVisit ?? 1),
     freeCustomerLimit: Number(salon?.freeCustomerLimit ?? 50),
   };
@@ -1958,6 +2346,12 @@ export const registerCustomerFromZalo = onCall(zaloQrFunctionOptions, async (req
     request,
     salonId,
     request.data?.zaloAccessToken,
+  );
+  await assertFeatureEnabled(
+    salonId,
+    "checkinEnabled",
+    "Salon đang tạm ngừng nhận lượt check-in mới.",
+    request.data?.appVersion,
   );
   const zaloProfile = await verifyZaloAccessToken(request.data?.zaloAccessToken);
   const zaloUserId = zaloProfile.zaloUserId;
@@ -2190,6 +2584,7 @@ export const registerCustomerFromZalo = onCall(zaloQrFunctionOptions, async (req
     points: customerSnap.data()?.points ?? 0,
     zaloUserId,
     phoneLast4: String(customerSnap.data()?.phoneLast4 || ""),
+    features: qrResolution.features,
   };
 });
 
@@ -2199,6 +2594,13 @@ export const submitPointRequest = onCall(functionOptions, async (request) => {
   const sessionId = requireString(request.data?.sessionId, "sessionId");
   const note = optionalLimitedString(request.data?.note, "note", 500) ?? "";
   const user = await assertSalonRole(uid, salonId, ["owner", "staff"]);
+  await enforceAuthenticatedRateLimit("submitPointRequest", uid, salonId);
+  await assertFeatureEnabled(
+    salonId,
+    "pointApprovalEnabled",
+    "Tính năng gửi và duyệt điểm đang tạm ngừng.",
+    request.data?.appVersion,
+  );
   const staffName = user.name || "Nhân viên";
   const salonSnap = await db.collection("salons").doc(salonId).get();
   const pointsRequested = Math.max(1, Math.floor(Number(salonSnap.data()?.pointPerVisit ?? 1)));
@@ -2206,8 +2608,31 @@ export const submitPointRequest = onCall(functionOptions, async (request) => {
   const now = Timestamp.now();
   const sessionRef = db.collection("chair_sessions").doc(sessionId);
   const requestRef = db.collection("point_requests").doc(sessionId);
+  const submittedRequestSnap = await requestRef.get();
+  if (submittedRequestSnap.exists) {
+    const submittedRequest = submittedRequestSnap.data();
+    if (
+      submittedRequest?.salonId === salonId &&
+      submittedRequest?.sessionId === sessionId &&
+      submittedRequest?.staffId === uid
+    ) {
+      return { requestId: requestRef.id, alreadySubmitted: true };
+    }
+    throw apiError(
+      "already-exists",
+      ApiErrorCode.REQUEST_ALREADY_PROCESSED,
+      "Lượt cắt đã có yêu cầu điểm khác",
+    );
+  }
+  let alreadySubmitted = false;
 
   if (photoUrls.length > 0) {
+    await assertFeatureEnabled(
+      salonId,
+      "photoUploadEnabled",
+      "Tính năng lưu ảnh kiểu tóc đang tạm ngừng.",
+      request.data?.appVersion,
+    );
     const sessionSnap = await sessionRef.get();
     const session = sessionSnap.data();
     if (!sessionSnap.exists || session?.salonId !== salonId) {
@@ -2217,7 +2642,7 @@ export const submitPointRequest = onCall(functionOptions, async (request) => {
     if (!branchId) {
       throw new HttpsError("failed-precondition", "Lượt cắt chưa được gắn chi nhánh");
     }
-    assertBranchAccess(user, branchId);
+    await assertBranchAccess(user, branchId);
     if (session.status !== "serving" || session.assignedStaffId !== uid) {
       throw new HttpsError("permission-denied", "Bạn không phụ trách lượt cắt này");
     }
@@ -2248,6 +2673,23 @@ export const submitPointRequest = onCall(functionOptions, async (request) => {
       tx.get(requestRef),
     ]);
 
+    if (existingRequestSnap.exists) {
+      const existingRequest = existingRequestSnap.data();
+      if (
+        existingRequest?.salonId === salonId &&
+        existingRequest?.sessionId === sessionId &&
+        existingRequest?.staffId === uid
+      ) {
+        alreadySubmitted = true;
+        return;
+      }
+      throw apiError(
+        "already-exists",
+        ApiErrorCode.REQUEST_ALREADY_PROCESSED,
+        "Lượt cắt đã có yêu cầu điểm khác",
+      );
+    }
+
     if (!sessionSnap.exists || sessionSnap.data()?.salonId !== salonId) {
       throw new HttpsError("not-found", "Không tìm thấy phiên phục vụ");
     }
@@ -2257,18 +2699,22 @@ export const submitPointRequest = onCall(functionOptions, async (request) => {
     if (!branchId) {
       throw new HttpsError("failed-precondition", "Lượt cắt chưa được gắn chi nhánh");
     }
-    assertBranchAccess(user, branchId);
+    await assertBranchAccess(user, branchId);
+    const branchSnap = await tx.get(db.collection("branches").doc(branchId));
+    assertBranchIsOperational(branchSnap.data(), salonId, branchId);
     if (session?.status !== "serving") {
-      throw new HttpsError(
+      throw apiError(
         "failed-precondition",
+        ApiErrorCode.SESSION_NOT_OPEN,
         session?.status === "waiting"
           ? "Nhân viên cần nhận khách trước khi gửi yêu cầu điểm"
           : "Phiên này đã được gửi yêu cầu điểm hoặc đã xử lý",
       );
     }
     if (session.assignedStaffId !== uid) {
-      throw new HttpsError(
+      throw apiError(
         "permission-denied",
+        ApiErrorCode.SESSION_ALREADY_CLAIMED,
         `Lượt này đang do ${String(session.assignedStaffName || "nhân viên khác")} phụ trách`,
       );
     }
@@ -2276,7 +2722,11 @@ export const submitPointRequest = onCall(functionOptions, async (request) => {
       throw new HttpsError("failed-precondition", "Phiên cắt đã quá thời gian cho phép cộng điểm");
     }
     if (existingRequestSnap.exists) {
-      throw new HttpsError("already-exists", "Phiên này đã có yêu cầu cộng điểm");
+      throw apiError(
+        "already-exists",
+        ApiErrorCode.REQUEST_ALREADY_PROCESSED,
+        "Phiên này đã có yêu cầu cộng điểm",
+      );
     }
 
     const customerRef = db.collection("customers").doc(String(session.customerId || ""));
@@ -2308,6 +2758,9 @@ export const submitPointRequest = onCall(functionOptions, async (request) => {
         allowPhoto: Boolean(customer.allowPhoto),
       },
       status: "pending",
+      idempotencyKey: sessionId,
+      processedAt: null,
+      processedBy: null,
       createdAt: now,
       updatedAt: now,
     });
@@ -2341,7 +2794,7 @@ export const submitPointRequest = onCall(functionOptions, async (request) => {
     );
   });
 
-  return { requestId: requestRef.id };
+  return { requestId: requestRef.id, alreadySubmitted };
 });
 
 export const updatePendingPointRequestPhotos = onCall(functionOptions, async (request) => {
@@ -2389,6 +2842,14 @@ export const updatePendingPointRequestPhotos = onCall(functionOptions, async (re
 
   const existingPhotoUrls = safePhotoUrls(pointRequest.photoUrls);
   const addedPhotoUrls = photoUrls.filter((photoUrl) => !existingPhotoUrls.includes(photoUrl));
+  if (addedPhotoUrls.length > 0) {
+    await assertFeatureEnabled(
+      salonId,
+      "photoUploadEnabled",
+      "Tính năng lưu ảnh kiểu tóc đang tạm ngừng.",
+      request.data?.appVersion,
+    );
+  }
   await assertSubmittedHaircutPhotos({
     photoUrls: addedPhotoUrls,
     salonId,
@@ -2469,6 +2930,7 @@ export const claimServiceSession = onCall(functionOptions, async (request) => {
   const salonId = requireString(request.data?.salonId, "salonId");
   const sessionId = requireString(request.data?.sessionId, "sessionId");
   const user = await assertSalonRole(uid, salonId, ["owner", "staff"]);
+  await enforceAuthenticatedRateLimit("claimServiceSession", uid, salonId);
   const sessionRef = db.collection("chair_sessions").doc(sessionId);
   const requestRef = db.collection("point_requests").doc(sessionId);
   const now = Timestamp.now();
@@ -2483,7 +2945,7 @@ export const claimServiceSession = onCall(functionOptions, async (request) => {
     ]);
 
     if (!sessionSnap.exists || sessionSnap.data()?.salonId !== salonId) {
-      throw new HttpsError("not-found", "Không tìm thấy lượt phục vụ");
+      throw apiError("not-found", ApiErrorCode.INVALID_REQUEST, "Không tìm thấy lượt phục vụ");
     }
 
     const session = sessionSnap.data() ?? {};
@@ -2491,7 +2953,9 @@ export const claimServiceSession = onCall(functionOptions, async (request) => {
     if (!branchId) {
       throw new HttpsError("failed-precondition", "Lượt cắt chưa được gắn chi nhánh");
     }
-    assertBranchAccess(user, branchId);
+    await assertBranchAccess(user, branchId);
+    const branchSnap = await tx.get(db.collection("branches").doc(branchId));
+    assertBranchIsOperational(branchSnap.data(), salonId, branchId);
     if (!isFreshServiceSession(session.createdAt, now, session.expiresAt)) {
       throw new HttpsError("failed-precondition", "Lượt phục vụ đã quá thời gian cho phép");
     }
@@ -2519,8 +2983,9 @@ export const claimServiceSession = onCall(functionOptions, async (request) => {
 
     if (session.status === "serving") {
       if (session.assignedStaffId !== uid) {
-        throw new HttpsError(
+        throw apiError(
           "failed-precondition",
+          ApiErrorCode.SESSION_ALREADY_CLAIMED,
           `Khách đã được ${String(session.assignedStaffName || "nhân viên khác")} nhận`,
         );
       }
@@ -2529,7 +2994,11 @@ export const claimServiceSession = onCall(functionOptions, async (request) => {
     }
 
     if (session.status !== "waiting") {
-      throw new HttpsError("failed-precondition", "Lượt này không còn ở trạng thái chờ nhận");
+      throw apiError(
+        "failed-precondition",
+        ApiErrorCode.SESSION_NOT_OPEN,
+        "Lượt này không còn ở trạng thái chờ nhận",
+      );
     }
 
     const assignment = {
@@ -2556,6 +3025,21 @@ export const claimServiceSession = onCall(functionOptions, async (request) => {
       },
       { merge: true },
     );
+    tx.set(
+      db.collection("audit_events").doc(),
+      auditEventData({
+        salonId,
+        branchId,
+        actorId: uid,
+        actorRole: user.role,
+        action: "session.claimed",
+        targetType: "chair_session",
+        targetId: sessionId,
+        before: { status: "waiting" },
+        after: { status: "serving", assignedStaffId: uid },
+        createdAt: now,
+      }),
+    );
   });
 
   return { status: resultStatus, assignedStaffId, assignedStaffName };
@@ -2578,12 +3062,14 @@ export const cancelServiceSession = onCall(functionOptions, async (request) => {
       tx.get(pointRequestRef),
     ]);
     if (!sessionSnap.exists || sessionSnap.data()?.salonId !== salonId) {
-      throw new HttpsError("not-found", "Không tìm thấy lượt cắt");
+      throw apiError("not-found", ApiErrorCode.INVALID_REQUEST, "Không tìm thấy lượt cắt");
     }
 
     const session = sessionSnap.data() ?? {};
     const branchId = String(session.branchId || "");
-    assertBranchAccess(user, branchId);
+    await assertBranchAccess(user, branchId);
+    const branchSnap = await tx.get(db.collection("branches").doc(branchId));
+    assertBranchIsOperational(branchSnap.data(), salonId, branchId);
     if (session.status === "cancelled") {
       return null;
     }
@@ -2603,7 +3089,11 @@ export const cancelServiceSession = onCall(functionOptions, async (request) => {
         assignedStaffId: session.assignedStaffId,
       })
     ) {
-      throw new HttpsError("permission-denied", "Bạn không được hủy lượt cắt này");
+      throw apiError(
+        "permission-denied",
+        ApiErrorCode.SESSION_NOT_OPEN,
+        "Bạn không được hủy lượt cắt này",
+      );
     }
 
     const customerId = String(session.customerId || "");
@@ -2625,6 +3115,21 @@ export const cancelServiceSession = onCall(functionOptions, async (request) => {
     if (activeSnap.exists && activeSnap.data()?.sessionId === sessionId) {
       tx.delete(activeRef);
     }
+    tx.set(
+      db.collection("audit_events").doc(),
+      auditEventData({
+        salonId,
+        branchId,
+        actorId: uid,
+        actorRole: user.role,
+        action: "session.cancelled",
+        targetType: "chair_session",
+        targetId: sessionId,
+        before: { status: session.status ?? null },
+        after: { status: "cancelled", cancellationReason },
+        createdAt: now,
+      }),
+    );
 
     const pointRequest = pointRequestSnap.exists ? pointRequestSnap.data() : null;
     if (pointRequest?.status === "pending") {
@@ -2727,10 +3232,18 @@ export const approvePointRequest = onCall(functionOptions, async (request) => {
   const uid = currentUid(request.auth);
   const salonId = requireString(request.data?.salonId, "salonId");
   const requestId = requireString(request.data?.requestId, "requestId");
-  await assertSalonRole(uid, salonId, ["owner"]);
+  const owner = await assertSalonRole(uid, salonId, ["owner"]);
+  await enforceAuthenticatedRateLimit("approvePointRequest", uid, salonId);
+  await assertFeatureEnabled(
+    salonId,
+    "pointApprovalEnabled",
+    "Tính năng gửi và duyệt điểm đang tạm ngừng.",
+    request.data?.appVersion,
+  );
 
   const requestRef = db.collection("point_requests").doc(requestId);
   const now = Timestamp.now();
+  let alreadyProcessed = false;
 
   const discardedPhotos = await db.runTransaction(async (tx) => {
     const pointSnap = await tx.get(requestRef);
@@ -2741,8 +3254,16 @@ export const approvePointRequest = onCall(functionOptions, async (request) => {
     if (pointRequest?.salonId !== salonId) {
       throw new HttpsError("permission-denied", "Yêu cầu không thuộc salon này");
     }
+    if (pointRequest?.status === "approved") {
+      alreadyProcessed = true;
+      return null;
+    }
     if (pointRequest?.status !== "pending") {
-      throw new HttpsError("failed-precondition", "Yêu cầu đã được xử lý");
+      throw apiError(
+        "failed-precondition",
+        ApiErrorCode.REQUEST_ALREADY_PROCESSED,
+        "Yêu cầu đã được xử lý",
+      );
     }
     const branchId = String(pointRequest?.branchId || "");
     if (!branchId) {
@@ -2750,13 +3271,35 @@ export const approvePointRequest = onCall(functionOptions, async (request) => {
     }
 
     const customerRef = db.collection("customers").doc(pointRequest.customerId);
-    const customerSnap = await tx.get(customerRef);
+    const sessionRef = db.collection("chair_sessions").doc(pointRequest.sessionId);
+    const branchRef = db.collection("branches").doc(branchId);
+    const [customerSnap, sessionSnap, branchSnap] = await Promise.all([
+      tx.get(customerRef),
+      tx.get(sessionRef),
+      tx.get(branchRef),
+    ]);
     if (!customerSnap.exists || customerSnap.data()?.salonId !== salonId) {
       throw new HttpsError("failed-precondition", "Hồ sơ khách không thuộc salon này");
     }
-    const recordRef = db.collection("haircut_records").doc();
-    const sessionRef = db.collection("chair_sessions").doc(pointRequest.sessionId);
+    if (
+      !sessionSnap.exists ||
+      sessionSnap.data()?.salonId !== salonId ||
+      sessionSnap.data()?.branchId !== branchId ||
+      sessionSnap.data()?.customerId !== pointRequest.customerId ||
+      sessionSnap.data()?.status !== "pending_approval"
+    ) {
+      throw apiError(
+        "failed-precondition",
+        ApiErrorCode.INVALID_REQUEST,
+        "Lượt cắt của yêu cầu không hợp lệ",
+      );
+    }
+    assertBranchIsOperational(branchSnap.data(), salonId, branchId);
+    const recordId = createHash("sha256").update(`haircut-record:${requestId}`).digest("hex");
+    const recordRef = db.collection("haircut_records").doc(recordId);
     const pointsAdded = Number(pointRequest.pointsRequested ?? pointRequest.pointsAdded ?? 1);
+    const pointsBefore = Math.max(0, Number(customerSnap.data()?.points ?? 0));
+    const pointsAfter = pointsBefore + pointsAdded;
     const canKeepPhotos = customerSnap.data()?.allowPhoto === true;
     const recordPhotoUrls = canKeepPhotos
       ? trustedStoredHaircutPhotoUrls(pointRequest.photoUrls, {
@@ -2771,7 +3314,7 @@ export const approvePointRequest = onCall(functionOptions, async (request) => {
     }
 
     tx.update(customerRef, {
-      points: FieldValue.increment(pointsAdded),
+      points: pointsAfter,
       lastVisitAt: now,
       updatedAt: now,
     });
@@ -2779,6 +3322,10 @@ export const approvePointRequest = onCall(functionOptions, async (request) => {
       status: "approved",
       approvedBy: uid,
       approvedAt: now,
+      processedBy: uid,
+      processedAt: now,
+      pointsBefore,
+      pointsAfter,
       photoUrls: recordPhotoUrls,
       updatedAt: now,
     });
@@ -2807,6 +3354,36 @@ export const approvePointRequest = onCall(functionOptions, async (request) => {
       { merge: true },
     );
     tx.delete(activeSessionRefFor(salonId, String(pointRequest.customerId || "")));
+    tx.set(
+      db.collection("audit_events").doc(),
+      auditEventData({
+        salonId,
+        branchId,
+        actorId: uid,
+        actorRole: owner.role,
+        action: "point_request.approved",
+        targetType: "point_request",
+        targetId: requestId,
+        before: { status: "pending", points: pointsBefore },
+        after: { status: "approved", points: pointsAfter, pointsAdded },
+        createdAt: now,
+      }),
+    );
+    tx.set(
+      db.collection("audit_events").doc(),
+      auditEventData({
+        salonId,
+        branchId,
+        actorId: uid,
+        actorRole: owner.role,
+        action: "session.completed",
+        targetType: "chair_session",
+        targetId: String(pointRequest.sessionId || ""),
+        before: { status: sessionSnap.data()?.status ?? null },
+        after: { status: "completed" },
+        createdAt: now,
+      }),
+    );
 
     return canKeepPhotos
       ? null
@@ -2824,7 +3401,7 @@ export const approvePointRequest = onCall(functionOptions, async (request) => {
     });
   }
 
-  return { ok: true };
+  return { ok: true, alreadyProcessed };
 });
 
 export const rejectPointRequest = onCall(functionOptions, async (request) => {
@@ -2832,10 +3409,18 @@ export const rejectPointRequest = onCall(functionOptions, async (request) => {
   const salonId = requireString(request.data?.salonId, "salonId");
   const requestId = requireString(request.data?.requestId, "requestId");
   const reason = optionalString(request.data?.reason) ?? "";
-  await assertSalonRole(uid, salonId, ["owner"]);
+  const owner = await assertSalonRole(uid, salonId, ["owner"]);
+  await enforceAuthenticatedRateLimit("rejectPointRequest", uid, salonId);
+  await assertFeatureEnabled(
+    salonId,
+    "pointApprovalEnabled",
+    "Tính năng gửi và duyệt điểm đang tạm ngừng.",
+    request.data?.appVersion,
+  );
 
   const requestRef = db.collection("point_requests").doc(requestId);
   const now = Timestamp.now();
+  let alreadyProcessed = false;
 
   const rejectedPhotos = await db.runTransaction(async (tx) => {
     const snap = await tx.get(requestRef);
@@ -2844,9 +3429,45 @@ export const rejectPointRequest = onCall(functionOptions, async (request) => {
     }
 
     const pointRequest = snap.data();
-    if (pointRequest?.status !== "pending") {
-      throw new HttpsError("failed-precondition", "Yêu cầu đã được xử lý");
+    if (pointRequest?.status === "rejected") {
+      alreadyProcessed = true;
+      return null;
     }
+    if (pointRequest?.status !== "pending") {
+      throw apiError(
+        "failed-precondition",
+        ApiErrorCode.REQUEST_ALREADY_PROCESSED,
+        "Yêu cầu đã được xử lý",
+      );
+    }
+
+    const branchId = String(pointRequest?.branchId || "");
+    const sessionId = String(pointRequest?.sessionId || "");
+    if (!branchId || !sessionId) {
+      throw apiError(
+        "failed-precondition",
+        ApiErrorCode.INVALID_REQUEST,
+        "Yêu cầu chưa có đủ thông tin lượt cắt",
+      );
+    }
+    const [sessionSnap, branchSnap] = await Promise.all([
+      tx.get(db.collection("chair_sessions").doc(sessionId)),
+      tx.get(db.collection("branches").doc(branchId)),
+    ]);
+    if (
+      !sessionSnap.exists ||
+      sessionSnap.data()?.salonId !== salonId ||
+      sessionSnap.data()?.branchId !== branchId ||
+      sessionSnap.data()?.customerId !== pointRequest.customerId ||
+      sessionSnap.data()?.status !== "pending_approval"
+    ) {
+      throw apiError(
+        "failed-precondition",
+        ApiErrorCode.INVALID_REQUEST,
+        "Lượt cắt của yêu cầu không hợp lệ",
+      );
+    }
+    assertBranchIsOperational(branchSnap.data(), salonId, branchId);
 
     tx.set(
       requestRef,
@@ -2854,6 +3475,8 @@ export const rejectPointRequest = onCall(functionOptions, async (request) => {
         status: "rejected",
         rejectedBy: uid,
         rejectedAt: now,
+        processedBy: uid,
+        processedAt: now,
         rejectionReason: reason,
         photoUrls: [],
         updatedAt: now,
@@ -2861,7 +3484,7 @@ export const rejectPointRequest = onCall(functionOptions, async (request) => {
       { merge: true },
     );
     tx.set(
-      db.collection("chair_sessions").doc(String(pointRequest.sessionId || "")),
+      db.collection("chair_sessions").doc(sessionId),
       {
         status: "cancelled",
         isOpen: false,
@@ -2872,6 +3495,21 @@ export const rejectPointRequest = onCall(functionOptions, async (request) => {
       { merge: true },
     );
     tx.delete(activeSessionRefFor(salonId, String(pointRequest.customerId || "")));
+    tx.set(
+      db.collection("audit_events").doc(),
+      auditEventData({
+        salonId,
+        branchId,
+        actorId: uid,
+        actorRole: owner.role,
+        action: "point_request.rejected",
+        targetType: "point_request",
+        targetId: requestId,
+        before: { status: "pending" },
+        after: { status: "rejected", reasonProvided: Boolean(reason) },
+        createdAt: now,
+      }),
+    );
 
     return {
       photoUrls: pointRequest.photoUrls,
@@ -2880,12 +3518,14 @@ export const rejectPointRequest = onCall(functionOptions, async (request) => {
     };
   });
 
-  await deleteSubmittedHaircutPhotos({
-    ...rejectedPhotos,
-    salonId,
-  });
+  if (rejectedPhotos) {
+    await deleteSubmittedHaircutPhotos({
+      ...rejectedPhotos,
+      salonId,
+    });
+  }
 
-  return { ok: true };
+  return { ok: true, alreadyProcessed };
 });
 
 export const getOwnerOverview = onCall(functionOptions, async (request) => {
@@ -3083,13 +3723,16 @@ export const spinLuckyWheel = onCall(functionOptions, async (request) => {
   const uid = currentUid(request.auth);
   const salonId = requireString(request.data?.salonId, "salonId");
   const customerId = requireString(request.data?.customerId, "customerId");
+  const idempotencyKey = requireIdempotencyKey(request.data?.idempotencyKey);
   await assertSalonRole(uid, salonId, ["owner"]);
+  await enforceAuthenticatedRateLimit("spinLuckyWheel", uid, salonId);
 
-  return spinWheelForCustomer(salonId, customerId);
+  return spinWheelForCustomer(salonId, customerId, idempotencyKey, request.data?.appVersion);
 });
 
 export const spinLuckyWheelFromZalo = onCall(zaloFunctionOptions, async (request) => {
   const salonId = requireString(request.data?.salonId, "salonId");
+  const idempotencyKey = requireIdempotencyKey(request.data?.idempotencyKey);
   await enforcePublicRequestPolicy(
     "spinLuckyWheelFromZalo",
     request,
@@ -3099,7 +3742,7 @@ export const spinLuckyWheelFromZalo = onCall(zaloFunctionOptions, async (request
   const zaloProfile = await verifyZaloAccessToken(request.data?.zaloAccessToken);
   const customerId = customerIdFor(salonId, zaloProfile.zaloUserId);
 
-  return spinWheelForCustomer(salonId, customerId);
+  return spinWheelForCustomer(salonId, customerId, idempotencyKey, request.data?.appVersion);
 });
 
 export const getCustomerSessionFromZalo = onCall(zaloFunctionOptions, async (request) => {
@@ -3114,10 +3757,11 @@ export const getCustomerSessionFromZalo = onCall(zaloFunctionOptions, async (req
   const zaloProfile = await verifyZaloAccessToken(request.data?.zaloAccessToken);
   const customerId = customerIdFor(salonId, zaloProfile.zaloUserId);
 
-  const [customerSnap, sessionSnap, wheelSnap] = await Promise.all([
+  const [customerSnap, sessionSnap, wheelSnap, features] = await Promise.all([
     db.collection("customers").doc(customerId).get(),
     db.collection("chair_sessions").doc(sessionId).get(),
     db.collection("lucky_wheel").doc(salonId).get(),
+    getSystemFeatures(salonId),
   ]);
 
   if (!customerSnap.exists || customerSnap.data()?.salonId !== salonId) {
@@ -3176,6 +3820,7 @@ export const getCustomerSessionFromZalo = onCall(zaloFunctionOptions, async (req
       deductPointsAfterSpin: wheel.deductPointsAfterSpin !== false,
       slots,
     },
+    features,
   };
 });
 
@@ -3220,7 +3865,7 @@ export const getCustomerHistoryFromZalo = onCall(zaloFunctionOptions, async (req
   const staffNames = new Map<string, string>();
   staffDocs.forEach((doc) => {
     const name = doc.data()?.name;
-    if (doc.exists && typeof name === "string") {
+    if (doc.exists && doc.data()?.salonId === salonId && typeof name === "string") {
       staffNames.set(doc.id, name);
     }
   });
@@ -3395,7 +4040,7 @@ export const searchSalonCustomers = onCall(functionOptions, async (request) => {
 
   return {
     customers: enriched,
-    nextCursor: hasMore ? (pageDocs.at(-1)?.id ?? null) : null,
+    nextCursor: hasMore ? (pageDocs[pageDocs.length - 1]?.id ?? null) : null,
   };
 });
 
@@ -3964,7 +4609,9 @@ export const lookupRewardCode = onCall(functionOptions, async (request) => {
 
   if (reward.customerId) {
     const customerSnap = await db.collection("customers").doc(String(reward.customerId)).get();
-    customerName = String(customerSnap.data()?.name ?? "");
+    if (customerSnap.exists && customerSnap.data()?.salonId === salonId) {
+      customerName = String(customerSnap.data()?.name ?? "");
+    }
   }
 
   return {
@@ -3984,7 +4631,16 @@ export const redeemRewardCode = onCall(functionOptions, async (request) => {
   const uid = currentUid(request.auth);
   const salonId = requireString(request.data?.salonId, "salonId");
   const rewardCodeInput = requireString(request.data?.rewardCode, "rewardCode");
+  const idempotencyKey = requireIdempotencyKey(request.data?.idempotencyKey);
+  const requestedBranchId = optionalLimitedString(request.data?.branchId, "branchId", 128);
   const user = await assertSalonRole(uid, salonId, ["owner", "staff"]);
+  await enforceAuthenticatedRateLimit("redeemRewardCode", uid, salonId);
+  await assertFeatureEnabled(
+    salonId,
+    "rewardRedeemEnabled",
+    "Tính năng đổi quà đang tạm ngừng.",
+    request.data?.appVersion,
+  );
 
   if (user.role === "staff" && user.canRedeemRewards !== true) {
     throw new HttpsError("permission-denied", "Nhân viên chưa được phép xác nhận mã quà");
@@ -4002,14 +4658,66 @@ export const redeemRewardCode = onCall(functionOptions, async (request) => {
   }
 
   const rewardRef = query.docs[0].ref;
+  const rewardBeforeTransaction = query.docs[0].data();
+  const staffBranchIds = [
+    ...new Set(
+      [user.branchId, ...(user.branchIds ?? [])].filter(
+        (value): value is string => typeof value === "string" && value.length > 0,
+      ),
+    ),
+  ];
+  const usedBranchId =
+    requestedBranchId ||
+    (user.role === "staff" && staffBranchIds.length === 1
+      ? staffBranchIds[0]
+      : String(rewardBeforeTransaction.branchId || ""));
+  if (!usedBranchId) {
+    throw apiError(
+      "failed-precondition",
+      ApiErrorCode.INVALID_BRANCH,
+      "Chưa xác định được chi nhánh đổi quà",
+    );
+  }
+  await assertBranchAccess(user, usedBranchId);
   const now = Timestamp.now();
 
   const result = await db.runTransaction(async (tx) => {
-    const rewardSnap = await tx.get(rewardRef);
+    const customerId = String(rewardBeforeTransaction.customerId || "");
+    const [rewardSnap, branchSnap, customerSnap] = await Promise.all([
+      tx.get(rewardRef),
+      tx.get(db.collection("branches").doc(usedBranchId)),
+      tx.get(db.collection("customers").doc(customerId)),
+    ]);
     const reward = rewardSnap.data();
 
     if (!rewardSnap.exists || reward?.salonId !== salonId) {
       throw new HttpsError("not-found", "Không tìm thấy mã quà");
+    }
+    assertBranchIsOperational(branchSnap.data(), salonId, usedBranchId);
+    if (
+      !customerId ||
+      reward.customerId !== customerId ||
+      !customerSnap.exists ||
+      customerSnap.data()?.salonId !== salonId
+    ) {
+      throw apiError(
+        "failed-precondition",
+        ApiErrorCode.INVALID_REQUEST,
+        "Mã quà không còn gắn với khách hợp lệ",
+      );
+    }
+    if (
+      reward?.status === "used" &&
+      reward?.redemptionIdempotencyKey === idempotencyKey &&
+      reward?.usedBy === uid
+    ) {
+      return {
+        rewardId: rewardSnap.id,
+        rewardCode: reward.rewardCode ?? rewardCodeInput,
+        rewardName: reward.rewardName ?? "",
+        customerId: reward.customerId ?? "",
+        alreadyRedeemed: true,
+      };
     }
     const rewardStatus = effectiveRewardStatus(
       reward.status,
@@ -4017,10 +4725,14 @@ export const redeemRewardCode = onCall(functionOptions, async (request) => {
       now.toMillis(),
     );
     if (rewardStatus === "expired") {
-      throw new HttpsError("failed-precondition", "Mã quà đã hết hạn");
+      throw apiError("failed-precondition", ApiErrorCode.REWARD_EXPIRED, "Mã quà đã hết hạn");
     }
     if (rewardStatus !== "unused") {
-      throw new HttpsError("failed-precondition", "Mã quà đã được xử lý");
+      throw apiError(
+        "failed-precondition",
+        ApiErrorCode.REWARD_ALREADY_REDEEMED,
+        rewardStatus === "revoked" ? "Mã quà đã bị hủy" : "Mã quà đã được xử lý",
+      );
     }
 
     tx.set(
@@ -4029,6 +4741,8 @@ export const redeemRewardCode = onCall(functionOptions, async (request) => {
         status: "used",
         usedAt: now,
         usedBy: uid,
+        usedBranchId,
+        redemptionIdempotencyKey: idempotencyKey,
         updatedAt: now,
       },
       { merge: true },
@@ -4037,12 +4751,14 @@ export const redeemRewardCode = onCall(functionOptions, async (request) => {
       db.collection("audit_events").doc(),
       auditEventData({
         salonId,
+        branchId: usedBranchId,
         actorId: uid,
+        actorRole: user.role,
         action: "reward.redeemed",
         targetType: "reward",
         targetId: rewardSnap.id,
         before: { status: rewardStatus },
-        after: { status: "used" },
+        after: { status: "used", usedBranchId },
         createdAt: now,
       }),
     );
@@ -4052,13 +4768,16 @@ export const redeemRewardCode = onCall(functionOptions, async (request) => {
       rewardCode: reward.rewardCode ?? rewardCodeInput,
       rewardName: reward.rewardName ?? "",
       customerId: reward.customerId ?? "",
+      alreadyRedeemed: false,
     };
   });
 
   let customerName = "";
   if (result.customerId) {
     const customerSnap = await db.collection("customers").doc(String(result.customerId)).get();
-    customerName = String(customerSnap.data()?.name ?? "");
+    if (customerSnap.exists && customerSnap.data()?.salonId === salonId) {
+      customerName = String(customerSnap.data()?.name ?? "");
+    }
   }
 
   return {
@@ -4066,6 +4785,7 @@ export const redeemRewardCode = onCall(functionOptions, async (request) => {
     rewardCode: result.rewardCode,
     rewardName: result.rewardName,
     customerName,
+    alreadyRedeemed: result.alreadyRedeemed,
   };
 });
 
@@ -4114,6 +4834,8 @@ export const restoreRewardCode = onCall(functionOptions, async (request) => {
         status: "unused",
         usedAt: FieldValue.delete(),
         usedBy: FieldValue.delete(),
+        usedBranchId: FieldValue.delete(),
+        redemptionIdempotencyKey: FieldValue.delete(),
         restoredAt: now,
         restoredBy: uid,
         restoreReason: reason,
@@ -4139,6 +4861,750 @@ export const restoreRewardCode = onCall(functionOptions, async (request) => {
   return { rewardCode: rewardCodeInput, status: "unused" as const };
 });
 
+export const requestPersonalAccountDeletion = onCall(functionOptions, async (request) => {
+  const uid = currentUid(request.auth);
+  assertRecentAuthentication(request.auth);
+  const user = await getAppUser(uid);
+  await enforceAuthenticatedRateLimit("adminMutation", uid, user.salonId);
+  if (user.role === "owner") {
+    throw new HttpsError(
+      "failed-precondition",
+      "Chủ salon cần dùng mục Xóa salon để xử lý cả tài khoản và dữ liệu salon",
+      { errorCode: "OWNER_MUST_DELETE_SALON" },
+    );
+  }
+
+  const now = Timestamp.now();
+  const userRef = db.collection("users").doc(uid);
+  const tokenSnap = await db.collection("device_tokens").where("uid", "==", uid).get();
+  const batch = db.batch();
+  batch.set(
+    userRef,
+    {
+      name: "Tài khoản đã xóa",
+      phone: FieldValue.delete(),
+      email: FieldValue.delete(),
+      avatarUrl: FieldValue.delete(),
+      isActive: false,
+      deletionStatus: "completed",
+      deletedAt: now,
+      updatedAt: now,
+    },
+    { merge: true },
+  );
+  tokenSnap.docs.forEach((tokenDoc) => batch.delete(tokenDoc.ref));
+  batch.set(
+    db.collection("audit_events").doc(),
+    auditEventData({
+      salonId: user.salonId,
+      actorId: uid,
+      action: "account.deleted",
+      targetType: "user",
+      targetId: uid,
+      before: { isActive: true },
+      after: { isActive: false, deletionStatus: "completed" },
+      createdAt: now,
+    }),
+  );
+  await batch.commit();
+  await getAuth().deleteUser(uid);
+
+  return { status: "completed" as const };
+});
+
+export const requestSalonDeletion = onCall(functionOptions, async (request) => {
+  const uid = currentUid(request.auth);
+  assertRecentAuthentication(request.auth);
+  const salonId = limitedString(request.data?.salonId, "salonId", 128);
+  const confirmedSalonName = limitedString(request.data?.salonName, "salonName", 120);
+  await assertSalonRoleIncludingInactiveSalon(uid, salonId, ["owner"]);
+  await enforceAuthenticatedRateLimit("adminMutation", uid, salonId);
+  const salonRef = db.collection("salons").doc(salonId);
+  const jobRef = db.collection("salon_deletion_jobs").doc(salonId);
+  const now = Timestamp.now();
+  const executeAfter = Timestamp.fromMillis(now.toMillis() + 14 * 24 * 60 * 60 * 1000);
+
+  const result = await db.runTransaction(async (tx) => {
+    const [salonSnap, jobSnap] = await Promise.all([tx.get(salonRef), tx.get(jobRef)]);
+    if (!salonSnap.exists) {
+      throw new HttpsError("not-found", "Không tìm thấy salon");
+    }
+    const actualName = String(salonSnap.data()?.name || "").trim();
+    if (actualName.localeCompare(confirmedSalonName.trim(), "vi", { sensitivity: "base" }) !== 0) {
+      throw new HttpsError("invalid-argument", "Tên salon xác nhận chưa đúng");
+    }
+    if (jobSnap.data()?.status === "requested") {
+      return {
+        status: "requested" as const,
+        executeAfterMs: timestampMillis(jobSnap.data()?.executeAfter) ?? executeAfter.toMillis(),
+        alreadyRequested: true,
+      };
+    }
+    tx.set(
+      salonRef,
+      {
+        status: "pending_deletion",
+        isActive: false,
+        deletionRequestedAt: now,
+        deletionRequestedBy: uid,
+        updatedAt: now,
+      },
+      { merge: true },
+    );
+    tx.set(jobRef, {
+      salonId,
+      status: "requested",
+      requestedBy: uid,
+      requestedAt: now,
+      executeAfter,
+      updatedAt: now,
+    });
+    tx.set(
+      db.collection("audit_events").doc(),
+      auditEventData({
+        salonId,
+        actorId: uid,
+        action: "salon.deletion_requested",
+        targetType: "salon",
+        targetId: salonId,
+        before: { status: salonStatus(salonSnap.data()) },
+        after: { status: "pending_deletion", executeAfterMs: executeAfter.toMillis() },
+        createdAt: now,
+      }),
+    );
+    return {
+      status: "requested" as const,
+      executeAfterMs: executeAfter.toMillis(),
+      alreadyRequested: false,
+    };
+  });
+
+  return result;
+});
+
+export const cancelSalonDeletion = onCall(functionOptions, async (request) => {
+  const uid = currentUid(request.auth);
+  assertRecentAuthentication(request.auth);
+  const salonId = limitedString(request.data?.salonId, "salonId", 128);
+  await assertSalonRoleIncludingInactiveSalon(uid, salonId, ["owner"]);
+  await enforceAuthenticatedRateLimit("adminMutation", uid, salonId);
+  const salonRef = db.collection("salons").doc(salonId);
+  const jobRef = db.collection("salon_deletion_jobs").doc(salonId);
+  const now = Timestamp.now();
+
+  await db.runTransaction(async (tx) => {
+    const [salonSnap, jobSnap] = await Promise.all([tx.get(salonRef), tx.get(jobRef)]);
+    if (!salonSnap.exists || !jobSnap.exists || jobSnap.data()?.status !== "requested") {
+      throw new HttpsError("failed-precondition", "Không có yêu cầu xóa salon đang chờ");
+    }
+    const leaseUntilMs = timestampMillis(jobSnap.data()?.leaseUntil) ?? 0;
+    if (leaseUntilMs > now.toMillis()) {
+      throw new HttpsError("failed-precondition", "Hệ thống đã bắt đầu xóa và không thể hủy");
+    }
+    tx.set(
+      salonRef,
+      {
+        status: "active",
+        isActive: true,
+        deletionRequestedAt: FieldValue.delete(),
+        deletionRequestedBy: FieldValue.delete(),
+        updatedAt: now,
+      },
+      { merge: true },
+    );
+    tx.set(
+      jobRef,
+      { status: "cancelled", cancelledAt: now, cancelledBy: uid, updatedAt: now },
+      { merge: true },
+    );
+    tx.set(
+      db.collection("audit_events").doc(),
+      auditEventData({
+        salonId,
+        actorId: uid,
+        action: "salon.deletion_cancelled",
+        targetType: "salon",
+        targetId: salonId,
+        before: { status: "pending_deletion" },
+        after: { status: "active" },
+        createdAt: now,
+      }),
+    );
+  });
+
+  return { status: "cancelled" as const };
+});
+
+export const getSalonDeletionStatus = onCall(functionOptions, async (request) => {
+  const uid = currentUid(request.auth);
+  const salonId = limitedString(request.data?.salonId, "salonId", 128);
+  await assertSalonRoleIncludingInactiveSalon(uid, salonId, ["owner"]);
+  const jobSnap = await db.collection("salon_deletion_jobs").doc(salonId).get();
+  if (!jobSnap.exists) {
+    return { status: "none" as const, executeAfterMs: null };
+  }
+  return {
+    status: String(jobSnap.data()?.status || "none"),
+    executeAfterMs: timestampMillis(jobSnap.data()?.executeAfter),
+  };
+});
+
+export const registerManagerDeviceToken = onCall(functionOptions, async (request) => {
+  const uid = currentUid(request.auth);
+  const salonId = limitedString(request.data?.salonId, "salonId", 128);
+  const user = await assertSalonRole(uid, salonId, ["owner", "staff"]);
+  assertSupportedAppVersion(await getSystemFeatures(salonId), request.data?.appVersion);
+  const parsed = DeviceTokenSchema.safeParse({
+    uid,
+    salonId,
+    platform: request.data?.platform,
+    token: request.data?.token,
+    appVersion: request.data?.appVersion ?? "",
+    isActive: true,
+  });
+  if (!parsed.success) {
+    throw new HttpsError("invalid-argument", "Thông tin thiết bị nhận thông báo không hợp lệ");
+  }
+  const tokenRef = db.collection("device_tokens").doc(deviceTokenId(parsed.data.token));
+  const tokenSnap = await tokenRef.get();
+  const now = Timestamp.now();
+  await tokenRef.set(
+    {
+      ...parsed.data,
+      role: user.role,
+      branchIds:
+        user.role === "owner"
+          ? []
+          : [
+              ...new Set(
+                [...(Array.isArray(user.branchIds) ? user.branchIds : []), user.branchId].filter(
+                  (branchId): branchId is string =>
+                    typeof branchId === "string" && branchId.length > 0,
+                ),
+              ),
+            ],
+      createdAt: tokenSnap.exists ? (tokenSnap.data()?.createdAt ?? now) : now,
+      updatedAt: now,
+    },
+    { merge: true },
+  );
+  return { registered: true };
+});
+
+export const unregisterManagerDeviceToken = onCall(functionOptions, async (request) => {
+  const uid = currentUid(request.auth);
+  const token = limitedString(request.data?.token, "token", 4096);
+  const tokenRef = db.collection("device_tokens").doc(deviceTokenId(token));
+  const tokenSnap = await tokenRef.get();
+  if (tokenSnap.exists && tokenSnap.data()?.uid !== uid) {
+    throw new HttpsError("permission-denied", "Thiết bị không thuộc tài khoản này");
+  }
+  if (tokenSnap.exists) {
+    await tokenRef.set(
+      { isActive: false, disabledReason: "signed_out", updatedAt: Timestamp.now() },
+      { merge: true },
+    );
+  }
+  return { unregistered: true };
+});
+
+export const getSystemAdminOverview = onCall(functionOptions, async (request) => {
+  const uid = currentUid(request.auth);
+  await assertSystemAdmin(uid);
+
+  const [
+    salonsCount,
+    suspendedCount,
+    pendingDeletionCount,
+    ownersCount,
+    staffCount,
+    pendingPointsCount,
+    openSessionsCount,
+  ] = await Promise.all([
+    db.collection("salons").count().get(),
+    db.collection("salons").where("status", "==", "suspended").count().get(),
+    db.collection("salons").where("status", "==", "pending_deletion").count().get(),
+    db.collection("users").where("role", "==", "owner").count().get(),
+    db.collection("users").where("role", "==", "staff").count().get(),
+    db.collection("point_requests").where("status", "==", "pending").count().get(),
+    db.collection("chair_sessions").where("isOpen", "==", true).count().get(),
+  ]);
+  const totalSalons = salonsCount.data().count;
+  const suspendedSalons = suspendedCount.data().count;
+  const pendingDeletionSalons = pendingDeletionCount.data().count;
+
+  return {
+    salons: {
+      total: totalSalons,
+      active: Math.max(0, totalSalons - suspendedSalons - pendingDeletionSalons),
+      suspended: suspendedSalons,
+      pendingDeletion: pendingDeletionSalons,
+    },
+    users: {
+      owners: ownersCount.data().count,
+      staff: staffCount.data().count,
+    },
+    operations: {
+      pendingPointRequests: pendingPointsCount.data().count,
+      openSessions: openSessionsCount.data().count,
+    },
+  };
+});
+
+export const listSystemAdminSalons = onCall(functionOptions, async (request) => {
+  const uid = currentUid(request.auth);
+  await assertSystemAdmin(uid);
+  const pageSize = Math.min(Math.max(Number(request.data?.pageSize ?? 30), 10), 100);
+  const cursor = optionalString(request.data?.cursor);
+  let salonsQuery = db
+    .collection("salons")
+    .orderBy(FieldPath.documentId())
+    .limit(Math.floor(pageSize));
+
+  if (cursor) {
+    const cursorSnap = await db.collection("salons").doc(cursor).get();
+    if (cursorSnap.exists) {
+      salonsQuery = salonsQuery.startAfter(cursorSnap);
+    }
+  }
+
+  const salonsSnap = await salonsQuery.get();
+  return {
+    salons: salonsSnap.docs.map((salonDoc) => {
+      const data = salonDoc.data();
+      return {
+        id: salonDoc.id,
+        name: String(data.name || "Salon"),
+        status: salonStatus(data),
+        plan: String(data.plan || "free"),
+        customerCount: Math.max(0, Number(data.customerCount ?? 0)),
+        ownerId: String(data.ownerId || ""),
+        updatedAtMs: timestampMillis(data.updatedAt),
+      };
+    }),
+    nextCursor:
+      salonsSnap.size === Math.floor(pageSize)
+        ? (salonsSnap.docs[salonsSnap.docs.length - 1]?.id ?? null)
+        : null,
+  };
+});
+
+export const updateSystemAdminSalonStatus = onCall(functionOptions, async (request) => {
+  const uid = currentUid(request.auth);
+  await assertSystemAdmin(uid);
+  const salonId = limitedString(request.data?.salonId, "salonId", 128);
+  await enforceAuthenticatedRateLimit("adminMutation", uid, salonId);
+  const statusResult = SalonStatusSchema.safeParse(request.data?.status);
+  if (!statusResult.success) {
+    throw new HttpsError("invalid-argument", "Trạng thái salon không hợp lệ");
+  }
+  const status = statusResult.data;
+  const reason = optionalLimitedString(request.data?.reason, "reason", 300) ?? "";
+  if (status !== "active" && !reason) {
+    throw new HttpsError("invalid-argument", "Cần nhập lý do khi khóa hoặc chờ xóa salon");
+  }
+
+  const salonRef = db.collection("salons").doc(salonId);
+  const now = Timestamp.now();
+  const previousStatus = await db.runTransaction(async (tx) => {
+    const salonSnap = await tx.get(salonRef);
+    if (!salonSnap.exists) {
+      throw new HttpsError("not-found", "Không tìm thấy salon");
+    }
+    const before = salonStatus(salonSnap.data());
+    if (before === status) {
+      return before;
+    }
+    tx.set(
+      salonRef,
+      {
+        status,
+        isActive: status === "active",
+        statusReason: reason || FieldValue.delete(),
+        statusUpdatedAt: now,
+        statusUpdatedBy: uid,
+        updatedAt: now,
+      },
+      { merge: true },
+    );
+    tx.set(
+      db.collection("audit_events").doc(),
+      auditEventData({
+        salonId,
+        actorId: uid,
+        action: status === "active" ? "admin.salon_reactivated" : "admin.salon_suspended",
+        targetType: "salon",
+        targetId: salonId,
+        before: { status: before },
+        after: { status, reason },
+        createdAt: now,
+      }),
+    );
+    return before;
+  });
+
+  return { salonId, previousStatus, status };
+});
+
+export const updateSystemFeatureFlags = onCall(functionOptions, async (request) => {
+  const uid = currentUid(request.auth);
+  await assertSystemAdmin(uid);
+  const targetSalonId = optionalLimitedString(request.data?.salonId, "salonId", 128);
+  await enforceAuthenticatedRateLimit("adminMutation", uid, targetSalonId || "__system__");
+  const patch = parseFeaturePatch(request.data?.features);
+  const now = Timestamp.now();
+  const featureRef = targetSalonId
+    ? db.collection("salons").doc(targetSalonId).collection("settings").doc("features")
+    : db.collection("system_config").doc("features");
+
+  if (targetSalonId) {
+    const salonSnap = await db.collection("salons").doc(targetSalonId).get();
+    if (!salonSnap.exists) {
+      throw new HttpsError("not-found", "Không tìm thấy salon");
+    }
+  }
+
+  const before = targetSalonId
+    ? await getSystemFeatures(targetSalonId)
+    : normalizeSystemFeatures((await featureRef.get()).data());
+  const parsed = SystemFeaturesSchema.safeParse({ ...before, ...patch });
+  if (!parsed.success) {
+    throw new HttpsError("invalid-argument", "Cấu hình tính năng không hợp lệ");
+  }
+  const next = parsed.data;
+  const batch = db.batch();
+  batch.set(
+    featureRef,
+    {
+      ...(targetSalonId ? patch : next),
+      updatedAt: now,
+      updatedBy: uid,
+    },
+    { merge: true },
+  );
+  batch.set(
+    db.collection("audit_events").doc(),
+    auditEventData({
+      salonId: targetSalonId || "__system__",
+      actorId: uid,
+      action: "admin.feature_flag_updated",
+      targetType: "feature_flags",
+      targetId: targetSalonId || "global",
+      before,
+      after: next,
+      createdAt: now,
+    }),
+  );
+  await batch.commit();
+
+  return { salonId: targetSalonId ?? null, features: next };
+});
+
+export const getSystemFeatureFlags = onCall(functionOptions, async (request) => {
+  const uid = currentUid(request.auth);
+  await assertSystemAdmin(uid);
+  const salonId = optionalLimitedString(request.data?.salonId, "salonId", 128);
+  if (salonId) {
+    const salonSnap = await db.collection("salons").doc(salonId).get();
+    if (!salonSnap.exists) {
+      throw new HttpsError("not-found", "Không tìm thấy salon");
+    }
+  }
+  return {
+    salonId: salonId ?? null,
+    features: salonId
+      ? await getSystemFeatures(salonId)
+      : normalizeSystemFeatures(
+          (await db.collection("system_config").doc("features").get()).data(),
+        ),
+  };
+});
+
+export const updateSystemAdminUserStatus = onCall(functionOptions, async (request) => {
+  const uid = currentUid(request.auth);
+  await assertSystemAdmin(uid);
+  const targetUid = limitedString(request.data?.uid, "uid", 128);
+  await enforceAuthenticatedRateLimit("adminMutation", uid, "__system__");
+  const isActive = requireBoolean(request.data?.isActive, "isActive");
+  const reason = optionalLimitedString(request.data?.reason, "reason", 300) ?? "";
+  if (!isActive && !reason) {
+    throw new HttpsError("invalid-argument", "Cần nhập lý do khóa tài khoản");
+  }
+
+  const userRef = db.collection("users").doc(targetUid);
+  const userSnap = await userRef.get();
+  const target = userSnap.data();
+  if (
+    !userSnap.exists ||
+    (target?.role !== "owner" && target?.role !== "staff") ||
+    typeof target?.salonId !== "string"
+  ) {
+    throw new HttpsError("not-found", "Không tìm thấy tài khoản owner/staff");
+  }
+
+  await getAuth().updateUser(targetUid, { disabled: !isActive });
+  await getAuth().revokeRefreshTokens(targetUid);
+  const now = Timestamp.now();
+  const batch = db.batch();
+  batch.set(
+    userRef,
+    { isActive, statusReason: reason || FieldValue.delete(), updatedAt: now },
+    { merge: true },
+  );
+  batch.set(
+    db.collection("audit_events").doc(),
+    auditEventData({
+      salonId: target.salonId,
+      actorId: uid,
+      action: isActive ? "admin.user_reactivated" : "admin.user_disabled",
+      targetType: "user",
+      targetId: targetUid,
+      before: { isActive: target.isActive === true },
+      after: { isActive, reason },
+      createdAt: now,
+    }),
+  );
+  await batch.commit();
+
+  return { uid: targetUid, isActive };
+});
+
+export const cancelSessionAsSystemAdmin = onCall(functionOptions, async (request) => {
+  const uid = currentUid(request.auth);
+  await assertSystemAdmin(uid);
+  const sessionId = limitedString(request.data?.sessionId, "sessionId", 128);
+  await enforceAuthenticatedRateLimit("adminMutation", uid, "__system__");
+  const reason = limitedString(request.data?.reason, "reason", 300);
+  const sessionRef = db.collection("chair_sessions").doc(sessionId);
+  const now = Timestamp.now();
+  let alreadyCancelled = false;
+
+  await db.runTransaction(async (tx) => {
+    const sessionSnap = await tx.get(sessionRef);
+    if (!sessionSnap.exists) {
+      throw new HttpsError("not-found", "Không tìm thấy lượt cắt");
+    }
+    const session = sessionSnap.data() ?? {};
+    const salonId = String(session.salonId || "");
+    const customerId = String(session.customerId || "");
+    if (!salonId || !customerId) {
+      throw new HttpsError("failed-precondition", "Lượt cắt thiếu tenant hoặc khách hàng");
+    }
+    if (session.status === "cancelled") {
+      alreadyCancelled = true;
+      return;
+    }
+    if (session.status === "completed") {
+      throw new HttpsError("failed-precondition", "Không thể hủy lượt đã hoàn tất");
+    }
+    const activeRef = activeSessionRefFor(salonId, customerId);
+    const activeSnap = await tx.get(activeRef);
+    tx.set(
+      sessionRef,
+      {
+        status: "cancelled",
+        isOpen: false,
+        cancellationReason: "admin",
+        cancellationNote: reason,
+        cancelledAt: now,
+        cancelledBy: uid,
+        updatedAt: now,
+      },
+      { merge: true },
+    );
+    if (activeSnap.exists && activeSnap.data()?.sessionId === sessionId) {
+      tx.delete(activeRef);
+    }
+    tx.set(
+      db.collection("audit_events").doc(),
+      auditEventData({
+        salonId,
+        actorId: uid,
+        action: "admin.session_cancelled",
+        targetType: "chair_session",
+        targetId: sessionId,
+        before: { status: session.status ?? null },
+        after: { status: "cancelled", reason },
+        createdAt: now,
+      }),
+    );
+  });
+
+  return { sessionId, status: "cancelled" as const, alreadyCancelled };
+});
+
+export const listSystemAdminAuditEvents = onCall(functionOptions, async (request) => {
+  const uid = currentUid(request.auth);
+  await assertSystemAdmin(uid);
+  const salonId = optionalLimitedString(request.data?.salonId, "salonId", 128);
+  const pageSize = Math.min(Math.max(Math.floor(Number(request.data?.pageSize ?? 30)), 10), 100);
+  const snapshot = await db
+    .collection("audit_events")
+    .orderBy("createdAt", "desc")
+    .limit(salonId ? Math.min(pageSize * 4, 300) : pageSize)
+    .get();
+  const events = snapshot.docs
+    .filter((eventDoc) => !salonId || eventDoc.data().salonId === salonId)
+    .slice(0, pageSize)
+    .map((eventDoc) => {
+      const event = eventDoc.data();
+      return {
+        id: eventDoc.id,
+        salonId: String(event.salonId || ""),
+        actorId: String(event.actorId || ""),
+        action: String(event.action || ""),
+        targetType: String(event.targetType || ""),
+        targetId: String(event.targetId || ""),
+        createdAtMs: timestampMillis(event.createdAt),
+      };
+    });
+  return { events };
+});
+
+async function deleteSalonCollection(collectionName: string, salonId: string) {
+  let deleted = 0;
+  while (true) {
+    const snapshot = await db
+      .collection(collectionName)
+      .where("salonId", "==", salonId)
+      .limit(400)
+      .get();
+    if (snapshot.empty) break;
+    const batch = db.batch();
+    snapshot.docs.forEach((document) => batch.delete(document.ref));
+    await batch.commit();
+    deleted += snapshot.size;
+  }
+  return deleted;
+}
+
+async function executeSalonDeletion(salonId: string) {
+  const userSnap = await db.collection("users").where("salonId", "==", salonId).get();
+  const authUids = userSnap.docs.map((document) => document.id);
+  await storage.bucket().deleteFiles({ prefix: `salons/${salonId}/`, force: true });
+
+  const collections = [
+    "active_service_sessions",
+    "audit_events",
+    "branches",
+    "chair_sessions",
+    "customer_deletion_jobs",
+    "customers",
+    "device_tokens",
+    "haircut_records",
+    "idempotency_keys",
+    "mirrors",
+    "point_requests",
+    "reward_history",
+    "support_requests",
+  ];
+  let deletedDocuments = 0;
+  for (const collectionName of collections) {
+    deletedDocuments += await deleteSalonCollection(collectionName, salonId);
+  }
+
+  const settingsSnap = await db.collection("salons").doc(salonId).collection("settings").get();
+  if (!settingsSnap.empty) {
+    const settingsBatch = db.batch();
+    settingsSnap.docs.forEach((document) => settingsBatch.delete(document.ref));
+    await settingsBatch.commit();
+    deletedDocuments += settingsSnap.size;
+  }
+  const finalBatch = db.batch();
+  finalBatch.delete(db.collection("lucky_wheel").doc(salonId));
+  finalBatch.delete(
+    db
+      .collection("_customer_search_migrations")
+      .doc(createHash("sha256").update(`name-prefixes-v1:${salonId}`).digest("hex")),
+  );
+  userSnap.docs.forEach((document) => finalBatch.delete(document.ref));
+  finalBatch.delete(db.collection("salons").doc(salonId));
+  await finalBatch.commit();
+  deletedDocuments += userSnap.size + 2;
+
+  for (let index = 0; index < authUids.length; index += 1000) {
+    const result = await getAuth().deleteUsers(authUids.slice(index, index + 1000));
+    if (result.failureCount > 0) {
+      throw new Error("auth_delete_failed");
+    }
+  }
+  return { deletedDocuments, deletedUsers: authUids.length };
+}
+
+export const processSalonDeletionJobs = onSchedule(
+  {
+    region: "asia-southeast1",
+    schedule: "every 60 minutes",
+    timeZone: "Asia/Bangkok",
+    timeoutSeconds: 540,
+    maxInstances: 1,
+  },
+  async () => {
+    const now = Timestamp.now();
+    const jobsSnap = await db
+      .collection("salon_deletion_jobs")
+      .where("status", "==", "requested")
+      .where("executeAfter", "<=", now)
+      .limit(3)
+      .get();
+
+    for (const candidate of jobsSnap.docs) {
+      const acquired = await db.runTransaction(async (tx) => {
+        const current = await tx.get(candidate.ref);
+        const leaseUntilMs = timestampMillis(current.data()?.leaseUntil) ?? 0;
+        if (
+          !current.exists ||
+          current.data()?.status !== "requested" ||
+          (timestampMillis(current.data()?.executeAfter) ?? Number.POSITIVE_INFINITY) >
+            now.toMillis() ||
+          leaseUntilMs > now.toMillis()
+        ) {
+          return false;
+        }
+        tx.set(
+          candidate.ref,
+          {
+            leaseUntil: Timestamp.fromMillis(now.toMillis() + 10 * 60 * 1000),
+            processingStartedAt: now,
+            updatedAt: now,
+          },
+          { merge: true },
+        );
+        return true;
+      });
+      if (!acquired) continue;
+
+      const salonId = String(candidate.data().salonId || candidate.id);
+      try {
+        const result = await executeSalonDeletion(salonId);
+        await candidate.ref.set(
+          {
+            status: "completed",
+            ...result,
+            completedAt: Timestamp.now(),
+            leaseUntil: FieldValue.delete(),
+            updatedAt: Timestamp.now(),
+          },
+          { merge: true },
+        );
+      } catch (error) {
+        await candidate.ref.set(
+          {
+            leaseUntil: FieldValue.delete(),
+            lastErrorCode: String((error as { code?: unknown })?.code || "deletion_failed").slice(
+              0,
+              80,
+            ),
+            lastFailedAt: Timestamp.now(),
+            updatedAt: Timestamp.now(),
+          },
+          { merge: true },
+        );
+      }
+    }
+  },
+);
+
 export const expireUnusedRewards = onSchedule(
   { region: "asia-southeast1", schedule: "every 60 minutes", timeZone: "Asia/Bangkok" },
   async () => {
@@ -4148,18 +5614,138 @@ export const expireUnusedRewards = onSchedule(
       .where("expiresAt", "<=", now)
       .limit(400)
       .get();
-    const batch = db.batch();
     let updated = 0;
 
-    expiredSnap.docs.forEach((doc) => {
-      if (doc.data().status === "unused") {
-        batch.set(doc.ref, { status: "expired", expiredAt: now, updatedAt: now }, { merge: true });
-        updated += 1;
-      }
-    });
+    for (let index = 0; index < expiredSnap.docs.length; index += 20) {
+      const group = expiredSnap.docs.slice(index, index + 20);
+      const results = await Promise.all(
+        group.map((expiredDoc) =>
+          db.runTransaction(async (tx) => {
+            const current = await tx.get(expiredDoc.ref);
+            if (
+              !current.exists ||
+              current.data()?.status !== "unused" ||
+              (timestampMillis(current.data()?.expiresAt) ?? Number.POSITIVE_INFINITY) >
+                now.toMillis()
+            ) {
+              return false;
+            }
+            tx.set(
+              expiredDoc.ref,
+              { status: "expired", expiredAt: now, updatedAt: now },
+              { merge: true },
+            );
+            return true;
+          }),
+        ),
+      );
+      updated += results.filter(Boolean).length;
+    }
 
-    if (updated > 0) {
-      await batch.commit();
+    console.info("Đã hết hạn mã quà", { updated });
+  },
+);
+
+export const notifyStaffOnCustomerCheckin = onDocumentCreated(
+  { region: "asia-southeast1", document: "chair_sessions/{sessionId}" },
+  async (event) => {
+    const session = event.data?.data();
+    const salonId = String(session?.salonId || "");
+    const branchId = String(session?.branchId || "");
+    if (!salonId || !branchId || session?.status !== "waiting") {
+      return;
+    }
+    try {
+      await sendManagerPush({
+        salonId,
+        branchId,
+        role: "staff",
+        title: "Có khách mới đang chờ",
+        body: "Mở HAIRCUT Manager để xem hàng chờ tại chi nhánh.",
+        data: {
+          route: "/queue",
+          sessionId: event.params.sessionId,
+          branchId,
+        },
+      });
+    } catch (error) {
+      console.error("Không gửi được thông báo khách mới", {
+        salonId,
+        branchId,
+        sessionId: event.params.sessionId,
+        errorCode: String((error as { code?: unknown })?.code || "push_failed"),
+      });
+      throw error;
+    }
+  },
+);
+
+export const notifyOwnerOnPointRequest = onDocumentCreated(
+  { region: "asia-southeast1", document: "point_requests/{requestId}" },
+  async (event) => {
+    const pointRequest = event.data?.data();
+    const salonId = String(pointRequest?.salonId || "");
+    if (!salonId || pointRequest?.status !== "pending") {
+      return;
+    }
+    try {
+      await sendManagerPush({
+        salonId,
+        role: "owner",
+        title: "Có yêu cầu cộng điểm mới",
+        body: "Mở HAIRCUT Manager để kiểm tra và duyệt yêu cầu.",
+        data: {
+          route: "/approvals",
+          requestId: event.params.requestId,
+        },
+      });
+    } catch (error) {
+      console.error("Không gửi được thông báo yêu cầu điểm", {
+        salonId,
+        requestId: event.params.requestId,
+        errorCode: String((error as { code?: unknown })?.code || "push_failed"),
+      });
+      throw error;
+    }
+  },
+);
+
+export const notifyStaffOnPointRequestResult = onDocumentUpdated(
+  { region: "asia-southeast1", document: "point_requests/{requestId}" },
+  async (event) => {
+    const before = event.data?.before.data();
+    const after = event.data?.after.data();
+    if (
+      before?.status === after?.status ||
+      (after?.status !== "approved" && after?.status !== "rejected")
+    ) {
+      return;
+    }
+    const salonId = String(after?.salonId || "");
+    const staffId = String(after?.staffId || "");
+    if (!salonId || !staffId) {
+      return;
+    }
+    try {
+      await sendManagerPush({
+        salonId,
+        uid: staffId,
+        title:
+          after.status === "approved" ? "Yêu cầu điểm đã được duyệt" : "Yêu cầu điểm bị từ chối",
+        body: "Mở HAIRCUT Manager để xem trạng thái lượt phục vụ.",
+        data: {
+          route: "/activity",
+          requestId: event.params.requestId,
+          status: String(after.status),
+        },
+      });
+    } catch (error) {
+      console.error("Không gửi được kết quả yêu cầu điểm", {
+        salonId,
+        requestId: event.params.requestId,
+        errorCode: String((error as { code?: unknown })?.code || "push_failed"),
+      });
+      throw error;
     }
   },
 );

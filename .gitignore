@@ -1,5 +1,10 @@
 # Dependencies
 node_modules/
+.cache/
+.vite/
+.vitest/
+.eslintcache
+*.tsbuildinfo
 
 # Build outputs
 dist/
@@ -11,7 +16,18 @@ test-results/
 .lighthouseci/
 .firebase/
 firebase/public/
+codeql-results/
+tmp/
+.tmp/
+*.tmp
+*.swp
+*.pid
+*.pid.lock
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
 # Firebase and local config
 .env
@@ -43,8 +59,15 @@ zalo-mini-app/qr-*-dev.png
 .warp/
 .windsurf/
 
+# OS and accidental command artifacts
+.DS_Store
+Thumbs.db
+/gcloud
+
 # iOS
 DerivedData/
 *.xcuserdata/
 *.xcuserstate
 ios-app/Haircut/Resources/GoogleService-Info.plist
+apps/manager-mobile/android/app/google-services.json
+apps/manager-mobile/ios/App/App/GoogleService-Info.plist

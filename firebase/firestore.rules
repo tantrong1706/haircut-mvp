@@ -20,10 +20,27 @@ service cloud.firestore {
       return get(userPath()).data;
     }
 
+    function salonPath(salonId) {
+      return /databases/$(database)/documents/salons/$(salonId);
+    }
+
+    function salonOperational(salonId) {
+      return exists(salonPath(salonId))
+        && (
+          !("isActive" in get(salonPath(salonId)).data)
+          || get(salonPath(salonId)).data.isActive == true
+        )
+        && (
+          !("status" in get(salonPath(salonId)).data)
+          || get(salonPath(salonId)).data.status == "active"
+        );
+    }
+
     function isActiveMember(salonId) {
       return hasUserProfile()
         && appUser().salonId == salonId
-        && appUser().isActive == true;
+        && appUser().isActive == true
+        && salonOperational(salonId);
     }
 
     function isStaffOrOwner(salonId) {
@@ -107,6 +124,24 @@ service cloud.firestore {
     match /reward_history/{rewardId} {
       allow read: if isOwner(resource.data.salonId);
       allow create, update, delete: if false;
+    }
+
+    // Operational collections are server-only. They may contain tokens,
+    // security events or state used to enforce idempotency.
+    match /active_service_sessions/{sessionId} {
+      allow read, write: if false;
+    }
+
+    match /audit_events/{eventId} {
+      allow read, write: if false;
+    }
+
+    match /device_tokens/{tokenId} {
+      allow read, write: if false;
+    }
+
+    match /support_requests/{requestId} {
+      allow read, write: if false;
     }
 
     match /{document=**} {

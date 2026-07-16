@@ -1,0 +1,12 @@
+[
+  "branches",
+  "customers",
+  "chair_sessions",
+  "active_service_sessions",
+  "point_requests",
+  "haircut_records",
+  "reward_history",
+  "audit_events",
+  "device_tokens",
+  "support_requests"
+]

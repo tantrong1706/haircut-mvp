@@ -18,6 +18,7 @@ import {
   isFirebaseConfigured,
 } from "./firebase";
 import { callWriteFunctionOrFallback } from "./functionWrites";
+import { prepareSquareImage } from "./imageProcessing";
 
 export type AppRole = "owner" | "staff";
 
@@ -32,10 +33,6 @@ export type AppUser = {
   branchId?: string;
   branchIds?: string[];
 };
-
-const OWNER_AVATAR_MAX_SOURCE_SIZE = 10 * 1024 * 1024;
-const OWNER_AVATAR_MAX_UPLOAD_SIZE = 3 * 1024 * 1024;
-const OWNER_AVATAR_ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 export function listenAuthState(onChange: (user: User | null) => void) {
   const auth = getFirebaseAuth();
@@ -236,6 +233,7 @@ export async function signOutOwnerStaff() {
     return;
   }
 
+  await window.__haircutBeforeSignOut?.();
   await signOut(auth);
 }
 
@@ -321,12 +319,7 @@ export async function uploadOwnerAvatarFile(input: {
     throw new Error("Bạn cần đăng nhập chủ salon để tải avatar lên");
   }
 
-  const sourceFile = validateOwnerAvatarFile(input.file);
-  const avatarBlob = await resizeOwnerAvatar(sourceFile);
-
-  if (avatarBlob.size > OWNER_AVATAR_MAX_UPLOAD_SIZE) {
-    throw new Error("Ảnh avatar quá lớn. Vui lòng chọn ảnh nhẹ hơn 3MB.");
-  }
+  const avatarBlob = await prepareSquareImage(input.file, { subject: "ảnh avatar" });
 
   const avatarRef = ref(storage, `salons/${input.salonId}/owner_avatars/${currentUser.uid}/avatar`);
 
@@ -363,68 +356,6 @@ async function updateOwnerAvatarDirect(avatarUrl: string): Promise<{ avatarUrl: 
   );
 
   return { avatarUrl };
-}
-
-function validateOwnerAvatarFile(file: File) {
-  if (!file) {
-    throw new Error("Vui lòng chọn ảnh avatar");
-  }
-
-  if (!OWNER_AVATAR_ALLOWED_TYPES.has(file.type)) {
-    throw new Error("Avatar chỉ hỗ trợ ảnh JPG, PNG hoặc WebP");
-  }
-
-  if (file.size > OWNER_AVATAR_MAX_SOURCE_SIZE) {
-    throw new Error("Ảnh gốc quá lớn. Vui lòng chọn ảnh dưới 10MB.");
-  }
-
-  return file;
-}
-
-async function resizeOwnerAvatar(file: File): Promise<Blob> {
-  const imageUrl = URL.createObjectURL(file);
-
-  try {
-    const image = await loadImage(imageUrl);
-    const sourceSize = Math.min(image.naturalWidth, image.naturalHeight);
-
-    if (!sourceSize) {
-      throw new Error("Không đọc được kích thước ảnh avatar");
-    }
-
-    const canvas = document.createElement("canvas");
-    canvas.width = 512;
-    canvas.height = 512;
-
-    const context = canvas.getContext("2d");
-    if (!context) {
-      return file;
-    }
-
-    const sourceX = Math.max(0, (image.naturalWidth - sourceSize) / 2);
-    const sourceY = Math.max(0, (image.naturalHeight - sourceSize) / 2);
-    context.drawImage(image, sourceX, sourceY, sourceSize, sourceSize, 0, 0, 512, 512);
-
-    const resizedBlob = await canvasToBlob(canvas, "image/webp", 0.86);
-    return resizedBlob || file;
-  } finally {
-    URL.revokeObjectURL(imageUrl);
-  }
-}
-
-function loadImage(url: string) {
-  return new Promise<HTMLImageElement>((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error("Không đọc được ảnh avatar"));
-    image.src = url;
-  });
-}
-
-function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number) {
-  return new Promise<Blob | null>((resolve) => {
-    canvas.toBlob(resolve, type, quality);
-  });
 }
 
 export async function getAppUser(uid: string): Promise<AppUser | null> {

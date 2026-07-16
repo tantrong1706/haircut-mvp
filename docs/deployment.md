@@ -10,6 +10,7 @@
 - `ZALO_OPEN_API_KEY` là API Key trong phần Open APIs của Zalo Mini App, phải nằm trong Firebase Secret Manager và không được ghi vào `.env`, log hoặc repository.
 - `QR_SIGNING_SECRET` phải nằm trong Firebase Secret Manager, dài tối thiểu 32 ký tự và không được dùng lại `ZALO_APP_SECRET`.
 - Chỉ đặt `REQUIRE_ZALO_APP_CHECK=true` sau khi App Check đã chạy ổn trong cả Zalo Android và iPhone; để trống trong giai đoạn tương thích.
+- Chỉ đặt `ENFORCE_APP_CHECK=true` sau khi web/Zalo và Manager native đều gửi token hợp lệ. Manager dùng Play Integrity và App Attest/DeviceCheck; không dùng reCAPTCHA web trong native runtime.
 - `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT` chỉ đặt ở môi trường deploy/GitHub Secrets.
 - Khi đủ ba biến Sentry, Vite tạo source map ẩn, upload rồi xóa file map khỏi `dist`.
 
@@ -32,12 +33,37 @@ cd ..
 
 ## Thứ tự deploy
 
-1. Chạy readiness và toàn bộ test.
-2. Export Firestore, deploy Functions có `migrateSalonBranches`, rồi chạy migration cho từng salon theo [BRANCH_QR_MIGRATION.md](BRANCH_QR_MIGRATION.md).
-3. Deploy indexes và chờ tạo xong trước khi bật giao diện mới.
-4. Sau khi xác nhận dữ liệu có `branchId`, deploy Firestore Rules và Storage Rules.
-5. Build rồi deploy Hosting.
-6. Chạy `npm run deploy:zmp:test`, kiểm tra trên Zalo Android/iPhone rồi mới gửi duyệt production.
+1. Chạy readiness, test liên quan và tạo release SHA/tag ở trạng thái working tree sạch.
+2. Dry-run audit tenant, export Firestore bằng `scripts/backup-firestore.ps1`, ghi URL backup vào biên bản.
+3. Deploy Functions tương thích ngược theo nhóm nhỏ.
+4. Chạy migration đã phê duyệt; không tự suy đoán document thiếu `salonId`.
+5. Deploy indexes và chờ tạo xong, sau đó Firestore Rules và Storage Rules.
+6. Build/deploy Hosting khách; kiểm tra Privacy, Terms, deletion và webhook.
+7. Chạy `npm run deploy:zmp:test`, kiểm tra Zalo Android/iPhone rồi mới phát hành.
+8. Manager đi qua Internal Testing/TestFlight; Admin dùng Hosting site riêng, không ghi đè site khách.
+
+## Audit tenant và migration
+
+```powershell
+cd firebase\functions
+npm run audit:tenant-data -- --project haircut-c7d12
+```
+
+Lệnh mặc định chỉ đếm document thiếu `salonId` và không in ID. Chế độ ghi bắt buộc file mapping, `--apply` và `--confirm-project haircut-c7d12`; xem `scripts/tenant-migration.example.json`. Chưa chạy trên production chỉ vì source đã có script.
+
+## HAIRCUT Manager
+
+```powershell
+cd apps\manager-mobile
+npm ci
+npm run sync
+```
+
+Android cần `google-services.json`; iOS cần `GoogleService-Info.plist`, APNs key và Xcode capabilities. Hai file config không được commit. Hướng dẫn store đầy đủ ở [MANAGER_STORE_SUBMISSION.md](MANAGER_STORE_SUBMISSION.md).
+
+## HAIRCUT Admin
+
+Build bằng `npm run build` trong `apps/admin-web`. Trước deploy phải tạo Firebase Hosting site riêng, cấu hình URL vào `VITE_ADMIN_URL` và smoke test tài khoản `system_admin`; không dùng site `haircut-c7d12` của khách.
 
 ## Kiểm tra sau deploy
 
@@ -64,3 +90,5 @@ cd ..
 - Storage: bật versioning/lifecycle trên bucket backup theo chính sách vận hành và kiểm tra riêng ảnh kiểu tóc/avatar sau phục hồi.
 - Zalo: giữ phiên bản test trước và chỉ phát hành production sau khi smoke test đạt.
 - Mỗi quý chạy một diễn tập restore không dùng dữ liệu khách thật, ghi lại RTO/RPO, lỗi gặp phải và người phê duyệt.
+
+Lệnh dry-run và runbook chi tiết nằm tại [PRODUCTION_OPERATIONS.md](PRODUCTION_OPERATIONS.md). Không rollback Rules theo cách mở quyền client và không import Firestore trực tiếp khi chưa xác nhận project hai lần.

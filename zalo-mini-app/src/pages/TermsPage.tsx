@@ -93,6 +93,11 @@ export function TermsPage() {
             </>
           ) : null}
         </p>
+        <p>
+          <a href="/privacy">Chính sách quyền riêng tư</a>
+          <br />
+          <a href="/delete-account">Yêu cầu xóa tài khoản hoặc salon</a>
+        </p>
       </div>
     </section>
   );

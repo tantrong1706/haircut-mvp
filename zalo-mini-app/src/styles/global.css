@@ -538,6 +538,46 @@ small {
   background: #fee2e2;
 }
 
+.account-deletion-panel {
+  display: grid;
+  gap: 16px;
+  border-color: #ead7d2;
+}
+
+.account-deletion-panel .section-heading > svg {
+  color: #a64638;
+}
+
+.account-deletion-panel .toggle-row {
+  align-items: flex-start;
+}
+
+.deletion-pending {
+  padding: 14px;
+  border: 1px solid #e9d8a8;
+  border-radius: 8px;
+  color: #6b520f;
+  background: #fff8df;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.deletion-pending strong,
+.deletion-pending span {
+  display: block;
+}
+
+.deletion-pending span {
+  margin-top: 3px;
+  font-size: 13px;
+}
+
+.account-support {
+  margin-top: 14px;
+  text-align: center;
+}
+
 .danger-primary {
   background: var(--red);
 }

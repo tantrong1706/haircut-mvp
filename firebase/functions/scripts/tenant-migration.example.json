@@ -1,0 +1,10 @@
+{
+  "entries": [
+    {
+      "collection": "chair_sessions",
+      "documentId": "REPLACE_WITH_DOCUMENT_ID",
+      "salonId": "REPLACE_WITH_SALON_ID",
+      "branchId": "REPLACE_WITH_BRANCH_ID"
+    }
+  ]
+}

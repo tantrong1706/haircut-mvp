@@ -75,6 +75,21 @@ Input:
 
 Chỉ owner của đúng salon được gọi. Gửi `avatarUrl` rỗng để xóa avatar. Server cập nhật cả `users/{uid}.avatarUrl` và `photoURL` trong Firebase Auth.
 
+## updateSalonAvatar
+
+Input:
+
+```json
+{
+  "salonId": "...",
+  "salonAvatarUrl": "https://firebasestorage.googleapis.com/..."
+}
+```
+
+Chỉ owner của đúng salon được gọi. Server chỉ chấp nhận object
+`salons/{salonId}/branding/avatar.webp` thuộc bucket Firebase của dự án, kiểm tra MIME, kích thước,
+metadata `salonId`/`ownerUid` và ghi audit event. Gửi `salonAvatarUrl` rỗng để xóa ảnh salon.
+
 ## listBranches / createBranch / updateBranch
 
 Owner xem, tạo, sửa và khóa chi nhánh. Staff chỉ nhận những chi nhánh được phân công.
@@ -86,8 +101,10 @@ xoay QR chi nhánh không ảnh hưởng QR salon.
 
 ## resolveCustomerQr / migrateSalonBranches
 
-`resolveCustomerQr` xác minh QR và trả chi nhánh phù hợp. `migrateSalonBranches` tạo Chi nhánh chính,
-gắn `branchId` vào dữ liệu cũ và có thể chạy lại mà không tạo trùng.
+`resolveCustomerQr` xác minh QR và trả chi nhánh phù hợp, gồm `salonName`, `salonAvatarUrl`,
+`branchName` và `branchAddress`; khi salon chưa có ảnh, `salonAvatarUrl` là chuỗi rỗng.
+`migrateSalonBranches` tạo Chi nhánh chính, gắn `branchId` vào dữ liệu cũ và có thể chạy lại mà
+không tạo trùng.
 
 ## registerCustomerFromZalo
 
@@ -138,10 +155,12 @@ Input:
 
 Owner hoặc staff được gọi. Server luôn cố định cộng 1 điểm, không tin số điểm do client tự gửi.
 Server lấy `branchId` từ phiên đã xác minh; client không được tự chọn chi nhánh cho yêu cầu điểm.
+Document request dùng `sessionId` làm ID/khóa xác định. Gửi lại cùng staff/session trả `alreadySubmitted=true`.
 
 ## approvePointRequest / rejectPointRequest
 
 Chỉ owner được gọi. Khi duyệt, server tăng điểm, tạo `haircut_records` và đóng phiên phục vụ. Khi từ chối, yêu cầu điểm chuyển sang `rejected`.
+Transaction ghi `processedAt`, `processedBy`, `pointsBefore` và `pointsAfter`; gọi lại không cộng điểm lần hai.
 
 ## updateLuckyWheel
 
@@ -172,7 +191,8 @@ Input:
 ```json
 {
   "salonId": "...",
-  "zaloAccessToken": "..."
+  "zaloAccessToken": "...",
+  "idempotencyKey": "random-16-128-characters"
 }
 ```
 
@@ -211,6 +231,35 @@ Owner/staff tìm khách theo tên hoặc 4 số cuối SĐT. Output gồm điể
 ## lookupRewardCode / redeemRewardCode
 
 Owner hoặc staff có `canRedeemRewards=true` được kiểm tra và xác nhận mã quà đã sử dụng.
+`redeemRewardCode` nhận thêm `branchId` và `idempotencyKey`; backend xác minh branch theo user, ghi `usedBranchId` và chỉ cho trạng thái `unused`.
+
+## Error code ổn định
+
+Frontend hiển thị tiếng Việt từ `HttpsError.details.errorCode`, không so khớp toàn bộ message. Các mã chính nằm trong `@haircut/contracts`:
+
+```text
+UNAUTHENTICATED
+FORBIDDEN
+USER_INACTIVE
+SALON_SUSPENDED
+SALON_PENDING_DELETION
+INVALID_SALON
+INVALID_BRANCH
+BRANCH_ACCESS_DENIED
+SESSION_ALREADY_CLAIMED
+SESSION_NOT_OPEN
+REQUEST_ALREADY_PROCESSED
+REWARD_ALREADY_REDEEMED
+REWARD_EXPIRED
+INVALID_REQUEST
+RATE_LIMITED
+APP_VERSION_UNSUPPORTED
+FEATURE_DISABLED
+MAINTENANCE_MODE
+INTERNAL_ERROR
+```
+
+Tên callable dùng chung cũng được công bố bởi `CloudFunctionNames`; thay đổi tên production phải có giai đoạn tương thích.
 
 ## deleteCustomerData
 
