@@ -86,6 +86,8 @@ Phân phối Android qua Internal Testing rồi Closed Testing. Phân phối iOS
 
 ## Checklist gửi duyệt
 
+- [ ] GitHub Actions `Manager Android` đã chạy Gradle test, lint và `assembleDebug` trên đúng release SHA.
+- [ ] GitHub Actions `Manager iOS Simulator` đã build Xcode Simulator với `CODE_SIGNING_ALLOWED=NO` trên đúng release SHA.
 - [ ] Firebase native config đúng bundle ID và không nằm trong Git.
 - [ ] FCM nhận được thông báo trên Android và iPhone; bấm thông báo mở đúng màn.
 - [ ] App Check token hợp lệ trước khi bật `ENFORCE_APP_CHECK=true`.

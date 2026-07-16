@@ -71,3 +71,8 @@ DerivedData/
 ios-app/Haircut/Resources/GoogleService-Info.plist
 apps/manager-mobile/android/app/google-services.json
 apps/manager-mobile/ios/App/App/GoogleService-Info.plist
+*.jks
+*.keystore
+*.p8
+*.p12
+*.mobileprovision
