@@ -3,6 +3,7 @@ import { Gift, History, House, Sparkles, type LucideIcon } from "lucide-react";
 import { InstallAppPrompt } from "./components/InstallAppPrompt";
 import { trackEvent } from "./services/monitoring";
 import { parseQrContext } from "./services/qr";
+import { isZaloMiniAppRuntime } from "./services/runtime";
 import { clearSavedSession, loadSavedSession, saveSession } from "./services/sessionStore";
 import type { AppSession, TabKey } from "./services/types";
 
@@ -47,6 +48,8 @@ const tabs: Array<{ key: TabKey; label: string; Icon: LucideIcon }> = [
   { key: "rewards", label: "Quà", Icon: Gift },
 ];
 
+const managementRoutes = ["/staff", "/owner", "/admin", "/delete-account"];
+
 function PageLoading() {
   return (
     <section className="panel loading-panel" aria-live="polite">
@@ -79,7 +82,11 @@ function AdminPortalRedirect() {
 }
 
 export default function App() {
-  const path = window.location.pathname;
+  const requestedPath = window.location.pathname;
+  const path =
+    isZaloMiniAppRuntime() && managementRoutes.some((route) => requestedPath.startsWith(route))
+      ? "/"
+      : requestedPath;
   const isCustomerRoute = ![
     "/staff",
     "/owner",

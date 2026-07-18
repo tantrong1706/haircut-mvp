@@ -262,37 +262,45 @@ export function ScanEntryPage({ onReady }: Props) {
           <QrCode size={38} aria-hidden="true" />
 
           <div>
-            <h2>Chưa có QR salon</h2>
+            <h2>Cần QR của salon</h2>
 
             <p className="muted">
-              Nếu bạn là chủ salon, vào mục Chi nhánh để tải QR chung hoặc QR của từng chi nhánh.
+              QR giúp HAIRCUT xác định đúng salon và chi nhánh. Hãy quét QR do salon cung cấp rồi mở
+              lại ứng dụng.
             </p>
           </div>
         </div>
 
-        <div className="quick-actions">
-          <button type="button" onClick={() => window.location.assign("/owner")}>
-            <span>
-              <ArrowRight size={20} aria-hidden="true" />
-            </span>
+        {isZaloRuntime ? (
+          <nav className="entry-help-links" aria-label="Thông tin HAIRCUT">
+            <a href="/privacy">Chính sách quyền riêng tư</a>
+            <a href="/terms">Điều khoản sử dụng</a>
+          </nav>
+        ) : (
+          <div className="quick-actions">
+            <button type="button" onClick={() => window.location.assign("/owner")}>
+              <span>
+                <ArrowRight size={20} aria-hidden="true" />
+              </span>
 
-            <div>
-              <strong>Trang chủ salon</strong>
-              <small>Quản lý chi nhánh, nhân viên và QR</small>
-            </div>
-          </button>
+              <div>
+                <strong>Trang chủ salon</strong>
+                <small>Quản lý chi nhánh, nhân viên và QR</small>
+              </div>
+            </button>
 
-          <button type="button" onClick={() => window.location.assign("/staff")}>
-            <span>
-              <Scissors size={20} aria-hidden="true" />
-            </span>
+            <button type="button" onClick={() => window.location.assign("/staff")}>
+              <span>
+                <Scissors size={20} aria-hidden="true" />
+              </span>
 
-            <div>
-              <strong>Trang nhân viên</strong>
-              <small>Xem khách đang chờ và đổi mã quà</small>
-            </div>
-          </button>
-        </div>
+              <div>
+                <strong>Trang nhân viên</strong>
+                <small>Xem khách đang chờ và đổi mã quà</small>
+              </div>
+            </button>
+          </div>
+        )}
       </section>
     );
   }
