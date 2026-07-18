@@ -5,6 +5,17 @@ const config: CapacitorConfig = {
   appName: "HAIRCUT Manager",
   webDir: "dist",
   backgroundColor: "#10231d",
+  experimental: {
+    ios: {
+      spm: {
+        packageOptions: {
+          "@capacitor-firebase/app-check": {
+            symlink: true,
+          },
+        },
+      },
+    },
+  },
   plugins: {
     SplashScreen: {
       launchShowDuration: 1200,
