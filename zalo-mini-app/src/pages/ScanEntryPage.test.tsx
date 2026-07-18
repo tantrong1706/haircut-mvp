@@ -116,6 +116,55 @@ describe("ScanEntryPage", () => {
     });
   });
 
+  it("mở link chung không QR mà không hiện lối vào quản lý", async () => {
+    window.history.replaceState({}, "", "/");
+
+    render(<ScanEntryPage onReady={vi.fn()} />);
+
+    expect(screen.getByRole("heading", { name: "Quét QR tại salon" })).toBeInTheDocument();
+    expect(
+      screen.getByText(/QR giúp HAIRCUT xác định đúng salon và chi nhánh/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Trang chủ salon")).not.toBeInTheDocument();
+    expect(screen.queryByText("Trang nhân viên")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Chính sách quyền riêng tư" })).toHaveAttribute(
+      "href",
+      "/privacy",
+    );
+    expect(screen.getByRole("link", { name: "Điều khoản sử dụng" })).toHaveAttribute(
+      "href",
+      "/terms",
+    );
+    expect(mocks.resolveCustomerQr).not.toHaveBeenCalled();
+    expect(mocks.getZaloIdentity).not.toHaveBeenCalled();
+  });
+
+  it("giải thích trước khi xin lại quyền hồ sơ bị từ chối", async () => {
+    const user = userEvent.setup();
+    mocks.getZaloIdentity
+      .mockResolvedValueOnce({
+        accessToken: "access-token-test",
+        name: "",
+      })
+      .mockResolvedValueOnce({
+        accessToken: "access-token-test",
+        zaloUserId: "zalo-a",
+        name: "Anh Tân",
+      });
+
+    render(<ScanEntryPage onReady={vi.fn()} />);
+
+    expect(await screen.findByText("Chưa nhận được thông tin Zalo")).toBeInTheDocument();
+    expect(screen.getByText(/Cho phép HAIRCUT đọc tên hiển thị/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Cho phép đọc tên Zalo" }));
+
+    expect(await screen.findByText("Anh Tân")).toBeInTheDocument();
+    expect(mocks.getZaloIdentity).toHaveBeenNthCalledWith(2, {
+      requestProfilePermission: true,
+    });
+  });
+
   it("hiển thị ảnh salon và quay về logo mặc định khi ảnh lỗi", async () => {
     const { container } = render(<ScanEntryPage onReady={vi.fn()} />);
     const salonAvatar = await screen.findByAltText("Ảnh đại diện HAIRCUT Studio");

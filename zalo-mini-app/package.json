@@ -22,12 +22,13 @@
     "sync:zmp": "node scripts/sync-zmp-config.mjs --write",
     "validate:zmp": "node scripts/sync-zmp-config.mjs --check",
     "build:zmp": "npm run build && npm run validate:zmp",
+    "check:zalo-review": "node ../scripts/check-zalo-review-readiness.mjs",
     "prepare:zalo-review": "node tools/prepare-zalo-review.mjs",
     "capture:zalo-review": "node tools/run-zalo-review-capture.mjs",
     "login:zmp:qr": "node tools/zmp-qr-login.mjs",
     "deploy:zmp:test": "npm run build:zmp && zmp deploy -p -e -t -o www -m \"HAIRCUT production test\"",
     "preview": "vite preview --host 0.0.0.0",
-    "check": "npm run lint && npm run format:check && npm run test:run && npm run build:zmp"
+    "check": "npm run lint && npm run format:check && npm run test:run && npm run build:zmp && npm run check:zalo-review"
   },
   "dependencies": {
     "@haircut/contracts": "file:../packages/contracts",
