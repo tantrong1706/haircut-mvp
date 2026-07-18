@@ -12,6 +12,7 @@
     "module": "ESNext",
     "moduleResolution": "Node",
     "baseUrl": ".",
+    "typeRoots": ["./node_modules/@types"],
     "paths": {
       "@haircut/contracts": ["node_modules/@haircut/contracts"],
       "@sentry/react": ["node_modules/@sentry/react"],
