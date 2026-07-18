@@ -10,7 +10,7 @@ export function TermsPage() {
         <BrandLogo />
         <p className="eyebrow">HAIRCUT</p>
         <h1>Điều khoản sử dụng</h1>
-        <p className="muted">Cập nhật: 15/07/2026</p>
+        <p className="muted">Cập nhật: 18/07/2026</p>
       </header>
 
       <div className="panel privacy-content">
@@ -24,8 +24,10 @@ export function TermsPage() {
         <h2>2. Xác nhận và tài khoản</h2>
         <p>
           Khách chịu trách nhiệm xác nhận đúng salon, chi nhánh và thông tin hiển thị trước khi tạo
-          lượt. Chủ salon và nhân viên phải bảo vệ tài khoản đăng nhập, không chia sẻ quyền truy cập
-          và thông báo ngay khi nghi ngờ tài khoản bị sử dụng trái phép.
+          lượt. HAIRCUT chỉ yêu cầu quyền đọc tên và ảnh đại diện Zalo để nhận diện khách; số điện
+          thoại là thông tin tùy chọn do khách tự nhập. Chủ salon và nhân viên phải bảo vệ tài khoản
+          đăng nhập, không chia sẻ quyền truy cập và thông báo ngay khi nghi ngờ tài khoản bị sử
+          dụng trái phép.
         </p>
 
         <h2>3. Quy tắc sử dụng</h2>
@@ -96,7 +98,7 @@ export function TermsPage() {
         <p>
           <a href="/privacy">Chính sách quyền riêng tư</a>
           <br />
-          <a href="/delete-account">Yêu cầu xóa tài khoản hoặc salon</a>
+          <a href="/privacy#data-rights">Hướng dẫn yêu cầu xem, sửa hoặc xóa dữ liệu</a>
         </p>
       </div>
     </section>

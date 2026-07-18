@@ -12,6 +12,12 @@ describe("trang pháp lý công khai", () => {
     const privacyLinks = screen.getAllByRole("link", { name: "Chính sách quyền riêng tư" });
     expect(privacyLinks.length).toBeGreaterThan(0);
     privacyLinks.forEach((link) => expect(link).toHaveAttribute("href", "/privacy"));
+    expect(
+      screen.getByRole("link", { name: "Hướng dẫn yêu cầu xem, sửa hoặc xóa dữ liệu" }),
+    ).toHaveAttribute("href", "/privacy#data-rights");
+    expect(
+      screen.queryByRole("link", { name: /xóa tài khoản hoặc salon/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("liên kết từ chính sách quyền riêng tư sang điều khoản", () => {

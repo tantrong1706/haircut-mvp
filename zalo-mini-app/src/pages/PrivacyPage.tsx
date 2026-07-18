@@ -10,7 +10,7 @@ export function PrivacyPage() {
         <BrandLogo />
         <p className="eyebrow">HAIRCUT</p>
         <h1>Chính sách quyền riêng tư</h1>
-        <p className="muted">Cập nhật: 13/07/2026</p>
+        <p className="muted">Cập nhật: 18/07/2026</p>
       </header>
 
       <div className="panel privacy-content">
@@ -23,9 +23,11 @@ export function PrivacyPage() {
 
         <h2>2. Dữ liệu được thu thập</h2>
         <p>
-          HAIRCUT có thể xử lý tên hiển thị và mã định danh Zalo; số điện thoại, ngày sinh nếu khách
-          tự cung cấp; salon, chi nhánh và thời điểm check-in; điểm, lịch sử cắt tóc, ghi chú dịch
-          vụ, lượt quay và mã quà. Với chủ salon và nhân viên, hệ thống còn lưu email đăng nhập,
+          HAIRCUT xử lý mã định danh và tên hiển thị Zalo sau khi khách cho phép. Ảnh đại diện Zalo
+          chỉ được hiển thị tạm trên màn hình xác nhận và không được lưu vào hồ sơ phục vụ. Số điện
+          thoại chỉ được lưu khi khách tự nhập; ứng dụng không yêu cầu quyền lấy số điện thoại Zalo.
+          Hệ thống còn xử lý salon, chi nhánh và thời điểm check-in; điểm, lịch sử cắt tóc, ghi chú
+          dịch vụ, lượt quay và mã quà. Với chủ salon và nhân viên, hệ thống lưu email đăng nhập,
           tên, vai trò và chi nhánh được phân công.
         </p>
 
@@ -66,7 +68,7 @@ export function PrivacyPage() {
           Firebase; không có phương thức truyền hoặc lưu trữ nào bảo đảm an toàn tuyệt đối.
         </p>
 
-        <h2>8. Quyền xem, sửa và xóa dữ liệu</h2>
+        <h2 id="data-rights">8. Quyền xem, sửa và xóa dữ liệu</h2>
         <p>
           Khách có thể yêu cầu xem, sửa hoặc xóa hồ sơ và ảnh bằng cách liên hệ salon đã phục vụ
           hoặc kênh hỗ trợ bên dưới. Yêu cầu sẽ được xác minh để tránh xóa nhầm, dự kiến phản hồi
