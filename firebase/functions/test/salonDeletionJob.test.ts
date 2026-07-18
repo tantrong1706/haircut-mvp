@@ -12,8 +12,10 @@ function createAdapter(input: {
   initial?: SalonDeletionJobState;
   failOnceFor?: string;
   missingUid?: string;
+  failFirestoreOnce?: boolean;
 }) {
   let failOnceFor = input.failOnceFor;
+  let failFirestoreOnce = input.failFirestoreOnce;
   const state: SalonDeletionJobState = input.initial ?? { status: "requested" };
   const calls = {
     collect: 0,
@@ -52,6 +54,10 @@ function createAdapter(input: {
     },
     async deleteFirestoreData() {
       calls.firestore += 1;
+      if (failFirestoreOnce) {
+        failFirestoreOnce = false;
+        throw { code: "firestore/unavailable" };
+      }
       return 12;
     },
     async deleteStorageData() {
@@ -160,5 +166,23 @@ describe("salon deletion job", () => {
       storage: 0,
       salon: 0,
     });
+  });
+
+  it("retry đúng phase khi Firestore tạm lỗi", async () => {
+    const context = createAdapter({ authUids: ["owner-firestore"], failFirestoreOnce: true });
+
+    await expect(runSalonDeletionJob(context.adapter)).resolves.toMatchObject({ status: "failed" });
+    expect(context.state).toMatchObject({
+      status: "failed",
+      resumeStatus: "deleting_firestore_data",
+    });
+    expect(context.calls.storage).toBe(0);
+
+    await expect(runSalonDeletionJob(context.adapter)).resolves.toMatchObject({
+      status: "completed",
+    });
+    expect(context.calls.auth).toEqual(["owner-firestore"]);
+    expect(context.calls.firestore).toBe(2);
+    expect(context.calls.storage).toBe(1);
   });
 });

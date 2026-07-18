@@ -47,6 +47,18 @@ describe("Manager bootstrap", () => {
     expect(track).toHaveBeenCalledWith("manager_splash_hide_failed", expect.any(Object));
   });
 
+  it("không làm bootstrap văng lỗi khi hàm ẩn splash bất ngờ throw", async () => {
+    const track = vi.fn();
+    const result = await runManagerBootstrap({
+      initialize: vi.fn().mockResolvedValue(vi.fn()),
+      hideSplash: vi.fn().mockRejectedValue(new Error("native bridge failed")),
+      track,
+    });
+
+    expect(result).toMatchObject({ ok: true });
+    expect(track).toHaveBeenCalledWith("manager_splash_hide_failed", expect.any(Object));
+  });
+
   it("cho phép người dùng thử lại sau lần đầu thất bại", async () => {
     const initialize = vi
       .fn()

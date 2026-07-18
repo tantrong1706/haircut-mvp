@@ -2,6 +2,20 @@ import { describe, expect, it, vi } from "vitest";
 import { adminAppCheckErrorMessage, initializeAdminAppCheck } from "./appCheck";
 
 describe("Admin App Check", () => {
+  it("bỏ qua an toàn khi chưa có site key", () => {
+    const initialize = vi.fn();
+    expect(
+      initializeAdminAppCheck({
+        app: {},
+        siteKey: "",
+        production: true,
+        createProvider: () => ({}),
+        initialize,
+      }),
+    ).toEqual({ enabled: false, reason: "missing_site_key" });
+    expect(initialize).not.toHaveBeenCalled();
+  });
+
   it("khởi tạo provider khi có site key hợp lệ", () => {
     const initialize = vi.fn();
     const createProvider = vi.fn((siteKey: string) => ({ siteKey }));

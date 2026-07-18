@@ -47,7 +47,13 @@ export async function runManagerBootstrap(input: {
     if (timedOut) {
       void initialization.then((cleanup) => cleanup()).catch(() => undefined);
     }
-    if (!(await input.hideSplash())) {
+    let splashHidden = false;
+    try {
+      splashHidden = await input.hideSplash();
+    } catch {
+      splashHidden = false;
+    }
+    if (!splashHidden) {
       input.track("manager_splash_hide_failed", {
         error_code: "MANAGER_SPLASH_HIDE_FAILED",
         request_id: requestId,
