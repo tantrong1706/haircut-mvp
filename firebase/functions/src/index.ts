@@ -212,6 +212,19 @@ function limitedString(value: unknown, field: string, maxLength: number): string
   return result;
 }
 
+function requirePointRejectionReason(value: unknown): string {
+  const reason = requireString(value, "reason").replace(/\s+/g, " ");
+  if (reason.length < 5 || reason.length > 200) {
+    throw apiError(
+      "invalid-argument",
+      ApiErrorCode.INVALID_REQUEST,
+      "Lý do từ chối phải có từ 5 đến 200 ký tự",
+      { field: "reason" },
+    );
+  }
+  return reason;
+}
+
 function optionalLimitedString(
   value: unknown,
   field: string,
@@ -2184,7 +2197,10 @@ export const getSalonProfile = onCall(functionOptions, async (request) => {
   const salonId = requireString(request.data?.salonId, "salonId");
   await assertSalonRole(uid, salonId, ["owner", "staff"]);
 
-  const salonSnap = await db.collection("salons").doc(salonId).get();
+  const [salonSnap, features] = await Promise.all([
+    db.collection("salons").doc(salonId).get(),
+    getSystemFeatures(salonId),
+  ]);
   if (!salonSnap.exists) {
     throw new HttpsError("not-found", "Không tìm thấy salon");
   }
@@ -2198,6 +2214,7 @@ export const getSalonProfile = onCall(functionOptions, async (request) => {
     avatarUrl: trustedStoredSalonAvatarUrl(salon?.avatarUrl, salonId),
     pointPerVisit: Number(salon?.pointPerVisit ?? 1),
     freeCustomerLimit: Number(salon?.freeCustomerLimit ?? 50),
+    features,
   };
 });
 
@@ -2251,6 +2268,7 @@ export const updateSalonProfile = onCall(functionOptions, async (request) => {
     }),
   );
   await salonBatch.commit();
+  const features = await getSystemFeatures(salonId);
 
   return {
     id: salonId,
@@ -2259,6 +2277,7 @@ export const updateSalonProfile = onCall(functionOptions, async (request) => {
     phone: phone ?? "",
     pointPerVisit,
     freeCustomerLimit: Number(salonSnap.data()?.freeCustomerLimit ?? 50),
+    features,
   };
 });
 
@@ -3427,7 +3446,7 @@ export const rejectPointRequest = onCall(functionOptions, async (request) => {
   const uid = currentUid(request.auth);
   const salonId = requireString(request.data?.salonId, "salonId");
   const requestId = requireString(request.data?.requestId, "requestId");
-  const reason = optionalString(request.data?.reason) ?? "";
+  const reason = requirePointRejectionReason(request.data?.reason);
   const owner = await assertSalonRole(uid, salonId, ["owner"]);
   await enforceAuthenticatedRateLimit("rejectPointRequest", uid, salonId);
   await assertFeatureEnabled(

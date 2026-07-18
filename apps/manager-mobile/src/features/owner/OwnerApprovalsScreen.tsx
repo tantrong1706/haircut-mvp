@@ -18,6 +18,12 @@ import {
 import { trackEvent, withMonitoringTrace } from "../../services/monitoring";
 import { ownerPhoneLabel } from "./ownerFormatters";
 
+const REJECTION_PRESETS = [
+  "Số điểm chưa đúng",
+  "Thiếu thông tin lượt cắt",
+  "Yêu cầu bị gửi nhầm",
+] as const;
+
 export function OwnerApprovalsScreen({
   salonId,
   requests,
@@ -27,6 +33,8 @@ export function OwnerApprovalsScreen({
   onRequestsChange,
   onRefreshOverview,
   onConfirm,
+  pointApprovalEnabled,
+  photoUploadEnabled,
 }: {
   salonId: string;
   requests: PointRequest[];
@@ -36,10 +44,15 @@ export function OwnerApprovalsScreen({
   onRequestsChange: (requests: PointRequest[]) => void;
   onRefreshOverview: () => void;
   onConfirm: (request: ConfirmDialogRequest) => void;
+  pointApprovalEnabled: boolean;
+  photoUploadEnabled: boolean;
 }) {
   const [expandedId, setExpandedId] = useState(requests[0]?.id || "");
   const [busyId, setBusyId] = useState("");
   const [photoBusyId, setPhotoBusyId] = useState("");
+  const [rejectingId, setRejectingId] = useState("");
+  const [rejectionReason, setRejectionReason] = useState("");
+  const [rejectionError, setRejectionError] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -63,24 +76,49 @@ export function OwnerApprovalsScreen({
     }
   }
 
-  async function reject(request: PointRequest) {
+  async function reject(request: PointRequest, reason: string) {
     setBusyId(request.id);
     setMessage("");
     setError("");
     try {
       await withMonitoringTrace(
         "owner_reject_point_request",
-        () => rejectPointRequest(request),
+        () => rejectPointRequest(request, reason),
         { salon_id: salonId },
       );
       onRequestsChange(requests.filter((item) => item.id !== request.id));
       onRefreshOverview();
+      setRejectingId("");
+      setRejectionReason("");
+      setRejectionError("");
       setMessage("Đã từ chối yêu cầu.");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Không từ chối được yêu cầu.");
     } finally {
       setBusyId("");
     }
+  }
+
+  function requestRejection(request: PointRequest) {
+    const reason = rejectionReason.trim().replace(/\s+/g, " ");
+    if (reason.length < 5) {
+      setRejectionError("Nhập lý do từ chối có ít nhất 5 ký tự.");
+      return;
+    }
+    if (reason.length > 200) {
+      setRejectionError("Lý do từ chối không được quá 200 ký tự.");
+      return;
+    }
+    setRejectionError("");
+    onConfirm({
+      title: "Từ chối yêu cầu?",
+      description: `Điểm của ${
+        request.customer?.name || "khách hàng"
+      } sẽ không thay đổi. Lý do: ${reason}`,
+      confirmLabel: "Xác nhận từ chối",
+      tone: "danger",
+      onConfirm: () => reject(request, reason),
+    });
   }
 
   async function addPhotos(request: PointRequest, files: File[]) {
@@ -155,6 +193,11 @@ export function OwnerApprovalsScreen({
         title={`Duyệt điểm (${requests.length})`}
         description="Kiểm tra đúng khách, nhân viên, ảnh và ghi chú trước khi duyệt."
       />
+      {!pointApprovalEnabled ? (
+        <InlineFeedback tone="warning">
+          Tính năng duyệt điểm đang tạm ngừng. Danh sách vẫn được giữ để xử lý sau.
+        </InlineFeedback>
+      ) : null}
       {branches.length > 0 ? (
         <label className="manager-field compact">
           <span>Lọc theo chi nhánh</span>
@@ -219,17 +262,98 @@ export function OwnerApprovalsScreen({
                       photos={request.photoUrls.map((url) => ({ id: url, url }))}
                       consentGranted={request.customer?.allowPhoto === true}
                       busy={photoBusyId === request.id}
-                      disabled={Boolean(busyId) || Boolean(photoBusyId)}
-                      disabledReason="Có thể chụp bổ sung trước khi duyệt."
+                      disabled={
+                        !photoUploadEnabled || Boolean(busyId) || Boolean(photoBusyId)
+                      }
+                      disabledReason={
+                        photoUploadEnabled
+                          ? "Có thể chụp bổ sung trước khi duyệt."
+                          : "Tính năng tải ảnh đang tạm ngừng."
+                      }
                       maxPhotos={MAX_HAIRCUT_PHOTOS}
                       onFilesSelected={(files) => addPhotos(request, files)}
                       onRemove={(photo) => removePhoto(request, photo)}
                     />
+                    {rejectingId === request.id ? (
+                      <div className="manager-rejection-form">
+                        <strong>Lý do từ chối</strong>
+                        <div className="manager-quick-notes" aria-label="Lý do từ chối mẫu">
+                          {REJECTION_PRESETS.map((reason) => (
+                            <button
+                              type="button"
+                              key={reason}
+                              aria-pressed={rejectionReason === reason}
+                              onClick={() => {
+                                setRejectionReason(reason);
+                                setRejectionError("");
+                              }}
+                            >
+                              {reason}
+                            </button>
+                          ))}
+                        </div>
+                        <label className="manager-field">
+                          <span>Lý do cụ thể</span>
+                          <textarea
+                            autoFocus
+                            rows={3}
+                            maxLength={200}
+                            value={rejectionReason}
+                            aria-invalid={Boolean(rejectionError)}
+                            aria-describedby={
+                              rejectionError ? `rejection-error-${request.id}` : undefined
+                            }
+                            onChange={(event) => {
+                              setRejectionReason(event.target.value);
+                              setRejectionError("");
+                            }}
+                            placeholder="Nhập lý do để nhân viên có thể kiểm tra lại"
+                          />
+                          <small>{rejectionReason.length}/200 ký tự</small>
+                        </label>
+                        {rejectionError ? (
+                          <p
+                            className="manager-field-error"
+                            id={`rejection-error-${request.id}`}
+                            role="alert"
+                          >
+                            {rejectionError}
+                          </p>
+                        ) : null}
+                        <div className="manager-button-row">
+                          <button
+                            className="manager-button secondary"
+                            type="button"
+                            disabled={Boolean(busyId)}
+                            onClick={() => {
+                              setRejectingId("");
+                              setRejectionReason("");
+                              setRejectionError("");
+                            }}
+                          >
+                            Quay lại
+                          </button>
+                          <button
+                            className="manager-button danger"
+                            type="button"
+                            disabled={Boolean(busyId)}
+                            onClick={() => requestRejection(request)}
+                          >
+                            <XCircle aria-hidden="true" />
+                            Xác nhận lý do
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
                     <div className="manager-button-row">
                       <button
                         className="manager-button primary"
                         type="button"
-                        disabled={busyId === request.id || photoBusyId === request.id}
+                        disabled={
+                          !pointApprovalEnabled ||
+                          busyId === request.id ||
+                          photoBusyId === request.id
+                        }
                         onClick={() =>
                           onConfirm({
                             title: "Duyệt cộng điểm?",
@@ -247,18 +371,16 @@ export function OwnerApprovalsScreen({
                       <button
                         className="manager-button secondary"
                         type="button"
-                        disabled={busyId === request.id || photoBusyId === request.id}
-                        onClick={() =>
-                          onConfirm({
-                            title: "Từ chối yêu cầu?",
-                            description: `Điểm của ${
-                              request.customer?.name || "khách hàng"
-                            } sẽ không thay đổi.`,
-                            confirmLabel: "Từ chối",
-                            tone: "danger",
-                            onConfirm: () => reject(request),
-                          })
+                        disabled={
+                          !pointApprovalEnabled ||
+                          busyId === request.id ||
+                          photoBusyId === request.id
                         }
+                        onClick={() => {
+                          setRejectingId(request.id);
+                          setRejectionReason("");
+                          setRejectionError("");
+                        }}
                       >
                         <XCircle aria-hidden="true" />
                         Từ chối

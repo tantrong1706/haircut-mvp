@@ -1,3 +1,4 @@
+import { DEFAULT_SYSTEM_FEATURES } from "@haircut/contracts";
 import { useState } from "react";
 import { ManagerLayout } from "../layouts/ManagerLayout";
 import { type OwnerPrimaryTab, type StaffPrimaryTab } from "../navigation/managerNavigation";
@@ -242,6 +243,8 @@ function OwnerPreview({ scenario }: { scenario: string }) {
           onRequestsChange={setPreviewRequests}
           onRefreshOverview={() => undefined}
           onConfirm={() => undefined}
+          pointApprovalEnabled
+          photoUploadEnabled
         />
       ) : tab === "management" ? (
         <OwnerManagementScreen
@@ -252,6 +255,7 @@ function OwnerPreview({ scenario }: { scenario: string }) {
           onConfirm={() => undefined}
           onOpenScanner={() => undefined}
           onOpenTab={setTab}
+          features={{ ...DEFAULT_SYSTEM_FEATURES }}
         />
       ) : (
         <OwnerTodayScreen

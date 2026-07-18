@@ -10,6 +10,7 @@ import {
   getSystemAdminOverview,
   getSalonDeletionStatus,
   redeemRewardCode,
+  rejectPointRequest,
   requestSalonDeletion,
   restoreRewardCode,
   searchSalonCustomers,
@@ -144,6 +145,58 @@ describe.skipIf(!emulatorHost)("callable transactions", () => {
       (await db.collection("haircut_records").where("customerId", "==", customerId).get()).size,
     ).toBe(1);
     expect((await db.collection("customers").doc(customerId).get()).data()?.points).toBe(1);
+  });
+
+  it("bắt buộc lý do hợp lệ khi owner từ chối yêu cầu điểm", async () => {
+    const salonId = "salon-reject-reason";
+    const branchId = "branch-reject-reason";
+    const customerId = "customer-reject-reason";
+    const requestId = "request-reject-reason";
+    await seedOwner("owner-reject-reason", salonId);
+    await seedBranch(salonId, branchId);
+    await db.collection("customers").doc(customerId).set({
+      salonId,
+      name: "Khách từ chối",
+      points: 2,
+    });
+    await db.collection("chair_sessions").doc(requestId).set({
+      salonId,
+      branchId,
+      customerId,
+      status: "pending_approval",
+      isOpen: true,
+    });
+    await db.collection("point_requests").doc(requestId).set({
+      salonId,
+      branchId,
+      sessionId: requestId,
+      customerId,
+      status: "pending",
+      pointsRequested: 1,
+      photoUrls: [],
+    });
+
+    for (const reason of ["", "Sai"]) {
+      await expect(
+        rejectPointRequest.run(requestFor("owner-reject-reason", { salonId, requestId, reason })),
+      ).rejects.toMatchObject({
+        code: "invalid-argument",
+        details: { errorCode: "INVALID_REQUEST" },
+      });
+    }
+
+    await rejectPointRequest.run(
+      requestFor("owner-reject-reason", {
+        salonId,
+        requestId,
+        reason: "  Thiếu   thông tin lượt cắt  ",
+      }),
+    );
+    expect((await db.collection("point_requests").doc(requestId).get()).data()).toMatchObject({
+      status: "rejected",
+      rejectionReason: "Thiếu thông tin lượt cắt",
+      processedBy: "owner-reject-reason",
+    });
   });
 
   it("chỉ owner được cập nhật ảnh của yêu cầu đang chờ duyệt", async () => {

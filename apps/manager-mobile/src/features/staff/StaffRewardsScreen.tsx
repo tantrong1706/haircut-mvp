@@ -16,6 +16,8 @@ export function StaffRewardsScreen({
   scanning,
   onOpenScanner,
   onOpenActive,
+  rewardRedeemEnabled,
+  pointApprovalEnabled,
 }: {
   salonId: string;
   branchId?: string;
@@ -24,6 +26,8 @@ export function StaffRewardsScreen({
   scanning: boolean;
   onOpenScanner: () => void;
   onOpenActive: () => void;
+  rewardRedeemEnabled: boolean;
+  pointApprovalEnabled: boolean;
 }) {
   return (
     <div className="manager-screen">
@@ -47,9 +51,17 @@ export function StaffRewardsScreen({
           title="Mở khách đang làm"
           description="Hoàn tất ghi chú và ảnh, sau đó gửi chủ salon duyệt điểm."
           onClick={onOpenActive}
+          disabled={!pointApprovalEnabled}
+          meta={!pointApprovalEnabled ? "Tạm ngừng" : undefined}
         />
       </Section>
-      {canRedeem ? (
+      {!rewardRedeemEnabled ? (
+        <EmptyState
+          icon={<ShieldX aria-hidden="true" />}
+          title="Đổi quà đang tạm ngừng"
+          description="Mã quà hiện có vẫn được giữ và sẽ dùng lại được khi tính năng được bật."
+        />
+      ) : canRedeem ? (
         <RewardRedemption
           salonId={salonId}
           branchId={branchId}

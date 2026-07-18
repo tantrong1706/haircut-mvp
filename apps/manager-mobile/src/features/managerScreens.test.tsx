@@ -1,3 +1,4 @@
+import { DEFAULT_SYSTEM_FEATURES } from "@haircut/contracts";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { OwnerOverview, StaffSession } from "../services/managerApi";
@@ -135,6 +136,7 @@ describe("Manager screen information architecture", () => {
         onConfirm={() => undefined}
         onOpenScanner={() => undefined}
         onOpenTab={() => undefined}
+        features={{ ...DEFAULT_SYSTEM_FEATURES }}
       />,
     );
     for (const label of [
@@ -152,7 +154,7 @@ describe("Manager screen information architecture", () => {
     }
   });
 
-  it("Staff có lối vào gửi điểm, đổi quà và bộ lọc lịch sử đơn giản", () => {
+  it("Staff có lối vào gửi điểm, đổi quà và không giả dữ liệu hàng chờ thành lịch sử", () => {
     const rewardsHtml = renderToStaticMarkup(
       <StaffRewardsScreen
         salonId="salon"
@@ -161,16 +163,16 @@ describe("Manager screen information architecture", () => {
         scanning={false}
         onOpenScanner={() => undefined}
         onOpenActive={() => undefined}
+        rewardRedeemEnabled
+        pointApprovalEnabled
       />,
     );
-    const historyHtml = renderToStaticMarkup(
-      <StaffHistoryScreen sessions={sessions} currentUid="staff" />,
-    );
+    const historyHtml = renderToStaticMarkup(<StaffHistoryScreen />);
     expect(rewardsHtml).toContain("Gửi yêu cầu điểm");
     expect(rewardsHtml).toContain("Mở khách đang làm");
     expect(rewardsHtml).toContain("Xác nhận mã quà");
-    expect(historyHtml).toContain("Hôm nay");
-    expect(historyHtml).toContain("7 ngày");
-    expect(historyHtml).toContain("30 ngày");
+    expect(historyHtml).toContain("Lịch sử đầy đủ đang được hoàn thiện");
+    expect(historyHtml).toContain("chưa dùng dữ liệu hàng chờ để giả làm lịch sử");
+    expect(historyHtml).not.toContain("Anh Nam");
   });
 });

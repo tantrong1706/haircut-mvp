@@ -25,8 +25,10 @@ export function PhotoCapture<TPhoto extends ManagerPhoto>({
 }) {
   const atLimit = photos.length >= maxPhotos;
   const captureDisabled = disabled || !consentGranted || busy || atLimit;
-  const note = !consentGranted
-    ? "Khách chưa đồng ý lưu ảnh. Camera đang khóa để bảo vệ quyền riêng tư."
+  const note = disabled && disabledReason
+    ? disabledReason
+    : !consentGranted
+      ? "Khách chưa đồng ý lưu ảnh. Camera đang khóa để bảo vệ quyền riêng tư."
     : atLimit
       ? `Đã đủ ${maxPhotos} ảnh cho lượt này.`
       : disabledReason;

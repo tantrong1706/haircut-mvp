@@ -409,7 +409,7 @@ img {
 }
 
 .manager-button.compact {
-  min-height: 40px;
+  min-height: 48px;
   padding: 8px 11px;
   font-size: 13px;
 }
@@ -455,7 +455,7 @@ img {
 }
 
 .manager-text-button {
-  min-height: 40px;
+  min-height: 48px;
   padding: 6px 0;
   color: var(--manager-green);
   background: transparent;
@@ -898,8 +898,9 @@ img {
 }
 
 .manager-feedback button {
-  min-height: 34px;
-  padding: 5px 8px;
+  min-width: 48px;
+  min-height: 48px;
+  padding: 8px 10px;
   border: 0;
   border-radius: 6px;
   color: inherit;
@@ -980,7 +981,7 @@ img {
 }
 
 .manager-customer-card summary {
-  min-height: 40px;
+  min-height: 48px;
   padding: 7px 0;
   color: var(--manager-green-dark);
   font-size: 13px;
@@ -1224,8 +1225,8 @@ img {
   position: absolute;
   top: 4px;
   right: 4px;
-  width: 32px;
-  height: 32px;
+  width: 48px;
+  height: 48px;
   color: #fff;
   background: rgba(22, 31, 27, 0.82);
 }
@@ -1237,13 +1238,31 @@ img {
 }
 
 .manager-quick-notes button {
-  min-height: 38px;
-  padding: 7px 10px;
+  min-height: 48px;
+  padding: 10px 12px;
   border: 1px solid #bdd0c7;
   border-radius: 999px;
   color: var(--manager-green-dark);
   background: #f2f8f5;
   font-size: 12px;
+  font-weight: 800;
+}
+
+.manager-rejection-form {
+  padding-top: 14px;
+  border-top: 1px solid var(--manager-line);
+  display: grid;
+  gap: 12px;
+}
+
+.manager-rejection-form > strong {
+  font-size: 15px;
+}
+
+.manager-field-error {
+  margin: 0;
+  color: var(--manager-red);
+  font-size: 13px;
   font-weight: 800;
 }
 
@@ -1624,6 +1643,11 @@ img {
   line-height: 1.5;
 }
 
+.manager-lock .manager-lock-error {
+  color: var(--manager-red);
+  font-weight: 800;
+}
+
 .manager-startup-error small {
   color: var(--manager-muted);
   overflow-wrap: anywhere;
@@ -1686,8 +1710,8 @@ img {
 }
 
 .manager-native-message button {
-  width: 34px;
-  height: 34px;
+  width: 48px;
+  height: 48px;
   border: 0;
   color: #fff;
   background: transparent;
@@ -1780,7 +1804,7 @@ img {
   }
 
   .manager-bottom-nav button {
-    font-size: 9px;
+    font-size: 10px;
   }
 }
 

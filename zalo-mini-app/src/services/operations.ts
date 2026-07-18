@@ -17,6 +17,11 @@ import {
   where,
 } from "firebase/firestore";
 import { sendPasswordResetEmail } from "firebase/auth";
+import {
+  DEFAULT_SYSTEM_FEATURES,
+  normalizeSystemFeatures,
+  type SystemFeatures,
+} from "@haircut/contracts";
 import { callFunctionOrFallback, callWriteFunctionOrFallback } from "./functionWrites";
 import { callFunction, getFirebaseAuth, getFirebaseDb, isFirebaseConfigured } from "./firebase";
 import { LuckyWheelConfig, defaultLuckyWheelConfig } from "./types";
@@ -97,6 +102,7 @@ export type SalonProfile = {
   avatarUrl: string;
   pointPerVisit: number;
   freeCustomerLimit: number;
+  features: SystemFeatures;
 };
 
 export type RedeemRewardResult = {
@@ -495,6 +501,7 @@ async function getSalonProfileDirect(salonId: string): Promise<SalonProfile> {
       avatarUrl: "",
       pointPerVisit: 1,
       freeCustomerLimit: 50,
+      features: { ...DEFAULT_SYSTEM_FEATURES },
     };
   }
 
@@ -509,6 +516,7 @@ async function getSalonProfileDirect(salonId: string): Promise<SalonProfile> {
       avatarUrl: "",
       pointPerVisit: 1,
       freeCustomerLimit: 50,
+      features: { ...DEFAULT_SYSTEM_FEATURES },
     };
   }
 
@@ -521,6 +529,7 @@ async function getSalonProfileDirect(salonId: string): Promise<SalonProfile> {
     avatarUrl: String(data.avatarUrl || ""),
     pointPerVisit: Number(data.pointPerVisit ?? 1),
     freeCustomerLimit: Number(data.freeCustomerLimit ?? 50),
+    features: normalizeSystemFeatures(data.features),
   };
 }
 
@@ -542,6 +551,7 @@ async function updateSalonProfileDirect(input: {
       avatarUrl: "",
       pointPerVisit: input.pointPerVisit,
       freeCustomerLimit: 50,
+      features: { ...DEFAULT_SYSTEM_FEATURES },
     };
   }
 
@@ -1273,19 +1283,28 @@ async function approvePointRequestDirect(request: PointRequest) {
   });
 }
 
-export async function rejectPointRequest(request: PointRequest) {
+export function normalizePointRejectionReason(value: string) {
+  const reason = value.trim().replace(/\s+/g, " ");
+  if (reason.length < 5 || reason.length > 200) {
+    throw new Error("Lý do từ chối phải có từ 5 đến 200 ký tự.");
+  }
+  return reason;
+}
+
+export async function rejectPointRequest(request: PointRequest, value = "Chủ salon từ chối") {
+  const reason = normalizePointRejectionReason(value);
   return callWriteFunctionOrFallback(
     "rejectPointRequest",
     {
       salonId: request.salonId,
       requestId: request.id,
-      reason: "Chủ salon từ chối",
+      reason,
     },
-    () => rejectPointRequestDirect(request),
+    () => rejectPointRequestDirect(request, reason),
   );
 }
 
-async function rejectPointRequestDirect(request: PointRequest) {
+async function rejectPointRequestDirect(request: PointRequest, reason: string) {
   const db = getFirebaseDb();
 
   if (!isFirebaseConfigured() || !db) {
@@ -1298,6 +1317,7 @@ async function rejectPointRequestDirect(request: PointRequest) {
   await runTransaction(db, async (transaction) => {
     transaction.update(requestRef, {
       status: "rejected",
+      rejectionReason: reason,
       rejectedAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });

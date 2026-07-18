@@ -208,6 +208,6 @@ export function staffTabAfterSessionStatus(
 ): StaffPrimaryTab {
   if (status === "serving") return "active";
   if (status === "pending_approval" || status === "completed" || status === "cancelled")
-    return "history";
+    return "queue";
   return "queue";
 }

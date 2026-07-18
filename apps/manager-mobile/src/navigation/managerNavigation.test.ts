@@ -40,7 +40,7 @@ describe("Manager navigation", () => {
     expect(staffTabFromRoute("/rewards")).toBe("rewards");
     expect(staffTabFromRoute("/history")).toBe("history");
     expect(staffTabAfterSessionStatus("serving")).toBe("active");
-    expect(staffTabAfterSessionStatus("pending_approval")).toBe("history");
-    expect(staffTabAfterSessionStatus("cancelled")).toBe("history");
+    expect(staffTabAfterSessionStatus("pending_approval")).toBe("queue");
+    expect(staffTabAfterSessionStatus("cancelled")).toBe("queue");
   });
 });

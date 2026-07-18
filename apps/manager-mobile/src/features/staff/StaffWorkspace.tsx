@@ -17,6 +17,7 @@ import {
   type UploadedHaircutPhoto,
 } from "../../services/managerApi";
 import { trackEvent } from "../../services/monitoring";
+import { useManagerFeatures } from "../useManagerFeatures";
 import { StaffAccountScreen } from "./StaffAccountScreen";
 import { StaffActiveScreen } from "./StaffActiveScreen";
 import { StaffHistoryScreen } from "./StaffHistoryScreen";
@@ -44,12 +45,16 @@ export function StaffWorkspace({ currentUser }: { currentUser: AppUser }) {
   const [selectedId, setSelectedId] = useState("");
   const [pointPerVisit, setPointPerVisit] = useState(1);
   const [salonName, setSalonName] = useState("");
+  const [salonProfile, setSalonProfile] = useState<Awaited<
+    ReturnType<typeof getSalonProfile>
+  > | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [retryKey, setRetryKey] = useState(0);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [photos, setPhotos] = useState<Record<string, UploadedHaircutPhoto[]>>({});
   const native = useManagerNative();
+  const managerFeatures = useManagerFeatures(salonProfile);
 
   const selectedSession = sessions.find((session) => session.id === selectedId) || null;
   const branchName =
@@ -91,6 +96,7 @@ export function StaffWorkspace({ currentUser }: { currentUser: AppUser }) {
         );
         setPointPerVisit(Math.max(1, Math.floor(profile.pointPerVisit || 1)));
         setSalonName(profile.name);
+        setSalonProfile(profile);
       })
       .catch((caught) =>
         setError(caught instanceof Error ? caught.message : "Không tải được cấu hình nhân viên."),
@@ -170,6 +176,16 @@ export function StaffWorkspace({ currentUser }: { currentUser: AppUser }) {
     );
   }
 
+  if (managerFeatures.isEnabled("maintenanceMode")) {
+    return (
+      <main className="manager-startup-error">
+        <ShieldCheck aria-hidden="true" />
+        <h1>HAIRCUT Manager đang bảo trì</h1>
+        <p>Hàng chờ và thao tác nhân viên đang tạm ngừng. Vui lòng thử lại sau.</p>
+      </main>
+    );
+  }
+
   return (
     <ManagerLayout
       user={currentUser}
@@ -195,6 +211,8 @@ export function StaffWorkspace({ currentUser }: { currentUser: AppUser }) {
           onNoteChange={(next) =>
             setNotes((current) => ({ ...current, [selectedSession.id]: next }))
           }
+          photoUploadEnabled={managerFeatures.isEnabled("photoUploadEnabled")}
+          pointApprovalEnabled={managerFeatures.isEnabled("pointApprovalEnabled")}
         />
       ) : activeTab === "queue" ? (
         <StaffQueueScreen
@@ -219,13 +237,18 @@ export function StaffWorkspace({ currentUser }: { currentUser: AppUser }) {
           salonId={salonId}
           branchId={branchFilter || undefined}
           pointPerVisit={pointPerVisit}
-          canRedeem={currentUser.canRedeemRewards === true}
+          canRedeem={
+            currentUser.canRedeemRewards === true &&
+            managerFeatures.isEnabled("rewardRedeemEnabled")
+          }
+          rewardRedeemEnabled={managerFeatures.isEnabled("rewardRedeemEnabled")}
+          pointApprovalEnabled={managerFeatures.isEnabled("pointApprovalEnabled")}
           scanning={native.scanning}
           onOpenScanner={() => void native.scanReward()}
           onOpenActive={() => setActiveTab("active")}
         />
       ) : activeTab === "history" ? (
-        <StaffHistoryScreen sessions={sessions} currentUid={currentUser.uid} />
+        <StaffHistoryScreen />
       ) : (
         <StaffAccountScreen
           user={currentUser}

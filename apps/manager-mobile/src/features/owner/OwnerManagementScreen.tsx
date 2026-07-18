@@ -25,6 +25,7 @@ import type {
   OwnerPrimaryTab,
 } from "../../navigation/managerNavigation";
 import type { SalonBranch } from "../../services/managerApi";
+import type { SystemFeatures } from "@haircut/contracts";
 import { BranchesManager } from "./management/BranchesManager";
 import { StaffManager } from "./management/StaffManager";
 import { WheelManager } from "./management/WheelManager";
@@ -37,6 +38,7 @@ export function OwnerManagementScreen({
   onConfirm,
   onOpenScanner,
   onOpenTab,
+  features,
 }: {
   salonId: string;
   initialSection: OwnerManagementSection | null;
@@ -45,6 +47,7 @@ export function OwnerManagementScreen({
   onConfirm: (request: ConfirmDialogRequest) => void;
   onOpenScanner: () => void;
   onOpenTab: (tab: OwnerPrimaryTab) => void;
+  features: SystemFeatures;
 }) {
   const [section, setSection] = useState<OwnerManagementSection | null>(initialSection);
 
@@ -74,14 +77,20 @@ export function OwnerManagementScreen({
           />
         ) : section === "staff" ? (
           <StaffManager salonId={salonId} />
-        ) : section === "wheel" ? (
+        ) : section === "wheel" && features.luckyWheelEnabled ? (
           <WheelManager salonId={salonId} />
-        ) : section === "redeem" ? (
+        ) : section === "redeem" && features.rewardRedeemEnabled ? (
           <RewardRedemption
             salonId={salonId}
             branchId={branchFilter === "all" ? undefined : branchFilter}
             allowRestore
             onOpenScanner={onOpenScanner}
+          />
+        ) : section === "wheel" || section === "redeem" ? (
+          <EmptyState
+            icon={<ShieldCheck aria-hidden="true" />}
+            title="Tính năng đang tạm ngừng"
+            description="Cấu hình hệ thống đang tắt tính năng này. Dữ liệu hiện có không bị thay đổi."
           />
         ) : (
           <EmptyState
@@ -131,12 +140,16 @@ export function OwnerManagementScreen({
             icon={SlidersHorizontal}
             title="Quà và vòng quay"
             description="Điểm quay, hạn mã quà và nội dung phần thưởng."
+            disabled={!features.luckyWheelEnabled}
+            meta={!features.luckyWheelEnabled ? "Tạm ngừng" : undefined}
             onClick={() => setSection("wheel")}
           />
           <ActionRow
             icon={TicketCheck}
             title="Đổi quà"
             description="Kiểm tra mã trước khi xác nhận đã sử dụng."
+            disabled={!features.rewardRedeemEnabled}
+            meta={!features.rewardRedeemEnabled ? "Tạm ngừng" : undefined}
             onClick={() => setSection("redeem")}
           />
           <ActionRow

@@ -36,6 +36,8 @@ export function StaffSessionDetail({
   onSessionRemove,
   onPhotosChange,
   onNoteChange,
+  photoUploadEnabled,
+  pointApprovalEnabled,
 }: {
   user: AppUser;
   session: StaffSession;
@@ -47,6 +49,8 @@ export function StaffSessionDetail({
   onSessionRemove: (sessionId: string) => void;
   onPhotosChange: (photos: UploadedHaircutPhoto[]) => void;
   onNoteChange: (note: string) => void;
+  photoUploadEnabled: boolean;
+  pointApprovalEnabled: boolean;
 }) {
   const [busy, setBusy] = useState<"claim" | "submit" | "cancel" | "photo" | "">("");
   const [message, setMessage] = useState("");
@@ -140,7 +144,7 @@ export function StaffSessionDetail({
   }
 
   async function addPhotos(files: File[]) {
-    if (!canEdit || !consent || busy) return;
+    if (!photoUploadEnabled || !canEdit || !consent || busy) return;
     const available = MAX_HAIRCUT_PHOTOS - photos.length;
     if (available <= 0 || files.length > available) {
       setError(available <= 0 ? "Lượt này đã đủ 3 ảnh." : `Bạn chỉ có thể thêm ${available} ảnh.`);
@@ -261,9 +265,11 @@ export function StaffSessionDetail({
             photos={photos}
             consentGranted={consent}
             busy={busy === "photo"}
-            disabled={!canEdit}
+            disabled={!photoUploadEnabled || !canEdit}
             disabledReason={
-              assignedToMe
+              !photoUploadEnabled
+                ? "Tính năng tải ảnh đang tạm ngừng."
+                : assignedToMe
                 ? "Có thể thêm ảnh trước khi gửi duyệt."
                 : `Lượt đang do ${session.assignedStaffName || "nhân viên khác"} phụ trách.`
             }
@@ -305,13 +311,22 @@ export function StaffSessionDetail({
               className="manager-button primary wide"
               type="button"
               disabled={
-                Boolean(busy) || !canEdit || !note.trim() || revokedWithPhotos
+                Boolean(busy) ||
+                !pointApprovalEnabled ||
+                !canEdit ||
+                !note.trim() ||
+                revokedWithPhotos
               }
               onClick={() => void submit()}
             >
               <Send aria-hidden="true" />
               {busy === "submit" ? "Đang gửi..." : `Gửi cộng ${pointPerVisit} điểm`}
             </button>
+            {!pointApprovalEnabled ? (
+              <InlineFeedback tone="warning">
+                Tính năng gửi và duyệt điểm đang tạm ngừng.
+              </InlineFeedback>
+            ) : null}
             {canEdit ? (
               <button
                 className="manager-button secondary wide"

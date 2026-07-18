@@ -23,6 +23,7 @@ import {
   type StaffSession,
 } from "../../services/managerApi";
 import { trackEvent } from "../../services/monitoring";
+import { useManagerFeatures } from "../useManagerFeatures";
 import { OwnerApprovalsScreen } from "./OwnerApprovalsScreen";
 import { OwnerCustomersScreen } from "./OwnerCustomersScreen";
 import { OwnerManagementScreen } from "./OwnerManagementScreen";
@@ -45,6 +46,7 @@ export function OwnerWorkspace({ currentUser }: { currentUser: AppUser }) {
   const [confirm, setConfirm] = useState<ConfirmDialogRequest | null>(null);
   const [confirming, setConfirming] = useState(false);
   const native = useManagerNative();
+  const managerFeatures = useManagerFeatures(profile);
 
   useEffect(() => {
     setUser(currentUser);
@@ -166,6 +168,16 @@ export function OwnerWorkspace({ currentUser }: { currentUser: AppUser }) {
     );
   }
 
+  if (managerFeatures.isEnabled("maintenanceMode")) {
+    return (
+      <main className="manager-startup-error">
+        <ShieldCheck aria-hidden="true" />
+        <h1>HAIRCUT Manager đang bảo trì</h1>
+        <p>Các thao tác quản lý đang tạm ngừng để bảo vệ dữ liệu. Vui lòng thử lại sau.</p>
+      </main>
+    );
+  }
+
   return (
     <ManagerLayout
       user={user}
@@ -206,6 +218,8 @@ export function OwnerWorkspace({ currentUser }: { currentUser: AppUser }) {
           onRequestsChange={setRequests}
           onRefreshOverview={() => void refreshOverview(true)}
           onConfirm={setConfirm}
+          pointApprovalEnabled={managerFeatures.isEnabled("pointApprovalEnabled")}
+          photoUploadEnabled={managerFeatures.isEnabled("photoUploadEnabled")}
         />
       ) : activeTab === "management" ? (
         <OwnerManagementScreen
@@ -216,6 +230,7 @@ export function OwnerWorkspace({ currentUser }: { currentUser: AppUser }) {
           onConfirm={setConfirm}
           onOpenScanner={() => void native.scanReward()}
           onOpenTab={setActiveTab}
+          features={managerFeatures.features}
         />
       ) : profile ? (
         <OwnerSettingsScreen
