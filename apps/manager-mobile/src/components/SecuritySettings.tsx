@@ -1,5 +1,6 @@
 import { Bell, Cloud, KeyRound, LockKeyhole, Smartphone } from "lucide-react";
 import { useState } from "react";
+import { useManagerNative } from "../hooks/useManagerNative";
 import { getManagerSignedInEmail } from "../services/firebase";
 import { requestOwnerStaffPasswordReset } from "../services/managerApi";
 import { InlineFeedback } from "./Feedback";
@@ -16,6 +17,7 @@ export function SecuritySettings({
   online: boolean;
   onToggleBiometric: () => Promise<void>;
 }) {
+  const { pushStatus, retryPush } = useManagerNative();
   const email = getManagerSignedInEmail();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -91,7 +93,7 @@ export function SecuritySettings({
             <dt>
               <Bell aria-hidden="true" /> Thông báo
             </dt>
-            <dd>{nativeReady ? "Theo cài đặt điện thoại" : "Chỉ có trên ứng dụng điện thoại"}</dd>
+            <dd>{pushStatusLabel(nativeReady, pushStatus)}</dd>
           </div>
           <div>
             <dt>
@@ -100,10 +102,28 @@ export function SecuritySettings({
             <dd>{appVersion}</dd>
           </div>
         </dl>
+        {nativeReady && (pushStatus === "denied" || pushStatus === "unavailable") ? (
+          <button className="manager-button secondary wide" type="button" onClick={retryPush}>
+            <Bell aria-hidden="true" />
+            Thử bật lại thông báo
+          </button>
+        ) : null}
       </Section>
 
       {message ? <InlineFeedback tone="success">{message}</InlineFeedback> : null}
       {error ? <InlineFeedback tone="error">{error}</InlineFeedback> : null}
     </>
   );
+}
+
+function pushStatusLabel(
+  nativeReady: boolean,
+  status: "idle" | "initializing" | "ready" | "denied" | "unavailable",
+) {
+  if (!nativeReady) return "Chỉ có trên ứng dụng điện thoại";
+  if (status === "initializing") return "Đang kết nối";
+  if (status === "ready") return "Đã bật";
+  if (status === "denied") return "Đang bị tắt";
+  if (status === "unavailable") return "Tạm thời không khả dụng";
+  return "Chưa khởi tạo";
 }

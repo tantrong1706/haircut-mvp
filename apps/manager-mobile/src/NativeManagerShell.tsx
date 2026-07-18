@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { AlertTriangle, LoaderCircle, RotateCcw, ShieldCheck, X } from "lucide-react";
-import { OfflineNotice } from "./components/Feedback";
+import { InlineFeedback, OfflineNotice } from "./components/Feedback";
 import { ManagerNativeContext } from "./hooks/useManagerNative";
 import { runManagerBootstrap } from "./managerBootstrap";
+import { runOptionalPushInitialization } from "./optionalPush";
 import type { AppUser } from "./services/managerApi";
 import { captureError, trackEvent } from "./services/monitoring";
 import {
@@ -10,6 +11,8 @@ import {
   disableBiometricLock,
   enableBiometricLock,
   initializeNativeManager,
+  initializePushNotifications,
+  retryBiometricUnlock,
   safelyHideSplashScreen,
   scanRewardCode,
 } from "./nativeRuntime";
@@ -21,7 +24,13 @@ export function NativeManagerShell({ user, children }: { user: AppUser; children
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [message, setMessage] = useState("");
+  const [biometricError, setBiometricError] = useState("");
+  const [unlocking, setUnlocking] = useState(false);
   const [bootstrapAttempt, setBootstrapAttempt] = useState(0);
+  const [pushAttempt, setPushAttempt] = useState(0);
+  const [pushStatus, setPushStatus] = useState<
+    "idle" | "initializing" | "ready" | "denied" | "unavailable"
+  >("idle");
   const [bootstrapping, setBootstrapping] = useState(true);
   const [bootstrapError, setBootstrapError] = useState<{
     message: string;
@@ -40,6 +49,7 @@ export function NativeManagerShell({ user, children }: { user: AppUser; children
           user,
           onOnlineChange: setOnline,
           onLockedChange: setLocked,
+          onBiometricError: setBiometricError,
           onNativeReady: setNativeReady,
         }),
       hideSplash: safelyHideSplashScreen,
@@ -68,6 +78,42 @@ export function NativeManagerShell({ user, children }: { user: AppUser; children
       void cleanup?.();
     };
   }, [bootstrapAttempt, user.uid, user.salonId]);
+
+  useEffect(() => {
+    if (!nativeReady || bootstrapping || bootstrapError) {
+      setPushStatus("idle");
+      return undefined;
+    }
+
+    let cancelled = false;
+    let cleanup: (() => void | Promise<void>) | undefined;
+    setPushStatus("initializing");
+    void runOptionalPushInitialization({
+      initialize: () => initializePushNotifications(user),
+      onWarning: (code) => {
+        trackEvent("manager_push_unavailable", {
+          error_code: code,
+          salon_id: user.salonId,
+        });
+        captureError(new Error(code), {
+          area: "manager_push",
+          error_code: code,
+        });
+      },
+    }).then((result) => {
+      if (cancelled) {
+        void result.cleanup();
+        return;
+      }
+      cleanup = result.cleanup;
+      setPushStatus(result.status);
+    });
+
+    return () => {
+      cancelled = true;
+      void cleanup?.();
+    };
+  }, [bootstrapError, bootstrapping, nativeReady, pushAttempt, user.salonId, user.uid]);
 
   async function scan() {
     setScanning(true);
@@ -99,16 +145,33 @@ export function NativeManagerShell({ user, children }: { user: AppUser; children
     }
   }
 
+  async function unlock() {
+    if (unlocking) return;
+    setUnlocking(true);
+    setBiometricError("");
+    const result = await retryBiometricUnlock(setLocked);
+    if (!result.ok) {
+      setBiometricError(result.message);
+      trackEvent("manager_biometric_unlock_failed", {
+        error_code: result.code,
+        salon_id: user.salonId,
+      });
+    }
+    setUnlocking(false);
+  }
+
   const nativeContext = useMemo(
     () => ({
       nativeReady,
       online,
       biometricEnabled,
       scanning,
+      pushStatus,
       scanReward: scan,
       toggleBiometric,
+      retryPush: () => setPushAttempt((value) => value + 1),
     }),
-    [nativeReady, online, biometricEnabled, scanning],
+    [nativeReady, online, biometricEnabled, scanning, pushStatus],
   );
 
   if (locked) {
@@ -117,6 +180,16 @@ export function NativeManagerShell({ user, children }: { user: AppUser; children
         <ShieldCheck />
         <h1>HAIRCUT Manager đang khóa</h1>
         <p>Dùng sinh trắc học hoặc mã khóa thiết bị để tiếp tục.</p>
+        {biometricError ? <p className="manager-lock-error" role="alert">{biometricError}</p> : null}
+        <button
+          className="manager-button primary"
+          type="button"
+          disabled={unlocking}
+          onClick={() => void unlock()}
+        >
+          <ShieldCheck aria-hidden="true" />
+          {unlocking ? "Đang xác thực..." : "Thử lại bằng sinh trắc học hoặc mã khóa"}
+        </button>
       </main>
     );
   }
@@ -152,6 +225,21 @@ export function NativeManagerShell({ user, children }: { user: AppUser; children
     <ManagerNativeContext.Provider value={nativeContext}>
       <div className={nativeReady ? "manager-native" : "manager-web-preview"}>
         {!online ? <OfflineNotice /> : null}
+        {pushStatus === "denied" || pushStatus === "unavailable" ? (
+          <InlineFeedback
+            tone="warning"
+            action={
+              <button type="button" onClick={() => setPushAttempt((value) => value + 1)}>
+                <RotateCcw aria-hidden="true" />
+                Thử bật lại
+              </button>
+            }
+          >
+            {pushStatus === "denied"
+              ? "Thông báo đang bị tắt. Bạn vẫn có thể dùng đầy đủ các chức năng chính."
+              : "Tạm thời chưa kết nối được thông báo. Ứng dụng vẫn hoạt động bình thường."}
+          </InlineFeedback>
+        ) : null}
         {message ? (
           <div className="manager-native-message" role="status">
             <span>{message}</span>

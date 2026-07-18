@@ -5,8 +5,15 @@ import {
   type FirebaseApp,
   type FirebaseOptions,
 } from "firebase/app";
+import { ReCaptchaEnterpriseProvider, initializeAppCheck } from "firebase/app-check";
 import { getAuth } from "firebase/auth";
 import { getFunctions, httpsCallable } from "firebase/functions";
+import {
+  initializeManagerWebAppCheck,
+  managerAppCheckErrorMessage,
+  markFirebaseAppCheckInitialized,
+  type ManagerAppCheckStatus,
+} from "./appCheck";
 
 const managerFirebaseConfig: FirebaseOptions = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -28,6 +35,7 @@ const REQUIRED_CONFIG_KEYS = [
 ] as const;
 
 let managerApp: FirebaseApp | null = null;
+let managerAppCheckStatus: ManagerAppCheckStatus | null = null;
 
 export function missingManagerFirebaseKeys(config: FirebaseOptions = managerFirebaseConfig) {
   return REQUIRED_CONFIG_KEYS.filter((key) => !String(config[key] || "").trim());
@@ -49,7 +57,33 @@ export function initializeManagerFirebase() {
       return { ok: false as const, code: "MANAGER_FIREBASE_PROJECT_MISMATCH", missing: [] };
     }
     managerApp = existing ?? initializeApp(managerFirebaseConfig);
-    return { ok: true as const, app: managerApp };
+    managerAppCheckStatus ??= initializeManagerWebAppCheck({
+      app: managerApp,
+      siteKey: String(import.meta.env.VITE_FIREBASE_APP_CHECK_SITE_KEY || ""),
+      debugToken: import.meta.env.DEV ? import.meta.env.VITE_APP_CHECK_DEBUG_TOKEN : undefined,
+      production: import.meta.env.PROD,
+      nativeRuntime: window.Capacitor?.isNativePlatform?.() === true,
+      createProvider: (siteKey) => new ReCaptchaEnterpriseProvider(siteKey),
+      initialize: (app, provider) => {
+        initializeAppCheck(app, { provider, isTokenAutoRefreshEnabled: true });
+        markFirebaseAppCheckInitialized(app.name);
+      },
+    });
+    if (
+      import.meta.env.PROD &&
+      managerAppCheckStatus.enabled === false &&
+      managerAppCheckStatus.reason !== "native_runtime"
+    ) {
+      return {
+        ok: false as const,
+        code:
+          managerAppCheckStatus.reason === "missing_site_key"
+            ? "MANAGER_APP_CHECK_CONFIG_MISSING"
+            : "MANAGER_APP_CHECK_INIT_FAILED",
+        missing: [],
+      };
+    }
+    return { ok: true as const, app: managerApp, appCheck: managerAppCheckStatus };
   } catch {
     return { ok: false as const, code: "MANAGER_FIREBASE_INIT_FAILED", missing: [] };
   }
@@ -74,5 +108,11 @@ export async function callManagerFunction<TInput, TOutput>(name: string, input: 
     String(import.meta.env.VITE_FIREBASE_REGION || "asia-southeast1"),
   );
   const callable = httpsCallable<TInput, TOutput>(functions, name);
-  return (await callable(input)).data;
+  try {
+    return (await callable(input)).data;
+  } catch (error) {
+    const appCheckMessage = managerAppCheckErrorMessage(error);
+    if (appCheckMessage) throw new Error(appCheckMessage);
+    throw error;
+  }
 }
