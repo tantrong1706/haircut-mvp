@@ -5,6 +5,7 @@ import {
   type FirebaseApp,
   type FirebaseOptions,
 } from "firebase/app";
+import { getAuth } from "firebase/auth";
 import { getFunctions, httpsCallable } from "firebase/functions";
 
 const managerFirebaseConfig: FirebaseOptions = {
@@ -58,6 +59,11 @@ export function getManagerFirebaseApp() {
   if (managerApp) return managerApp;
   const result = initializeManagerFirebase();
   return result.ok ? result.app : null;
+}
+
+export function getManagerSignedInEmail() {
+  const app = getManagerFirebaseApp();
+  return app ? getAuth(app).currentUser?.email || "" : "";
 }
 
 export async function callManagerFunction<TInput, TOutput>(name: string, input: TInput) {

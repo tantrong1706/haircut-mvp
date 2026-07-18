@@ -14,7 +14,7 @@ import { Network } from "@capacitor/network";
 import { Share } from "@capacitor/share";
 import { SplashScreen } from "@capacitor/splash-screen";
 import { CustomProvider, initializeAppCheck } from "firebase/app-check";
-import type { ManagerUser } from "./ManagerApp";
+import type { AppUser } from "./services/managerApi";
 import { ManagerBootstrapError, createSingleFlight } from "./managerBootstrap";
 import { callManagerFunction, getManagerFirebaseApp } from "./services/firebase";
 
@@ -54,7 +54,7 @@ export async function initializeNativeFirebaseSecurity() {
 }
 
 type NativeManagerInput = {
-  user: ManagerUser;
+  user: AppUser;
   onOnlineChange: (online: boolean) => void;
   onLockedChange: (locked: boolean) => void;
   onNativeReady: (value: boolean) => void;
@@ -228,7 +228,7 @@ async function authenticateIfEnabled(onLockedChange: (locked: boolean) => void) 
   }
 }
 
-async function requestPushPermission(user: ManagerUser) {
+async function requestPushPermission(user: AppUser) {
   let permission = await FirebaseMessaging.checkPermissions();
   if (permission.receive === "prompt") {
     permission = await FirebaseMessaging.requestPermissions();
@@ -239,7 +239,7 @@ async function requestPushPermission(user: ManagerUser) {
   }
 }
 
-async function registerPushToken(user: ManagerUser, token: string) {
+async function registerPushToken(user: AppUser, token: string) {
   if (!token) return;
   await callManagerFunction("registerManagerDeviceToken", {
     salonId: user.salonId,

@@ -1,16 +1,9 @@
-import { useEffect, useState, type ReactNode } from "react";
-import {
-  AlertTriangle,
-  LoaderCircle,
-  LockKeyhole,
-  RotateCcw,
-  ScanLine,
-  ShieldCheck,
-  WifiOff,
-  X,
-} from "lucide-react";
-import type { ManagerUser } from "./ManagerApp";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { AlertTriangle, LoaderCircle, RotateCcw, ShieldCheck, X } from "lucide-react";
+import { OfflineNotice } from "./components/Feedback";
+import { ManagerNativeContext } from "./hooks/useManagerNative";
 import { runManagerBootstrap } from "./managerBootstrap";
+import type { AppUser } from "./services/managerApi";
 import { captureError, trackEvent } from "./services/monitoring";
 import {
   biometricLockEnabled,
@@ -21,7 +14,7 @@ import {
   scanRewardCode,
 } from "./nativeRuntime";
 
-export function NativeManagerShell({ user, children }: { user: ManagerUser; children: ReactNode }) {
+export function NativeManagerShell({ user, children }: { user: AppUser; children: ReactNode }) {
   const [online, setOnline] = useState(navigator.onLine);
   const [nativeReady, setNativeReady] = useState(false);
   const [locked, setLocked] = useState(false);
@@ -106,6 +99,18 @@ export function NativeManagerShell({ user, children }: { user: ManagerUser; chil
     }
   }
 
+  const nativeContext = useMemo(
+    () => ({
+      nativeReady,
+      online,
+      biometricEnabled,
+      scanning,
+      scanReward: scan,
+      toggleBiometric,
+    }),
+    [nativeReady, online, biometricEnabled, scanning],
+  );
+
   if (locked) {
     return (
       <main className="manager-lock">
@@ -144,37 +149,19 @@ export function NativeManagerShell({ user, children }: { user: ManagerUser; chil
   }
 
   return (
-    <div className={nativeReady ? "manager-native" : "manager-web-preview"}>
-      {!online ? (
-        <div className="manager-offline">
-          <WifiOff />
-          Thiết bị đang mất mạng. Dữ liệu chỉ đọc có thể chưa mới nhất.
-        </div>
-      ) : null}
-      {nativeReady ? (
-        <div className="manager-native-bar">
-          <strong>{user.role === "owner" ? "Chủ salon" : "Nhân viên"}</strong>
-          <div>
-            <button title="Quét mã quà" disabled={scanning} onClick={() => void scan()}>
-              <ScanLine />
-              {scanning ? "Đang quét" : "Quét quà"}
-            </button>
-            <button title="Khóa sinh trắc học" onClick={() => void toggleBiometric()}>
-              <LockKeyhole />
-              {biometricEnabled ? "Đã khóa" : "Bật khóa"}
+    <ManagerNativeContext.Provider value={nativeContext}>
+      <div className={nativeReady ? "manager-native" : "manager-web-preview"}>
+        {!online ? <OfflineNotice /> : null}
+        {message ? (
+          <div className="manager-native-message" role="status">
+            <span>{message}</span>
+            <button aria-label="Đóng" onClick={() => setMessage("")}>
+              <X />
             </button>
           </div>
-        </div>
-      ) : null}
-      {message ? (
-        <div className="manager-native-message" role="status">
-          <span>{message}</span>
-          <button aria-label="Đóng" onClick={() => setMessage("")}>
-            <X />
-          </button>
-        </div>
-      ) : null}
-      {children}
-    </div>
+        ) : null}
+        {children}
+      </div>
+    </ManagerNativeContext.Provider>
   );
 }
