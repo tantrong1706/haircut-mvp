@@ -55,6 +55,4 @@ declare module "zmp-sdk/apis" {
       followedOA?: boolean;
     };
   }>;
-
-  export function getPhoneNumber(): Promise<{ token: string }>;
 }

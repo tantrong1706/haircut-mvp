@@ -22,7 +22,7 @@ import { captureError, trackEvent, withMonitoringTrace } from "../services/monit
 import { hasQrContext, parseQrContext } from "../services/qr";
 import { isZaloMiniAppRuntime } from "../services/runtime";
 import type { AppSession } from "../services/types";
-import { getZaloIdentity, requestPhoneToken } from "../services/zalo";
+import { getZaloIdentity } from "../services/zalo";
 
 type Props = {
   onReady: (session: AppSession) => void;
@@ -114,7 +114,7 @@ export function ScanEntryPage({ onReady }: Props) {
     };
   }, [hasQr, isZaloRuntime]);
 
-  function loadZaloIdentity() {
+  function loadZaloIdentity(requestProfilePermission = false) {
     if (!isZaloRuntime) {
       setLoadingIdentity(false);
       setZaloRequired(true);
@@ -126,7 +126,7 @@ export function ScanEntryPage({ onReady }: Props) {
     setZaloRequired(false);
     setError(null);
 
-    getZaloIdentity()
+    getZaloIdentity({ requestProfilePermission })
       .then((nextIdentity) => {
         if (!mountedRef.current) {
           return;
@@ -199,8 +199,7 @@ export function ScanEntryPage({ onReady }: Props) {
        * Luôn lấy access token mới ngay khi khách
        * bấm tạo lượt cắt, không dùng token cũ.
        */
-      const confirmedIdentity = await getZaloIdentity();
-      const phoneToken = phone.trim() ? undefined : (await requestPhoneToken()) || undefined;
+      const confirmedIdentity = await getZaloIdentity({ requestProfilePermission: false });
 
       const session = await withMonitoringTrace(
         "customer_checkin",
@@ -214,7 +213,7 @@ export function ScanEntryPage({ onReady }: Props) {
               },
               allowPhoto,
               phone || undefined,
-              phoneToken,
+              undefined,
             ),
           ),
         {
@@ -376,9 +375,9 @@ export function ScanEntryPage({ onReady }: Props) {
             ) : null}
 
             {isZaloRuntime ? (
-              <button className="secondary-button" onClick={loadZaloIdentity}>
+              <button className="secondary-button" onClick={() => loadZaloIdentity(true)}>
                 <RefreshCcw size={18} aria-hidden="true" />
-                Thử lấy lại thông tin
+                Cho phép đọc tên Zalo
               </button>
             ) : null}
           </div>
@@ -494,11 +493,11 @@ export function ScanEntryPage({ onReady }: Props) {
                   inputMode="tel"
                   value={phone}
                   onChange={(event) => setPhone(event.target.value)}
-                  placeholder="Tự lấy từ Zalo khi xác nhận"
+                  placeholder="Nhập nếu bạn muốn salon liên hệ"
                   disabled={loading}
                 />
 
-                <small>Zalo sẽ hỏi bạn trước; nhân viên chỉ thấy 4 số cuối.</small>
+                <small>Không bắt buộc; nhân viên chỉ thấy 4 số cuối.</small>
               </label>
 
               <label className="toggle-row photo-consent">

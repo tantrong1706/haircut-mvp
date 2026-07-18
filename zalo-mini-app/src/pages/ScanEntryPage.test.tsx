@@ -7,7 +7,6 @@ import { ScanEntryPage } from "./ScanEntryPage";
 const mocks = vi.hoisted(() => ({
   buildRegisterInput: vi.fn(),
   getZaloIdentity: vi.fn(),
-  requestPhoneToken: vi.fn(),
   registerCustomer: vi.fn(),
   resolveCustomerQr: vi.fn(),
 }));
@@ -18,7 +17,6 @@ vi.mock("../services/runtime", () => ({
 
 vi.mock("../services/zalo", () => ({
   getZaloIdentity: mocks.getZaloIdentity,
-  requestPhoneToken: mocks.requestPhoneToken,
 }));
 
 vi.mock("../services/api", () => ({
@@ -88,7 +86,6 @@ describe("ScanEntryPage", () => {
     });
     mocks.buildRegisterInput.mockReturnValue({ request: "register" });
     mocks.registerCustomer.mockResolvedValue(session);
-    mocks.requestPhoneToken.mockResolvedValue("phone-token-test");
   });
 
   it("tự hiện thông tin Zalo và tạo lượt chỉ bằng nút xác nhận", async () => {
@@ -109,9 +106,14 @@ describe("ScanEntryPage", () => {
       expect.objectContaining({ name: "Anh Tân", zaloUserId: "zalo-a" }),
       false,
       undefined,
-      "phone-token-test",
+      undefined,
     );
-    expect(mocks.requestPhoneToken).toHaveBeenCalledTimes(1);
+    expect(mocks.getZaloIdentity).toHaveBeenNthCalledWith(1, {
+      requestProfilePermission: false,
+    });
+    expect(mocks.getZaloIdentity).toHaveBeenNthCalledWith(2, {
+      requestProfilePermission: false,
+    });
   });
 
   it("hiển thị ảnh salon và quay về logo mặc định khi ảnh lỗi", async () => {
@@ -123,7 +125,7 @@ describe("ScanEntryPage", () => {
     expect(container.querySelector(".salon-identity-avatar .brand-mark")).toBeInTheDocument();
   });
 
-  it("không xin phone token khi khách đã tự nhập số điện thoại", async () => {
+  it("chỉ gửi số điện thoại khi khách tự nhập", async () => {
     const user = userEvent.setup();
     render(<ScanEntryPage onReady={vi.fn()} />);
 
@@ -133,7 +135,6 @@ describe("ScanEntryPage", () => {
     await user.click(screen.getByRole("button", { name: "Xác nhận vào hàng chờ" }));
 
     await waitFor(() => expect(mocks.registerCustomer).toHaveBeenCalled());
-    expect(mocks.requestPhoneToken).not.toHaveBeenCalled();
     expect(mocks.buildRegisterInput).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),

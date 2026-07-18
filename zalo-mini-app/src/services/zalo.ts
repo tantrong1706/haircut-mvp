@@ -7,6 +7,10 @@ export type ZaloIdentity = {
   avatar?: string;
 };
 
+type ZaloIdentityOptions = {
+  requestProfilePermission?: boolean;
+};
+
 const ZALO_REQUIRED_MESSAGE = "Vui lòng mở HAIRCUT trong Zalo để xác nhận danh tính khách hàng.";
 
 function previewIdentity(): ZaloIdentity | null {
@@ -45,7 +49,7 @@ export async function getZaloAccessToken(): Promise<string> {
   }
 }
 
-export async function getZaloIdentity(): Promise<ZaloIdentity> {
+export async function getZaloIdentity(options: ZaloIdentityOptions = {}): Promise<ZaloIdentity> {
   const preview = previewIdentity();
   if (preview) {
     return preview;
@@ -56,7 +60,7 @@ export async function getZaloIdentity(): Promise<ZaloIdentity> {
   try {
     const { getUserInfo } = await import("zmp-sdk/apis");
     const { userInfo } = await getUserInfo({
-      autoRequestPermission: true,
+      autoRequestPermission: options.requestProfilePermission === true,
       avatarType: "normal",
     });
     const rawUserInfo = userInfo as { id?: unknown; userId?: unknown };
@@ -72,19 +76,5 @@ export async function getZaloIdentity(): Promise<ZaloIdentity> {
       accessToken,
       name: "",
     };
-  }
-}
-
-export async function requestPhoneToken(): Promise<string | null> {
-  if (!isZaloMiniAppRuntime()) {
-    return null;
-  }
-
-  try {
-    const { getPhoneNumber } = await import("zmp-sdk/apis");
-    const { token } = await getPhoneNumber();
-    return String(token || "").trim() || null;
-  } catch {
-    return null;
   }
 }

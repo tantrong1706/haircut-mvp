@@ -1,9 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getZaloIdentity, requestPhoneToken } from "./zalo";
+import { getZaloIdentity } from "./zalo";
 
 const mocks = vi.hoisted(() => ({
   getAccessToken: vi.fn(),
-  getPhoneNumber: vi.fn(),
   getUserInfo: vi.fn(),
   isZaloMiniAppRuntime: vi.fn(),
 }));
@@ -14,7 +13,6 @@ vi.mock("./runtime", () => ({
 
 vi.mock("zmp-sdk/apis", () => ({
   getAccessToken: mocks.getAccessToken,
-  getPhoneNumber: mocks.getPhoneNumber,
   getUserInfo: mocks.getUserInfo,
 }));
 
@@ -36,6 +34,10 @@ describe("getZaloIdentity", () => {
       accessToken: "access-token-test",
       name: "",
     });
+    expect(mocks.getUserInfo).toHaveBeenCalledWith({
+      autoRequestPermission: false,
+      avatarType: "normal",
+    });
   });
 
   it("trả tên hồ sơ khi Zalo cấp quyền", async () => {
@@ -49,6 +51,19 @@ describe("getZaloIdentity", () => {
     });
   });
 
+  it("chỉ mở hộp thoại quyền hồ sơ khi người dùng chủ động yêu cầu", async () => {
+    mocks.getUserInfo.mockResolvedValue({
+      userInfo: { id: "zalo-a", name: "Anh Tân" },
+    });
+
+    await getZaloIdentity({ requestProfilePermission: true });
+
+    expect(mocks.getUserInfo).toHaveBeenCalledWith({
+      autoRequestPermission: true,
+      avatarType: "normal",
+    });
+  });
+
   it("dùng danh tính mô phỏng chỉ trong chế độ xem trước", async () => {
     vi.stubEnv("VITE_ZALO_PREVIEW", "true");
 
@@ -57,24 +72,5 @@ describe("getZaloIdentity", () => {
       name: "Khách xem trước",
     });
     expect(mocks.getAccessToken).not.toHaveBeenCalled();
-  });
-});
-
-describe("requestPhoneToken", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mocks.isZaloMiniAppRuntime.mockReturnValue(true);
-  });
-
-  it("trả phone token khi khách đồng ý chia sẻ số Zalo", async () => {
-    mocks.getPhoneNumber.mockResolvedValue({ token: " phone-token-test " });
-
-    await expect(requestPhoneToken()).resolves.toBe("phone-token-test");
-  });
-
-  it("trả null khi khách từ chối quyền số điện thoại", async () => {
-    mocks.getPhoneNumber.mockRejectedValue(new Error("permission denied"));
-
-    await expect(requestPhoneToken()).resolves.toBeNull();
   });
 });
