@@ -20,7 +20,7 @@ vụ chính mỗi màn hình, nút tối thiểu 48 px và mọi chức năng c�
 1. **Hàng chờ:** khách tiếp theo tại đúng chi nhánh.
 2. **Đang làm:** khách đang phục vụ, ảnh, ghi chú và hoàn tất.
 3. **Điểm và quà:** lối vào gửi điểm và đổi mã quà theo quyền.
-4. **Lịch sử:** Hôm nay, 7 ngày hoặc 30 ngày.
+4. **Lịch sử:** hiển thị rõ API lịch sử chưa sẵn sàng; không dùng lượt đang mở làm lịch sử giả.
 5. **Tài khoản:** role, chi nhánh, mật khẩu, ứng dụng, dữ liệu và pháp lý.
 
 ## Trạng thái giao diện
@@ -49,12 +49,13 @@ Mock preview bị loại khỏi nhánh production bởi `import.meta.env.DEV`.
 
 ## Kiểm tra responsive
 
-Sáu prototype đã được kiểm tra tại `360 × 800`, `390 × 844`, `412 × 915`:
+Sáu prototype đã được kiểm tra bằng Playwright tại `360 × 800`, `390 × 844`, `412 × 915`;
+18 ảnh bên dưới được tạo lại từ source hiện tại:
 
 - Không tràn ngang.
 - Bottom navigation cố định đúng đáy viewport.
 - Không có vùng chạm nhỏ hơn 48 px.
-- Không có lỗi console.
+- Mỗi bottom navigation có đủ năm mục và nằm trong viewport.
 
 | Màn hình | 360 × 800 | 390 × 844 | 412 × 915 |
 | --- | --- | --- | --- |
@@ -67,7 +68,7 @@ Sáu prototype đã được kiểm tra tại `360 × 800`, `390 × 844`, `412 �
 
 ## Khoảng trống không bị che giấu
 
-Một số màn hình chi tiết chưa có API Manager phù hợp từ trước: lịch sử phiên đã hủy/no-show, lịch sử
-duyệt đầy đủ, ảnh trong kết quả tìm khách, lịch sử quà theo staff và audit log cho owner. Các mục này
-đã có vị trí trong inventory, được ghi rõ `Tạm chưa triển khai — cần xác nhận` hoặc `Chỉ hiện theo
-quyền`; lần thiết kế lại không tạo dữ liệu giả và không nới Rules.
+Tám luồng còn thiếu API: phiên đã hủy, no-show, ảnh khách trong kết quả tìm kiếm, lịch sử quà owner,
+chi nhánh khách từng đến, lịch sử duyệt, lịch sử đổi quà staff và lịch sử thao tác staff. Trạng thái
+quyền audit của owner hiện là `UI_ONLY`. Chi tiết nằm trong
+`docs/MANAGER_FEATURE_INVENTORY.md`; lần thiết kế lại không tạo dữ liệu giả và không nới Rules.

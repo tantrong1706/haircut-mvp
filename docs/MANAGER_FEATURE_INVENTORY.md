@@ -1,20 +1,41 @@
 # Kiểm kê chức năng HAIRCUT Manager
 
-Tài liệu này là hợp đồng bảo toàn chức năng của lần thiết kế lại Manager. Registry chạy được nằm
-tại `apps/manager-mobile/src/navigation/managerNavigation.ts` và được bảo vệ bởi
-`managerFeatureParity.test.ts`.
+Tài liệu này là hợp đồng bảo toàn chức năng của lần thiết kế lại Manager. Registry điều hướng nằm
+tại `apps/manager-mobile/src/navigation/managerNavigation.ts` và được kiểm tra kiến trúc bởi
+`managerFeatureParity.test.ts`. Registry chỉ chứng minh vị trí điều hướng, không chứng minh API hoặc
+luồng nghiệp vụ đã hoạt động.
 
 ## Tổng hợp
 
 - **81 chức năng đã kiểm kê:** 49 Owner, 23 Staff và 9 chức năng nền dùng chung.
-- **81/81 chức năng có vị trí mới:** tối đa ba lần chạm từ một trong năm tab đúng vai trò.
-- Không thay đổi Cloud Functions, Firestore schema, quyền, transaction hoặc business rule.
-- Mục ghi **Tạm chưa triển khai — cần xác nhận** là khoảng trống đã tồn tại trước lần thiết kế lại:
-  Manager chưa có API đọc phù hợp. Mục vẫn có vị trí, không bị xóa hoặc giả lập dữ liệu.
+- **81/81 chức năng có vị trí điều hướng:** tối đa ba lần chạm từ một trong năm tab đúng vai trò.
+- **Trạng thái triển khai:** 72 `WORKING`, 8 `API_GAP`, 1 `UI_ONLY`.
+- PR giao diện này không thêm schema hoặc API lịch sử còn thiếu. Các khoảng trống vẫn có vị trí rõ,
+  không bị xóa và không dùng dữ liệu giả để tạo cảm giác đã hoạt động.
 
-Trạng thái chỉ dùng một trong các giá trị đã thống nhất:
-`Giữ nguyên`, `Đổi vị trí`, `Đơn giản hóa giao diện`, `Chỉ hiện theo quyền`,
-`Chỉ hiện theo feature flag`, `Tạm chưa triển khai — cần xác nhận`.
+Trạng thái triển khai dùng các giá trị: `WORKING`, `UI_ONLY`, `API_GAP`, `ROLE_GATED`,
+`FEATURE_FLAG_GATED`, `NOT_SUPPORTED_YET`. Các trạng thái cũ trong bảng chi tiết bên dưới mô tả cách
+bố trí giao diện, không thay thế trạng thái triển khai.
+
+## Ma trận triển khai production
+
+Mọi mục không liệt kê trong bảng ngoại lệ bên dưới được tính là `WORKING`; các mục có quyền hoặc
+feature flag vẫn phải qua backend authorization tương ứng.
+
+| Mã chức năng | Trạng thái | UI | API | Tích hợp | Native | Production | Ghi chú |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
+| `owner.cancelled_sessions` | `API_GAP` | Có vị trí | Chưa có | Chưa nối | Không phụ thuộc | Chưa | Chưa có API đọc lịch sử phiên đã hủy |
+| `owner.no_show` | `API_GAP` | Có vị trí | Chưa có | Chưa nối | Không phụ thuộc | Chưa | Chưa có API đọc lượt không đến |
+| `owner.haircut_photos` | `API_GAP` | Có vị trí | Thiếu dữ liệu | Chưa nối | Có camera | Chưa | Kết quả tìm khách chưa trả ảnh đã lưu |
+| `owner.reward_history` | `API_GAP` | Có vị trí | Chưa đủ | Chưa nối | Không phụ thuộc | Chưa | Tìm khách chưa trả đủ lịch sử quà |
+| `owner.customer_branch_history` | `API_GAP` | Có vị trí | Chưa có | Chưa nối | Không phụ thuộc | Chưa | Chưa có tổng hợp chi nhánh khách từng đến |
+| `owner.approval_history` | `API_GAP` | Có vị trí | Chưa có | Chưa nối | Không phụ thuộc | Chưa | Chưa có API yêu cầu điểm đã xử lý |
+| `staff.reward_history` | `API_GAP` | Có vị trí | Chưa có | Chưa nối | Không phụ thuộc | Chưa | Chưa có lịch sử đổi quà theo nhân viên |
+| `staff.history` | `API_GAP` | Thông báo trung thực | Chưa có | Không nối dữ liệu giả | Không phụ thuộc | Chưa | Không dùng lượt đang mở làm lịch sử |
+| `owner.audit_permission` | `UI_ONLY` | Có | Server-only | Chưa có luồng đọc | Không phụ thuộc | Chưa | Chỉ hiển thị trạng thái quyền, không giả lập audit log |
+
+Các chức năng đổi quà/quét mã là `ROLE_GATED`. Duyệt điểm, ảnh, vòng quay và đổi quà là
+`FEATURE_FLAG_GATED`; khi flag tắt, UI khóa thao tác và backend vẫn là lớp bảo vệ cuối.
 
 ## Owner
 
@@ -112,9 +133,12 @@ Trạng thái chỉ dùng một trong các giá trị đã thống nhất:
 | Quét mã quà | Có | Có điều kiện | Native shell | Đổi quà đúng role | Barcode Scanner | native tests | Chỉ hiện theo quyền |
 | Push notification | Có | Có | Native shell | Nền ứng dụng + trạng thái tài khoản | Firebase Messaging | native tests | Giữ nguyên |
 
-## Kết luận parity
+## Kết luận kiểm kê
 
 - Số chức năng bị loại bỏ: **0**
 - Số chức năng chưa có vị trí mới: **0**
+- Số chức năng đã hoạt động: **72**
+- Số chức năng còn thiếu API: **8**
+- Số chức năng mới chỉ có UI/trạng thái quyền: **1**
 - Business rule bị thay đổi: **Không**
 - Backend schema bị thay đổi: **Không**

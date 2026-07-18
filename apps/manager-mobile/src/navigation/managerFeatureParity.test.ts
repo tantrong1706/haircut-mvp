@@ -95,7 +95,7 @@ const REQUIRED_SHARED_FEATURES = [
   "shared.push_notifications",
 ] as const;
 
-describe("Manager feature parity", () => {
+describe("Manager navigation registry architecture", () => {
   it("không bỏ sót hoặc khai báo trùng chức năng đã kiểm kê", () => {
     const ids = MANAGER_FEATURE_PLACEMENTS.map((feature) => feature.id);
     const required = [
