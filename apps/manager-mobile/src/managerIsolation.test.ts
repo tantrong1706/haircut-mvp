@@ -1,3 +1,5 @@
+// @vitest-environment node
+
 import { readdirSync, readFileSync } from "node:fs";
 import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,5 +30,16 @@ describe("Manager source boundary", () => {
     const main = readFileSync(join(sourceRoot, "main.tsx"), "utf8");
     expect(main).toContain('import "./manager.css"');
     expect(main).not.toContain("zalo-mini-app");
+  });
+
+  it("chỉ adapter được phép nhập service dùng chung đang nằm trong Zalo Mini App", () => {
+    const sharedServicePath = ["zalo-mini-app", "src", "services"].join("/");
+    const violations = sourceFiles(sourceRoot)
+      .filter((path) => !path.split("\\").join("/").includes("/services/adapters/"))
+      .map((path) => ({ path, content: readFileSync(path, "utf8").split("\\").join("/") }))
+      .filter(({ content }) => content.includes(`${sharedServicePath}/`))
+      .map(({ path }) => path);
+
+    expect(violations).toEqual([]);
   });
 });
