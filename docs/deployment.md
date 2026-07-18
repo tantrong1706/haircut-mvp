@@ -11,6 +11,8 @@
 - `QR_SIGNING_SECRET` phải nằm trong Firebase Secret Manager, dài tối thiểu 32 ký tự và không được dùng lại `ZALO_APP_SECRET`.
 - Chỉ đặt `REQUIRE_ZALO_APP_CHECK=true` sau khi App Check đã chạy ổn trong cả Zalo Android và iPhone; để trống trong giai đoạn tương thích.
 - Chỉ đặt `ENFORCE_APP_CHECK=true` sau khi web/Zalo và Manager native đều gửi token hợp lệ. Manager dùng Play Integrity và App Attest/DeviceCheck; không dùng reCAPTCHA web trong native runtime.
+- Admin Web cần `VITE_FIREBASE_APP_CHECK_SITE_KEY` của reCAPTCHA Enterprise. `VITE_APP_CHECK_DEBUG_TOKEN` chỉ dùng local và tuyệt đối không đặt trong production.
+- `ADMIN_WRITE_OPERATIONS_ENABLED` mặc định tắt. Không bật trong bản Admin read-only; mọi callable ghi Admin sẽ trả `ADMIN_WRITE_DISABLED` dù được gọi trực tiếp.
 - `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT` chỉ đặt ở môi trường deploy/GitHub Secrets.
 - Khi đủ ba biến Sentry, Vite tạo source map ẩn, upload rồi xóa file map khỏi `dist`.
 
@@ -63,7 +65,7 @@ Android cần `google-services.json`; iOS cần `GoogleService-Info.plist`, APNs
 
 ## HAIRCUT Admin
 
-Build bằng `npm run build` trong `apps/admin-web`. Trước deploy phải tạo Firebase Hosting site riêng, cấu hình URL vào `VITE_ADMIN_URL` và smoke test tài khoản `system_admin`; không dùng site `haircut-c7d12` của khách.
+Build bằng `npm run build` trong `apps/admin-web`. Trước deploy phải tạo Firebase Hosting site riêng, cấu hình URL vào `VITE_ADMIN_URL` và smoke test tài khoản `system_admin`; không dùng site `haircut-c7d12` của khách. Giao diện và API client bản đầu chỉ đọc; backend vẫn khóa callable ghi khi flag server chưa bật.
 
 ## Kiểm tra sau deploy
 

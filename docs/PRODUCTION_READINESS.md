@@ -18,7 +18,7 @@ cd ..\zalo-mini-app
 npm run check
 ```
 
-Admin Web phải qua `npm run check`. Manager phải qua typecheck, unit test, build và `cap sync`.
+Admin Web phải qua `npm run check`. Manager phải qua typecheck, unit test, build, `cap sync`, Android Gradle và iOS Simulator CI không ký.
 
 ## Cổng dữ liệu và bảo mật
 

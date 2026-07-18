@@ -122,6 +122,7 @@ npm run sync        # build và cap sync Android/iOS
 ```
 
 Manager production không được dùng đồng thời `@capacitor/push-notifications` và Firebase Messaging. Source hiện dùng FCM token cho cả Android/iOS và bridge App Check native vào Firebase JS SDK.
+CI có job riêng cho web bundle, Android Gradle và iOS Simulator không ký. Manager dùng `.env` riêng trong `apps/manager-mobile`; xem [ranh giới tách Manager](docs/MANAGER_EXTRACTION.md).
 
 ## Biến môi trường và secrets
 
@@ -138,8 +139,10 @@ Production bắt buộc `VITE_FUNCTION_WRITE_MODE=required`. Tham khảo mẫu t
 
 ### Cloud Functions
 
-- Biến cấu hình: `ZALO_MINI_APP_ID`, `ZALO_APP_ID`, `REQUIRE_ZALO_APP_CHECK`, `ENFORCE_APP_CHECK`.
+- Biến cấu hình: `ZALO_MINI_APP_ID`, `ZALO_APP_ID`, `REQUIRE_ZALO_APP_CHECK`, `ENFORCE_APP_CHECK`, `ADMIN_WRITE_OPERATIONS_ENABLED`.
 - Firebase Secret Manager: `ZALO_APP_SECRET`, `ZALO_OPEN_API_KEY`, `QR_SIGNING_SECRET`.
+
+Admin Web dùng `VITE_FIREBASE_APP_CHECK_SITE_KEY`; `VITE_APP_CHECK_DEBUG_TOKEN` chỉ được dùng local. Bản Admin đầu tiên là read-only và `ADMIN_WRITE_OPERATIONS_ENABLED` phải để trống/`false`.
 
 Không đặt App Secret, Open API Key, QR signing secret, access token, mật khẩu, tài khoản kiểm thử hoặc dữ liệu khách hàng trong Git, log hay ảnh chụp màn hình.
 

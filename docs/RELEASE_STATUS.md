@@ -8,7 +8,7 @@ Cập nhật: 16/07/2026
 | --- | --- | --- | --- |
 | HAIRCUT Zalo Mini App | Khách hàng | Luồng QR, check-in, điểm, lịch sử, vòng quay và quà đã có | Đã gửi Zalo xét duyệt; phiên bản thực tế xem trên Zalo Portal |
 | HAIRCUT Manager | Owner và staff | React/Capacitor, Android/iOS, FCM, App Check, camera, biometric, secure storage và deep link đã có | Chưa đưa lên TestFlight/Google Play Internal Testing |
-| HAIRCUT Admin | Quản trị hệ thống | Web riêng, chỉ role `system_admin`, feature flags, khóa salon/user, hủy session và audit đã có | Chưa tạo Firebase Hosting site riêng |
+| HAIRCUT Admin | Quản trị hệ thống | Web riêng, chỉ role `system_admin`, tổng quan, salon, feature flags và audit dạng chỉ đọc | Chưa tạo Firebase Hosting site riêng; thao tác ghi bị khóa mặc định |
 
 Mini App ID được giữ nguyên: `2038116772828167300`. Bundle ID Manager: `vn.haircut.manager`.
 
@@ -31,6 +31,7 @@ Mini App ID được giữ nguyên: `2038116772828167300`. Bundle ID Manager: `v
 ## Đang phát triển
 
 - Kiểm thử Manager trên thiết bị thật sau khi thêm file cấu hình Firebase native.
+- Xác minh hai job CI `Manager Android` và `Manager iOS Simulator` trên SHA phát hành cuối cùng.
 - Cấu hình APNs, Play Integrity, App Attest/DeviceCheck và bật enforcement theo rollout.
 - Tạo Hosting site riêng cho Admin và điền `VITE_ADMIN_URL`.
 - Chụp screenshot store, tạo tài khoản demo và hoàn thiện biểu mẫu App Privacy/Data Safety.
