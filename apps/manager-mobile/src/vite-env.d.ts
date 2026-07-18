@@ -20,4 +20,8 @@ interface ImportMeta {
 interface Window {
   __haircutBeforeSignOut?: () => Promise<void>;
   __haircutNativeShare?: (url: string, title: string) => Promise<void>;
+  Capacitor?: {
+    getPlatform?: () => string;
+    isNativePlatform?: () => boolean;
+  };
 }

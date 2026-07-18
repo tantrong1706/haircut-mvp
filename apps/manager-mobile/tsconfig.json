@@ -27,5 +27,5 @@
     "noEmit": true,
     "jsx": "react-jsx"
   },
-  "include": ["src", "../../zalo-mini-app/src"]
+  "include": ["src"]
 }
