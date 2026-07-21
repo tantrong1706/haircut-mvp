@@ -209,14 +209,19 @@ describe.skipIf(!emulatorHost)("callable transactions", () => {
 
   it("chỉ owner nhận số điện thoại đầy đủ khi tìm khách", async () => {
     const salonId = "salon-customer-phone";
+    const branchId = "branch-customer-phone";
     await seedOwner("owner-customer-phone", salonId, { customerCount: 1 });
-    await db.collection("users").doc("staff-customer-phone").set({
-      salonId,
-      role: "staff",
-      name: "Nhân viên",
-      isActive: true,
-      branchIds: [],
-    });
+    await seedBranch(salonId, branchId);
+    await db
+      .collection("users")
+      .doc("staff-customer-phone")
+      .set({
+        salonId,
+        role: "staff",
+        name: "Nhân viên",
+        isActive: true,
+        branchIds: [branchId],
+      });
     await db.collection("customers").doc("customer-phone").set({
       salonId,
       name: "Khách có số",
@@ -224,13 +229,14 @@ describe.skipIf(!emulatorHost)("callable transactions", () => {
       phoneLast4: "5678",
       points: 2,
       allowPhoto: false,
+      lastBranchId: branchId,
     });
 
     const ownerResult = await searchSalonCustomers.run(
       requestFor("owner-customer-phone", { salonId, term: "5678" }),
     );
     const staffResult = await searchSalonCustomers.run(
-      requestFor("staff-customer-phone", { salonId, term: "5678" }),
+      requestFor("staff-customer-phone", { salonId, branchId, term: "5678" }),
     );
 
     expect(ownerResult.customers[0]).toMatchObject({
