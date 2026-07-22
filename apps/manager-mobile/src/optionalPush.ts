@@ -1,3 +1,10 @@
+import {
+  createSingleFlight,
+  StaleInitializationError,
+  type InitializationAttempt,
+  type InitializationAttemptContext,
+} from "./managerBootstrap";
+
 export type PushInitializationStatus = "ready" | "denied" | "unavailable";
 
 export type PushInitializationResult = {
@@ -5,43 +12,52 @@ export type PushInitializationResult = {
   cleanup: () => void | Promise<void>;
 };
 
+export type PushInitializationAttempt = InitializationAttempt<PushInitializationResult>;
+
 export function createPushInitializationSingleFlight(
-  initialize: (userKey: string) => Promise<PushInitializationResult>,
+  initialize: (
+    userKey: string,
+    context: InitializationAttemptContext,
+  ) => Promise<PushInitializationResult>,
 ) {
-  let inFlight: Promise<PushInitializationResult> | null = null;
-  return (userKey: string) => {
-    if (!inFlight) {
-      inFlight = initialize(userKey).finally(() => {
-        inFlight = null;
-      });
-    }
-    return inFlight;
-  };
+  const start = createSingleFlight((userKey: string, context) => initialize(userKey, context), {
+    cleanup: (result) => result.cleanup(),
+  });
+  return (userKey: string) => start(userKey, userKey);
 }
 
 export async function runOptionalPushInitialization(input: {
-  initialize: () => Promise<PushInitializationResult>;
+  attempt: PushInitializationAttempt;
   timeoutMs?: number;
   onWarning: (code: string) => void;
 }): Promise<PushInitializationResult> {
-  const initialization = Promise.resolve().then(input.initialize);
   let timedOut = false;
 
   try {
-    return await withTimeout(initialization, input.timeoutMs ?? 12_000, () => {
+    const result = await withTimeout(input.attempt.result, input.timeoutMs ?? 12_000, () => {
       timedOut = true;
     });
+    return {
+      status: result.status,
+      cleanup: input.attempt.invalidate,
+    };
   } catch (error) {
+    const staleBeforeTimeout = input.attempt.isStale();
+    if (timedOut) await input.attempt.invalidate();
+    if (staleBeforeTimeout || error instanceof StaleInitializationError) {
+      return unavailableResult();
+    }
     const code = timedOut ? "MANAGER_PUSH_TIMEOUT" : pushErrorCode(error);
     input.onWarning(code);
-    if (timedOut) {
-      void initialization.then((result) => result.cleanup()).catch(() => undefined);
-    }
-    return {
-      status: "unavailable",
-      cleanup: async () => undefined,
-    };
+    return unavailableResult();
   }
+}
+
+function unavailableResult(): PushInitializationResult {
+  return {
+    status: "unavailable",
+    cleanup: async () => undefined,
+  };
 }
 
 function withTimeout<T>(task: Promise<T>, timeoutMs: number, onTimeout: () => void) {

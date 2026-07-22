@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AlertTriangle, LoaderCircle, RotateCcw, ShieldCheck, X } from "lucide-react";
 import { InlineFeedback, OfflineNotice } from "./components/Feedback";
 import { ManagerNativeContext } from "./hooks/useManagerNative";
@@ -12,14 +12,21 @@ import {
   enableBiometricLock,
   initializeNativeManager,
   initializePushNotifications,
+  managerRuntimeUserKey,
   retryBiometricUnlock,
   safelyHideSplashScreen,
   scanRewardCode,
 } from "./nativeRuntime";
 
 export function NativeManagerShell({ user, children }: { user: AppUser; children: ReactNode }) {
+  const userKey = managerRuntimeUserKey(user);
+  const currentUserKey = useRef(userKey);
+  const bootstrapGeneration = useRef(0);
+  const pushGeneration = useRef(0);
+  currentUserKey.current = userKey;
   const [online, setOnline] = useState(navigator.onLine);
   const [nativeReady, setNativeReady] = useState(false);
+  const [nativeReadyUserKey, setNativeReadyUserKey] = useState<string | null>(null);
   const [locked, setLocked] = useState(false);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [scanning, setScanning] = useState(false);
@@ -40,30 +47,37 @@ export function NativeManagerShell({ user, children }: { user: AppUser; children
 
   useEffect(() => {
     let cancelled = false;
-    let cleanup: (() => void | Promise<void>) | undefined;
+    const generation = ++bootstrapGeneration.current;
+    const attempt = initializeNativeManager({
+      user,
+      onOnlineChange: setOnline,
+      onLockedChange: setLocked,
+      onBiometricError: setBiometricError,
+      onNativeReady: setNativeReady,
+    });
+    const isCurrent = () =>
+      !cancelled &&
+      bootstrapGeneration.current === generation &&
+      currentUserKey.current === userKey;
+
     setBootstrapping(true);
     setBootstrapError(null);
+    setNativeReady(false);
+    setNativeReadyUserKey(null);
     void runManagerBootstrap({
-      initialize: () =>
-        initializeNativeManager({
-          user,
-          onOnlineChange: setOnline,
-          onLockedChange: setLocked,
-          onBiometricError: setBiometricError,
-          onNativeReady: setNativeReady,
-        }),
+      attempt,
       hideSplash: safelyHideSplashScreen,
       track: (name, params) => trackEvent(name, params),
     }).then((result) => {
-      if (cancelled) {
-        if (result.ok) void result.cleanup();
-        return;
-      }
+      if (!isCurrent() || (!result.ok && result.stale)) return;
       if (result.ok) {
-        cleanup = result.cleanup;
-        void biometricLockEnabled().then(setBiometricEnabled);
+        setNativeReadyUserKey(userKey);
+        void biometricLockEnabled().then((enabled) => {
+          if (isCurrent()) setBiometricEnabled(enabled);
+        });
       } else {
         setNativeReady(false);
+        setNativeReadyUserKey(null);
         setBootstrapError(result);
         captureError(new Error(result.code), {
           area: "manager_bootstrap",
@@ -75,22 +89,27 @@ export function NativeManagerShell({ user, children }: { user: AppUser; children
     });
     return () => {
       cancelled = true;
-      void cleanup?.();
+      if (bootstrapGeneration.current === generation) bootstrapGeneration.current += 1;
+      void attempt.invalidate();
     };
-  }, [bootstrapAttempt, user.uid, user.salonId]);
+  }, [bootstrapAttempt, userKey]);
 
   useEffect(() => {
-    if (!nativeReady || bootstrapping || bootstrapError) {
+    if (!nativeReady || nativeReadyUserKey !== userKey || bootstrapping || bootstrapError) {
       setPushStatus("idle");
       return undefined;
     }
 
     let cancelled = false;
-    let cleanup: (() => void | Promise<void>) | undefined;
+    const generation = ++pushGeneration.current;
+    const attempt = initializePushNotifications(user);
+    const isCurrent = () =>
+      !cancelled && pushGeneration.current === generation && currentUserKey.current === userKey;
     setPushStatus("initializing");
     void runOptionalPushInitialization({
-      initialize: () => initializePushNotifications(user),
+      attempt,
       onWarning: (code) => {
+        if (!isCurrent()) return;
         trackEvent("manager_push_unavailable", {
           error_code: code,
           salon_id: user.salonId,
@@ -101,19 +120,16 @@ export function NativeManagerShell({ user, children }: { user: AppUser; children
         });
       },
     }).then((result) => {
-      if (cancelled) {
-        void result.cleanup();
-        return;
-      }
-      cleanup = result.cleanup;
+      if (!isCurrent()) return;
       setPushStatus(result.status);
     });
 
     return () => {
       cancelled = true;
-      void cleanup?.();
+      if (pushGeneration.current === generation) pushGeneration.current += 1;
+      void attempt.invalidate();
     };
-  }, [bootstrapError, bootstrapping, nativeReady, pushAttempt, user.salonId, user.uid]);
+  }, [bootstrapError, bootstrapping, nativeReady, nativeReadyUserKey, pushAttempt, userKey]);
 
   async function scan() {
     setScanning(true);
@@ -180,7 +196,11 @@ export function NativeManagerShell({ user, children }: { user: AppUser; children
         <ShieldCheck />
         <h1>HAIRCUT Manager đang khóa</h1>
         <p>Dùng sinh trắc học hoặc mã khóa thiết bị để tiếp tục.</p>
-        {biometricError ? <p className="manager-lock-error" role="alert">{biometricError}</p> : null}
+        {biometricError ? (
+          <p className="manager-lock-error" role="alert">
+            {biometricError}
+          </p>
+        ) : null}
         <button
           className="manager-button primary"
           type="button"

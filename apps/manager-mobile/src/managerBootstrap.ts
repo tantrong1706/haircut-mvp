@@ -16,22 +16,55 @@ export class ManagerBootstrapError extends Error {
 
 type Cleanup = () => void | Promise<void>;
 
+export type InitializationAttemptContext = {
+  attemptId: number;
+  key: string;
+  isActive: () => boolean;
+};
+
+export type InitializationAttempt<TResult> = {
+  attemptId: number;
+  key: string;
+  result: Promise<TResult>;
+  isActive: () => boolean;
+  isStale: () => boolean;
+  invalidate: () => Promise<void>;
+};
+
+export class StaleInitializationError extends Error {
+  constructor() {
+    super("STALE_INITIALIZATION_ATTEMPT");
+    this.name = "StaleInitializationError";
+  }
+}
+
 export async function runManagerBootstrap(input: {
-  initialize: () => Promise<Cleanup>;
+  attempt: InitializationAttempt<Cleanup>;
   hideSplash: () => Promise<boolean>;
   track: (name: string, params: Record<string, string>) => void;
   timeoutMs?: number;
 }) {
   const requestId = safeRequestId();
-  const initialization = Promise.resolve().then(input.initialize);
   let timedOut = false;
 
   try {
-    const cleanup = await withTimeout(initialization, input.timeoutMs ?? 20_000, () => {
+    await withTimeout(input.attempt.result, input.timeoutMs ?? 20_000, () => {
       timedOut = true;
     });
-    return { ok: true as const, cleanup, requestId };
+    return { ok: true as const, cleanup: input.attempt.invalidate, requestId };
   } catch (error) {
+    if (timedOut) {
+      await input.attempt.invalidate();
+    }
+    if (error instanceof StaleInitializationError) {
+      return {
+        ok: false as const,
+        stale: true as const,
+        code: "MANAGER_NATIVE_PLUGIN_FAILED" as const,
+        requestId,
+        message: safeBootstrapMessage("MANAGER_NATIVE_PLUGIN_FAILED"),
+      };
+    }
     const code = bootstrapCode(error);
     if (code === "MANAGER_APP_CHECK_FAILED") {
       input.track("manager_app_check_failed", { error_code: code, request_id: requestId });
@@ -44,9 +77,6 @@ export async function runManagerBootstrap(input: {
       message: safeBootstrapMessage(code),
     };
   } finally {
-    if (timedOut) {
-      void initialization.then((cleanup) => cleanup()).catch(() => undefined);
-    }
     let splashHidden = false;
     try {
       splashHidden = await input.hideSplash();
@@ -62,15 +92,104 @@ export async function runManagerBootstrap(input: {
   }
 }
 
-export function createSingleFlight<TInput, TResult>(task: (input: TInput) => Promise<TResult>) {
-  let inFlight: Promise<TResult> | null = null;
-  return (input: TInput) => {
-    if (!inFlight) {
-      inFlight = task(input).finally(() => {
-        inFlight = null;
-      });
+export function createSingleFlight<TInput, TResult>(
+  task: (input: TInput, context: InitializationAttemptContext) => Promise<TResult>,
+  options: {
+    cleanup?: (result: TResult) => void | Promise<void>;
+    onActivate?: () => void;
+    onDeactivate?: () => void;
+  } = {},
+) {
+  type AttemptState = {
+    attemptId: number;
+    key: string;
+    stale: boolean;
+    deactivated: boolean;
+    cleanup?: () => Promise<void>;
+    rejectAsStale: () => void;
+    handle: InitializationAttempt<TResult>;
+  };
+
+  let current: AttemptState | null = null;
+  let nextAttemptId = 0;
+
+  const deactivate = (state: AttemptState) => {
+    if (state.deactivated) return;
+    state.deactivated = true;
+    options.onDeactivate?.();
+  };
+
+  const invalidate = async (state: AttemptState) => {
+    if (!state.stale) {
+      state.stale = true;
+      if (current === state) current = null;
+      deactivate(state);
+      state.rejectAsStale();
     }
-    return inFlight;
+    await state.cleanup?.();
+  };
+
+  return (key: string, input: TInput): InitializationAttempt<TResult> => {
+    if (current && !current.stale && current.key === key) {
+      return current.handle;
+    }
+    if (current) void invalidate(current);
+
+    const attemptId = ++nextAttemptId;
+    let rejectAsStale!: () => void;
+    const stalePromise = new Promise<never>((_, reject) => {
+      rejectAsStale = () => reject(new StaleInitializationError());
+    });
+    const state = {
+      attemptId,
+      key,
+      stale: false,
+      deactivated: false,
+      rejectAsStale,
+    } as AttemptState;
+    const context: InitializationAttemptContext = {
+      attemptId,
+      key,
+      isActive: () => current === state && !state.stale,
+    };
+
+    current = state;
+    options.onActivate?.();
+
+    const taskResult = Promise.resolve()
+      .then(() => task(input, context))
+      .then(
+        async (result) => {
+          state.cleanup = onceAsync(() => options.cleanup?.(result));
+          if (state.stale) await state.cleanup();
+          return result;
+        },
+        (error) => {
+          if (current === state) current = null;
+          deactivate(state);
+          throw error;
+        },
+      );
+
+    const handle: InitializationAttempt<TResult> = {
+      attemptId,
+      key,
+      result: Promise.race([taskResult, stalePromise]),
+      isActive: context.isActive,
+      isStale: () => state.stale,
+      invalidate: () => invalidate(state),
+    };
+    state.handle = handle;
+    void handle.result.catch(() => undefined);
+    return handle;
+  };
+}
+
+function onceAsync(task: () => void | Promise<void>) {
+  let promise: Promise<void> | null = null;
+  return () => {
+    if (!promise) promise = Promise.resolve().then(task);
+    return promise;
   };
 }
 
