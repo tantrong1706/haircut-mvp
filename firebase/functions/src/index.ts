@@ -14,6 +14,7 @@ import {
   DocumentData,
   FieldPath,
   FieldValue,
+  QueryDocumentSnapshot,
   Timestamp,
   getFirestore,
 } from "firebase-admin/firestore";
@@ -4164,6 +4165,60 @@ export const getManagerPointRequestHistory = onCall(functionOptions, async (requ
   };
 });
 
+async function managerRewardDocsForBranch(input: {
+  salonId: string;
+  branchId: string;
+  limit: number;
+  usedBy?: string;
+}) {
+  let currentQuery = db
+    .collection("reward_history")
+    .where("salonId", "==", input.salonId)
+    .where("usedBranchId", "==", input.branchId);
+  let legacyQuery = db
+    .collection("reward_history")
+    .where("salonId", "==", input.salonId)
+    .where("branchId", "==", input.branchId);
+
+  if (input.usedBy) {
+    currentQuery = currentQuery.where("usedBy", "==", input.usedBy).where("status", "==", "used");
+    legacyQuery = legacyQuery.where("usedBy", "==", input.usedBy).where("status", "==", "used");
+  }
+
+  const currentSnap = await currentQuery.orderBy("createdAt", "desc").limit(input.limit).get();
+  const byId = new Map<string, QueryDocumentSnapshot<DocumentData>>(
+    currentSnap.docs.map((doc) => [doc.id, doc]),
+  );
+
+  const pageSize = Math.min(Math.max(input.limit, 20), 50);
+  let legacyCount = 0;
+  let cursor: QueryDocumentSnapshot<DocumentData> | undefined;
+  while (legacyCount < input.limit) {
+    let pageQuery = legacyQuery.orderBy("createdAt", "desc").limit(pageSize);
+    if (cursor) pageQuery = pageQuery.startAfter(cursor);
+    const page = await pageQuery.get();
+
+    for (const doc of page.docs) {
+      const data = doc.data();
+      if (!data.usedBranchId && !byId.has(doc.id)) {
+        byId.set(doc.id, doc);
+        legacyCount += 1;
+      }
+      if (legacyCount >= input.limit) break;
+    }
+    if (page.size < pageSize) break;
+    cursor = page.docs[page.docs.length - 1];
+  }
+
+  return [...byId.values()]
+    .sort(
+      (left, right) =>
+        (timestampMillis(right.data().createdAt) ?? 0) -
+        (timestampMillis(left.data().createdAt) ?? 0),
+    )
+    .slice(0, input.limit);
+}
+
 export const getManagerRewardHistory = onCall(functionOptions, async (request) => {
   const uid = currentUid(request.auth);
   const salonId = requireString(request.data?.salonId, "salonId");
@@ -4172,13 +4227,22 @@ export const getManagerRewardHistory = onCall(functionOptions, async (request) =
   const user = await assertSalonRole(uid, salonId, ["owner", "staff"]);
   await assertManagerHistoryBranch(user, salonId, branchId);
 
-  let rewardQuery = db.collection("reward_history").where("salonId", "==", salonId);
-  if (user.role === "staff") {
-    rewardQuery = rewardQuery.where("usedBy", "==", uid).where("status", "==", "used");
-    if (branchId) rewardQuery = rewardQuery.where("usedBranchId", "==", branchId);
+  let rewardDocs: QueryDocumentSnapshot<DocumentData>[];
+  if (branchId) {
+    rewardDocs = await managerRewardDocsForBranch({
+      salonId,
+      branchId,
+      limit,
+      ...(user.role === "staff" ? { usedBy: uid } : {}),
+    });
+  } else {
+    let rewardQuery = db.collection("reward_history").where("salonId", "==", salonId);
+    if (user.role === "staff") {
+      rewardQuery = rewardQuery.where("usedBy", "==", uid).where("status", "==", "used");
+    }
+    rewardDocs = (await rewardQuery.orderBy("createdAt", "desc").limit(limit).get()).docs;
   }
-  const snapshot = await rewardQuery.orderBy("createdAt", "desc").limit(limit).get();
-  const visibleDocs = snapshot.docs
+  const visibleDocs = rewardDocs
     .filter((doc) => {
       const data = doc.data();
       if (
