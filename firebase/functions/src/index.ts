@@ -3971,6 +3971,259 @@ export const getCustomerRewardsFromZalo = onCall(zaloFunctionOptions, async (req
   };
 });
 
+async function assertManagerHistoryBranch(
+  user: Awaited<ReturnType<typeof getAppUser>>,
+  salonId: string,
+  branchId: string | undefined,
+) {
+  if (!branchId) return;
+  await assertBranchAccess(user, branchId);
+  const branchSnap = await db.collection("branches").doc(branchId).get();
+  if (!branchSnap.exists || branchSnap.data()?.salonId !== salonId) {
+    throw apiError(
+      "failed-precondition",
+      ApiErrorCode.INVALID_BRANCH,
+      "Chi nhánh không thuộc salon này",
+      { branchId },
+    );
+  }
+}
+
+async function managerCustomerMap(salonId: string, customerIds: string[]) {
+  const uniqueIds = [...new Set(customerIds.filter(Boolean))];
+  const snapshots =
+    uniqueIds.length > 0
+      ? await db.getAll(...uniqueIds.map((id) => db.collection("customers").doc(id)))
+      : [];
+  const customers = new Map<string, DocumentData>();
+  snapshots.forEach((snapshot) => {
+    if (snapshot.exists && snapshot.data()?.salonId === salonId) {
+      customers.set(snapshot.id, snapshot.data() ?? {});
+    }
+  });
+  return customers;
+}
+
+function managerCustomerSummary(
+  customerId: string,
+  storedCustomer: DocumentData | undefined,
+  embeddedCustomer: unknown,
+  includePhone: boolean,
+) {
+  const embedded =
+    typeof embeddedCustomer === "object" && embeddedCustomer !== null
+      ? (embeddedCustomer as Record<string, unknown>)
+      : {};
+  const customer = storedCustomer ?? {};
+  return {
+    id: customerId,
+    name: String(customer.name ?? embedded.name ?? "Khách hàng"),
+    ...(includePhone ? { phone: String(customer.phone ?? "") } : {}),
+    phoneLast4: String(customer.phoneLast4 ?? embedded.phoneLast4 ?? ""),
+    points: Math.max(0, Number(customer.points ?? embedded.points ?? 0)),
+    allowPhoto: Boolean(customer.allowPhoto ?? embedded.allowPhoto),
+  };
+}
+
+export const getManagerSessionHistory = onCall(functionOptions, async (request) => {
+  const uid = currentUid(request.auth);
+  const salonId = requireString(request.data?.salonId, "salonId");
+  const branchId = optionalLimitedString(request.data?.branchId, "branchId", 128);
+  const limit = boundedQueryLimit(request.data?.limit, 30, 50);
+  const user = await assertSalonRole(uid, salonId, ["owner", "staff"]);
+  await assertManagerHistoryBranch(user, salonId, branchId);
+
+  let visibleDocs;
+  if (user.role === "owner") {
+    let historyQuery = db
+      .collection("chair_sessions")
+      .where("salonId", "==", salonId)
+      .where("status", "in", ["completed", "cancelled"])
+      .orderBy("createdAt", "desc")
+      .limit(limit);
+    if (branchId) historyQuery = historyQuery.where("branchId", "==", branchId);
+    visibleDocs = (await historyQuery.get()).docs;
+  } else {
+    let assignedQuery = db
+      .collection("chair_sessions")
+      .where("salonId", "==", salonId)
+      .where("assignedStaffId", "==", uid)
+      .where("status", "in", ["completed", "cancelled"])
+      .orderBy("createdAt", "desc")
+      .limit(limit);
+    let cancelledQuery = db
+      .collection("chair_sessions")
+      .where("salonId", "==", salonId)
+      .where("cancelledBy", "==", uid)
+      .where("status", "==", "cancelled")
+      .orderBy("createdAt", "desc")
+      .limit(limit);
+    if (branchId) {
+      assignedQuery = assignedQuery.where("branchId", "==", branchId);
+      cancelledQuery = cancelledQuery.where("branchId", "==", branchId);
+    }
+    const [assignedSnap, cancelledSnap] = await Promise.all([
+      assignedQuery.get(),
+      cancelledQuery.get(),
+    ]);
+    const uniqueDocs = new Map(
+      [...assignedSnap.docs, ...cancelledSnap.docs].map((doc) => [doc.id, doc]),
+    );
+    visibleDocs = [...uniqueDocs.values()]
+      .filter((doc) => canUserAccessBranch(user, String(doc.data().branchId || "")))
+      .sort(
+        (left, right) =>
+          (timestampMillis(right.data().createdAt) ?? 0) -
+          (timestampMillis(left.data().createdAt) ?? 0),
+      )
+      .slice(0, limit);
+  }
+  const customers = await managerCustomerMap(
+    salonId,
+    visibleDocs.map((doc) => String(doc.data().customerId || "")),
+  );
+
+  return {
+    sessions: visibleDocs.map((doc) => {
+      const data = doc.data();
+      const customerId = String(data.customerId || "");
+      return {
+        id: doc.id,
+        salonId,
+        branchId: String(data.branchId || ""),
+        branchName: String(data.branchName || data.mirrorName || "Chi nhánh"),
+        branchAddress: String(data.branchAddress || ""),
+        customerId,
+        status: data.status === "cancelled" ? "cancelled" : "completed",
+        assignedStaffId: String(data.assignedStaffId || ""),
+        assignedStaffName: String(data.assignedStaffName || ""),
+        claimedAtMs: timestampMillis(data.claimedAt),
+        createdAtMs: timestampMillis(data.createdAt),
+        completedAtMs: timestampMillis(data.completedAt),
+        cancelledAtMs: timestampMillis(data.cancelledAt),
+        cancellationReason: String(data.cancellationReason || ""),
+        customer: managerCustomerSummary(
+          customerId,
+          customers.get(customerId),
+          data.customerSummary,
+          user.role === "owner",
+        ),
+      };
+    }),
+  };
+});
+
+export const getManagerPointRequestHistory = onCall(functionOptions, async (request) => {
+  const uid = currentUid(request.auth);
+  const salonId = requireString(request.data?.salonId, "salonId");
+  const branchId = optionalLimitedString(request.data?.branchId, "branchId", 128);
+  const limit = boundedQueryLimit(request.data?.limit, 30, 50);
+  const owner = await assertSalonRole(uid, salonId, ["owner"]);
+  await assertManagerHistoryBranch(owner, salonId, branchId);
+
+  let historyQuery = db
+    .collection("point_requests")
+    .where("salonId", "==", salonId)
+    .where("status", "in", ["approved", "rejected"])
+    .orderBy("createdAt", "desc")
+    .limit(limit);
+  if (branchId) historyQuery = historyQuery.where("branchId", "==", branchId);
+
+  const snapshot = await historyQuery.get();
+  const customers = await managerCustomerMap(
+    salonId,
+    snapshot.docs.map((doc) => String(doc.data().customerId || "")),
+  );
+
+  return {
+    requests: snapshot.docs.map((doc) => {
+      const data = doc.data();
+      const customerId = String(data.customerId || "");
+      return {
+        id: doc.id,
+        salonId,
+        branchId: String(data.branchId || ""),
+        branchName: String(data.branchName || "Chi nhánh"),
+        sessionId: String(data.sessionId || ""),
+        customerId,
+        staffName: String(data.staffName || ""),
+        note: String(data.note || ""),
+        pointsAdded: Math.max(0, Number(data.pointsAdded ?? data.pointsRequested ?? 0)),
+        status: data.status === "approved" ? "approved" : "rejected",
+        rejectionReason: String(data.rejectionReason || ""),
+        createdAtMs: timestampMillis(data.createdAt),
+        processedAtMs: timestampMillis(data.processedAt ?? data.approvedAt ?? data.rejectedAt),
+        customer: managerCustomerSummary(
+          customerId,
+          customers.get(customerId),
+          data.customerSummary,
+          true,
+        ),
+      };
+    }),
+  };
+});
+
+export const getManagerRewardHistory = onCall(functionOptions, async (request) => {
+  const uid = currentUid(request.auth);
+  const salonId = requireString(request.data?.salonId, "salonId");
+  const branchId = optionalLimitedString(request.data?.branchId, "branchId", 128);
+  const limit = boundedQueryLimit(request.data?.limit, 30, 50);
+  const user = await assertSalonRole(uid, salonId, ["owner", "staff"]);
+  await assertManagerHistoryBranch(user, salonId, branchId);
+
+  let rewardQuery = db.collection("reward_history").where("salonId", "==", salonId);
+  if (user.role === "staff") {
+    rewardQuery = rewardQuery.where("usedBy", "==", uid).where("status", "==", "used");
+    if (branchId) rewardQuery = rewardQuery.where("usedBranchId", "==", branchId);
+  }
+  const snapshot = await rewardQuery.orderBy("createdAt", "desc").limit(limit).get();
+  const visibleDocs = snapshot.docs
+    .filter((doc) => {
+      const data = doc.data();
+      if (
+        effectiveRewardStatus(data.status, timestampMillis(data.expiresAt), Date.now()) ===
+        "no_prize"
+      ) {
+        return false;
+      }
+      if (branchId && String(data.usedBranchId || data.branchId || "") !== branchId) return false;
+      if (user.role === "owner") return true;
+      return (
+        data.status === "used" &&
+        data.usedBy === uid &&
+        canUserAccessBranch(user, String(data.usedBranchId || data.branchId || ""))
+      );
+    })
+    .slice(0, limit);
+  const customers = await managerCustomerMap(
+    salonId,
+    visibleDocs.map((doc) => String(doc.data().customerId || "")),
+  );
+
+  return {
+    rewards: visibleDocs.map((doc) => {
+      const data = doc.data();
+      const customerId = String(data.customerId || "");
+      const rewardCode = String(data.rewardCode || "");
+      return {
+        id: doc.id,
+        rewardName: String(data.rewardName || ""),
+        ...(user.role === "owner" ? { rewardCode } : {}),
+        rewardCodeLast4: rewardCode.slice(-4),
+        status: effectiveRewardStatus(data.status, timestampMillis(data.expiresAt), Date.now()),
+        branchId: String(data.usedBranchId || data.branchId || ""),
+        customerId,
+        customerName: String(customers.get(customerId)?.name || "Khách hàng"),
+        ...(user.role === "owner" ? { usedBy: String(data.usedBy || "") } : {}),
+        createdAtMs: timestampMillis(data.createdAt),
+        usedAtMs: timestampMillis(data.usedAt),
+        expiresAtMs: timestampMillis(data.expiresAt),
+      };
+    }),
+  };
+});
+
 export const searchSalonCustomers = onCall(functionOptions, async (request) => {
   const uid = currentUid(request.auth);
   const salonId = requireString(request.data?.salonId, "salonId");
@@ -4037,41 +4290,77 @@ export const searchSalonCustomers = onCall(functionOptions, async (request) => {
           .where("salonId", "==", salonId)
           .where("customerId", "==", customer.id)
           .orderBy("createdAt", "desc")
-          .limit(5)
+          .limit(user.role === "owner" ? 20 : 5)
           .get(),
         db
           .collection("reward_history")
           .where("salonId", "==", salonId)
           .where("customerId", "==", customer.id)
           .orderBy("createdAt", "desc")
-          .limit(10)
+          .limit(user.role === "owner" ? 20 : 10)
           .get(),
       ]);
 
+      const recentRecords = recordsSnap.docs.map((doc) => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          branchId: String(data.branchId || ""),
+          branchName: String(data.branchName || ""),
+          staffName: String(data.staffName || ""),
+          note: String(data.note || ""),
+          pointsAdded: Number(data.pointsAdded ?? 1),
+          createdAtMs: timestampMillis(data.createdAt),
+          photoUrls:
+            user.role === "owner" && customer.allowPhoto
+              ? trustedStoredHaircutPhotoUrls(data.photoUrls, {
+                  salonId,
+                  customerId: customer.id,
+                  sessionId: String(data.pointRequestId || ""),
+                })
+              : [],
+        };
+      });
+      const rewardHistory = rewardsSnap.docs.flatMap((doc) => {
+        const data = doc.data();
+        const status = effectiveRewardStatus(
+          data.status,
+          timestampMillis(data.expiresAt),
+          Date.now(),
+        );
+        if (status === "no_prize") return [];
+        return [
+          {
+            id: doc.id,
+            rewardName: String(data.rewardName || ""),
+            rewardCode: user.role === "owner" ? String(data.rewardCode || "") : "",
+            status,
+            branchId: String(data.usedBranchId || data.branchId || ""),
+            createdAtMs: timestampMillis(data.createdAt),
+            usedAtMs: timestampMillis(data.usedAt),
+            expiresAtMs: timestampMillis(data.expiresAt),
+          },
+        ];
+      });
+      const branchVisits = Array.from(
+        recentRecords.reduce((visits, record) => {
+          if (record.branchId && !visits.has(record.branchId)) {
+            visits.set(record.branchId, {
+              branchId: record.branchId,
+              branchName: record.branchName || "Chi nhánh",
+              lastVisitAtMs: record.createdAtMs,
+            });
+          }
+          return visits;
+        }, new Map<string, { branchId: string; branchName: string; lastVisitAtMs: number | null }>()),
+      ).map(([, visit]) => visit);
+
       return {
         ...customer,
-        recentRecords: recordsSnap.docs.map((doc) => {
-          const data = doc.data();
-          return {
-            id: doc.id,
-            staffName: data.staffName ?? "",
-            note: data.note ?? "",
-            pointsAdded: Number(data.pointsAdded ?? 1),
-            createdAtMs: timestampMillis(data.createdAt),
-          };
-        }),
-        unusedRewards: rewardsSnap.docs
-          .map((doc) => {
-            const data = doc.data();
-            return {
-              id: doc.id,
-              rewardName: data.rewardName ?? "",
-              rewardCode: data.rewardCode ?? "",
-              status: data.status ?? "unused",
-              createdAtMs: timestampMillis(data.createdAt),
-            };
-          })
-          .filter((reward) => reward.status === "unused"),
+        recentRecords,
+        branchVisits: user.role === "owner" ? branchVisits : [],
+        rewardHistory: user.role === "owner" ? rewardHistory : [],
+        unusedRewards: rewardHistory.filter((reward) => reward.status === "unused"),
       };
     }),
   );
