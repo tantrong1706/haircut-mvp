@@ -1,5 +1,6 @@
 import {
   ClipboardCheck,
+  CalendarClock,
   Copy,
   Gift,
   RefreshCcw,
@@ -15,8 +16,10 @@ import { ScreenHeader, Section } from "../../components/ScreenPrimitives";
 import {
   deleteCustomerData,
   formatDateTime,
+  getManagerSessionHistory,
   searchSalonCustomers,
   type CustomerLookupResult,
+  type ManagerSessionHistoryItem,
   type StaffSession,
 } from "../../services/managerApi";
 import { ownerPhoneLabel } from "./ownerFormatters";
@@ -24,13 +27,15 @@ import { ownerPhoneLabel } from "./ownerFormatters";
 export function OwnerCustomersScreen({
   salonId,
   sessions,
+  branchId,
   onConfirm,
 }: {
   salonId: string;
   sessions: StaffSession[];
+  branchId?: string | null;
   onConfirm: (request: ConfirmDialogRequest) => void;
 }) {
-  const [mode, setMode] = useState<"operations" | "search">("operations");
+  const [mode, setMode] = useState<"operations" | "history" | "search">("operations");
   const [term, setTerm] = useState("");
   const [results, setResults] = useState<CustomerLookupResult[]>([]);
   const [searched, setSearched] = useState(false);
@@ -40,6 +45,9 @@ export function OwnerCustomersScreen({
   const [busyId, setBusyId] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [sessionHistory, setSessionHistory] = useState<ManagerSessionHistoryItem[]>([]);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [historyBranchId, setHistoryBranchId] = useState("");
   const compact = term.trim().replace(/\s/g, "");
   const digits = compact.replace(/\D/g, "");
   const numeric = compact.length > 0 && digits.length === compact.length;
@@ -69,6 +77,24 @@ export function OwnerCustomersScreen({
     }
   }
 
+  async function openHistory(force = false) {
+    setMode("history");
+    const requestedBranchId = branchId || "";
+    if (historyLoaded && historyBranchId === requestedBranchId && !force) return;
+    setLoading(true);
+    setError("");
+    try {
+      const result = await getManagerSessionHistory({ salonId, branchId, limit: 50 });
+      setSessionHistory(result.sessions);
+      setHistoryLoaded(true);
+      setHistoryBranchId(requestedBranchId);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Không tải được lịch sử lượt khách.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function removeCustomer(customer: CustomerLookupResult) {
     setBusyId(customer.id);
     setMessage("");
@@ -90,15 +116,23 @@ export function OwnerCustomersScreen({
     <div className="manager-screen">
       <ScreenHeader
         eyebrow="Khách hàng"
-        title={mode === "operations" ? "Lượt khách hiện tại" : "Tìm và xem hồ sơ"}
+        title={
+          mode === "operations"
+            ? "Lượt khách hiện tại"
+            : mode === "history"
+              ? "Lịch sử lượt khách"
+              : "Tìm và xem hồ sơ"
+        }
         description={
           mode === "operations"
             ? "Theo dõi khách đang chờ, đang phục vụ và chờ duyệt."
-            : "Tìm theo tên hoặc đúng 4 số cuối điện thoại."
+            : mode === "history"
+              ? "Xem lượt hoàn tất, lượt hủy và khách không đến."
+              : "Tìm theo tên hoặc đúng 4 số cuối điện thoại."
         }
       />
 
-      <div className="manager-segmented" aria-label="Chế độ xem khách">
+      <div className="manager-segmented three" aria-label="Chế độ xem khách">
         <button
           type="button"
           className={mode === "operations" ? "active" : ""}
@@ -107,6 +141,15 @@ export function OwnerCustomersScreen({
         >
           <UsersRound aria-hidden="true" />
           Lượt hiện tại
+        </button>
+        <button
+          type="button"
+          className={mode === "history" ? "active" : ""}
+          aria-pressed={mode === "history"}
+          onClick={() => void openHistory()}
+        >
+          <CalendarClock aria-hidden="true" />
+          Lịch sử
         </button>
         <button
           type="button"
@@ -121,6 +164,13 @@ export function OwnerCustomersScreen({
 
       {mode === "operations" ? (
         <OwnerSessionGroups sessions={sessions} />
+      ) : mode === "history" ? (
+        <OwnerSessionHistory
+          sessions={sessionHistory}
+          loading={loading}
+          error={error}
+          onRetry={() => void openHistory(true)}
+        />
       ) : (
         <>
           <Section>
@@ -187,11 +237,69 @@ export function OwnerCustomersScreen({
                       <div className="manager-detail-list">
                         {customer.recentRecords.map((record) => (
                           <div key={record.id}>
-                            <strong>{formatDateTime(record.createdAtMs) || "Chưa rõ thời gian"}</strong>
+                            <strong>
+                              {formatDateTime(record.createdAtMs) || "Chưa rõ thời gian"}
+                            </strong>
                             <span>
                               {record.staffName || "Nhân viên"} · +{record.pointsAdded} điểm
                             </span>
+                            {record.branchName ? <small>{record.branchName}</small> : null}
                             <small>{record.note || "Không có ghi chú"}</small>
+                            {record.photoUrls.length > 0 ? (
+                              <div className="manager-photo-grid">
+                                {record.photoUrls.map((url) => (
+                                  <figure key={url}>
+                                    <img
+                                      src={url}
+                                      alt={`Kiểu tóc của ${customer.name}`}
+                                      loading="lazy"
+                                    />
+                                  </figure>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </details>
+
+                  <details>
+                    <summary>Chi nhánh từng ghé ({customer.branchVisits.length})</summary>
+                    {customer.branchVisits.length === 0 ? (
+                      <p className="manager-field-note">Chưa có dữ liệu chi nhánh.</p>
+                    ) : (
+                      <div className="manager-detail-list">
+                        {customer.branchVisits.map((visit) => (
+                          <div key={visit.branchId}>
+                            <strong>{visit.branchName}</strong>
+                            <span>Lần gần nhất: {formatDateTime(visit.lastVisitAtMs)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </details>
+
+                  <details>
+                    <summary>Lịch sử quà ({customer.rewardHistory.length})</summary>
+                    {customer.rewardHistory.length === 0 ? (
+                      <p className="manager-field-note">Khách chưa có lịch sử quà.</p>
+                    ) : (
+                      <div className="manager-detail-list">
+                        {customer.rewardHistory.map((reward) => (
+                          <div key={reward.id}>
+                            <strong>{reward.rewardName || "Phần quà"}</strong>
+                            <span>
+                              {reward.status === "unused"
+                                ? "Chưa dùng"
+                                : reward.status === "used"
+                                  ? "Đã dùng"
+                                  : reward.status === "revoked"
+                                    ? "Đã hủy"
+                                    : "Hết hạn"}
+                              {reward.rewardCode ? ` · ${reward.rewardCode}` : ""}
+                            </span>
+                            <small>{formatDateTime(reward.usedAtMs || reward.createdAtMs)}</small>
                           </div>
                         ))}
                       </div>
@@ -269,6 +377,81 @@ export function OwnerCustomersScreen({
   );
 }
 
+function OwnerSessionHistory({
+  sessions,
+  loading,
+  error,
+  onRetry,
+}: {
+  sessions: ManagerSessionHistoryItem[];
+  loading: boolean;
+  error: string;
+  onRetry: () => void;
+}) {
+  if (loading) {
+    return <p className="manager-field-note">Đang tải lịch sử lượt khách...</p>;
+  }
+  if (error) {
+    return (
+      <InlineFeedback
+        tone="error"
+        action={
+          <button type="button" onClick={onRetry}>
+            <RefreshCcw aria-hidden="true" />
+            Thử lại
+          </button>
+        }
+      >
+        {error}
+      </InlineFeedback>
+    );
+  }
+  if (sessions.length === 0) {
+    return (
+      <EmptyState
+        icon={<CalendarClock aria-hidden="true" />}
+        title="Chưa có lịch sử lượt khách"
+        description="Lượt hoàn tất hoặc bị hủy sẽ xuất hiện tại đây."
+      />
+    );
+  }
+
+  return (
+    <Section title={`${sessions.length} lượt gần nhất`}>
+      <div className="manager-list">
+        {sessions.map((session) => (
+          <article className="manager-list-item" key={session.id}>
+            <span className="manager-action-icon">
+              <CalendarClock aria-hidden="true" />
+            </span>
+            <div className="manager-list-main">
+              <strong>{session.customer?.name || "Khách hàng"}</strong>
+              <span>
+                {session.branchName || "Chi nhánh"} ·{" "}
+                {session.assignedStaffName || "Chưa rõ nhân viên"}
+              </span>
+            </div>
+            <div className="manager-list-meta">
+              <strong>
+                {session.status === "completed"
+                  ? "Hoàn tất"
+                  : session.cancellationReason === "no_show"
+                    ? "Không đến"
+                    : "Đã hủy"}
+              </strong>
+              <span>
+                {formatDateTime(
+                  session.completedAtMs || session.cancelledAtMs || session.createdAtMs,
+                )}
+              </span>
+            </div>
+          </article>
+        ))}
+      </div>
+    </Section>
+  );
+}
+
 function OwnerSessionGroups({ sessions }: { sessions: StaffSession[] }) {
   const groups = [
     {
@@ -310,10 +493,7 @@ function OwnerSessionGroups({ sessions }: { sessions: StaffSession[] }) {
                     <div className="manager-list-main">
                       <strong>{session.customer?.name || "Khách hàng"}</strong>
                       <span>
-                        {session.customer
-                          ? ownerPhoneLabel(session.customer)
-                          : "Chưa có SĐT"}{" "}
-                        ·{" "}
+                        {session.customer ? ownerPhoneLabel(session.customer) : "Chưa có SĐT"} ·{" "}
                         {session.branchName || "Chi nhánh"}
                       </span>
                     </div>

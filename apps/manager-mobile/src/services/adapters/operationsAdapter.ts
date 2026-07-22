@@ -8,6 +8,9 @@ import {
   formatDateTime as sharedFormatDateTime,
   getBranchQrSettings as sharedGetBranchQrSettings,
   getLuckyWheelConfig as sharedGetLuckyWheelConfig,
+  getManagerPointRequestHistory as sharedGetManagerPointRequestHistory,
+  getManagerRewardHistory as sharedGetManagerRewardHistory,
+  getManagerSessionHistory as sharedGetManagerSessionHistory,
   getOwnerOverview as sharedGetOwnerOverview,
   getSalonProfile as sharedGetSalonProfile,
   listenActiveSessions as sharedListenActiveSessions,
@@ -35,6 +38,9 @@ export type {
   BranchQrSettings,
   CustomerLookupResult,
   DeleteCustomerDataResult,
+  ManagerPointRequestHistoryItem,
+  ManagerRewardHistoryItem,
+  ManagerSessionHistoryItem,
   OwnerOverview,
   PointRequest,
   RedeemRewardResult,
@@ -54,6 +60,9 @@ export const deleteCustomerData = sharedDeleteCustomerData;
 export const formatDateTime = sharedFormatDateTime;
 export const getBranchQrSettings = sharedGetBranchQrSettings;
 export const getLuckyWheelConfig = sharedGetLuckyWheelConfig;
+export const getManagerPointRequestHistory = sharedGetManagerPointRequestHistory;
+export const getManagerRewardHistory = sharedGetManagerRewardHistory;
+export const getManagerSessionHistory = sharedGetManagerSessionHistory;
 export const getOwnerOverview = sharedGetOwnerOverview;
 export const getSalonProfile = sharedGetSalonProfile;
 export const listenActiveSessions = sharedListenActiveSessions;

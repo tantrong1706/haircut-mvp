@@ -167,12 +167,14 @@ describe("Manager screen information architecture", () => {
         pointApprovalEnabled
       />,
     );
-    const historyHtml = renderToStaticMarkup(<StaffHistoryScreen />);
+    const historyHtml = renderToStaticMarkup(
+      <StaffHistoryScreen salonId="salon" branchId="branch" />,
+    );
     expect(rewardsHtml).toContain("Gửi yêu cầu điểm");
     expect(rewardsHtml).toContain("Mở khách đang làm");
     expect(rewardsHtml).toContain("Xác nhận mã quà");
-    expect(historyHtml).toContain("Lịch sử đầy đủ đang được hoàn thiện");
-    expect(historyHtml).toContain("chưa dùng dữ liệu hàng chờ để giả làm lịch sử");
+    expect(historyHtml).toContain("Lịch sử của bạn");
+    expect(historyHtml).toContain("Đang tải lịch sử");
     expect(historyHtml).not.toContain("Anh Nam");
   });
 });
