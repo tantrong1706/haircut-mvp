@@ -35,7 +35,7 @@
   "devDependencies": {
     "@firebase/rules-unit-testing": "^5.0.1",
     "@eslint/js": "^9.39.2",
-    "eslint": "^9.39.2",
+    "eslint": "^10.7.0",
     "eslint-plugin-promise": "^7.2.1",
     "firebase": "^12.10.0",
     "globals": "^16.5.0",
