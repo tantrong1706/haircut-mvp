@@ -103,6 +103,19 @@ export type ManagerRewardHistoryItem = {
   expiresAtMs: number | null;
 };
 
+export type ManagerAuditEventItem = {
+  id: string;
+  branchId: string;
+  actorId: string;
+  actorName: string;
+  actorRole: string;
+  action: string;
+  targetType: string;
+  targetId: string;
+  requestId: string;
+  createdAtMs: number | null;
+};
+
 export type OwnerOverview = {
   customersToday: number;
   customers7Days: number;
@@ -406,6 +419,21 @@ export async function getManagerRewardHistory(input: {
     { salonId: string; branchId?: string; limit: number },
     { rewards: ManagerRewardHistoryItem[] }
   >("getManagerRewardHistory", {
+    salonId: input.salonId,
+    ...(input.branchId ? { branchId: input.branchId } : {}),
+    limit: input.limit ?? 30,
+  });
+}
+
+export async function getManagerAuditEvents(input: {
+  salonId: string;
+  branchId?: string | null;
+  limit?: number;
+}): Promise<{ events: ManagerAuditEventItem[] }> {
+  return callFunction<
+    { salonId: string; branchId?: string; limit: number },
+    { events: ManagerAuditEventItem[] }
+  >("getManagerAuditEvents", {
     salonId: input.salonId,
     ...(input.branchId ? { branchId: input.branchId } : {}),
     limit: input.limit ?? 30,

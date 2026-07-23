@@ -7,6 +7,7 @@ import {
   cancelSalonDeletion,
   claimServiceSession,
   createManualCustomer,
+  getManagerAuditEvents,
   getSystemAdminOverview,
   getSalonDeletionStatus,
   getManagerPointRequestHistory,
@@ -675,6 +676,103 @@ describe.skipIf(!emulatorHost)("callable transactions", () => {
           branchId: branchA,
           limit,
         }),
+      ),
+    ).rejects.toMatchObject({ details: { errorCode: "FORBIDDEN" } });
+  });
+
+  it("chỉ owner đọc được nhật ký rút gọn của đúng salon và chi nhánh", async () => {
+    const salonId = "salon-manager-audit";
+    const otherSalonId = "salon-manager-audit-other";
+    const branchA = "branch-manager-audit-a";
+    const branchB = "branch-manager-audit-b";
+    const now = Timestamp.now();
+    await Promise.all([
+      seedOwner("owner-manager-audit", salonId, { customerCount: 0 }),
+      seedOwner("owner-manager-audit-other", otherSalonId, { customerCount: 0 }),
+      seedBranch(salonId, branchA),
+      seedBranch(salonId, branchB),
+    ]);
+    await db
+      .collection("users")
+      .doc("staff-manager-audit")
+      .set({
+        salonId,
+        role: "staff",
+        name: "Nhân viên Nhật ký",
+        isActive: true,
+        branchIds: [branchA],
+      });
+    await Promise.all([
+      db
+        .collection("audit_events")
+        .doc("audit-manager-a")
+        .set({
+          salonId,
+          branchId: branchA,
+          actorUid: "staff-manager-audit",
+          actorRole: "staff",
+          action: "point_request.approved",
+          targetType: "point_request",
+          targetId: "request-a",
+          requestId: "request-audit-a",
+          metadata: { privateNote: "không được trả về" },
+          createdAt: now,
+        }),
+      db
+        .collection("audit_events")
+        .doc("audit-manager-b")
+        .set({
+          salonId,
+          branchId: branchB,
+          actorUid: "owner-manager-audit",
+          actorRole: "owner",
+          action: "session.cancelled",
+          targetType: "chair_session",
+          targetId: "session-b",
+          requestId: "request-audit-b",
+          createdAt: Timestamp.fromMillis(now.toMillis() - 1_000),
+        }),
+      db
+        .collection("audit_events")
+        .doc("audit-manager-other-salon")
+        .set({
+          salonId: otherSalonId,
+          branchId: branchA,
+          actorUid: "owner-manager-audit-other",
+          actorRole: "owner",
+          action: "salon.avatar_updated",
+          targetType: "salon",
+          targetId: otherSalonId,
+          requestId: "request-audit-other",
+          createdAt: Timestamp.fromMillis(now.toMillis() + 1_000),
+        }),
+    ]);
+
+    const allEvents = await getManagerAuditEvents.run(
+      requestFor("owner-manager-audit", { salonId, limit: 30 }),
+    );
+    expect(allEvents.events.map((event) => event.id)).toEqual([
+      "audit-manager-a",
+      "audit-manager-b",
+    ]);
+    expect(allEvents.events[0]).toMatchObject({
+      branchId: branchA,
+      actorName: "Nhân viên Nhật ký",
+      action: "point_request.approved",
+      requestId: "request-audit-a",
+    });
+    expect(allEvents.events[0]).not.toHaveProperty("metadata");
+
+    const branchEvents = await getManagerAuditEvents.run(
+      requestFor("owner-manager-audit", { salonId, branchId: branchA, limit: 30 }),
+    );
+    expect(branchEvents.events.map((event) => event.id)).toEqual(["audit-manager-a"]);
+    await expect(
+      getManagerAuditEvents.run(requestFor("staff-manager-audit", { salonId, branchId: branchA })),
+    ).rejects.toMatchObject({ details: { errorCode: "FORBIDDEN" } });
+    await expect(
+      getManagerAuditEvents.run(
+        requestFor("owner-manager-audit", { salonId: otherSalonId, branchId: branchA }),
       ),
     ).rejects.toMatchObject({ details: { errorCode: "FORBIDDEN" } });
   });

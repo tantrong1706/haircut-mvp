@@ -13,22 +13,15 @@ import {
 import { useEffect, useState } from "react";
 import { EmptyState } from "../../components/Feedback";
 import { RewardRedemption } from "../../components/RewardRedemption";
-import {
-  ActionRow,
-  DetailHeader,
-  ScreenHeader,
-  Section,
-} from "../../components/ScreenPrimitives";
+import { ActionRow, DetailHeader, ScreenHeader, Section } from "../../components/ScreenPrimitives";
 import type { ConfirmDialogRequest } from "../../components/ConfirmDialog";
-import type {
-  OwnerManagementSection,
-  OwnerPrimaryTab,
-} from "../../navigation/managerNavigation";
+import type { OwnerManagementSection, OwnerPrimaryTab } from "../../navigation/managerNavigation";
 import type { SalonBranch } from "../../services/managerApi";
 import type { SystemFeatures } from "@haircut/contracts";
 import { BranchesManager } from "./management/BranchesManager";
 import { StaffManager } from "./management/StaffManager";
 import { WheelManager } from "./management/WheelManager";
+import { OwnerAuditScreen } from "./OwnerAuditScreen";
 
 export function OwnerManagementScreen({
   salonId,
@@ -93,10 +86,9 @@ export function OwnerManagementScreen({
             description="Cấu hình hệ thống đang tắt tính năng này. Dữ liệu hiện có không bị thay đổi."
           />
         ) : (
-          <EmptyState
-            icon={<ShieldCheck aria-hidden="true" />}
-            title="Nhật ký được bảo vệ"
-            description="Các thao tác quan trọng vẫn được ghi tự động. Tài khoản chủ salon hiện không có quyền đọc nhật ký hệ thống."
+          <OwnerAuditScreen
+            salonId={salonId}
+            branchId={branchFilter === "all" ? null : branchFilter}
           />
         )}
       </div>
@@ -161,7 +153,7 @@ export function OwnerManagementScreen({
           <ActionRow
             icon={History}
             title="Nhật ký hoạt động"
-            description="Xem trạng thái quyền đối với nhật ký thao tác."
+            description="Xem ai đã thực hiện các thao tác quan trọng và thời điểm thực hiện."
             onClick={() => setSection("audit")}
           />
           <ActionRow

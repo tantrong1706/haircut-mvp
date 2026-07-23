@@ -9,9 +9,9 @@ luồng nghiệp vụ đã hoạt động.
 
 - **81 chức năng đã kiểm kê:** 49 Owner, 23 Staff và 9 chức năng nền dùng chung.
 - **81/81 chức năng có vị trí điều hướng:** tối đa ba lần chạm từ một trong năm tab đúng vai trò.
-- **Trạng thái triển khai:** 80 `WORKING`, 1 `UI_ONLY`.
+- **Trạng thái triển khai:** 81 `WORKING`.
 - Các API lịch sử Manager được xác thực ở backend, lọc theo salon/chi nhánh và có integration test
-  chống truy cập chéo tenant. Nhật ký audit cho owner vẫn là chức năng duy nhất chỉ có vị trí UI.
+  chống truy cập chéo tenant. Owner có thể đọc nhật ký đã rút gọn của đúng salon và chi nhánh.
 
 Trạng thái triển khai dùng các giá trị: `WORKING`, `UI_ONLY`, `API_GAP`, `ROLE_GATED`,
 `FEATURE_FLAG_GATED`, `NOT_SUPPORTED_YET`. Các trạng thái cũ trong bảng chi tiết bên dưới mô tả cách
@@ -32,7 +32,7 @@ feature flag vẫn phải qua backend authorization tương ứng.
 | `owner.approval_history` | `WORKING` | Có | `getManagerPointRequestHistory` | Đã nối | Không phụ thuộc | Có | Chỉ owner đọc yêu cầu đã xử lý |
 | `staff.reward_history` | `WORKING` | Có | `getManagerRewardHistory` | Đã nối | Không phụ thuộc | Có | Chỉ trả lượt do chính staff đổi tại chi nhánh được phân công |
 | `staff.history` | `WORKING` | Có | `getManagerSessionHistory` | Đã nối | Không phụ thuộc | Có | Chỉ trả lượt do chính staff xử lý hoặc hủy |
-| `owner.audit_permission` | `UI_ONLY` | Có | Server-only | Chưa có luồng đọc | Không phụ thuộc | Chưa | Chỉ hiển thị trạng thái quyền, không giả lập audit log |
+| `owner.audit_permission` | `WORKING` | Có | `getManagerAuditEvents` | Đã nối | Không phụ thuộc | Có | Chỉ owner đọc dữ liệu đã rút gọn của đúng salon/chi nhánh |
 
 Các chức năng đổi quà/quét mã là `ROLE_GATED`. Duyệt điểm, ảnh, vòng quay và đổi quà là
 `FEATURE_FLAG_GATED`; khi flag tắt, UI khóa thao tác và backend vẫn là lớp bảo vệ cuối.
@@ -77,7 +77,7 @@ Các chức năng đổi quà/quét mã là `ROLE_GATED`. Duyệt điểm, ảnh
 | Quản lý quà | Có | Không | Vòng quay/Quà | Quản lý > Quà và vòng quay | wheel/reward services | parity | Đổi vị trí |
 | Đổi mã quà | Có | Có điều kiện | Quà | Quản lý > Đổi quà | reward services | parity | Chỉ hiện theo quyền |
 | Báo cáo hiện có | Có | Không | Tổng | Hôm nay / Quản lý > Báo cáo | `getOwnerOverview` | parity + screen | Đơn giản hóa giao diện |
-| Trạng thái quyền xem audit | Có | Không | Không hiển thị | Quản lý > Nhật ký hoạt động | `audit_events` server-only | parity + screen | Chỉ hiện theo quyền |
+| Nhật ký hoạt động | Có | Không | Không hiển thị | Quản lý > Nhật ký hoạt động | `getManagerAuditEvents` | integration + screen | Chỉ owner đọc dữ liệu rút gọn của đúng salon/chi nhánh |
 | Thông tin salon | Có | Không | Tổng | Cài đặt > Thông tin salon | salon services | parity | Đổi vị trí |
 | Logo/avatar salon | Có | Không | Tổng | Cài đặt > Nhận diện salon | salon branding services | parity | Đổi vị trí |
 | Avatar chủ salon | Có | Không | Tổng | Cài đặt > Tài khoản chủ | auth/avatar services | parity | Đổi vị trí |

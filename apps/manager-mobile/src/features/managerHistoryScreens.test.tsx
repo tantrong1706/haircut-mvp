@@ -2,11 +2,13 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  getManagerAuditEvents,
   getManagerPointRequestHistory,
   getManagerRewardHistory,
   getManagerSessionHistory,
 } from "../services/managerApi";
 import { OwnerApprovalsScreen } from "./owner/OwnerApprovalsScreen";
+import { OwnerAuditScreen } from "./owner/OwnerAuditScreen";
 import { OwnerCustomersScreen } from "./owner/OwnerCustomersScreen";
 import { StaffHistoryScreen } from "./staff/StaffHistoryScreen";
 
@@ -14,6 +16,7 @@ vi.mock("../services/managerApi", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../services/managerApi")>();
   return {
     ...actual,
+    getManagerAuditEvents: vi.fn(),
     getManagerPointRequestHistory: vi.fn(),
     getManagerRewardHistory: vi.fn(),
     getManagerSessionHistory: vi.fn(),
@@ -50,6 +53,22 @@ const sessionHistory = {
 
 describe("Manager history screens", () => {
   beforeEach(() => {
+    vi.mocked(getManagerAuditEvents).mockResolvedValue({
+      events: [
+        {
+          id: "audit",
+          branchId: "branch",
+          actorId: "staff",
+          actorName: "Minh",
+          actorRole: "staff",
+          action: "point_request.approved",
+          targetType: "point_request",
+          targetId: "request",
+          requestId: "trace-1234",
+          createdAtMs: 1_700_000_100_000,
+        },
+      ],
+    });
     vi.mocked(getManagerSessionHistory).mockResolvedValue(sessionHistory);
     vi.mocked(getManagerRewardHistory).mockResolvedValue({
       rewards: [
@@ -158,6 +177,19 @@ describe("Manager history screens", () => {
     expect(getManagerPointRequestHistory).toHaveBeenCalledWith({
       salonId: "salon",
       branchId: null,
+      limit: 50,
+    });
+  });
+
+  it("owner đọc nhật ký hoạt động thật theo chi nhánh", async () => {
+    render(<OwnerAuditScreen salonId="salon" branchId="branch" />);
+
+    expect(await screen.findByText("Duyệt cộng điểm")).toBeInTheDocument();
+    expect(screen.getByText("Minh")).toBeInTheDocument();
+    expect(screen.getByText("Mã tra cứu: trace-1234")).toBeInTheDocument();
+    expect(getManagerAuditEvents).toHaveBeenCalledWith({
+      salonId: "salon",
+      branchId: "branch",
       limit: 50,
     });
   });

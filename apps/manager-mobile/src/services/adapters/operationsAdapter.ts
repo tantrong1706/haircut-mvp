@@ -8,6 +8,7 @@ import {
   formatDateTime as sharedFormatDateTime,
   getBranchQrSettings as sharedGetBranchQrSettings,
   getLuckyWheelConfig as sharedGetLuckyWheelConfig,
+  getManagerAuditEvents as sharedGetManagerAuditEvents,
   getManagerPointRequestHistory as sharedGetManagerPointRequestHistory,
   getManagerRewardHistory as sharedGetManagerRewardHistory,
   getManagerSessionHistory as sharedGetManagerSessionHistory,
@@ -39,6 +40,7 @@ export type {
   CustomerLookupResult,
   DeleteCustomerDataResult,
   ManagerPointRequestHistoryItem,
+  ManagerAuditEventItem,
   ManagerRewardHistoryItem,
   ManagerSessionHistoryItem,
   OwnerOverview,
@@ -60,6 +62,7 @@ export const deleteCustomerData = sharedDeleteCustomerData;
 export const formatDateTime = sharedFormatDateTime;
 export const getBranchQrSettings = sharedGetBranchQrSettings;
 export const getLuckyWheelConfig = sharedGetLuckyWheelConfig;
+export const getManagerAuditEvents = sharedGetManagerAuditEvents;
 export const getManagerPointRequestHistory = sharedGetManagerPointRequestHistory;
 export const getManagerRewardHistory = sharedGetManagerRewardHistory;
 export const getManagerSessionHistory = sharedGetManagerSessionHistory;

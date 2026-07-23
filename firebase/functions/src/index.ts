@@ -4288,6 +4288,64 @@ export const getManagerRewardHistory = onCall(functionOptions, async (request) =
   };
 });
 
+export const getManagerAuditEvents = onCall(functionOptions, async (request) => {
+  const uid = currentUid(request.auth);
+  const salonId = requireString(request.data?.salonId, "salonId");
+  const branchId = optionalLimitedString(request.data?.branchId, "branchId", 128);
+  const limit = boundedQueryLimit(request.data?.limit, 30, 50);
+  const owner = await assertSalonRole(uid, salonId, ["owner"]);
+  await assertManagerHistoryBranch(owner, salonId, branchId);
+
+  let auditQuery = db.collection("audit_events").where("salonId", "==", salonId);
+  if (branchId) auditQuery = auditQuery.where("branchId", "==", branchId);
+  const snapshot = await auditQuery.orderBy("createdAt", "desc").limit(limit).get();
+  const actorIds = [
+    ...new Set(
+      snapshot.docs
+        .map((doc) => String(doc.data().actorUid || doc.data().actorId || ""))
+        .filter(Boolean),
+    ),
+  ];
+  const actorSnapshots =
+    actorIds.length > 0
+      ? await db.getAll(...actorIds.map((actorId) => db.collection("users").doc(actorId)))
+      : [];
+  const actorNames = new Map<string, string>();
+  actorSnapshots.forEach((actorSnapshot) => {
+    const actor = actorSnapshot.data();
+    if (actorSnapshot.exists && actor?.salonId === salonId) {
+      actorNames.set(actorSnapshot.id, String(actor.name || "Người dùng"));
+    }
+  });
+
+  return {
+    events: snapshot.docs.map((doc) => {
+      const data = doc.data();
+      const actorId = String(data.actorUid || data.actorId || "");
+      const actorRole = String(data.actorRole || "");
+      const actorName =
+        actorNames.get(actorId) ||
+        (actorRole === "customer"
+          ? "Khách hàng"
+          : actorRole === "system" || actorRole === "system_admin"
+            ? "Hệ thống"
+            : "Người dùng");
+      return {
+        id: doc.id,
+        branchId: String(data.branchId || ""),
+        actorId,
+        actorName,
+        actorRole,
+        action: String(data.action || ""),
+        targetType: String(data.targetType || ""),
+        targetId: String(data.targetId || ""),
+        requestId: String(data.requestId || data.correlationId || ""),
+        createdAtMs: timestampMillis(data.createdAt),
+      };
+    }),
+  };
+});
+
 export const searchSalonCustomers = onCall(functionOptions, async (request) => {
   const uid = currentUid(request.auth);
   const salonId = requireString(request.data?.salonId, "salonId");
