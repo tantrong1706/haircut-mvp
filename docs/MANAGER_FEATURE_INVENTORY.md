@@ -9,9 +9,9 @@ luồng nghiệp vụ đã hoạt động.
 
 - **81 chức năng đã kiểm kê:** 49 Owner, 23 Staff và 9 chức năng nền dùng chung.
 - **81/81 chức năng có vị trí điều hướng:** tối đa ba lần chạm từ một trong năm tab đúng vai trò.
-- **Trạng thái triển khai:** 72 `WORKING`, 8 `API_GAP`, 1 `UI_ONLY`.
-- PR giao diện này không thêm schema hoặc API lịch sử còn thiếu. Các khoảng trống vẫn có vị trí rõ,
-  không bị xóa và không dùng dữ liệu giả để tạo cảm giác đã hoạt động.
+- **Trạng thái triển khai:** 80 `WORKING`, 1 `UI_ONLY`.
+- Các API lịch sử Manager được xác thực ở backend, lọc theo salon/chi nhánh và có integration test
+  chống truy cập chéo tenant. Nhật ký audit cho owner vẫn là chức năng duy nhất chỉ có vị trí UI.
 
 Trạng thái triển khai dùng các giá trị: `WORKING`, `UI_ONLY`, `API_GAP`, `ROLE_GATED`,
 `FEATURE_FLAG_GATED`, `NOT_SUPPORTED_YET`. Các trạng thái cũ trong bảng chi tiết bên dưới mô tả cách
@@ -24,14 +24,14 @@ feature flag vẫn phải qua backend authorization tương ứng.
 
 | Mã chức năng | Trạng thái | UI | API | Tích hợp | Native | Production | Ghi chú |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
-| `owner.cancelled_sessions` | `API_GAP` | Có vị trí | Chưa có | Chưa nối | Không phụ thuộc | Chưa | Chưa có API đọc lịch sử phiên đã hủy |
-| `owner.no_show` | `API_GAP` | Có vị trí | Chưa có | Chưa nối | Không phụ thuộc | Chưa | Chưa có API đọc lượt không đến |
-| `owner.haircut_photos` | `API_GAP` | Có vị trí | Thiếu dữ liệu | Chưa nối | Có camera | Chưa | Kết quả tìm khách chưa trả ảnh đã lưu |
-| `owner.reward_history` | `API_GAP` | Có vị trí | Chưa đủ | Chưa nối | Không phụ thuộc | Chưa | Tìm khách chưa trả đủ lịch sử quà |
-| `owner.customer_branch_history` | `API_GAP` | Có vị trí | Chưa có | Chưa nối | Không phụ thuộc | Chưa | Chưa có tổng hợp chi nhánh khách từng đến |
-| `owner.approval_history` | `API_GAP` | Có vị trí | Chưa có | Chưa nối | Không phụ thuộc | Chưa | Chưa có API yêu cầu điểm đã xử lý |
-| `staff.reward_history` | `API_GAP` | Có vị trí | Chưa có | Chưa nối | Không phụ thuộc | Chưa | Chưa có lịch sử đổi quà theo nhân viên |
-| `staff.history` | `API_GAP` | Thông báo trung thực | Chưa có | Không nối dữ liệu giả | Không phụ thuộc | Chưa | Không dùng lượt đang mở làm lịch sử |
+| `owner.cancelled_sessions` | `WORKING` | Có | `getManagerSessionHistory` | Đã nối | Không phụ thuộc | Có | Lọc theo salon và chi nhánh |
+| `owner.no_show` | `WORKING` | Có | `getManagerSessionHistory` | Đã nối | Không phụ thuộc | Có | Phân biệt lý do `no_show` |
+| `owner.haircut_photos` | `WORKING` | Có | `searchSalonCustomers` | Đã nối | Có camera | Có | Chỉ trả ảnh đúng Storage path và khi khách đồng ý |
+| `owner.reward_history` | `WORKING` | Có | `searchSalonCustomers` | Đã nối | Không phụ thuộc | Có | Trả lịch sử quà đầy đủ cho owner |
+| `owner.customer_branch_history` | `WORKING` | Có | `searchSalonCustomers` | Đã nối | Không phụ thuộc | Có | Tổng hợp từ lịch sử cắt tóc |
+| `owner.approval_history` | `WORKING` | Có | `getManagerPointRequestHistory` | Đã nối | Không phụ thuộc | Có | Chỉ owner đọc yêu cầu đã xử lý |
+| `staff.reward_history` | `WORKING` | Có | `getManagerRewardHistory` | Đã nối | Không phụ thuộc | Có | Chỉ trả lượt do chính staff đổi tại chi nhánh được phân công |
+| `staff.history` | `WORKING` | Có | `getManagerSessionHistory` | Đã nối | Không phụ thuộc | Có | Chỉ trả lượt do chính staff xử lý hoặc hủy |
 | `owner.audit_permission` | `UI_ONLY` | Có | Server-only | Chưa có luồng đọc | Không phụ thuộc | Chưa | Chỉ hiển thị trạng thái quyền, không giả lập audit log |
 
 Các chức năng đổi quà/quét mã là `ROLE_GATED`. Duyệt điểm, ảnh, vòng quay và đổi quà là
@@ -47,25 +47,25 @@ Các chức năng đổi quà/quét mã là `ROLE_GATED`. Duyệt điểm, ảnh
 | Khách đang phục vụ | Có | Có | StaffPage | Khách > Lượt hiện tại | `listenActiveSessions` | parity + screen | Đổi vị trí |
 | Lượt chờ duyệt | Có | Có | StaffPage/Duyệt | Khách > Lượt hiện tại | `listenActiveSessions` | parity + screen | Đổi vị trí |
 | Lượt hoàn tất | Có | Có | Hồ sơ khách | Khách > Tìm khách > Lịch sử | `searchSalonCustomers` | parity | Đơn giản hóa giao diện |
-| Lượt bị hủy | Có | Có | Chưa có màn hình riêng | Khách > Lịch sử | Chưa có API Manager đọc lịch sử phiên | parity | Tạm chưa triển khai — cần xác nhận |
-| Không đến | Có | Có | Chưa có màn hình riêng | Khách > Lịch sử | Chưa có API Manager đọc lịch sử phiên | parity | Tạm chưa triển khai — cần xác nhận |
+| Lượt bị hủy | Có | Có | Chưa có màn hình riêng | Khách > Lịch sử | `getManagerSessionHistory` | integration + screen | Đã nối dữ liệu thật |
+| Không đến | Có | Có | Chưa có màn hình riêng | Khách > Lịch sử | `getManagerSessionHistory` | integration + screen | Đã nối dữ liệu thật |
 | Tìm khách | Có | Không | Khách | Khách > Tìm khách | `searchSalonCustomers` | parity + screen | Giữ nguyên |
 | Hồ sơ khách | Có | Không | Khách | Khách > Tìm khách > Kết quả | `searchSalonCustomers` | parity | Đơn giản hóa giao diện |
 | Điểm hiện tại | Có | Không | Khách | Khách > Hồ sơ | `searchSalonCustomers` | parity | Giữ nguyên |
 | Lịch sử điểm | Có | Không | Khách | Khách > Hồ sơ > Lịch sử | `searchSalonCustomers` | parity | Đơn giản hóa giao diện |
 | Lịch sử cắt tóc | Có | Không | Khách | Khách > Hồ sơ > Lịch sử | `searchSalonCustomers` | parity | Giữ nguyên |
 | Ghi chú kiểu tóc | Có | Không | Khách | Khách > Hồ sơ > Lịch sử | `searchSalonCustomers` | parity | Giữ nguyên |
-| Ảnh kiểu tóc có đồng ý | Có | Có | Duyệt | Khách > Hồ sơ > Ảnh | Chưa có API tìm khách trả ảnh | parity | Tạm chưa triển khai — cần xác nhận |
+| Ảnh kiểu tóc có đồng ý | Có | Có | Duyệt | Khách > Hồ sơ > Ảnh | `searchSalonCustomers` | integration | Chỉ trả ảnh hợp lệ khi khách đồng ý |
 | Quà của khách | Có | Không | Khách | Khách > Hồ sơ > Quà chưa dùng | `searchSalonCustomers` | parity | Giữ nguyên |
-| Lịch sử quà | Có | Không | Quà | Khách > Hồ sơ > Lịch sử quà | Chưa có API tìm khách trả đủ lịch sử quà | parity | Tạm chưa triển khai — cần xác nhận |
-| Chi nhánh khách từng đến | Có | Không | Chưa có màn hình riêng | Khách > Hồ sơ > Lịch sử | Chưa có trong response tìm khách | parity | Tạm chưa triển khai — cần xác nhận |
+| Lịch sử quà | Có | Không | Quà | Khách > Hồ sơ > Lịch sử quà | `searchSalonCustomers` | integration + screen | Đã nối dữ liệu thật |
+| Chi nhánh khách từng đến | Có | Không | Chưa có màn hình riêng | Khách > Hồ sơ > Lịch sử | `searchSalonCustomers` | integration + screen | Đã tổng hợp theo lịch sử cắt |
 | Nhân viên từng phục vụ | Có | Không | Khách | Khách > Hồ sơ > Lịch sử | `recentRecords.staffName` | parity | Giữ nguyên |
 | Xóa dữ liệu khách | Có | Không | Khách | Khách > Hồ sơ | `deleteCustomerData` | parity | Giữ nguyên |
 | Yêu cầu điểm đang chờ | Có | Không | Duyệt | Duyệt | `listenPendingPointRequests` | parity | Giữ nguyên |
 | Ảnh trong yêu cầu điểm | Có | Không | Duyệt | Duyệt > Yêu cầu | photo services | parity | Giữ nguyên |
 | Duyệt điểm | Có | Không | Duyệt | Duyệt > Yêu cầu | `approvePointRequest` | parity | Giữ nguyên |
 | Từ chối điểm | Có | Không | Duyệt | Duyệt > Yêu cầu | `rejectPointRequest` | parity | Giữ nguyên |
-| Lịch sử duyệt/từ chối | Có | Không | Chưa có danh sách riêng | Duyệt > Lịch sử duyệt | Chưa có API Manager đọc yêu cầu đã xử lý | parity | Tạm chưa triển khai — cần xác nhận |
+| Lịch sử duyệt/từ chối | Có | Không | Chưa có danh sách riêng | Duyệt > Lịch sử duyệt | `getManagerPointRequestHistory` | integration + screen | Đã nối dữ liệu thật |
 | Quản lý chi nhánh | Có | Không | Chi nhánh | Quản lý > Chi nhánh và QR | branch services | parity + screen | Đổi vị trí |
 | Quản lý nhân viên | Có | Không | Nhân viên | Quản lý > Nhân viên | staff services | parity + screen | Đổi vị trí |
 | QR salon | Có | Không | Chi nhánh | Quản lý > Chi nhánh và QR | `getBranchQrSettings` | parity | Đổi vị trí |
@@ -107,8 +107,8 @@ Các chức năng đổi quà/quét mã là `ROLE_GATED`. Duyệt điểm, ảnh
 | Gửi yêu cầu điểm | Có | Có | Chi tiết lượt | Đang làm / Điểm và quà | `submitPointRequest` | parity + screen | Đổi vị trí |
 | Trạng thái điểm | Có | Có | Danh sách lượt | Lịch sử | `listenActiveSessions` | parity | Đổi vị trí |
 | Đổi mã quà | Có | Có điều kiện | Cuối StaffPage | Điểm và quà | reward services | parity + screen | Chỉ hiện theo quyền |
-| Lịch sử đổi quà | Có | Có điều kiện | Chưa có màn hình riêng | Lịch sử | Chưa có API theo staff | parity | Tạm chưa triển khai — cần xác nhận |
-| Lịch sử thao tác | Có | Có | Danh sách lượt | Lịch sử | Luồng hiện có chỉ trả lượt mở | parity + screen | Tạm chưa triển khai — cần xác nhận |
+| Lịch sử đổi quà | Có | Có điều kiện | Chưa có màn hình riêng | Lịch sử | `getManagerRewardHistory` | integration + screen | Chỉ hiện thao tác của staff hiện tại |
+| Lịch sử thao tác | Có | Có | Danh sách lượt | Lịch sử | `getManagerSessionHistory` | integration + screen | Đã nối lượt hoàn tất và hủy |
 | Tài khoản | Có | Có | Thanh tài khoản | Tài khoản | Firebase Auth | parity | Đổi vị trí |
 | Đặt lại mật khẩu | Có | Có | Cổng đăng nhập | Tài khoản > Bảo mật | Firebase Auth | parity | Đổi vị trí |
 | Trạng thái thông báo | Có | Có | Native shell | Tài khoản > Bảo mật > Ứng dụng | Firebase Messaging | parity | Đơn giản hóa giao diện |

@@ -61,8 +61,7 @@ export function StaffWorkspace({ currentUser }: { currentUser: AppUser }) {
     branches.find((branch) => branch.id === branchFilter)?.name || "Chi nhánh được phân công";
   const waitingCount = sessions.filter((session) => session.status === "waiting").length;
   const activeCount = sessions.filter(
-    (session) =>
-      session.status === "serving" && session.assignedStaffId === currentUser.uid,
+    (session) => session.status === "serving" && session.assignedStaffId === currentUser.uid,
   ).length;
   const pendingCount = sessions.filter(
     (session) =>
@@ -140,9 +139,7 @@ export function StaffWorkspace({ currentUser }: { currentUser: AppUser }) {
   }
 
   function updateSession(next: StaffSession) {
-    setSessions((current) =>
-      current.map((session) => (session.id === next.id ? next : session)),
-    );
+    setSessions((current) => current.map((session) => (session.id === next.id ? next : session)));
     setSelectedId(next.id);
     setActiveTab(staffTabAfterSessionStatus(next.status));
     if (next.status === "pending_approval") {
@@ -248,7 +245,7 @@ export function StaffWorkspace({ currentUser }: { currentUser: AppUser }) {
           onOpenActive={() => setActiveTab("active")}
         />
       ) : activeTab === "history" ? (
-        <StaffHistoryScreen />
+        <StaffHistoryScreen salonId={salonId} branchId={branchFilter} />
       ) : (
         <StaffAccountScreen
           user={currentUser}

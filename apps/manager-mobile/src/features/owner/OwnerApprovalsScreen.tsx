@@ -1,18 +1,20 @@
-import { CheckCircle2, ClipboardCheck, RefreshCcw, XCircle } from "lucide-react";
+import { CalendarClock, CheckCircle2, ClipboardCheck, RefreshCcw, XCircle } from "lucide-react";
 import { useState } from "react";
 import { type ConfirmDialogRequest } from "../../components/ConfirmDialog";
 import { EmptyState, InlineFeedback } from "../../components/Feedback";
 import { PhotoCapture, type ManagerPhoto } from "../../components/PhotoCapture";
-import { ScreenHeader } from "../../components/ScreenPrimitives";
+import { ScreenHeader, Section } from "../../components/ScreenPrimitives";
 import {
   MAX_HAIRCUT_PHOTOS,
   approvePointRequest,
   deleteHaircutPhoto,
   formatDateTime,
+  getManagerPointRequestHistory,
   rejectPointRequest,
   updatePendingPointRequestPhotos,
   uploadHaircutPhoto,
   type PointRequest,
+  type ManagerPointRequestHistoryItem,
   type SalonBranch,
 } from "../../services/managerApi";
 import { trackEvent, withMonitoringTrace } from "../../services/monitoring";
@@ -55,17 +57,37 @@ export function OwnerApprovalsScreen({
   const [rejectionError, setRejectionError] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [history, setHistory] = useState<ManagerPointRequestHistoryItem[]>([]);
+
+  async function loadHistory() {
+    setHistoryOpen(true);
+    setHistoryLoading(true);
+    setError("");
+    try {
+      const result = await getManagerPointRequestHistory({
+        salonId,
+        branchId: branchFilter === "all" ? null : branchFilter,
+        limit: 50,
+      });
+      setHistory(result.requests);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Không tải được lịch sử duyệt điểm.");
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
 
   async function approve(request: PointRequest) {
     setBusyId(request.id);
     setMessage("");
     setError("");
     try {
-      await withMonitoringTrace(
-        "owner_approve_point_request",
-        () => approvePointRequest(request),
-        { salon_id: salonId, points_added: request.pointsAdded },
-      );
+      await withMonitoringTrace("owner_approve_point_request", () => approvePointRequest(request), {
+        salon_id: salonId,
+        points_added: request.pointsAdded,
+      });
       onRequestsChange(requests.filter((item) => item.id !== request.id));
       onRefreshOverview();
       setMessage("Đã duyệt điểm và lưu lịch sử cắt tóc.");
@@ -203,7 +225,11 @@ export function OwnerApprovalsScreen({
           <span>Lọc theo chi nhánh</span>
           <select
             value={branchFilter}
-            onChange={(event) => onBranchFilterChange(event.target.value)}
+            onChange={(event) => {
+              onBranchFilterChange(event.target.value);
+              setHistoryOpen(false);
+              setHistory([]);
+            }}
           >
             <option value="all">Tất cả chi nhánh</option>
             {branches.map((branch) => (
@@ -213,6 +239,53 @@ export function OwnerApprovalsScreen({
             ))}
           </select>
         </label>
+      ) : null}
+
+      <button
+        className="manager-button secondary"
+        type="button"
+        disabled={historyLoading}
+        onClick={() => (historyOpen ? setHistoryOpen(false) : void loadHistory())}
+      >
+        <CalendarClock aria-hidden="true" />
+        {historyOpen ? "Ẩn lịch sử đã xử lý" : "Xem lịch sử đã xử lý"}
+      </button>
+
+      {historyOpen ? (
+        <Section title={`Đã xử lý (${history.length})`}>
+          {historyLoading ? (
+            <p className="manager-field-note">Đang tải lịch sử duyệt điểm...</p>
+          ) : history.length === 0 ? (
+            <p className="manager-field-note">Chưa có yêu cầu đã xử lý.</p>
+          ) : (
+            <div className="manager-list">
+              {history.map((item) => (
+                <article className="manager-list-item" key={item.id}>
+                  <span className="manager-action-icon">
+                    {item.status === "approved" ? (
+                      <CheckCircle2 aria-hidden="true" />
+                    ) : (
+                      <XCircle aria-hidden="true" />
+                    )}
+                  </span>
+                  <div className="manager-list-main">
+                    <strong>{item.customer?.name || "Khách hàng"}</strong>
+                    <span>
+                      {item.branchName || "Chi nhánh"} · {item.staffName || "Nhân viên"}
+                    </span>
+                    {item.rejectionReason ? <small>{item.rejectionReason}</small> : null}
+                  </div>
+                  <div className="manager-list-meta">
+                    <strong>
+                      {item.status === "approved" ? `+${item.pointsAdded} điểm` : "Từ chối"}
+                    </strong>
+                    <span>{formatDateTime(item.processedAtMs) || "Chưa rõ giờ"}</span>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </Section>
       ) : null}
 
       {requests.length === 0 ? (
@@ -262,9 +335,7 @@ export function OwnerApprovalsScreen({
                       photos={request.photoUrls.map((url) => ({ id: url, url }))}
                       consentGranted={request.customer?.allowPhoto === true}
                       busy={photoBusyId === request.id}
-                      disabled={
-                        !photoUploadEnabled || Boolean(busyId) || Boolean(photoBusyId)
-                      }
+                      disabled={!photoUploadEnabled || Boolean(busyId) || Boolean(photoBusyId)}
                       disabledReason={
                         photoUploadEnabled
                           ? "Có thể chụp bổ sung trước khi duyệt."

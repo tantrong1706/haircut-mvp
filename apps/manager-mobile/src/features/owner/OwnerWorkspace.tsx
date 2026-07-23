@@ -104,7 +104,9 @@ export function OwnerWorkspace({ currentUser }: { currentUser: AppUser }) {
       branchFilter === "all" ? null : branchFilter,
       (next) => {
         setRequests(next);
-        setOverview((current) => (current ? { ...current, pendingRequests: next.length } : current));
+        setOverview((current) =>
+          current ? { ...current, pendingRequests: next.length } : current,
+        );
       },
       setOverviewError,
     );
@@ -132,9 +134,7 @@ export function OwnerWorkspace({ currentUser }: { currentUser: AppUser }) {
     if (!silent) setOverviewLoading(true);
     setOverviewError("");
     try {
-      setOverview(
-        await getOwnerOverview(salonId, branchFilter === "all" ? null : branchFilter),
-      );
+      setOverview(await getOwnerOverview(salonId, branchFilter === "all" ? null : branchFilter));
     } catch (caught) {
       setOverviewError(caught instanceof Error ? caught.message : "Không tải được tổng quan.");
     } finally {
@@ -206,6 +206,7 @@ export function OwnerWorkspace({ currentUser }: { currentUser: AppUser }) {
         <OwnerCustomersScreen
           salonId={salonId}
           sessions={sessions}
+          branchId={branchFilter === "all" ? null : branchFilter}
           onConfirm={setConfirm}
         />
       ) : activeTab === "approvals" ? (
