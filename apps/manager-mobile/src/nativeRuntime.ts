@@ -14,15 +14,27 @@ import { Network } from "@capacitor/network";
 import { Share } from "@capacitor/share";
 import { SplashScreen } from "@capacitor/splash-screen";
 import { CustomProvider, initializeAppCheck } from "firebase/app-check";
-import type { ManagerUser } from "./ManagerApp";
-import { ManagerBootstrapError, createSingleFlight } from "./managerBootstrap";
+import {
+  createBiometricUnlockSingleFlight,
+  runBiometricUnlock,
+  type BiometricUnlockResult,
+} from "./biometricUnlock";
+import type { AppUser } from "./services/managerApi";
+import {
+  ManagerBootstrapError,
+  createSingleFlight,
+  type InitializationAttemptContext,
+} from "./managerBootstrap";
+import {
+  createPushInitializationSingleFlight,
+  type PushInitializationResult,
+} from "./optionalPush";
 import { callManagerFunction, getManagerFirebaseApp } from "./services/firebase";
 
 const PUSH_TOKEN_KEY = "push_token";
 const BIOMETRIC_KEY = "biometric_enabled";
 let nativeFirebaseInitialized = false;
-let activeNativeCleanup: (() => void | Promise<void>) | null = null;
-let nativeInitializationConsumers = 0;
+let activeNativeOwnerAttemptId: number | null = null;
 
 export function isNativeManager() {
   return Capacitor.isNativePlatform();
@@ -54,112 +66,179 @@ export async function initializeNativeFirebaseSecurity() {
 }
 
 type NativeManagerInput = {
-  user: ManagerUser;
+  user: AppUser;
   onOnlineChange: (online: boolean) => void;
   onLockedChange: (locked: boolean) => void;
+  onBiometricError: (message: string) => void;
   onNativeReady: (value: boolean) => void;
 };
 
-const initializeNativeManagerOnce = createSingleFlight(async (input: NativeManagerInput) => {
-  if (!isNativeManager()) {
-    input.onNativeReady(false);
-    return () => undefined;
-  }
+type NativeCleanup = () => void | Promise<void>;
 
-  if (activeNativeCleanup) await activeNativeCleanup();
-  const handles: PluginListenerHandle[] = [];
-  try {
-    await initializeNativeFirebaseSecurity();
-    await SecureStorage.setKeyPrefix("haircut_manager_");
-    const network = await Network.getStatus();
-    input.onOnlineChange(network.connected);
-    input.onNativeReady(true);
+export function createNativeInitializationController<TInput>(
+  task: (input: TInput, context: InitializationAttemptContext) => Promise<NativeCleanup>,
+) {
+  let nativeInitializationConsumers = 0;
+  const start = createSingleFlight(task, {
+    cleanup: (cleanup) => cleanup(),
+    onActivate: () => {
+      nativeInitializationConsumers += 1;
+    },
+    onDeactivate: () => {
+      nativeInitializationConsumers = Math.max(0, nativeInitializationConsumers - 1);
+    },
+  });
+  return {
+    start,
+    getConsumerCount: () => nativeInitializationConsumers,
+  };
+}
 
-    handles.push(
-      await Network.addListener("networkStatusChange", (status) => {
-        input.onOnlineChange(status.connected);
-      }),
-    );
-    handles.push(
-      await CapacitorApp.addListener("appUrlOpen", ({ url }) => {
-        dispatchManagerRoute(routeFromUrl(url));
-      }),
-    );
-    handles.push(
-      await CapacitorApp.addListener("appStateChange", ({ isActive }) => {
-        if (isActive) {
-          void authenticateIfEnabled(input.onLockedChange);
-        }
-      }),
-    );
-    handles.push(
-      await FirebaseMessaging.addListener("tokenReceived", ({ token }) => {
-        void registerPushToken(input.user, token);
-      }),
-    );
-    handles.push(
-      await FirebaseMessaging.addListener("notificationActionPerformed", (event) => {
-        const data = event.notification.data as Record<string, unknown> | undefined;
-        dispatchManagerRoute(String(data?.route || ""));
-      }),
-    );
+const nativeInitialization = createNativeInitializationController(
+  async (input: NativeManagerInput, context: InitializationAttemptContext) => {
+    if (!isNativeManager()) {
+      input.onNativeReady(false);
+      return () => undefined;
+    }
 
-    window.__haircutBeforeSignOut = async () => {
-      const token = await SecureStorage.get(PUSH_TOKEN_KEY);
-      try {
-        if (typeof token === "string" && token) {
-          await callManagerFunction("unregisterManagerDeviceToken", { token });
-        }
-      } finally {
-        await FirebaseMessaging.deleteToken().catch(() => undefined);
-        await SecureStorage.remove(PUSH_TOKEN_KEY);
-      }
-    };
-    window.__haircutNativeShare = async (url: string, title: string) => {
-      await Share.share({ title, text: "Mã QR HAIRCUT", url, dialogTitle: "Chia sẻ QR" });
-    };
+    const handles: PluginListenerHandle[] = [];
+    try {
+      await initializeNativeFirebaseSecurity();
+      assertActiveAttempt(context);
+      await SecureStorage.setKeyPrefix("haircut_manager_");
+      assertActiveAttempt(context);
+      const network = await Network.getStatus();
+      assertActiveAttempt(context);
+      input.onOnlineChange(network.connected);
+      input.onNativeReady(true);
 
-    await requestPushPermission(input.user);
-    await authenticateIfEnabled(input.onLockedChange);
-
-    let cleaned = false;
-    const cleanup = async () => {
-      if (cleaned) return;
-      cleaned = true;
-      delete window.__haircutBeforeSignOut;
-      delete window.__haircutNativeShare;
-      await Promise.all(handles.map((handle) => handle.remove()));
-      if (activeNativeCleanup === cleanup) activeNativeCleanup = null;
-    };
-    activeNativeCleanup = cleanup;
-    return cleanup;
-  } catch (error) {
-    delete window.__haircutBeforeSignOut;
-    delete window.__haircutNativeShare;
-    await Promise.all(handles.map((handle) => handle.remove().catch(() => undefined)));
-    if (error instanceof ManagerBootstrapError) throw error;
-    throw new ManagerBootstrapError("MANAGER_NATIVE_PLUGIN_FAILED");
-  }
-});
-
-export function initializeNativeManager(input: NativeManagerInput) {
-  nativeInitializationConsumers += 1;
-  return initializeNativeManagerOnce(input)
-    .then(() => {
-      let released = false;
-      return async () => {
-        if (released) return;
-        released = true;
-        nativeInitializationConsumers = Math.max(0, nativeInitializationConsumers - 1);
-        if (nativeInitializationConsumers === 0 && activeNativeCleanup) {
-          await activeNativeCleanup();
+      handles.push(
+        await Network.addListener("networkStatusChange", (status) => {
+          if (context.isActive()) input.onOnlineChange(status.connected);
+        }),
+      );
+      assertActiveAttempt(context);
+      handles.push(
+        await CapacitorApp.addListener("appUrlOpen", ({ url }) => {
+          if (context.isActive()) dispatchManagerRoute(routeFromUrl(url));
+        }),
+      );
+      assertActiveAttempt(context);
+      handles.push(
+        await CapacitorApp.addListener("appStateChange", ({ isActive }) => {
+          if (isActive && context.isActive()) {
+            void authenticateIfEnabled(input.onLockedChange, input.onBiometricError);
+          }
+        }),
+      );
+      assertActiveAttempt(context);
+      activeNativeOwnerAttemptId = context.attemptId;
+      window.__haircutBeforeSignOut = async () => {
+        const token = await SecureStorage.get(PUSH_TOKEN_KEY);
+        try {
+          if (typeof token === "string" && token) {
+            await callManagerFunction("unregisterManagerDeviceToken", { token });
+          }
+        } finally {
+          await FirebaseMessaging.deleteToken().catch(() => undefined);
+          await SecureStorage.remove(PUSH_TOKEN_KEY);
         }
       };
-    })
-    .catch((error) => {
-      nativeInitializationConsumers = Math.max(0, nativeInitializationConsumers - 1);
-      throw error;
-    });
+      window.__haircutNativeShare = async (url: string, title: string) => {
+        await Share.share({ title, text: "Mã QR HAIRCUT", url, dialogTitle: "Chia sẻ QR" });
+      };
+
+      await authenticateIfEnabled(input.onLockedChange, input.onBiometricError);
+      assertActiveAttempt(context);
+
+      let cleaned = false;
+      const cleanup = async () => {
+        if (cleaned) return;
+        cleaned = true;
+        if (activeNativeOwnerAttemptId === context.attemptId) {
+          delete window.__haircutBeforeSignOut;
+          delete window.__haircutNativeShare;
+          activeNativeOwnerAttemptId = null;
+        }
+        await Promise.all(handles.map((handle) => handle.remove().catch(() => undefined)));
+      };
+      return cleanup;
+    } catch (error) {
+      if (activeNativeOwnerAttemptId === context.attemptId) {
+        delete window.__haircutBeforeSignOut;
+        delete window.__haircutNativeShare;
+        activeNativeOwnerAttemptId = null;
+      }
+      await Promise.all(handles.map((handle) => handle.remove().catch(() => undefined)));
+      if (error instanceof ManagerBootstrapError) throw error;
+      throw new ManagerBootstrapError("MANAGER_NATIVE_PLUGIN_FAILED");
+    }
+  },
+);
+
+export function initializeNativeManager(input: NativeManagerInput) {
+  return nativeInitialization.start(managerRuntimeUserKey(input.user), input);
+}
+
+const initializePushNotificationsOnce = createPushInitializationSingleFlight(
+  async (
+    userKey: string,
+    context: InitializationAttemptContext,
+  ): Promise<PushInitializationResult> => {
+    const user = JSON.parse(userKey) as AppUser;
+    if (!isNativeManager()) {
+      return { status: "unavailable", cleanup: async () => undefined };
+    }
+
+    const handles: PluginListenerHandle[] = [];
+    try {
+      handles.push(
+        await FirebaseMessaging.addListener("tokenReceived", ({ token }) => {
+          if (context.isActive()) void registerPushToken(user, token).catch(() => undefined);
+        }),
+      );
+      assertActiveAttempt(context);
+      handles.push(
+        await FirebaseMessaging.addListener("notificationActionPerformed", (event) => {
+          if (!context.isActive()) return;
+          const data = event.notification.data as Record<string, unknown> | undefined;
+          dispatchManagerRoute(String(data?.route || ""));
+        }),
+      );
+      assertActiveAttempt(context);
+      const status = await requestPushPermission(user, context);
+      assertActiveAttempt(context);
+      let cleaned = false;
+      return {
+        status,
+        cleanup: async () => {
+          if (cleaned) return;
+          cleaned = true;
+          await Promise.all(handles.map((handle) => handle.remove().catch(() => undefined)));
+        },
+      };
+    } catch {
+      await Promise.all(handles.map((handle) => handle.remove().catch(() => undefined)));
+      throw new Error("MANAGER_PUSH_PLUGIN_FAILED");
+    }
+  },
+);
+
+export function initializePushNotifications(user: AppUser) {
+  return initializePushNotificationsOnce(managerRuntimeUserKey(user));
+}
+
+export function managerRuntimeUserKey(user: AppUser) {
+  return JSON.stringify({
+    uid: user.uid,
+    salonId: user.salonId,
+    role: user.role,
+    branchIds: [...(user.branchIds || [])].sort(),
+  });
+}
+
+function assertActiveAttempt(context: InitializationAttemptContext) {
+  if (!context.isActive()) throw new Error("MANAGER_NATIVE_ATTEMPT_STALE");
 }
 
 export async function safelyHideSplashScreen() {
@@ -211,35 +290,59 @@ export async function biometricLockEnabled() {
   return (await SecureStorage.get(BIOMETRIC_KEY)) === true;
 }
 
-async function authenticateIfEnabled(onLockedChange: (locked: boolean) => void) {
-  if (!(await biometricLockEnabled())) {
-    onLockedChange(false);
-    return;
-  }
+const unlockBiometricOnce = createBiometricUnlockSingleFlight(() =>
+  runBiometricUnlock({
+    check: () => BiometricAuth.checkBiometry(),
+    authenticate: () =>
+      BiometricAuth.authenticate({
+        reason: "Mở khóa HAIRCUT Manager",
+        allowDeviceCredential: true,
+      }),
+  }),
+);
+
+export async function retryBiometricUnlock(
+  onLockedChange: (locked: boolean) => void,
+): Promise<BiometricUnlockResult> {
   onLockedChange(true);
-  try {
-    await BiometricAuth.authenticate({
-      reason: "Mở khóa HAIRCUT Manager",
-      allowDeviceCredential: true,
-    });
-    onLockedChange(false);
-  } catch {
-    onLockedChange(true);
-  }
+  const result = await unlockBiometricOnce();
+  onLockedChange(!result.ok);
+  return result;
 }
 
-async function requestPushPermission(user: ManagerUser) {
+async function authenticateIfEnabled(
+  onLockedChange: (locked: boolean) => void,
+  onBiometricError: (message: string) => void,
+) {
+  if (!(await biometricLockEnabled())) {
+    onLockedChange(false);
+    onBiometricError("");
+    return;
+  }
+  const result = await retryBiometricUnlock(onLockedChange);
+  onBiometricError(result.ok ? "" : result.message);
+}
+
+async function requestPushPermission(
+  user: AppUser,
+  context: InitializationAttemptContext,
+): Promise<PushInitializationResult["status"]> {
   let permission = await FirebaseMessaging.checkPermissions();
+  assertActiveAttempt(context);
   if (permission.receive === "prompt") {
     permission = await FirebaseMessaging.requestPermissions();
+    assertActiveAttempt(context);
   }
   if (permission.receive === "granted") {
     const { token } = await FirebaseMessaging.getToken();
+    assertActiveAttempt(context);
     await registerPushToken(user, token);
+    return "ready";
   }
+  return "denied";
 }
 
-async function registerPushToken(user: ManagerUser, token: string) {
+async function registerPushToken(user: AppUser, token: string) {
   if (!token) return;
   await callManagerFunction("registerManagerDeviceToken", {
     salonId: user.salonId,

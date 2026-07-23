@@ -17,6 +17,11 @@ import {
   where,
 } from "firebase/firestore";
 import { sendPasswordResetEmail } from "firebase/auth";
+import {
+  DEFAULT_SYSTEM_FEATURES,
+  normalizeSystemFeatures,
+  type SystemFeatures,
+} from "@haircut/contracts";
 import { callFunctionOrFallback, callWriteFunctionOrFallback } from "./functionWrites";
 import { callFunction, getFirebaseAuth, getFirebaseDb, isFirebaseConfigured } from "./firebase";
 import { LuckyWheelConfig, defaultLuckyWheelConfig } from "./types";
@@ -52,6 +57,15 @@ export type StaffSession = {
   customer?: CustomerSummary;
 };
 
+export type ManagerSessionHistoryItem = Omit<
+  StaffSession,
+  "mirrorId" | "mirrorName" | "expiresAtMs"
+> & {
+  status: "completed" | "cancelled";
+  completedAtMs: number | null;
+  cancelledAtMs: number | null;
+};
+
 export type PointRequest = {
   id: string;
   salonId: string;
@@ -66,6 +80,40 @@ export type PointRequest = {
   status: "pending" | "approved" | "rejected";
   createdAtMs: number | null;
   customer?: CustomerSummary;
+};
+
+export type ManagerPointRequestHistoryItem = Omit<PointRequest, "photoUrls"> & {
+  status: "approved" | "rejected";
+  rejectionReason: string;
+  processedAtMs: number | null;
+};
+
+export type ManagerRewardHistoryItem = {
+  id: string;
+  rewardName: string;
+  rewardCode?: string;
+  rewardCodeLast4: string;
+  status: "unused" | "used" | "expired" | "revoked";
+  branchId: string;
+  customerId: string;
+  customerName: string;
+  usedBy?: string;
+  createdAtMs: number | null;
+  usedAtMs: number | null;
+  expiresAtMs: number | null;
+};
+
+export type ManagerAuditEventItem = {
+  id: string;
+  branchId: string;
+  actorId: string;
+  actorName: string;
+  actorRole: string;
+  action: string;
+  targetType: string;
+  targetId: string;
+  requestId: string;
+  createdAtMs: number | null;
 };
 
 export type OwnerOverview = {
@@ -97,6 +145,7 @@ export type SalonProfile = {
   avatarUrl: string;
   pointPerVisit: number;
   freeCustomerLimit: number;
+  features: SystemFeatures;
 };
 
 export type RedeemRewardResult = {
@@ -148,8 +197,11 @@ export type StaffProfile = {
 
 export type CustomerRecordSummary = {
   id: string;
+  branchId: string;
+  branchName: string;
   staffName: string;
   note: string;
+  photoUrls: string[];
   pointsAdded: number;
   createdAtMs: number | null;
 };
@@ -158,14 +210,25 @@ export type CustomerRewardSummary = {
   id: string;
   rewardName: string;
   rewardCode: string;
-  status: "unused" | "used" | "expired";
+  status: "unused" | "used" | "expired" | "revoked";
+  branchId: string;
   createdAtMs: number | null;
+  usedAtMs: number | null;
+  expiresAtMs: number | null;
+};
+
+export type CustomerBranchVisit = {
+  branchId: string;
+  branchName: string;
+  lastVisitAtMs: number | null;
 };
 
 export type CustomerLookupResult = CustomerSummary & {
   lastVisitAtMs: number | null;
   recentRecords: CustomerRecordSummary[];
+  rewardHistory: CustomerRewardSummary[];
   unusedRewards: CustomerRewardSummary[];
+  branchVisits: CustomerBranchVisit[];
 };
 
 export type CustomerSearchPage = {
@@ -315,6 +378,66 @@ export async function getOwnerOverview(
     { salonId, ...(branchId ? { branchId } : {}) },
     () => getOwnerOverviewDirect(salonId, branchId),
   );
+}
+
+export async function getManagerSessionHistory(input: {
+  salonId: string;
+  branchId?: string | null;
+  limit?: number;
+}): Promise<{ sessions: ManagerSessionHistoryItem[] }> {
+  return callFunction<
+    { salonId: string; branchId?: string; limit: number },
+    { sessions: ManagerSessionHistoryItem[] }
+  >("getManagerSessionHistory", {
+    salonId: input.salonId,
+    ...(input.branchId ? { branchId: input.branchId } : {}),
+    limit: input.limit ?? 30,
+  });
+}
+
+export async function getManagerPointRequestHistory(input: {
+  salonId: string;
+  branchId?: string | null;
+  limit?: number;
+}): Promise<{ requests: ManagerPointRequestHistoryItem[] }> {
+  return callFunction<
+    { salonId: string; branchId?: string; limit: number },
+    { requests: ManagerPointRequestHistoryItem[] }
+  >("getManagerPointRequestHistory", {
+    salonId: input.salonId,
+    ...(input.branchId ? { branchId: input.branchId } : {}),
+    limit: input.limit ?? 30,
+  });
+}
+
+export async function getManagerRewardHistory(input: {
+  salonId: string;
+  branchId?: string | null;
+  limit?: number;
+}): Promise<{ rewards: ManagerRewardHistoryItem[] }> {
+  return callFunction<
+    { salonId: string; branchId?: string; limit: number },
+    { rewards: ManagerRewardHistoryItem[] }
+  >("getManagerRewardHistory", {
+    salonId: input.salonId,
+    ...(input.branchId ? { branchId: input.branchId } : {}),
+    limit: input.limit ?? 30,
+  });
+}
+
+export async function getManagerAuditEvents(input: {
+  salonId: string;
+  branchId?: string | null;
+  limit?: number;
+}): Promise<{ events: ManagerAuditEventItem[] }> {
+  return callFunction<
+    { salonId: string; branchId?: string; limit: number },
+    { events: ManagerAuditEventItem[] }
+  >("getManagerAuditEvents", {
+    salonId: input.salonId,
+    ...(input.branchId ? { branchId: input.branchId } : {}),
+    limit: input.limit ?? 30,
+  });
 }
 
 export async function getSalonProfile(salonId: string): Promise<SalonProfile> {
@@ -495,6 +618,7 @@ async function getSalonProfileDirect(salonId: string): Promise<SalonProfile> {
       avatarUrl: "",
       pointPerVisit: 1,
       freeCustomerLimit: 50,
+      features: { ...DEFAULT_SYSTEM_FEATURES },
     };
   }
 
@@ -509,6 +633,7 @@ async function getSalonProfileDirect(salonId: string): Promise<SalonProfile> {
       avatarUrl: "",
       pointPerVisit: 1,
       freeCustomerLimit: 50,
+      features: { ...DEFAULT_SYSTEM_FEATURES },
     };
   }
 
@@ -521,6 +646,7 @@ async function getSalonProfileDirect(salonId: string): Promise<SalonProfile> {
     avatarUrl: String(data.avatarUrl || ""),
     pointPerVisit: Number(data.pointPerVisit ?? 1),
     freeCustomerLimit: Number(data.freeCustomerLimit ?? 50),
+    features: normalizeSystemFeatures(data.features),
   };
 }
 
@@ -542,6 +668,7 @@ async function updateSalonProfileDirect(input: {
       avatarUrl: "",
       pointPerVisit: input.pointPerVisit,
       freeCustomerLimit: 50,
+      features: { ...DEFAULT_SYSTEM_FEATURES },
     };
   }
 
@@ -1273,19 +1400,28 @@ async function approvePointRequestDirect(request: PointRequest) {
   });
 }
 
-export async function rejectPointRequest(request: PointRequest) {
+export function normalizePointRejectionReason(value: string) {
+  const reason = value.trim().replace(/\s+/g, " ");
+  if (reason.length < 5 || reason.length > 200) {
+    throw new Error("Lý do từ chối phải có từ 5 đến 200 ký tự.");
+  }
+  return reason;
+}
+
+export async function rejectPointRequest(request: PointRequest, value = "Chủ salon từ chối") {
+  const reason = normalizePointRejectionReason(value);
   return callWriteFunctionOrFallback(
     "rejectPointRequest",
     {
       salonId: request.salonId,
       requestId: request.id,
-      reason: "Chủ salon từ chối",
+      reason,
     },
-    () => rejectPointRequestDirect(request),
+    () => rejectPointRequestDirect(request, reason),
   );
 }
 
-async function rejectPointRequestDirect(request: PointRequest) {
+async function rejectPointRequestDirect(request: PointRequest, reason: string) {
   const db = getFirebaseDb();
 
   if (!isFirebaseConfigured() || !db) {
@@ -1298,6 +1434,7 @@ async function rejectPointRequestDirect(request: PointRequest) {
   await runTransaction(db, async (transaction) => {
     transaction.update(requestRef, {
       status: "rejected",
+      rejectionReason: reason,
       rejectedAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
@@ -1639,7 +1776,9 @@ async function searchSalonCustomersDirect(
         allowPhoto: Boolean(data.allowPhoto),
         lastVisitAtMs: toMillis(data.lastVisitAt),
         recentRecords: [],
+        rewardHistory: [],
         unusedRewards: [],
+        branchVisits: [],
       } satisfies CustomerLookupResult;
     })
     .filter(
@@ -1753,16 +1892,33 @@ async function attachCustomerInsight(
     ),
   ]);
 
+  const recentRecords = recordsSnap.docs
+    .map(mapCustomerRecordSummary)
+    .sort((a, b) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0))
+    .slice(0, 20);
+  const rewardHistory = rewardsSnap.docs
+    .map(mapCustomerRewardSummary)
+    .sort((a, b) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0))
+    .slice(0, 20);
+  const branchVisits = Array.from(
+    recentRecords.reduce((visits, record) => {
+      if (record.branchId && !visits.has(record.branchId)) {
+        visits.set(record.branchId, {
+          branchId: record.branchId,
+          branchName: record.branchName || "Chi nhánh",
+          lastVisitAtMs: record.createdAtMs,
+        });
+      }
+      return visits;
+    }, new Map<string, CustomerBranchVisit>()),
+  ).map(([, visit]) => visit);
+
   return {
     ...customer,
-    recentRecords: recordsSnap.docs
-      .map(mapCustomerRecordSummary)
-      .sort((a, b) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0))
-      .slice(0, 5),
-    unusedRewards: rewardsSnap.docs
-      .map(mapCustomerRewardSummary)
-      .filter((reward) => reward.status === "unused")
-      .sort((a, b) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0)),
+    recentRecords,
+    rewardHistory,
+    unusedRewards: rewardHistory.filter((reward) => reward.status === "unused"),
+    branchVisits,
   };
 }
 
@@ -1895,8 +2051,11 @@ function mapCustomerRecordSummary(
 
   return {
     id: docSnap.id,
+    branchId: String(data.branchId || ""),
+    branchName: String(data.branchName || ""),
     staffName: String(data.staffName || ""),
     note: String(data.note || ""),
+    photoUrls: [],
     pointsAdded: Number(data.pointsAdded ?? 1),
     createdAtMs: toMillis(data.createdAt),
   };
@@ -1912,7 +2071,10 @@ function mapCustomerRewardSummary(
     rewardName: String(data.rewardName || ""),
     rewardCode: String(data.rewardCode || ""),
     status: normalizeRewardStatus(data.status),
+    branchId: String(data.usedBranchId || data.branchId || ""),
     createdAtMs: toMillis(data.createdAt),
+    usedAtMs: toMillis(data.usedAt),
+    expiresAtMs: toMillis(data.expiresAt),
   };
 }
 
@@ -2088,7 +2250,7 @@ function normalizeRequestStatus(value: unknown): PointRequest["status"] {
 }
 
 function normalizeRewardStatus(value: unknown): CustomerRewardSummary["status"] {
-  if (value === "used" || value === "expired") {
+  if (value === "used" || value === "expired" || value === "revoked") {
     return value;
   }
 

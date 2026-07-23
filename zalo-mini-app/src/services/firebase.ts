@@ -5,6 +5,10 @@ import { Firestore, getFirestore } from "firebase/firestore";
 import { Functions, getFunctions, httpsCallable } from "firebase/functions";
 import { FirebaseStorage, getStorage } from "firebase/storage";
 
+type AppCheckRegistry = typeof globalThis & {
+  __haircutAppCheckApps?: Set<string>;
+};
+
 let app: FirebaseApp | null = null;
 let auth: Auth | null = null;
 let db: Firestore | null = null;
@@ -51,11 +55,16 @@ export function getFirebaseApp() {
           });
 
     const appCheckSiteKey = String(import.meta.env.VITE_FIREBASE_APP_CHECK_SITE_KEY || "").trim();
-    if (appCheckSiteKey && !isNativeRuntime()) {
+    const appCheckRegistry = globalThis as AppCheckRegistry;
+    const appCheckAlreadyInitialized =
+      appCheckRegistry.__haircutAppCheckApps?.has(app.name) === true;
+    if (appCheckSiteKey && !isNativeRuntime() && !appCheckAlreadyInitialized) {
       initializeAppCheck(app, {
         provider: new ReCaptchaEnterpriseProvider(appCheckSiteKey),
         isTokenAutoRefreshEnabled: true,
       });
+      appCheckRegistry.__haircutAppCheckApps ??= new Set<string>();
+      appCheckRegistry.__haircutAppCheckApps.add(app.name);
     }
   }
 

@@ -1,22 +1,11 @@
 import react from "@vitejs/plugin-react";
-import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
-
-const managerDependency = (packageName: string) =>
-  fileURLToPath(new URL(`./node_modules/${packageName}`, import.meta.url));
+import { managerDependencyAliases } from "./dependencyAliases";
 
 export default defineConfig({
   plugins: [react()],
   resolve: {
-    alias: {
-      "@haircut/contracts": managerDependency("@haircut/contracts"),
-      "@sentry/react": managerDependency("@sentry/react"),
-      firebase: managerDependency("firebase"),
-      "lucide-react": managerDependency("lucide-react"),
-      qrcode: managerDependency("qrcode"),
-      react: managerDependency("react"),
-      "react-dom": managerDependency("react-dom"),
-    },
+    alias: managerDependencyAliases,
     dedupe: ["react", "react-dom", "firebase"],
   },
   server: { port: 5176, fs: { allow: ["../.."] } },

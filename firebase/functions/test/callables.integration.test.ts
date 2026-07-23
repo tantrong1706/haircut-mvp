@@ -7,9 +7,14 @@ import {
   cancelSalonDeletion,
   claimServiceSession,
   createManualCustomer,
+  getManagerAuditEvents,
   getSystemAdminOverview,
   getSalonDeletionStatus,
+  getManagerPointRequestHistory,
+  getManagerRewardHistory,
+  getManagerSessionHistory,
   redeemRewardCode,
+  rejectPointRequest,
   requestSalonDeletion,
   restoreRewardCode,
   searchSalonCustomers,
@@ -146,6 +151,58 @@ describe.skipIf(!emulatorHost)("callable transactions", () => {
     expect((await db.collection("customers").doc(customerId).get()).data()?.points).toBe(1);
   });
 
+  it("bắt buộc lý do hợp lệ khi owner từ chối yêu cầu điểm", async () => {
+    const salonId = "salon-reject-reason";
+    const branchId = "branch-reject-reason";
+    const customerId = "customer-reject-reason";
+    const requestId = "request-reject-reason";
+    await seedOwner("owner-reject-reason", salonId);
+    await seedBranch(salonId, branchId);
+    await db.collection("customers").doc(customerId).set({
+      salonId,
+      name: "Khách từ chối",
+      points: 2,
+    });
+    await db.collection("chair_sessions").doc(requestId).set({
+      salonId,
+      branchId,
+      customerId,
+      status: "pending_approval",
+      isOpen: true,
+    });
+    await db.collection("point_requests").doc(requestId).set({
+      salonId,
+      branchId,
+      sessionId: requestId,
+      customerId,
+      status: "pending",
+      pointsRequested: 1,
+      photoUrls: [],
+    });
+
+    for (const reason of ["", "Sai"]) {
+      await expect(
+        rejectPointRequest.run(requestFor("owner-reject-reason", { salonId, requestId, reason })),
+      ).rejects.toMatchObject({
+        code: "invalid-argument",
+        details: { errorCode: "INVALID_REQUEST" },
+      });
+    }
+
+    await rejectPointRequest.run(
+      requestFor("owner-reject-reason", {
+        salonId,
+        requestId,
+        reason: "  Thiếu   thông tin lượt cắt  ",
+      }),
+    );
+    expect((await db.collection("point_requests").doc(requestId).get()).data()).toMatchObject({
+      status: "rejected",
+      rejectionReason: "Thiếu thông tin lượt cắt",
+      processedBy: "owner-reject-reason",
+    });
+  });
+
   it("chỉ owner được cập nhật ảnh của yêu cầu đang chờ duyệt", async () => {
     const salonId = "salon-owner-photo";
     const branchId = "branch-owner-photo";
@@ -209,7 +266,9 @@ describe.skipIf(!emulatorHost)("callable transactions", () => {
 
   it("chỉ owner nhận số điện thoại đầy đủ khi tìm khách", async () => {
     const salonId = "salon-customer-phone";
+    const branchId = "branch-customer-phone";
     await seedOwner("owner-customer-phone", salonId, { customerCount: 1 });
+    await seedBranch(salonId, branchId);
     await db.collection("users").doc("staff-customer-phone").set({
       salonId,
       role: "staff",
@@ -223,7 +282,36 @@ describe.skipIf(!emulatorHost)("callable transactions", () => {
       phone: "84912345678",
       phoneLast4: "5678",
       points: 2,
-      allowPhoto: false,
+      allowPhoto: true,
+    });
+    await db
+      .collection("haircut_records")
+      .doc("record-customer-phone")
+      .set({
+        salonId,
+        branchId,
+        branchName: "Chi nhánh kiểm thử",
+        customerId: "customer-phone",
+        staffName: "Nhân viên",
+        pointRequestId: "session-customer-phone",
+        photoUrls: [
+          "https://firebasestorage.googleapis.com/v0/b/demo-haircut.appspot.com/o/" +
+            encodeURIComponent(
+              `salons/${salonId}/customers/customer-phone/haircuts/session-customer-phone/photo-history12345.jpg`,
+            ),
+        ],
+        pointsAdded: 1,
+        createdAt: Timestamp.now(),
+      });
+    await db.collection("reward_history").doc("reward-customer-phone").set({
+      salonId,
+      branchId,
+      customerId: "customer-phone",
+      rewardName: "Gội đầu",
+      rewardCode: "PHONE-REWARD-1234",
+      status: "used",
+      createdAt: Timestamp.now(),
+      usedAt: Timestamp.now(),
     });
 
     const ownerResult = await searchSalonCustomers.run(
@@ -237,8 +325,456 @@ describe.skipIf(!emulatorHost)("callable transactions", () => {
       phone: "84912345678",
       phoneLast4: "5678",
     });
+    expect(ownerResult.customers[0].branchVisits).toEqual([
+      expect.objectContaining({ branchId, branchName: "Chi nhánh kiểm thử" }),
+    ]);
+    expect(ownerResult.customers[0].recentRecords[0].photoUrls).toHaveLength(1);
+    expect(ownerResult.customers[0].rewardHistory).toEqual([
+      expect.objectContaining({ rewardCode: "PHONE-REWARD-1234", status: "used" }),
+    ]);
     expect(staffResult.customers[0]).toMatchObject({ phoneLast4: "5678" });
     expect(staffResult.customers[0]).not.toHaveProperty("phone");
+    expect(staffResult.customers[0].recentRecords[0].photoUrls).toEqual([]);
+    expect(staffResult.customers[0].rewardHistory).toEqual([]);
+  });
+
+  it("cô lập lịch sử Manager theo salon, chi nhánh và nhân viên", async () => {
+    const salonId = "salon-manager-history";
+    const branchA = "branch-manager-a";
+    const branchB = "branch-manager-b";
+    const now = Timestamp.now();
+    await seedOwner("owner-manager-history", salonId, { customerCount: 1 });
+    await Promise.all([seedBranch(salonId, branchA), seedBranch(salonId, branchB)]);
+    await Promise.all([
+      db
+        .collection("users")
+        .doc("staff-manager-a")
+        .set({
+          salonId,
+          role: "staff",
+          name: "Nhân viên A",
+          isActive: true,
+          canRedeemRewards: true,
+          branchIds: [branchA],
+        }),
+      db
+        .collection("users")
+        .doc("staff-manager-b")
+        .set({
+          salonId,
+          role: "staff",
+          name: "Nhân viên B",
+          isActive: true,
+          canRedeemRewards: true,
+          branchIds: [branchB],
+        }),
+      db
+        .collection("customers")
+        .doc("customer-manager-history")
+        .set({
+          salonId,
+          name: "Khách lịch sử",
+          phone: "84912345678",
+          phoneLast4: "5678",
+          points: 4,
+          allowPhoto: true,
+          namePrefixes: ["kh", "khá", "khách"],
+        }),
+    ]);
+
+    await Promise.all([
+      db
+        .collection("chair_sessions")
+        .doc("session-manager-completed")
+        .set({
+          salonId,
+          branchId: branchA,
+          branchName: "Chi nhánh A",
+          customerId: "customer-manager-history",
+          customerSummary: { name: "Khách lịch sử", phoneLast4: "5678" },
+          assignedStaffId: "staff-manager-a",
+          assignedStaffName: "Nhân viên A",
+          status: "completed",
+          createdAt: now,
+          completedAt: now,
+        }),
+      db
+        .collection("chair_sessions")
+        .doc("session-manager-no-show")
+        .set({
+          salonId,
+          branchId: branchA,
+          branchName: "Chi nhánh A",
+          customerId: "customer-manager-history",
+          customerSummary: { name: "Khách lịch sử", phoneLast4: "5678" },
+          cancelledBy: "staff-manager-a",
+          status: "cancelled",
+          cancellationReason: "no_show",
+          createdAt: now,
+          cancelledAt: now,
+        }),
+      db.collection("chair_sessions").doc("session-manager-other-branch").set({
+        salonId,
+        branchId: branchB,
+        branchName: "Chi nhánh B",
+        customerId: "customer-manager-history",
+        assignedStaffId: "staff-manager-b",
+        status: "completed",
+        createdAt: now,
+        completedAt: now,
+      }),
+      db
+        .collection("point_requests")
+        .doc("request-manager-approved")
+        .set({
+          salonId,
+          branchId: branchA,
+          branchName: "Chi nhánh A",
+          sessionId: "session-manager-completed",
+          customerId: "customer-manager-history",
+          customerSummary: { name: "Khách lịch sử", phoneLast4: "5678" },
+          staffName: "Nhân viên A",
+          status: "approved",
+          pointsAdded: 1,
+          createdAt: now,
+          processedAt: now,
+        }),
+      db.collection("reward_history").doc("reward-manager-a").set({
+        salonId,
+        branchId: branchA,
+        usedBranchId: branchA,
+        customerId: "customer-manager-history",
+        rewardName: "Gội đầu",
+        rewardCode: "REWARD-A-1234",
+        status: "used",
+        usedBy: "staff-manager-a",
+        createdAt: now,
+        usedAt: now,
+      }),
+      db.collection("reward_history").doc("reward-manager-b").set({
+        salonId,
+        branchId: branchB,
+        usedBranchId: branchB,
+        customerId: "customer-manager-history",
+        rewardName: "Sáp tóc",
+        rewardCode: "REWARD-B-5678",
+        status: "used",
+        usedBy: "staff-manager-b",
+        createdAt: now,
+        usedAt: now,
+      }),
+    ]);
+
+    const staffSessions = await getManagerSessionHistory.run(
+      requestFor("staff-manager-a", { salonId, limit: 30 }),
+    );
+    expect(staffSessions.sessions.map((session) => session.id).sort()).toEqual([
+      "session-manager-completed",
+      "session-manager-no-show",
+    ]);
+    expect(staffSessions.sessions[0]?.customer).not.toHaveProperty("phone");
+    await expect(
+      getManagerSessionHistory.run(requestFor("staff-manager-a", { salonId, branchId: branchB })),
+    ).rejects.toMatchObject({ details: { errorCode: "BRANCH_ACCESS_DENIED" } });
+
+    const ownerSessions = await getManagerSessionHistory.run(
+      requestFor("owner-manager-history", { salonId, limit: 30 }),
+    );
+    expect(ownerSessions.sessions).toHaveLength(3);
+    expect(ownerSessions.sessions[0]?.customer).toHaveProperty("phone", "84912345678");
+
+    const approvalHistory = await getManagerPointRequestHistory.run(
+      requestFor("owner-manager-history", { salonId, branchId: branchA }),
+    );
+    expect(approvalHistory.requests).toHaveLength(1);
+    expect(approvalHistory.requests[0]).toMatchObject({ status: "approved", pointsAdded: 1 });
+
+    const staffRewards = await getManagerRewardHistory.run(
+      requestFor("staff-manager-a", { salonId, limit: 30 }),
+    );
+    expect(staffRewards.rewards).toHaveLength(1);
+    expect(staffRewards.rewards[0]).toMatchObject({ rewardCodeLast4: "1234" });
+    expect(staffRewards.rewards[0]).not.toHaveProperty("rewardCode");
+
+    const ownerRewards = await getManagerRewardHistory.run(
+      requestFor("owner-manager-history", { salonId, limit: 30 }),
+    );
+    expect(ownerRewards.rewards).toHaveLength(2);
+    expect(ownerRewards.rewards[0]).toHaveProperty("rewardCode");
+  });
+
+  it("lọc lịch sử quà theo chi nhánh trước limit và giữ tương thích dữ liệu cũ", async () => {
+    const salonId = "salon-reward-branch-filter";
+    const otherSalonId = "salon-reward-other";
+    const branchA = "branch-reward-filter-a";
+    const branchB = "branch-reward-filter-b";
+    const limit = 5;
+    const baseMs = Date.now();
+    await Promise.all([
+      seedOwner("owner-reward-filter", salonId, { customerCount: 1 }),
+      seedOwner("owner-reward-other", otherSalonId, { customerCount: 1 }),
+      seedBranch(salonId, branchA),
+      seedBranch(salonId, branchB),
+    ]);
+    await Promise.all([
+      db
+        .collection("users")
+        .doc("staff-reward-filter")
+        .set({
+          salonId,
+          role: "staff",
+          name: "Nhân viên A",
+          isActive: true,
+          canRedeemRewards: true,
+          branchIds: [branchA],
+        }),
+      db
+        .collection("users")
+        .doc("staff-reward-filter-other")
+        .set({
+          salonId,
+          role: "staff",
+          name: "Nhân viên khác",
+          isActive: true,
+          canRedeemRewards: true,
+          branchIds: [branchA],
+        }),
+      db.collection("customers").doc("customer-reward-filter").set({
+        salonId,
+        name: "Khách chi nhánh A",
+        points: 0,
+      }),
+    ]);
+
+    const newerBranchBWrites = Array.from({ length: limit + 3 }, (_, index) =>
+      db
+        .collection("reward_history")
+        .doc(`reward-filter-b-${index}`)
+        .set({
+          salonId,
+          branchId: branchB,
+          usedBranchId: branchB,
+          customerId: "customer-reward-filter",
+          rewardName: `Quà B ${index}`,
+          rewardCode: `BRANCH-B-${index}`,
+          status: "used",
+          usedBy: "staff-reward-filter-other",
+          createdAt: Timestamp.fromMillis(baseMs + index + 1_000),
+          usedAt: Timestamp.fromMillis(baseMs + index + 1_000),
+        }),
+    );
+    await Promise.all([
+      ...newerBranchBWrites,
+      db
+        .collection("reward_history")
+        .doc("reward-filter-a-current")
+        .set({
+          salonId,
+          branchId: branchA,
+          usedBranchId: branchA,
+          customerId: "customer-reward-filter",
+          rewardName: "Quà A mới",
+          rewardCode: "BRANCH-A-CURRENT",
+          status: "used",
+          usedBy: "staff-reward-filter",
+          createdAt: Timestamp.fromMillis(baseMs - 1_000),
+          usedAt: Timestamp.fromMillis(baseMs - 1_000),
+        }),
+      db
+        .collection("reward_history")
+        .doc("reward-filter-a-legacy")
+        .set({
+          salonId,
+          branchId: branchA,
+          customerId: "customer-reward-filter",
+          rewardName: "Quà A cũ",
+          rewardCode: "BRANCH-A-LEGACY",
+          status: "used",
+          usedBy: "staff-reward-filter",
+          createdAt: Timestamp.fromMillis(baseMs - 2_000),
+          usedAt: Timestamp.fromMillis(baseMs - 2_000),
+        }),
+      ...Array.from({ length: limit }, (_, index) =>
+        db
+          .collection("reward_history")
+          .doc(`reward-filter-a-current-older-${index}`)
+          .set({
+            salonId,
+            branchId: branchA,
+            usedBranchId: branchA,
+            customerId: "customer-reward-filter",
+            rewardName: `Quà A schema mới cũ hơn ${index}`,
+            rewardCode: `BRANCH-A-CURRENT-OLDER-${index}`,
+            status: "used",
+            usedBy: "staff-reward-filter-other",
+            createdAt: Timestamp.fromMillis(baseMs - 10_000 - index),
+            usedAt: Timestamp.fromMillis(baseMs - 10_000 - index),
+          }),
+      ),
+      db
+        .collection("reward_history")
+        .doc("reward-filter-a-other-staff")
+        .set({
+          salonId,
+          branchId: branchA,
+          usedBranchId: branchA,
+          customerId: "customer-reward-filter",
+          rewardName: "Quà A nhân viên khác",
+          rewardCode: "BRANCH-A-OTHER",
+          status: "used",
+          usedBy: "staff-reward-filter-other",
+          createdAt: Timestamp.fromMillis(baseMs - 3_000),
+          usedAt: Timestamp.fromMillis(baseMs - 3_000),
+        }),
+      db
+        .collection("reward_history")
+        .doc("reward-filter-other-salon")
+        .set({
+          salonId: otherSalonId,
+          branchId: branchA,
+          usedBranchId: branchA,
+          customerId: "customer-other-salon",
+          rewardName: "Quà salon khác",
+          rewardCode: "OTHER-SALON",
+          status: "used",
+          usedBy: "owner-reward-other",
+          createdAt: Timestamp.fromMillis(baseMs + 10_000),
+          usedAt: Timestamp.fromMillis(baseMs + 10_000),
+        }),
+    ]);
+
+    const ownerResult = await getManagerRewardHistory.run(
+      requestFor("owner-reward-filter", { salonId, branchId: branchA, limit }),
+    );
+    expect(ownerResult.rewards.map((reward) => reward.id)).toEqual([
+      "reward-filter-a-current",
+      "reward-filter-a-legacy",
+      "reward-filter-a-other-staff",
+      "reward-filter-a-current-older-0",
+      "reward-filter-a-current-older-1",
+    ]);
+    expect(ownerResult.rewards.every((reward) => reward.branchId === branchA)).toBe(true);
+    expect(ownerResult.rewards.some((reward) => reward.id.startsWith("reward-filter-b-"))).toBe(
+      false,
+    );
+    expect(ownerResult.rewards).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: "reward-filter-other-salon" })]),
+    );
+
+    const staffResult = await getManagerRewardHistory.run(
+      requestFor("staff-reward-filter", { salonId, branchId: branchA, limit }),
+    );
+    expect(staffResult.rewards.map((reward) => reward.id)).toEqual([
+      "reward-filter-a-current",
+      "reward-filter-a-legacy",
+    ]);
+    expect(staffResult.rewards.every((reward) => !Object.hasOwn(reward, "rewardCode"))).toBe(true);
+    await expect(
+      getManagerRewardHistory.run(
+        requestFor("owner-reward-filter", {
+          salonId: otherSalonId,
+          branchId: branchA,
+          limit,
+        }),
+      ),
+    ).rejects.toMatchObject({ details: { errorCode: "FORBIDDEN" } });
+  });
+
+  it("chỉ owner đọc được nhật ký rút gọn của đúng salon và chi nhánh", async () => {
+    const salonId = "salon-manager-audit";
+    const otherSalonId = "salon-manager-audit-other";
+    const branchA = "branch-manager-audit-a";
+    const branchB = "branch-manager-audit-b";
+    const now = Timestamp.now();
+    await Promise.all([
+      seedOwner("owner-manager-audit", salonId, { customerCount: 0 }),
+      seedOwner("owner-manager-audit-other", otherSalonId, { customerCount: 0 }),
+      seedBranch(salonId, branchA),
+      seedBranch(salonId, branchB),
+    ]);
+    await db
+      .collection("users")
+      .doc("staff-manager-audit")
+      .set({
+        salonId,
+        role: "staff",
+        name: "Nhân viên Nhật ký",
+        isActive: true,
+        branchIds: [branchA],
+      });
+    await Promise.all([
+      db
+        .collection("audit_events")
+        .doc("audit-manager-a")
+        .set({
+          salonId,
+          branchId: branchA,
+          actorUid: "staff-manager-audit",
+          actorRole: "staff",
+          action: "point_request.approved",
+          targetType: "point_request",
+          targetId: "request-a",
+          requestId: "request-audit-a",
+          metadata: { privateNote: "không được trả về" },
+          createdAt: now,
+        }),
+      db
+        .collection("audit_events")
+        .doc("audit-manager-b")
+        .set({
+          salonId,
+          branchId: branchB,
+          actorUid: "owner-manager-audit",
+          actorRole: "owner",
+          action: "session.cancelled",
+          targetType: "chair_session",
+          targetId: "session-b",
+          requestId: "request-audit-b",
+          createdAt: Timestamp.fromMillis(now.toMillis() - 1_000),
+        }),
+      db
+        .collection("audit_events")
+        .doc("audit-manager-other-salon")
+        .set({
+          salonId: otherSalonId,
+          branchId: branchA,
+          actorUid: "owner-manager-audit-other",
+          actorRole: "owner",
+          action: "salon.avatar_updated",
+          targetType: "salon",
+          targetId: otherSalonId,
+          requestId: "request-audit-other",
+          createdAt: Timestamp.fromMillis(now.toMillis() + 1_000),
+        }),
+    ]);
+
+    const allEvents = await getManagerAuditEvents.run(
+      requestFor("owner-manager-audit", { salonId, limit: 30 }),
+    );
+    expect(allEvents.events.map((event) => event.id)).toEqual([
+      "audit-manager-a",
+      "audit-manager-b",
+    ]);
+    expect(allEvents.events[0]).toMatchObject({
+      branchId: branchA,
+      actorName: "Nhân viên Nhật ký",
+      action: "point_request.approved",
+      requestId: "request-audit-a",
+    });
+    expect(allEvents.events[0]).not.toHaveProperty("metadata");
+
+    const branchEvents = await getManagerAuditEvents.run(
+      requestFor("owner-manager-audit", { salonId, branchId: branchA, limit: 30 }),
+    );
+    expect(branchEvents.events.map((event) => event.id)).toEqual(["audit-manager-a"]);
+    await expect(
+      getManagerAuditEvents.run(requestFor("staff-manager-audit", { salonId, branchId: branchA })),
+    ).rejects.toMatchObject({ details: { errorCode: "FORBIDDEN" } });
+    await expect(
+      getManagerAuditEvents.run(
+        requestFor("owner-manager-audit", { salonId: otherSalonId, branchId: branchA }),
+      ),
+    ).rejects.toMatchObject({ details: { errorCode: "FORBIDDEN" } });
   });
 
   it("quay, đổi và hoàn tác quà giữ đúng điểm và trạng thái", async () => {

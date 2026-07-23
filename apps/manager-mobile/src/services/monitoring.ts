@@ -1,1 +1,1 @@
-export { captureError, trackEvent } from "../../../../zalo-mini-app/src/services/monitoring";
+export * from "./adapters/monitoringAdapter";
