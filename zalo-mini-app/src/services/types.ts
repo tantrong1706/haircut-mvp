@@ -28,6 +28,7 @@ export type AppSession = {
   sessionStatus?: "waiting" | "serving" | "pending_approval" | "completed" | "cancelled";
   assignedStaffName?: string;
   claimedAtMs?: number | null;
+  features?: SystemFeatures;
   customer: CustomerProfile;
 };
 
@@ -84,3 +85,4 @@ export const defaultLuckyWheelConfig: LuckyWheelConfig = {
     { label: "Hấp dầu miễn phí", active: true, type: "reward" },
   ],
 };
+import type { SystemFeatures } from "@haircut/contracts";

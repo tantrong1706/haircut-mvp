@@ -1,3 +1,4 @@
+import { DEFAULT_SYSTEM_FEATURES, type SystemFeatures } from "@haircut/contracts";
 import {
   collection,
   doc,
@@ -54,6 +55,7 @@ type RegisterCustomerFunctionResult = {
   points: number;
   zaloUserId: string;
   phoneLast4?: string;
+  features?: SystemFeatures;
 };
 
 type CustomerHistoryFunctionResult = {
@@ -88,6 +90,7 @@ type CustomerSessionFunctionResult = {
   claimedAtMs?: number | null;
   customer: CustomerProfile;
   wheelConfig: LuckyWheelConfig;
+  features?: SystemFeatures;
 };
 
 export type CustomerQrBranch = {
@@ -102,11 +105,13 @@ export type CustomerQrResolution = {
   qrType: QrContext["qrType"];
   salonId: string;
   salonName: string;
+  salonAvatarUrl: string;
   branchId: string | null;
   branchName: string;
   branchAddress: string;
   selectionRequired: boolean;
   branches: CustomerQrBranch[];
+  features: SystemFeatures;
 };
 
 export function listenSessionLiveUpdates(
@@ -159,6 +164,7 @@ export function listenSessionLiveUpdates(
           branchName: state.branchName || currentSession.branchName,
           branchAddress: state.branchAddress || currentSession.branchAddress,
           mirrorName: state.mirrorName || currentSession.mirrorName,
+          features: state.features ?? currentSession.features,
           customer: state.customer,
         };
 
@@ -375,11 +381,13 @@ export async function resolveCustomerQr(qr: QrContext): Promise<CustomerQrResolu
       qrType: qr.qrType,
       salonId: qr.salonId,
       salonName: "HAIRCUT Studio",
+      salonAvatarUrl: "",
       branchId,
       branchName: selectedBranch?.name || "",
       branchAddress: selectedBranch?.address || "",
       selectionRequired,
       branches: previewBranches,
+      features: { ...DEFAULT_SYSTEM_FEATURES },
     };
   }
 
@@ -534,21 +542,40 @@ export async function spinWheel(session: AppSession): Promise<SpinResult> {
   }
 
   const zaloAccessToken = await getZaloAccessToken();
+  const pendingSpin = getOrCreateIdempotencyKey(
+    `spin:${session.qr.salonId}:${session.customer.customerId}`,
+  );
   const result = await callCustomerFunctionOrDirect<
-    { salonId: string; zaloAccessToken: string },
+    { salonId: string; zaloAccessToken: string; idempotencyKey: string },
     SpinResult
   >(
     "spinLuckyWheelFromZalo",
     {
       salonId: session.qr.salonId,
       zaloAccessToken,
+      idempotencyKey: pendingSpin.key,
     },
     () => spinWheelDirect(session),
   );
+  localStorage.removeItem(pendingSpin.storageKey);
   return {
     ...result,
     isWinning: result.isWinning ?? Boolean(result.rewardCode),
   };
+}
+
+function getOrCreateIdempotencyKey(scope: string) {
+  const storageKey = `haircut_pending_operation:${scope}`;
+  const existing = localStorage.getItem(storageKey);
+  if (existing && /^[A-Za-z0-9_-]{16,128}$/.test(existing)) {
+    return { storageKey, key: existing };
+  }
+  const key =
+    typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${Date.now()}_${crypto.getRandomValues(new Uint32Array(4)).join("_")}`;
+  localStorage.setItem(storageKey, key);
+  return { storageKey, key };
 }
 
 async function spinWheelDirect(session: AppSession): Promise<SpinResult> {
@@ -724,6 +751,7 @@ async function getHaircutHistoryDirect(session: AppSession): Promise<HaircutReco
 
   const q = query(
     collection(db, "haircut_records"),
+    where("salonId", "==", session.qr.salonId),
     where("customerId", "==", session.customer.customerId),
     firestoreLimit(20),
   );
@@ -819,6 +847,7 @@ async function getRewardsDirect(session: AppSession): Promise<Reward[]> {
 
   const q = query(
     collection(db, "reward_history"),
+    where("salonId", "==", session.qr.salonId),
     where("customerId", "==", session.customer.customerId),
     firestoreLimit(20),
   );
@@ -885,6 +914,7 @@ function mockRegisterCustomer(input: RegisterInput): AppSession {
     mirrorName: input.branchId || input.mirrorId,
     zaloUserId: "mock-local-zalo-user",
     sessionStatus: "waiting",
+    features: { ...DEFAULT_SYSTEM_FEATURES },
     customer: {
       customerId: "mock-customer",
       name: input.name,
@@ -916,6 +946,7 @@ function buildSessionFromRegisterResult(
     sessionStatus: result.sessionStatus || "waiting",
     assignedStaffName: result.assignedStaffName || "",
     claimedAtMs: result.claimedAtMs ?? null,
+    features: result.features ?? { ...DEFAULT_SYSTEM_FEATURES },
     customer: {
       customerId: result.customerId,
       name: input.name || "Khách hàng",

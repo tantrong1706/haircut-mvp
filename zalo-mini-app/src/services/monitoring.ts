@@ -25,6 +25,44 @@ let performanceInstance: FirebasePerformance | null = null;
 let sentryPromise: Promise<SentryModule | null> | null = null;
 let started = false;
 
+const MONITORING_PARAM_ALLOWLIST = new Set([
+  "active_slots",
+  "allow_photo",
+  "app_env",
+  "app_version",
+  "area",
+  "auth_mode",
+  "branch_id",
+  "cancellation_reason",
+  "error_code",
+  "file_size",
+  "file_type",
+  "function_name",
+  "has_avatar",
+  "has_customer_session",
+  "has_phone",
+  "is_winning",
+  "page_path",
+  "photo_count",
+  "platform",
+  "points_after",
+  "points_before",
+  "points_requested",
+  "request_id",
+  "required_points",
+  "reward_status",
+  "role",
+  "route",
+  "salon_id",
+  "selected_index",
+  "session_id",
+  "session_status",
+  "status",
+  "tab",
+  "user_id",
+  "write_mode",
+]);
+
 export function initMonitoring() {
   parseQrContext();
   if (started || isMonitoringDisabled()) {
@@ -310,7 +348,7 @@ export function cleanParams(params: MonitoringParams) {
     (result, [key, value]) => {
       const cleanKey = key.replace(/[^a-zA-Z0-9_]/g, "_").slice(0, 40);
 
-      if (!cleanKey || /(token|secret|proof)/i.test(cleanKey)) {
+      if (!cleanKey || !MONITORING_PARAM_ALLOWLIST.has(cleanKey)) {
         return result;
       }
 
@@ -341,7 +379,16 @@ export function redactSensitiveUrl(value: string) {
 }
 
 export function redactSensitiveText(value: string) {
-  return value.replace(/([?&](?:qrToken|access_token|appsecret_proof)=)[^&#\s]*/gi, "$1[redacted]");
+  return value
+    .replace(/([?&](?:qrToken|access_token|appsecret_proof)=)[^&#\s]*/gi, "$1[redacted]")
+    .replace(/\bBearer\s+[A-Za-z0-9._~-]+/gi, "Bearer [redacted]")
+    .replace(
+      /(\b(?:qrToken|access_token|appsecret_proof|authorization)\b)(\s*[:=]\s*)["']?[^\s,"'}]+/gi,
+      "$1$2[redacted]",
+    )
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[email]")
+    .replace(/(?:\+?84|0)(?:[ .-]?\d){8,10}\b/g, "[phone]")
+    .replace(/\b(?:HC|HAIRCUT)-[A-Z0-9-]{6,}\b/gi, "[reward-code]");
 }
 
 function redactedError(error: unknown) {

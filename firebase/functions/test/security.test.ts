@@ -102,15 +102,17 @@ describe("phân quyền và migration chi nhánh", () => {
   });
 
   it("dùng lại phiên hiện tại khi khách quét QR lần nữa", () => {
-    expect(
-      shouldReuseActiveSession({
-        status: "waiting",
-        sessionId: "session-a",
-        createdAtMs: 1_000,
-        nowMs: 2_000,
-        maxAgeMs: 10_000,
-      }),
-    ).toBe(true);
+    for (const status of ["waiting", "serving", "pending_approval"]) {
+      expect(
+        shouldReuseActiveSession({
+          status,
+          sessionId: "session-a",
+          createdAtMs: 1_000,
+          nowMs: 2_000,
+          maxAgeMs: 10_000,
+        }),
+      ).toBe(true);
+    }
     expect(
       shouldReuseActiveSession({
         status: "waiting",

@@ -9,13 +9,21 @@ salons/{salonId}
   name: string
   address: string?
   phone: string?
+  avatarUrl: string?
   ownerId: string
+  status: active | suspended | pending_deletion
+  isActive: boolean
   plan: free | basic | pro | premium
   freeCustomerLimit: number
   pointPerVisit: number
   createdAt: timestamp
   updatedAt: timestamp
 ```
+
+`salons/{salonId}.avatarUrl` là ảnh đại diện công khai của salon, độc lập với
+`users/{uid}.avatarUrl` của owner/staff. Object được lưu tại
+`salons/{salonId}/branding/avatar.webp`; khách chỉ nhận URL đã kiểm tra qua
+`resolveCustomerQr`, không đọc trực tiếp document salon.
 
 ## users
 
@@ -27,7 +35,7 @@ users/{uid}
   name: string
   avatarUrl: string?
   phone: string?
-  role: owner | staff
+  role: owner | staff | system_admin
   isActive: boolean
   canRedeemRewards: boolean
   branchId: string?
@@ -85,7 +93,11 @@ chair_sessions/{sessionId}
   legacyMirrorId: string?
   customerId: string
   zaloUserId: string?
-  status: waiting | serving | completed | cancelled
+  status: waiting | serving | pending_approval | completed | cancelled
+  assignedStaffId: string?
+  assignedStaffName: string?
+  claimedAt: timestamp?
+  expiresAt: timestamp
   createdAt: timestamp
   updatedAt: timestamp?
 ```
@@ -101,7 +113,7 @@ active_service_sessions/{hash(salonId + customerId)}
   sessionId: string
   branchId: string
   branchName: string
-  status: waiting | serving
+  status: waiting | serving | pending_approval
   createdAt: timestamp
   updatedAt: timestamp
 ```
@@ -122,6 +134,11 @@ point_requests/{requestId}
   pointsAdded: number
   pointsRequested: number?
   status: pending | approved | rejected
+  idempotencyKey: string
+  processedAt: timestamp?
+  processedBy: string?
+  pointsBefore: number?
+  pointsAfter: number?
   createdAt: timestamp
   updatedAt: timestamp?
 ```
@@ -162,14 +179,99 @@ lucky_wheel/{salonId}
 ```text
 reward_history/{rewardId}
   salonId: string
+  branchId: string
   customerId: string
   zaloUserId: string?
   rewardName: string
   rewardCode: string
-  status: unused | used | expired
+  status: unused | used | expired | revoked | no_prize
   pointsUsed: number?
   pointsSpent: number?
   createdAt: timestamp
   usedAt: timestamp?
   usedBy: string?
+  usedBranchId: string?
+  redemptionIdempotencyKey: string?
+  expiresAt: timestamp?
 ```
+
+## audit_events
+
+```text
+audit_events/{eventId}
+  salonId: string
+  branchId: string?
+  actorUid: string
+  actorRole: owner | staff | system_admin | customer | system
+  action: string
+  targetType: string
+  targetId: string
+  requestId: string
+  before: map?
+  after: map?
+  metadata: map?
+  createdAt: timestamp
+```
+
+Không lưu token, phone/email đầy đủ, ghi chú, URL ảnh riêng tư hoặc reward code đầy đủ trong audit.
+
+## device_tokens
+
+Mỗi thiết bị có một document ID là SHA-256 của FCM token; không dùng một token duy nhất trong user.
+
+```text
+device_tokens/{tokenHash}
+  uid: string
+  salonId: string
+  role: owner | staff
+  branchIds: string[]
+  platform: ios | android
+  token: string
+  appVersion: string
+  isActive: boolean
+  createdAt: timestamp
+  updatedAt: timestamp
+```
+
+## support_requests
+
+Collection dành cho yêu cầu hỗ trợ của owner/staff. Client không đọc hoặc ghi trực tiếp; callable tương lai phải tự lấy tenant từ `users/{uid}` và không tin `salonId`, `role` hoặc `branchIds` do client gửi.
+
+```text
+support_requests/{requestId}
+  salonId: string
+  branchId: string?
+  requestedBy: string
+  requesterRole: owner | staff
+  category: string
+  status: open | in_progress | resolved | closed
+  createdAt: timestamp
+  updatedAt: timestamp
+```
+
+Nội dung hỗ trợ có thể chứa thông tin vận hành và chỉ được phục vụ qua Cloud Functions có kiểm tra tenant; không đưa nội dung này vào Analytics, Sentry hoặc audit metadata.
+
+## Feature flags
+
+```text
+system_config/features
+salons/{salonId}/settings/features
+  checkinEnabled: boolean
+  luckyWheelEnabled: boolean
+  rewardRedeemEnabled: boolean
+  photoUploadEnabled: boolean
+  pointApprovalEnabled: boolean
+  maintenanceMode: boolean
+  minimumSupportedAppVersion: string
+  recommendedAppVersion: string
+```
+
+## Xóa dữ liệu
+
+- `customer_deletion_jobs`: job idempotent từ owner hoặc Zalo webhook.
+- `salon_deletion_jobs/{salonId}`: yêu cầu xóa toàn tenant, có `executeAfter`, lease, retry và trạng thái.
+- `_public_rate_limits`, `_authenticated_rate_limits`, `idempotency_keys`: document kỹ thuật có TTL; client không được đọc/ghi.
+
+## Dữ liệu cũ thiếu tenant
+
+Không tự suy đoán `salonId`. Chạy `npm run audit:tenant-data -- --project <id>` chỉ để đếm; muốn ghi phải cung cấp mapping đã duyệt, `--apply` và `--confirm-project`. Công cụ không được chạy tự động trong request production.

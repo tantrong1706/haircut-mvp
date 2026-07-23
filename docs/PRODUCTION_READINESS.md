@@ -1,55 +1,51 @@
-# Kiểm Tra Sẵn Sàng Production
+# Kiểm tra sẵn sàng production
 
-Tài liệu này dùng trước khi đưa HAIRCUT cho salon thật dùng.
-
-## Lệnh kiểm tra
-
-Chạy từ thư mục `haircut-mvp`:
+## Kiểm tra tự động
 
 ```powershell
 .\scripts\check-production-readiness.ps1 -RunBuild -CheckLiveUrls
+
+cd firebase\functions
+npm run typecheck
+npm run lint
+npm run test:unit
+
+cd ..
+firebase emulators:exec --project demo-haircut --only firestore,storage "npm --prefix functions run test:rules"
+firebase emulators:exec --project demo-haircut --only firestore "npm --prefix functions run test:integration"
+
+cd ..\zalo-mini-app
+npm run check
 ```
 
-Script sẽ kiểm tra:
+Admin Web phải qua `npm run check`. Manager phải qua typecheck, unit test, build, `cap sync`, Android Gradle và iOS Simulator CI không ký.
 
-- Node/npm/Firebase CLI/GitHub CLI.
-- Git worktree có sạch không.
-- Firebase project hiện tại.
-- `zalo-mini-app/.env` và `VITE_FUNCTION_WRITE_MODE`.
-- Firestore rules live trong repo có còn mở không.
-- Rules production mẫu có khóa ghi client không.
-- Build local cho Functions và web.
-- Các URL live chính.
-- Trạng thái GitHub Actions mới nhất.
+## Cổng dữ liệu và bảo mật
 
-## Điều kiện nên đạt trước production
+- [ ] Production dùng `VITE_FUNCTION_WRITE_MODE=required`; client không ghi business data trực tiếp.
+- [ ] Mọi collection nghiệp vụ có `salonId`; dữ liệu chi nhánh có `branchId`.
+- [ ] Tenant audit dry-run đã kiểm tra; migration mapping được duyệt nếu còn dữ liệu cũ.
+- [ ] Firestore/Storage Rules test đạt và không có `allow read, write: if true`.
+- [ ] Secrets nằm trong Secret Manager; Git/history/log không chứa token hoặc dữ liệu khách.
+- [ ] App Check monitor trước, enforce sau khi Zalo web và Manager native đều có token hợp lệ.
+- [ ] Feature flags và maintenance mode đã được thử bằng dữ liệu demo.
 
-- `VITE_FUNCTION_WRITE_MODE=required`.
-- Cloud Functions đã deploy.
-- Firestore rules production đã khóa, không còn `allow read, write: if true`.
-- GitHub Actions chạy xanh.
-- Owner/staff đăng nhập bằng Firebase Auth và có `users/{uid}` đúng role.
-- QR gương được tạo bằng `mirrors/{mirrorId}` có `qrToken` riêng.
-- Privacy Policy có kênh liên hệ thật.
+## Cổng nghiệp vụ
 
-## Không tự động làm được
+- [ ] Một QR chung mỗi salon; một QR mỗi chi nhánh; QR Gương 1 chỉ là tương thích cũ.
+- [ ] Hai staff không thể nhận cùng session; staff sai branch bị chặn.
+- [ ] Retry check-in, submit/approve điểm, spin và redeem không tạo dữ liệu trùng.
+- [ ] Owner/staff không đọc tenant khác; system admin chỉ dùng Admin Web.
+- [ ] Ảnh chỉ lưu khi consent; xóa khách/salon không báo hoàn tất khi còn residue.
 
-Các việc sau cần chủ dự án thao tác hoặc cung cấp thông tin:
+## Cổng phát hành
 
-- Bật/nâng Firebase Blaze.
-- Sửa GitHub billing hoặc spending limit.
-- Tạo Zalo Mini App production nếu cần OTP/tài khoản cá nhân.
-- Đăng ký Apple Developer Program.
-- Cung cấp thông tin pháp lý/liên hệ trong chính sách quyền riêng tư.
+- [ ] Firestore export, release tag, deploy SHA và rollback owner đã được ghi nhận.
+- [ ] Functions -> migration -> indexes -> Rules -> Hosting được triển khai đúng thứ tự.
+- [ ] Zalo Testing chạy thật trên Android/iPhone trước Production.
+- [ ] Manager chạy trên thiết bị thật qua Internal Testing/TestFlight; FCM/App Check/camera/biometric/deep link đều đạt.
+- [ ] Admin có Hosting site riêng; `/admin` không còn cấp quyền owner.
+- [ ] Privacy, Terms, Support và Account deletion truy cập công khai.
+- [ ] Uptime, error/quota/billing alerts đã gửi thử tới đúng người trực.
 
-## Thứ tự chuyển production an toàn
-
-1. Deploy Functions.
-2. Đặt `VITE_FUNCTION_WRITE_MODE=auto`.
-3. Test full flow với owner/staff thật.
-4. Đặt `VITE_FUNCTION_WRITE_MODE=required`.
-5. Deploy Hosting.
-6. Deploy Firestore rules production.
-7. Test staff không vào được `/owner`.
-8. Test khách vẫn xem được lịch sử/quà qua Functions.
-9. Pilot với 1 salon thật trong 7-14 ngày.
+Không đánh dấu production-ready chỉ vì build thành công. Trạng thái hiện tại nằm ở [RELEASE_STATUS.md](RELEASE_STATUS.md).

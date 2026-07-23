@@ -17,6 +17,11 @@ import {
   where,
 } from "firebase/firestore";
 import { sendPasswordResetEmail } from "firebase/auth";
+import {
+  DEFAULT_SYSTEM_FEATURES,
+  normalizeSystemFeatures,
+  type SystemFeatures,
+} from "@haircut/contracts";
 import { callFunctionOrFallback, callWriteFunctionOrFallback } from "./functionWrites";
 import { callFunction, getFirebaseAuth, getFirebaseDb, isFirebaseConfigured } from "./firebase";
 import { LuckyWheelConfig, defaultLuckyWheelConfig } from "./types";
@@ -52,6 +57,15 @@ export type StaffSession = {
   customer?: CustomerSummary;
 };
 
+export type ManagerSessionHistoryItem = Omit<
+  StaffSession,
+  "mirrorId" | "mirrorName" | "expiresAtMs"
+> & {
+  status: "completed" | "cancelled";
+  completedAtMs: number | null;
+  cancelledAtMs: number | null;
+};
+
 export type PointRequest = {
   id: string;
   salonId: string;
@@ -66,6 +80,40 @@ export type PointRequest = {
   status: "pending" | "approved" | "rejected";
   createdAtMs: number | null;
   customer?: CustomerSummary;
+};
+
+export type ManagerPointRequestHistoryItem = Omit<PointRequest, "photoUrls"> & {
+  status: "approved" | "rejected";
+  rejectionReason: string;
+  processedAtMs: number | null;
+};
+
+export type ManagerRewardHistoryItem = {
+  id: string;
+  rewardName: string;
+  rewardCode?: string;
+  rewardCodeLast4: string;
+  status: "unused" | "used" | "expired" | "revoked";
+  branchId: string;
+  customerId: string;
+  customerName: string;
+  usedBy?: string;
+  createdAtMs: number | null;
+  usedAtMs: number | null;
+  expiresAtMs: number | null;
+};
+
+export type ManagerAuditEventItem = {
+  id: string;
+  branchId: string;
+  actorId: string;
+  actorName: string;
+  actorRole: string;
+  action: string;
+  targetType: string;
+  targetId: string;
+  requestId: string;
+  createdAtMs: number | null;
 };
 
 export type OwnerOverview = {
@@ -94,8 +142,10 @@ export type SalonProfile = {
   name: string;
   address: string;
   phone: string;
+  avatarUrl: string;
   pointPerVisit: number;
   freeCustomerLimit: number;
+  features: SystemFeatures;
 };
 
 export type RedeemRewardResult = {
@@ -103,6 +153,7 @@ export type RedeemRewardResult = {
   rewardCode: string;
   rewardName: string;
   customerName?: string;
+  alreadyRedeemed?: boolean;
 };
 
 export type SalonMirror = {
@@ -146,8 +197,11 @@ export type StaffProfile = {
 
 export type CustomerRecordSummary = {
   id: string;
+  branchId: string;
+  branchName: string;
   staffName: string;
   note: string;
+  photoUrls: string[];
   pointsAdded: number;
   createdAtMs: number | null;
 };
@@ -156,14 +210,25 @@ export type CustomerRewardSummary = {
   id: string;
   rewardName: string;
   rewardCode: string;
-  status: "unused" | "used" | "expired";
+  status: "unused" | "used" | "expired" | "revoked";
+  branchId: string;
   createdAtMs: number | null;
+  usedAtMs: number | null;
+  expiresAtMs: number | null;
+};
+
+export type CustomerBranchVisit = {
+  branchId: string;
+  branchName: string;
+  lastVisitAtMs: number | null;
 };
 
 export type CustomerLookupResult = CustomerSummary & {
   lastVisitAtMs: number | null;
   recentRecords: CustomerRecordSummary[];
+  rewardHistory: CustomerRewardSummary[];
   unusedRewards: CustomerRewardSummary[];
+  branchVisits: CustomerBranchVisit[];
 };
 
 export type CustomerSearchPage = {
@@ -176,7 +241,7 @@ export type RewardCodeInfo = {
   rewardId?: string;
   rewardCode: string;
   rewardName?: string;
-  status: "unused" | "used" | "expired" | "not_found";
+  status: "unused" | "used" | "expired" | "revoked" | "not_found";
   customerName?: string;
   createdAtMs?: number | null;
   usedAtMs?: number | null;
@@ -313,6 +378,66 @@ export async function getOwnerOverview(
     { salonId, ...(branchId ? { branchId } : {}) },
     () => getOwnerOverviewDirect(salonId, branchId),
   );
+}
+
+export async function getManagerSessionHistory(input: {
+  salonId: string;
+  branchId?: string | null;
+  limit?: number;
+}): Promise<{ sessions: ManagerSessionHistoryItem[] }> {
+  return callFunction<
+    { salonId: string; branchId?: string; limit: number },
+    { sessions: ManagerSessionHistoryItem[] }
+  >("getManagerSessionHistory", {
+    salonId: input.salonId,
+    ...(input.branchId ? { branchId: input.branchId } : {}),
+    limit: input.limit ?? 30,
+  });
+}
+
+export async function getManagerPointRequestHistory(input: {
+  salonId: string;
+  branchId?: string | null;
+  limit?: number;
+}): Promise<{ requests: ManagerPointRequestHistoryItem[] }> {
+  return callFunction<
+    { salonId: string; branchId?: string; limit: number },
+    { requests: ManagerPointRequestHistoryItem[] }
+  >("getManagerPointRequestHistory", {
+    salonId: input.salonId,
+    ...(input.branchId ? { branchId: input.branchId } : {}),
+    limit: input.limit ?? 30,
+  });
+}
+
+export async function getManagerRewardHistory(input: {
+  salonId: string;
+  branchId?: string | null;
+  limit?: number;
+}): Promise<{ rewards: ManagerRewardHistoryItem[] }> {
+  return callFunction<
+    { salonId: string; branchId?: string; limit: number },
+    { rewards: ManagerRewardHistoryItem[] }
+  >("getManagerRewardHistory", {
+    salonId: input.salonId,
+    ...(input.branchId ? { branchId: input.branchId } : {}),
+    limit: input.limit ?? 30,
+  });
+}
+
+export async function getManagerAuditEvents(input: {
+  salonId: string;
+  branchId?: string | null;
+  limit?: number;
+}): Promise<{ events: ManagerAuditEventItem[] }> {
+  return callFunction<
+    { salonId: string; branchId?: string; limit: number },
+    { events: ManagerAuditEventItem[] }
+  >("getManagerAuditEvents", {
+    salonId: input.salonId,
+    ...(input.branchId ? { branchId: input.branchId } : {}),
+    limit: input.limit ?? 30,
+  });
 }
 
 export async function getSalonProfile(salonId: string): Promise<SalonProfile> {
@@ -490,8 +615,10 @@ async function getSalonProfileDirect(salonId: string): Promise<SalonProfile> {
       name: "HAIRCUT Studio",
       address: "",
       phone: "",
+      avatarUrl: "",
       pointPerVisit: 1,
       freeCustomerLimit: 50,
+      features: { ...DEFAULT_SYSTEM_FEATURES },
     };
   }
 
@@ -503,8 +630,10 @@ async function getSalonProfileDirect(salonId: string): Promise<SalonProfile> {
       name: "Salon",
       address: "",
       phone: "",
+      avatarUrl: "",
       pointPerVisit: 1,
       freeCustomerLimit: 50,
+      features: { ...DEFAULT_SYSTEM_FEATURES },
     };
   }
 
@@ -514,8 +643,10 @@ async function getSalonProfileDirect(salonId: string): Promise<SalonProfile> {
     name: String(data.name || "Salon"),
     address: String(data.address || ""),
     phone: String(data.phone || ""),
+    avatarUrl: String(data.avatarUrl || ""),
     pointPerVisit: Number(data.pointPerVisit ?? 1),
     freeCustomerLimit: Number(data.freeCustomerLimit ?? 50),
+    features: normalizeSystemFeatures(data.features),
   };
 }
 
@@ -534,8 +665,10 @@ async function updateSalonProfileDirect(input: {
       name: input.name,
       address: input.address,
       phone: input.phone,
+      avatarUrl: "",
       pointPerVisit: input.pointPerVisit,
       freeCustomerLimit: 50,
+      features: { ...DEFAULT_SYSTEM_FEATURES },
     };
   }
 
@@ -1267,19 +1400,28 @@ async function approvePointRequestDirect(request: PointRequest) {
   });
 }
 
-export async function rejectPointRequest(request: PointRequest) {
+export function normalizePointRejectionReason(value: string) {
+  const reason = value.trim().replace(/\s+/g, " ");
+  if (reason.length < 5 || reason.length > 200) {
+    throw new Error("Lý do từ chối phải có từ 5 đến 200 ký tự.");
+  }
+  return reason;
+}
+
+export async function rejectPointRequest(request: PointRequest, value = "Chủ salon từ chối") {
+  const reason = normalizePointRejectionReason(value);
   return callWriteFunctionOrFallback(
     "rejectPointRequest",
     {
       salonId: request.salonId,
       requestId: request.id,
-      reason: "Chủ salon từ chối",
+      reason,
     },
-    () => rejectPointRequestDirect(request),
+    () => rejectPointRequestDirect(request, reason),
   );
 }
 
-async function rejectPointRequestDirect(request: PointRequest) {
+async function rejectPointRequestDirect(request: PointRequest, reason: string) {
   const db = getFirebaseDb();
 
   if (!isFirebaseConfigured() || !db) {
@@ -1292,6 +1434,7 @@ async function rejectPointRequestDirect(request: PointRequest) {
   await runTransaction(db, async (transaction) => {
     transaction.update(requestRef, {
       status: "rejected",
+      rejectionReason: reason,
       rejectedAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
@@ -1337,6 +1480,7 @@ export async function saveLuckyWheelConfig(salonId: string, config: LuckyWheelCo
 export async function redeemRewardCode(input: {
   salonId: string;
   rewardCode: string;
+  branchId?: string;
 }): Promise<RedeemRewardResult> {
   const rewardCode = normalizeRewardCode(input.rewardCode);
 
@@ -1344,22 +1488,28 @@ export async function redeemRewardCode(input: {
     throw new Error("Vui lòng nhập mã quà");
   }
 
-  return callWriteFunctionOrFallback(
+  const pendingOperation = getOrCreatePendingOperationKey(
+    `redeem:${input.salonId}:${localScopeHash(rewardCode)}`,
+  );
+  const result = await callWriteFunctionOrFallback(
     "redeemRewardCode",
     {
       salonId: input.salonId,
       rewardCode,
+      branchId: input.branchId,
+      idempotencyKey: pendingOperation.key,
     },
     () => redeemRewardCodeDirect(input.salonId, rewardCode),
-  ).then((result) => {
-    const maybeResult = result as Partial<RedeemRewardResult> | undefined;
-    return {
-      rewardId: maybeResult?.rewardId || "",
-      rewardCode,
-      rewardName: maybeResult?.rewardName || "",
-      customerName: maybeResult?.customerName || "",
-    };
-  });
+  );
+  localStorage.removeItem(pendingOperation.storageKey);
+  const maybeResult = result as Partial<RedeemRewardResult> | undefined;
+  return {
+    rewardId: maybeResult?.rewardId || "",
+    rewardCode,
+    rewardName: maybeResult?.rewardName || "",
+    customerName: maybeResult?.customerName || "",
+    alreadyRedeemed: maybeResult?.alreadyRedeemed === true,
+  };
 }
 
 export async function restoreRewardCode(input: { salonId: string; rewardCode: string }) {
@@ -1420,7 +1570,7 @@ async function redeemRewardCodeDirect(
     updatedAt: serverTimestamp(),
   });
 
-  const customer = await getCustomer(String(reward.customerId || ""));
+  const customer = await getCustomer(String(reward.customerId || ""), salonId);
 
   return {
     rewardId: rewardDoc.id,
@@ -1626,7 +1776,9 @@ async function searchSalonCustomersDirect(
         allowPhoto: Boolean(data.allowPhoto),
         lastVisitAtMs: toMillis(data.lastVisitAt),
         recentRecords: [],
+        rewardHistory: [],
         unusedRewards: [],
+        branchVisits: [],
       } satisfies CustomerLookupResult;
     })
     .filter(
@@ -1740,16 +1892,33 @@ async function attachCustomerInsight(
     ),
   ]);
 
+  const recentRecords = recordsSnap.docs
+    .map(mapCustomerRecordSummary)
+    .sort((a, b) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0))
+    .slice(0, 20);
+  const rewardHistory = rewardsSnap.docs
+    .map(mapCustomerRewardSummary)
+    .sort((a, b) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0))
+    .slice(0, 20);
+  const branchVisits = Array.from(
+    recentRecords.reduce((visits, record) => {
+      if (record.branchId && !visits.has(record.branchId)) {
+        visits.set(record.branchId, {
+          branchId: record.branchId,
+          branchName: record.branchName || "Chi nhánh",
+          lastVisitAtMs: record.createdAtMs,
+        });
+      }
+      return visits;
+    }, new Map<string, CustomerBranchVisit>()),
+  ).map(([, visit]) => visit);
+
   return {
     ...customer,
-    recentRecords: recordsSnap.docs
-      .map(mapCustomerRecordSummary)
-      .sort((a, b) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0))
-      .slice(0, 5),
-    unusedRewards: rewardsSnap.docs
-      .map(mapCustomerRewardSummary)
-      .filter((reward) => reward.status === "unused")
-      .sort((a, b) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0)),
+    recentRecords,
+    rewardHistory,
+    unusedRewards: rewardHistory.filter((reward) => reward.status === "unused"),
+    branchVisits,
   };
 }
 
@@ -1789,7 +1958,7 @@ async function lookupRewardCodeDirect(
 
   const rewardDoc = snap.docs[0];
   const reward = rewardDoc.data();
-  const customer = await getCustomer(String(reward.customerId || ""));
+  const customer = await getCustomer(String(reward.customerId || ""), salonId);
 
   return {
     found: true,
@@ -1882,8 +2051,11 @@ function mapCustomerRecordSummary(
 
   return {
     id: docSnap.id,
+    branchId: String(data.branchId || ""),
+    branchName: String(data.branchName || ""),
     staffName: String(data.staffName || ""),
     note: String(data.note || ""),
+    photoUrls: [],
     pointsAdded: Number(data.pointsAdded ?? 1),
     createdAtMs: toMillis(data.createdAt),
   };
@@ -1899,7 +2071,10 @@ function mapCustomerRewardSummary(
     rewardName: String(data.rewardName || ""),
     rewardCode: String(data.rewardCode || ""),
     status: normalizeRewardStatus(data.status),
+    branchId: String(data.usedBranchId || data.branchId || ""),
     createdAtMs: toMillis(data.createdAt),
+    usedAtMs: toMillis(data.usedAt),
+    expiresAtMs: toMillis(data.expiresAt),
   };
 }
 
@@ -2011,7 +2186,7 @@ function trustedPointRequestPhotoUrls(
 async function attachCustomersToRequests(requests: PointRequest[]) {
   const pairs = await Promise.all(
     requests.map(async (request) => {
-      const customer = await getCustomer(request.customerId);
+      const customer = await getCustomer(request.customerId, request.salonId);
       return {
         ...request,
         customer: customer ?? request.customer,
@@ -2022,7 +2197,10 @@ async function attachCustomersToRequests(requests: PointRequest[]) {
   return pairs;
 }
 
-async function getCustomer(customerId: string): Promise<CustomerSummary | undefined> {
+async function getCustomer(
+  customerId: string,
+  salonId: string,
+): Promise<CustomerSummary | undefined> {
   const db = getFirebaseDb();
 
   if (!db || !customerId) {
@@ -2031,7 +2209,7 @@ async function getCustomer(customerId: string): Promise<CustomerSummary | undefi
 
   const snap = await getDoc(doc(db, "customers", customerId));
 
-  if (!snap.exists()) {
+  if (!snap.exists() || snap.data().salonId !== salonId) {
     return undefined;
   }
 
@@ -2072,7 +2250,7 @@ function normalizeRequestStatus(value: unknown): PointRequest["status"] {
 }
 
 function normalizeRewardStatus(value: unknown): CustomerRewardSummary["status"] {
-  if (value === "used" || value === "expired") {
+  if (value === "used" || value === "expired" || value === "revoked") {
     return value;
   }
 
@@ -2171,6 +2349,26 @@ function randomToken() {
   }
 
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+function localScopeHash(value: string) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function getOrCreatePendingOperationKey(scope: string) {
+  const storageKey = `haircut_pending_operation:${scope}`;
+  const existing = localStorage.getItem(storageKey);
+  if (existing && /^[A-Za-z0-9_-]{16,128}$/.test(existing)) {
+    return { storageKey, key: existing };
+  }
+  const key = randomToken();
+  localStorage.setItem(storageKey, key);
+  return { storageKey, key };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

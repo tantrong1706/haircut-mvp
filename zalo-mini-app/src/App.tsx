@@ -3,6 +3,7 @@ import { Gift, History, House, Sparkles, type LucideIcon } from "lucide-react";
 import { InstallAppPrompt } from "./components/InstallAppPrompt";
 import { trackEvent } from "./services/monitoring";
 import { parseQrContext } from "./services/qr";
+import { isZaloMiniAppRuntime } from "./services/runtime";
 import { clearSavedSession, loadSavedSession, saveSession } from "./services/sessionStore";
 import type { AppSession, TabKey } from "./services/types";
 
@@ -24,6 +25,9 @@ const PrivacyPage = lazy(() =>
 const TermsPage = lazy(() =>
   import("./pages/TermsPage").then((module) => ({ default: module.TermsPage })),
 );
+const AccountDeletionPage = lazy(() =>
+  import("./pages/AccountDeletionPage").then((module) => ({ default: module.AccountDeletionPage })),
+);
 const RewardsPage = lazy(() =>
   import("./pages/RewardsPage").then((module) => ({ default: module.RewardsPage })),
 );
@@ -44,6 +48,8 @@ const tabs: Array<{ key: TabKey; label: string; Icon: LucideIcon }> = [
   { key: "rewards", label: "Quà", Icon: Gift },
 ];
 
+const managementRoutes = ["/staff", "/owner", "/admin", "/delete-account"];
+
 function PageLoading() {
   return (
     <section className="panel loading-panel" aria-live="polite">
@@ -54,11 +60,41 @@ function PageLoading() {
   );
 }
 
-export default function App() {
-  const path = window.location.pathname;
-  const isCustomerRoute = !["/staff", "/owner", "/admin", "/privacy", "/terms"].some((route) =>
-    path.startsWith(route),
+function AdminPortalRedirect() {
+  const adminUrl = String(import.meta.env.VITE_ADMIN_URL || "").trim();
+
+  useEffect(() => {
+    if (adminUrl) {
+      window.location.replace(adminUrl);
+    }
+  }, [adminUrl]);
+
+  return (
+    <section className="panel loading-panel" aria-live="polite">
+      <h1>HAIRCUT Admin</h1>
+      <p>
+        {adminUrl
+          ? "Đang chuyển sang cổng quản trị hệ thống..."
+          : "Cổng quản trị hệ thống chưa được cấu hình trên môi trường này."}
+      </p>
+    </section>
   );
+}
+
+export default function App() {
+  const requestedPath = window.location.pathname;
+  const path =
+    isZaloMiniAppRuntime() && managementRoutes.some((route) => requestedPath.startsWith(route))
+      ? "/"
+      : requestedPath;
+  const isCustomerRoute = ![
+    "/staff",
+    "/owner",
+    "/admin",
+    "/privacy",
+    "/terms",
+    "/delete-account",
+  ].some((route) => path.startsWith(route));
   const currentQr = useMemo(() => parseQrContext(), []);
   const [session, setSession] = useState<AppSession | null>(() =>
     isCustomerRoute ? loadSavedSession(currentQr) : null,
@@ -192,7 +228,17 @@ export default function App() {
     );
   }
 
-  if (path.startsWith("/owner") || path.startsWith("/admin")) {
+  if (path.startsWith("/admin")) {
+    return (
+      <div className="app-shell ops-shell">
+        <main className="app-main wide-main">
+          <AdminPortalRedirect />
+        </main>
+      </div>
+    );
+  }
+
+  if (path.startsWith("/owner")) {
     return (
       <div className="app-shell ops-shell">
         {!isOnline ? (
@@ -218,6 +264,20 @@ export default function App() {
         <main className="app-main wide-main">
           <Suspense fallback={<PageLoading />}>
             <PrivacyPage />
+          </Suspense>
+        </main>
+      </div>
+    );
+  }
+
+  if (path.startsWith("/delete-account")) {
+    return (
+      <div className="app-shell ops-shell">
+        <main className="app-main wide-main">
+          <Suspense fallback={<PageLoading />}>
+            <AuthGate allowedRoles={["owner", "staff"]}>
+              {(user) => <AccountDeletionPage currentUser={user} />}
+            </AuthGate>
           </Suspense>
         </main>
       </div>

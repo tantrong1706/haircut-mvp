@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppSession } from "../services/types";
@@ -7,7 +7,6 @@ import { ScanEntryPage } from "./ScanEntryPage";
 const mocks = vi.hoisted(() => ({
   buildRegisterInput: vi.fn(),
   getZaloIdentity: vi.fn(),
-  requestPhoneToken: vi.fn(),
   registerCustomer: vi.fn(),
   resolveCustomerQr: vi.fn(),
 }));
@@ -18,7 +17,6 @@ vi.mock("../services/runtime", () => ({
 
 vi.mock("../services/zalo", () => ({
   getZaloIdentity: mocks.getZaloIdentity,
-  requestPhoneToken: mocks.requestPhoneToken,
 }));
 
 vi.mock("../services/api", () => ({
@@ -65,6 +63,7 @@ describe("ScanEntryPage", () => {
       qrType: "branch",
       salonId: "salon-a",
       salonName: "HAIRCUT Studio",
+      salonAvatarUrl: "https://example.test/salon-avatar.webp",
       branchId: "branch-a",
       branchName: "Chi nhánh Trung tâm",
       branchAddress: "123 Nguyễn Huệ, Quận 1, TP.HCM",
@@ -87,7 +86,6 @@ describe("ScanEntryPage", () => {
     });
     mocks.buildRegisterInput.mockReturnValue({ request: "register" });
     mocks.registerCustomer.mockResolvedValue(session);
-    mocks.requestPhoneToken.mockResolvedValue("phone-token-test");
   });
 
   it("tự hiện thông tin Zalo và tạo lượt chỉ bằng nút xác nhận", async () => {
@@ -96,7 +94,7 @@ describe("ScanEntryPage", () => {
     render(<ScanEntryPage onReady={onReady} />);
 
     expect(await screen.findByText("Anh Tân")).toBeInTheDocument();
-    expect(screen.getByText("123 Nguyễn Huệ, Quận 1, TP.HCM")).toBeInTheDocument();
+    expect(screen.getAllByText("123 Nguyễn Huệ, Quận 1, TP.HCM")).not.toHaveLength(0);
     expect(screen.getByText("Thông tin tùy chọn").closest("details")).not.toHaveAttribute("open");
 
     await user.click(screen.getByRole("button", { name: "Xác nhận vào hàng chờ" }));
@@ -108,12 +106,75 @@ describe("ScanEntryPage", () => {
       expect.objectContaining({ name: "Anh Tân", zaloUserId: "zalo-a" }),
       false,
       undefined,
-      "phone-token-test",
+      undefined,
     );
-    expect(mocks.requestPhoneToken).toHaveBeenCalledTimes(1);
+    expect(mocks.getZaloIdentity).toHaveBeenNthCalledWith(1, {
+      requestProfilePermission: false,
+    });
+    expect(mocks.getZaloIdentity).toHaveBeenNthCalledWith(2, {
+      requestProfilePermission: false,
+    });
   });
 
-  it("không xin phone token khi khách đã tự nhập số điện thoại", async () => {
+  it("mở link chung không QR mà không hiện lối vào quản lý", async () => {
+    window.history.replaceState({}, "", "/");
+
+    render(<ScanEntryPage onReady={vi.fn()} />);
+
+    expect(screen.getByRole("heading", { name: "Quét QR tại salon" })).toBeInTheDocument();
+    expect(
+      screen.getByText(/QR giúp HAIRCUT xác định đúng salon và chi nhánh/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Trang chủ salon")).not.toBeInTheDocument();
+    expect(screen.queryByText("Trang nhân viên")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Chính sách quyền riêng tư" })).toHaveAttribute(
+      "href",
+      "/privacy",
+    );
+    expect(screen.getByRole("link", { name: "Điều khoản sử dụng" })).toHaveAttribute(
+      "href",
+      "/terms",
+    );
+    expect(mocks.resolveCustomerQr).not.toHaveBeenCalled();
+    expect(mocks.getZaloIdentity).not.toHaveBeenCalled();
+  });
+
+  it("giải thích trước khi xin lại quyền hồ sơ bị từ chối", async () => {
+    const user = userEvent.setup();
+    mocks.getZaloIdentity
+      .mockResolvedValueOnce({
+        accessToken: "access-token-test",
+        name: "",
+      })
+      .mockResolvedValueOnce({
+        accessToken: "access-token-test",
+        zaloUserId: "zalo-a",
+        name: "Anh Tân",
+      });
+
+    render(<ScanEntryPage onReady={vi.fn()} />);
+
+    expect(await screen.findByText("Chưa nhận được thông tin Zalo")).toBeInTheDocument();
+    expect(screen.getByText(/Cho phép HAIRCUT đọc tên hiển thị/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Cho phép đọc tên Zalo" }));
+
+    expect(await screen.findByText("Anh Tân")).toBeInTheDocument();
+    expect(mocks.getZaloIdentity).toHaveBeenNthCalledWith(2, {
+      requestProfilePermission: true,
+    });
+  });
+
+  it("hiển thị ảnh salon và quay về logo mặc định khi ảnh lỗi", async () => {
+    const { container } = render(<ScanEntryPage onReady={vi.fn()} />);
+    const salonAvatar = await screen.findByAltText("Ảnh đại diện HAIRCUT Studio");
+
+    expect(salonAvatar).toHaveAttribute("src", "https://example.test/salon-avatar.webp");
+    fireEvent.error(salonAvatar);
+    expect(container.querySelector(".salon-identity-avatar .brand-mark")).toBeInTheDocument();
+  });
+
+  it("chỉ gửi số điện thoại khi khách tự nhập", async () => {
     const user = userEvent.setup();
     render(<ScanEntryPage onReady={vi.fn()} />);
 
@@ -123,7 +184,6 @@ describe("ScanEntryPage", () => {
     await user.click(screen.getByRole("button", { name: "Xác nhận vào hàng chờ" }));
 
     await waitFor(() => expect(mocks.registerCustomer).toHaveBeenCalled());
-    expect(mocks.requestPhoneToken).not.toHaveBeenCalled();
     expect(mocks.buildRegisterInput).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),

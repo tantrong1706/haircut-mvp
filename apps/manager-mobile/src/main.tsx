@@ -1,0 +1,16 @@
+import React from "react";
+import ReactDOM from "react-dom/client";
+import { ManagerApp } from "./ManagerApp";
+import { safelyHideSplashScreen } from "./nativeRuntime";
+import { trackEvent } from "./services/monitoring";
+import "./manager.css";
+
+ReactDOM.createRoot(document.getElementById("root")!).render(
+  <React.StrictMode>
+    <ManagerApp />
+  </React.StrictMode>,
+);
+
+void safelyHideSplashScreen().then((hidden) => {
+  if (!hidden) trackEvent("manager_splash_hide_failed", { area: "manager_root" });
+});

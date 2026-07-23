@@ -136,6 +136,7 @@ describe("hạn dùng mã quà", () => {
     expect(effectiveRewardStatus("unused", expiresAtMs, expiresAtMs - 1)).toBe("unused");
     expect(effectiveRewardStatus("unused", expiresAtMs, expiresAtMs)).toBe("expired");
     expect(effectiveRewardStatus("used", expiresAtMs, expiresAtMs + 1)).toBe("used");
+    expect(effectiveRewardStatus("revoked", expiresAtMs, expiresAtMs - 1)).toBe("revoked");
   });
 
   it("chỉ cho owner hoàn tác mã vừa đổi trong cửa sổ an toàn", () => {

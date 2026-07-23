@@ -26,7 +26,10 @@ export function WheelPage({ session, onSessionChange }: Props) {
   const [loadVersion, setLoadVersion] = useState(0);
   const slots = useMemo(() => activeWheelSlots(wheelConfig), [wheelConfig]);
   const missingPoints = Math.max(0, wheelConfig.requiredPoints - session.customer.points);
-  const canSpin = !loadingConfig && !spinning && missingPoints === 0 && slots.length > 0;
+  const wheelUnavailable =
+    session.features?.maintenanceMode === true || session.features?.luckyWheelEnabled === false;
+  const canSpin =
+    !wheelUnavailable && !loadingConfig && !spinning && missingPoints === 0 && slots.length > 0;
   const wheelStyle = useMemo(
     () => ({
       background: wheelBackground(slots.length),
@@ -136,7 +139,9 @@ export function WheelPage({ session, onSessionChange }: Props) {
       </div>
 
       <button className="primary-button" disabled={!canSpin} onClick={handleSpin}>
-        {loadingConfig ? (
+        {wheelUnavailable ? (
+          "Vòng quay đang tạm ngừng"
+        ) : loadingConfig ? (
           "Đang tải vòng quay..."
         ) : spinning ? (
           "Đang quay..."
@@ -152,6 +157,14 @@ export function WheelPage({ session, onSessionChange }: Props) {
           </>
         )}
       </button>
+
+      {wheelUnavailable ? (
+        <p className="alert error" role="status">
+          {session.features?.maintenanceMode
+            ? "Hệ thống đang bảo trì. Vui lòng quay lại sau."
+            : "Salon đang tạm ngừng vòng quay."}
+        </p>
+      ) : null}
 
       {slots.length === 0 ? (
         <div className="empty-state">

@@ -3,6 +3,7 @@
 interface ImportMetaEnv {
   readonly VITE_APP_ENV?: string;
   readonly VITE_APP_VERSION?: string;
+  readonly VITE_ADMIN_URL?: string;
   readonly VITE_FIREBASE_API_KEY?: string;
   readonly VITE_FIREBASE_AUTH_DOMAIN?: string;
   readonly VITE_FIREBASE_PROJECT_ID?: string;
@@ -31,6 +32,15 @@ interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
 
+interface Window {
+  __haircutBeforeSignOut?: () => Promise<void>;
+  __haircutNativeShare?: (url: string, title: string) => Promise<void>;
+  Capacitor?: {
+    getPlatform?: () => string;
+    isNativePlatform?: () => boolean;
+  };
+}
+
 declare module "zmp-sdk/apis" {
   export function getAccessToken(): Promise<string>;
 
@@ -45,6 +55,4 @@ declare module "zmp-sdk/apis" {
       followedOA?: boolean;
     };
   }>;
-
-  export function getPhoneNumber(): Promise<{ token: string }>;
 }

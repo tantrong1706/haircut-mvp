@@ -1,67 +1,44 @@
-# Checklist Quyền Riêng Tư
+# Checklist quyền riêng tư
 
-Ứng dụng lưu tên khách, số điện thoại tùy chọn, lịch sử cắt tóc, ảnh kiểu tóc và mã quà. Cần xem đây là dữ liệu nhạy cảm của khách hàng.
+HAIRCUT có thể xử lý tên hiển thị Zalo, số điện thoại khi người dùng đồng ý, lịch sử cắt tóc, điểm, mã quà, ghi chú và ảnh kiểu tóc. Mọi môi trường phải áp dụng nguyên tắc tối thiểu dữ liệu và tách tenant theo salon.
 
-## Đồng ý của khách
+## Đồng ý và minh bạch
 
-Câu hỏi nên rõ ràng:
+- Consent lưu ảnh mặc định là tắt.
+- Giải thích mục đích trước khi xin số điện thoại hoặc chụp ảnh.
+- Khách có thể tiếp tục dùng luồng cơ bản khi không đồng ý lưu ảnh.
+- Hiển thị liên kết `/privacy`, `/terms` và kênh hỗ trợ công khai.
+- Không tuyên bố tự động lấy số điện thoại Zalo nếu chưa có quyền/API được Zalo phê duyệt.
 
-```text
-Salon có được lưu ảnh kiểu tóc để lần sau phục vụ tốt hơn không?
-```
+## Quyền truy cập
 
-Lựa chọn:
+- Nhân viên chỉ thấy thông tin tối thiểu của khách đang phục vụ trong chi nhánh được phân công.
+- Chủ salon có thể quản lý khách trong salon nhưng không truy cập salon khác.
+- Quản trị hệ thống chỉ dùng vai trò `system_admin` và mọi thao tác nhạy cảm phải có audit.
+- Client không được tự thay đổi điểm, phần thưởng, vai trò hoặc trạng thái deletion job.
 
-- Đồng ý
-- Không đồng ý
+## Ảnh và Storage
 
-Nếu khách không đồng ý:
+- Chỉ owner/staff đúng salon được chụp sau khi khách đồng ý.
+- Tệp phải đúng MIME/kích thước và đường dẫn salon/customer được backend/rules cho phép.
+- Không chấp nhận URL ảnh ngoài allowlist hoặc đưa URL ảnh vào telemetry.
+- Khi khách rút consent hoặc yêu cầu xóa, deletion job phải xử lý cả Firestore lẫn Storage và retry idempotent.
 
-- Không chụp ảnh.
-- Không upload ảnh.
-- Chỉ lưu ghi chú cơ bản và điểm.
+## Xóa dữ liệu
 
-## Số điện thoại
+- Khách có thể gửi yêu cầu trong ứng dụng hoặc qua webhook rút đồng ý của Zalo.
+- Yêu cầu được ghi thành job, có trạng thái, thời hạn xử lý và audit.
+- Chỉ đánh dấu hoàn tất khi không còn dữ liệu thuộc phạm vi xóa; lỗi một phần phải được retry.
+- Yêu cầu xóa salon có thời gian chờ 14 ngày và có thể hủy trong thời hạn được phép.
 
-Không nên xin số điện thoại ngay nếu chưa cần. Luồng tốt cho MVP:
+## Telemetry
 
-1. Dùng Zalo user ID và tên hiển thị trước.
-2. Xin số điện thoại sau khi giải thích rằng số điện thoại giúp salon phân biệt khách trùng tên.
-3. Nhân viên chỉ thấy 4 số cuối.
+Không log hoặc gửi Analytics/Sentry: token, QR token, số điện thoại, email, Zalo ID, tên khách, ghi chú, mã quà đầy đủ, URL ảnh và payload webhook. Chỉ dùng mã lỗi ổn định, request ID và định danh vận hành đã làm sạch.
 
-## Quyền của nhân viên
+## Kiểm tra trước production
 
-Nhân viên nên thấy:
-
-- Tên khách.
-- 4 số cuối điện thoại.
-- Điểm.
-- Lịch sử của khách đang phục vụ.
-
-Nhân viên không nên thấy:
-
-- Số điện thoại đầy đủ mặc định.
-- Export toàn bộ khách.
-- Cài đặt salon.
-- Cấu hình vòng quay.
-- Công cụ xóa dữ liệu thô.
-
-## Yêu cầu xóa dữ liệu
-
-Khách nên có quyền yêu cầu:
-
-- Xóa ảnh kiểu tóc đã lưu.
-- Xóa hồ sơ khách.
-- Rút lại đồng ý lưu ảnh.
-
-## Trang công khai
-
-Trang chính sách hiện tại:
-
-```text
-https://haircut-c7d12.web.app/privacy
-```
-
-## Storage
-
-Chưa triển khai Storage nếu project chưa nâng Blaze. Khi bật upload ảnh, cần rules riêng cho ảnh theo `salonId`, `customerId` và quyền chủ salon/nhân viên.
+- Firestore/Storage Rules test đủ actor, role, tenant, branch, trạng thái inactive/suspended và consent ảnh.
+- App Check được rollout có quan sát trước khi enforce.
+- `/privacy` và `/terms` mở công khai trên thiết bị thật.
+- Webhook quyền riêng tư dùng chữ ký hợp lệ, chống gửi lặp và không log secret.
+- Diễn tập một yêu cầu xóa trên staging, bao gồm retry sau lỗi Storage.

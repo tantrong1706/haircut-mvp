@@ -73,4 +73,4 @@ Không dùng `required` nếu Functions chưa deploy.
 
 ## Đăng nhập
 
-Xem [AUTH_SETUP.md](AUTH_SETUP.md).
+Xem [AUTH_SETUP.md](../AUTH_SETUP.md).

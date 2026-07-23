@@ -1,9 +1,13 @@
-import { FirebaseApp, initializeApp } from "firebase/app";
+import { FirebaseApp, getApp, getApps, initializeApp } from "firebase/app";
 import { ReCaptchaEnterpriseProvider, initializeAppCheck } from "firebase/app-check";
 import { Auth, getAuth } from "firebase/auth";
 import { Firestore, getFirestore } from "firebase/firestore";
 import { Functions, getFunctions, httpsCallable } from "firebase/functions";
 import { FirebaseStorage, getStorage } from "firebase/storage";
+
+type AppCheckRegistry = typeof globalThis & {
+  __haircutAppCheckApps?: Set<string>;
+};
 
 let app: FirebaseApp | null = null;
 let auth: Auth | null = null;
@@ -37,22 +41,30 @@ export function getFirebaseApp() {
   }
 
   if (!app) {
-    app = initializeApp({
-      apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-      authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-      projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-      storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-      messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-      appId: import.meta.env.VITE_FIREBASE_APP_ID,
-      measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
-    });
+    app =
+      getApps().length > 0
+        ? getApp()
+        : initializeApp({
+            apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+            authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+            projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+            storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+            messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+            appId: import.meta.env.VITE_FIREBASE_APP_ID,
+            measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
+          });
 
     const appCheckSiteKey = String(import.meta.env.VITE_FIREBASE_APP_CHECK_SITE_KEY || "").trim();
-    if (appCheckSiteKey) {
+    const appCheckRegistry = globalThis as AppCheckRegistry;
+    const appCheckAlreadyInitialized =
+      appCheckRegistry.__haircutAppCheckApps?.has(app.name) === true;
+    if (appCheckSiteKey && !isNativeRuntime() && !appCheckAlreadyInitialized) {
       initializeAppCheck(app, {
         provider: new ReCaptchaEnterpriseProvider(appCheckSiteKey),
         isTokenAutoRefreshEnabled: true,
       });
+      appCheckRegistry.__haircutAppCheckApps ??= new Set<string>();
+      appCheckRegistry.__haircutAppCheckApps.add(app.name);
     }
   }
 
@@ -130,20 +142,49 @@ export async function callFunction<TInput, TOutput>(
 
   const fn = httpsCallable<TInput, TOutput>(fns, name);
   try {
-    const result = await fn(payload);
+    const result = await fn(withRuntimeMetadata(payload));
     return result.data;
   } catch (error) {
     throw new Error(friendlyFirebaseFunctionError(error, name));
   }
 }
 
+function withRuntimeMetadata<TInput>(payload: TInput): TInput {
+  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
+    return payload;
+  }
+  const nativePlatform = window.Capacitor?.getPlatform?.();
+  const userAgent = navigator.userAgent.toLowerCase();
+  const platform =
+    nativePlatform === "ios" || nativePlatform === "android"
+      ? nativePlatform
+      : /iphone|ipad|ipod/.test(userAgent)
+        ? "ios"
+        : /android/.test(userAgent)
+          ? "android"
+          : "web";
+  return {
+    appVersion: String(import.meta.env.VITE_APP_VERSION || "0.1.0"),
+    platform,
+    ...payload,
+  } as TInput;
+}
+
+function isNativeRuntime() {
+  return window.Capacitor?.isNativePlatform?.() === true;
+}
+
 export function friendlyFirebaseFunctionError(error: unknown, callableName = "") {
   const code = normalizeErrorCode(readErrorField(error, "code"));
   const rawMessage = readErrorMessage(error);
   const message = normalizeRawErrorMessage(rawMessage);
+  const businessCode = readBusinessErrorCode(error);
 
   if (code === "unauthenticated") {
     return message || "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.";
+  }
+  if (businessCode && BUSINESS_ERROR_MESSAGES[businessCode]) {
+    return BUSINESS_ERROR_MESSAGES[businessCode];
   }
   if (code === "permission-denied") {
     if (isApprovedPermissionMessage(callableName, message)) {
@@ -184,6 +225,28 @@ export function friendlyFirebaseFunctionError(error: unknown, callableName = "")
 
   return message || "Không xử lý được thao tác. Vui lòng thử lại.";
 }
+
+const BUSINESS_ERROR_MESSAGES: Record<string, string> = {
+  UNAUTHENTICATED: "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.",
+  FORBIDDEN: "Tài khoản này không có quyền thực hiện thao tác.",
+  USER_INACTIVE: "Tài khoản đã bị khóa. Vui lòng liên hệ người quản lý.",
+  SALON_SUSPENDED: "Salon đang tạm khóa. Vui lòng liên hệ hỗ trợ.",
+  SALON_PENDING_DELETION: "Salon đang trong thời gian chờ xóa dữ liệu.",
+  INVALID_SALON: "Salon không tồn tại hoặc tài khoản không còn thuộc salon này.",
+  INVALID_BRANCH: "Chi nhánh không tồn tại hoặc đã bị khóa.",
+  BRANCH_ACCESS_DENIED: "Bạn chưa được phân công tại chi nhánh này.",
+  SESSION_ALREADY_CLAIMED: "Khách đã được một nhân viên khác nhận.",
+  SESSION_NOT_OPEN: "Lượt phục vụ không còn ở trạng thái cho phép thao tác.",
+  REQUEST_ALREADY_PROCESSED: "Yêu cầu này đã được xử lý trước đó.",
+  REWARD_ALREADY_REDEEMED: "Mã quà đã được sử dụng hoặc đã bị hủy.",
+  REWARD_EXPIRED: "Mã quà đã hết hạn.",
+  INVALID_REQUEST: "Dữ liệu yêu cầu không còn hợp lệ. Vui lòng tải lại.",
+  RATE_LIMITED: "Bạn thao tác quá nhanh. Vui lòng chờ một phút rồi thử lại.",
+  APP_VERSION_UNSUPPORTED: "Phiên bản ứng dụng đã quá cũ. Vui lòng cập nhật.",
+  FEATURE_DISABLED: "Tính năng này đang tạm ngừng.",
+  MAINTENANCE_MODE: "Hệ thống đang bảo trì. Vui lòng thử lại sau.",
+  INTERNAL_ERROR: "Hệ thống chưa xử lý được thao tác này. Vui lòng thử lại.",
+};
 
 const COMMON_PERMISSION_MESSAGES = new Set([
   "Không tìm thấy hồ sơ phân quyền",
@@ -247,6 +310,22 @@ function readErrorField(error: unknown, field: "code" | "message") {
 
   const value = (error as Record<string, unknown>)[field];
   return typeof value === "string" ? value : "";
+}
+
+function readBusinessErrorCode(error: unknown) {
+  if (typeof error !== "object" || error === null) return "";
+  const record = error as Record<string, unknown>;
+  const directDetails = record.details;
+  const customData = record.customData;
+  const details =
+    typeof directDetails === "object" && directDetails !== null
+      ? directDetails
+      : typeof customData === "object" && customData !== null
+        ? (customData as Record<string, unknown>).details
+        : null;
+  if (typeof details !== "object" || details === null) return "";
+  const value = (details as Record<string, unknown>).errorCode;
+  return typeof value === "string" ? value.toUpperCase() : "";
 }
 
 function normalizeRawErrorMessage(message: string) {

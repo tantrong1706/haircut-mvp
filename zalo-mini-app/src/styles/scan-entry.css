@@ -107,6 +107,102 @@
   font-weight: 700;
 }
 
+.entry-page .entry-help-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px 20px;
+  padding: 4px 0;
+  font-size: 0.88rem;
+}
+
+.entry-page .entry-help-links a {
+  color: var(--text-secondary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.entry-page .salon-identity-card {
+  min-height: 104px;
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  align-items: center;
+  gap: 15px;
+  padding: 14px;
+}
+
+.entry-page .salon-identity-avatar {
+  width: 76px;
+  height: 76px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 2px solid rgba(246, 199, 108, 0.62);
+  border-radius: 22px;
+  background: #10231e;
+  box-shadow: 0 12px 26px rgba(21, 25, 23, 0.16);
+}
+
+.entry-page .salon-identity-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.entry-page .salon-identity-avatar .brand-logo {
+  transform: scale(0.72);
+}
+
+.entry-page .salon-avatar-placeholder {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(100deg, #e7ebe8 20%, #f7f8f7 40%, #e7ebe8 60%);
+  background-size: 220% 100%;
+  animation: salon-avatar-loading 1.2s ease-in-out infinite;
+}
+
+.entry-page .salon-identity-copy {
+  min-width: 0;
+}
+
+.entry-page .salon-identity-copy span,
+.entry-page .salon-identity-copy strong,
+.entry-page .salon-identity-copy small {
+  display: block;
+}
+
+.entry-page .salon-identity-copy span {
+  color: var(--green-strong);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.entry-page .salon-identity-copy h2 {
+  margin: 2px 0 3px;
+  overflow-wrap: anywhere;
+  font-size: 20px;
+}
+
+.entry-page .salon-identity-copy strong {
+  overflow-wrap: anywhere;
+  color: #313a36;
+  font-size: 14px;
+}
+
+.entry-page .salon-identity-copy small {
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+  color: rgba(21, 25, 23, 0.62);
+  font-weight: 700;
+}
+
+@keyframes salon-avatar-loading {
+  to {
+    background-position-x: -220%;
+  }
+}
+
 .entry-page .zalo-profile-card {
   display: grid;
   grid-template-columns: 54px minmax(0, 1fr) auto;

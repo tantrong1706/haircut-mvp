@@ -22,7 +22,7 @@ import { captureError, trackEvent, withMonitoringTrace } from "../services/monit
 import { hasQrContext, parseQrContext } from "../services/qr";
 import { isZaloMiniAppRuntime } from "../services/runtime";
 import type { AppSession } from "../services/types";
-import { getZaloIdentity, requestPhoneToken } from "../services/zalo";
+import { getZaloIdentity } from "../services/zalo";
 
 type Props = {
   onReady: (session: AppSession) => void;
@@ -32,7 +32,8 @@ export function ScanEntryPage({ onReady }: Props) {
   const [allowPhoto, setAllowPhoto] = useState(false);
   const [phone, setPhone] = useState("");
   const [displayName, setDisplayName] = useState("");
-  const [avatarUrl, setAvatarUrl] = useState("");
+  const [zaloAvatarUrl, setZaloAvatarUrl] = useState("");
+  const [salonAvatarFailed, setSalonAvatarFailed] = useState(false);
   const [loadingIdentity, setLoadingIdentity] = useState(true);
   const [loadingQr, setLoadingQr] = useState(true);
   const [qrResolution, setQrResolution] = useState<CustomerQrResolution | null>(null);
@@ -48,6 +49,9 @@ export function ScanEntryPage({ onReady }: Props) {
   const hasQr = useMemo(() => hasQrContext(qr), [qr]);
   const isZaloRuntime = useMemo(() => isZaloMiniAppRuntime(), []);
   const selectedBranch = qrResolution?.branches.find((branch) => branch.id === selectedBranchId);
+  const checkinUnavailable =
+    qrResolution?.features?.maintenanceMode === true ||
+    qrResolution?.features?.checkinEnabled === false;
 
   useEffect(() => {
     if (!hasQr) {
@@ -64,6 +68,7 @@ export function ScanEntryPage({ onReady }: Props) {
           return;
         }
         setQrResolution(resolution);
+        setSalonAvatarFailed(false);
         setSelectedBranchId(resolution.branchId || "");
       })
       .catch((err) => {
@@ -109,7 +114,7 @@ export function ScanEntryPage({ onReady }: Props) {
     };
   }, [hasQr, isZaloRuntime]);
 
-  function loadZaloIdentity() {
+  function loadZaloIdentity(requestProfilePermission = false) {
     if (!isZaloRuntime) {
       setLoadingIdentity(false);
       setZaloRequired(true);
@@ -121,7 +126,7 @@ export function ScanEntryPage({ onReady }: Props) {
     setZaloRequired(false);
     setError(null);
 
-    getZaloIdentity()
+    getZaloIdentity({ requestProfilePermission })
       .then((nextIdentity) => {
         if (!mountedRef.current) {
           return;
@@ -133,7 +138,7 @@ export function ScanEntryPage({ onReady }: Props) {
         }
 
         setDisplayName(nextDisplayName);
-        setAvatarUrl(nextIdentity.avatar || "");
+        setZaloAvatarUrl(nextIdentity.avatar || "");
       })
       .catch((err) => {
         captureError(err, {
@@ -161,6 +166,15 @@ export function ScanEntryPage({ onReady }: Props) {
   async function continueWithZalo() {
     const confirmedName = normalizeDisplayName(displayName);
 
+    if (checkinUnavailable) {
+      setError(
+        qrResolution?.features?.maintenanceMode
+          ? "Hệ thống đang bảo trì. Vui lòng thử lại sau."
+          : "Salon đang tạm ngừng nhận lượt check-in mới.",
+      );
+      return;
+    }
+
     if (!confirmedName) {
       setError("Vui lòng nhập tên hiển thị tại salon để nhân viên dễ nhận khách.");
       return;
@@ -185,8 +199,7 @@ export function ScanEntryPage({ onReady }: Props) {
        * Luôn lấy access token mới ngay khi khách
        * bấm tạo lượt cắt, không dùng token cũ.
        */
-      const confirmedIdentity = await getZaloIdentity();
-      const phoneToken = phone.trim() ? undefined : (await requestPhoneToken()) || undefined;
+      const confirmedIdentity = await getZaloIdentity({ requestProfilePermission: false });
 
       const session = await withMonitoringTrace(
         "customer_checkin",
@@ -200,7 +213,7 @@ export function ScanEntryPage({ onReady }: Props) {
               },
               allowPhoto,
               phone || undefined,
-              phoneToken,
+              undefined,
             ),
           ),
         {
@@ -248,37 +261,45 @@ export function ScanEntryPage({ onReady }: Props) {
           <QrCode size={38} aria-hidden="true" />
 
           <div>
-            <h2>Chưa có QR salon</h2>
+            <h2>Cần QR của salon</h2>
 
             <p className="muted">
-              Nếu bạn là chủ salon, vào mục Chi nhánh để tải QR chung hoặc QR của từng chi nhánh.
+              QR giúp HAIRCUT xác định đúng salon và chi nhánh. Hãy quét QR do salon cung cấp rồi mở
+              lại ứng dụng.
             </p>
           </div>
         </div>
 
-        <div className="quick-actions">
-          <button type="button" onClick={() => window.location.assign("/owner")}>
-            <span>
-              <ArrowRight size={20} aria-hidden="true" />
-            </span>
+        {isZaloRuntime ? (
+          <nav className="entry-help-links" aria-label="Thông tin HAIRCUT">
+            <a href="/privacy">Chính sách quyền riêng tư</a>
+            <a href="/terms">Điều khoản sử dụng</a>
+          </nav>
+        ) : (
+          <div className="quick-actions">
+            <button type="button" onClick={() => window.location.assign("/owner")}>
+              <span>
+                <ArrowRight size={20} aria-hidden="true" />
+              </span>
 
-            <div>
-              <strong>Trang chủ salon</strong>
-              <small>Quản lý chi nhánh, nhân viên và QR</small>
-            </div>
-          </button>
+              <div>
+                <strong>Trang chủ salon</strong>
+                <small>Quản lý chi nhánh, nhân viên và QR</small>
+              </div>
+            </button>
 
-          <button type="button" onClick={() => window.location.assign("/staff")}>
-            <span>
-              <Scissors size={20} aria-hidden="true" />
-            </span>
+            <button type="button" onClick={() => window.location.assign("/staff")}>
+              <span>
+                <Scissors size={20} aria-hidden="true" />
+              </span>
 
-            <div>
-              <strong>Trang nhân viên</strong>
-              <small>Xem khách đang chờ và đổi mã quà</small>
-            </div>
-          </button>
-        </div>
+              <div>
+                <strong>Trang nhân viên</strong>
+                <small>Xem khách đang chờ và đổi mã quà</small>
+              </div>
+            </button>
+          </div>
+        )}
       </section>
     );
   }
@@ -299,6 +320,34 @@ export function ScanEntryPage({ onReady }: Props) {
 
         <p className="muted">Xác nhận để salon nhận đúng khách và cộng điểm sau khi cắt.</p>
       </header>
+
+      <section className="panel salon-identity-card" aria-live="polite">
+        <div className="salon-identity-avatar">
+          {loadingQr ? (
+            <span className="salon-avatar-placeholder" aria-hidden="true" />
+          ) : qrResolution?.salonAvatarUrl && !salonAvatarFailed ? (
+            <img
+              src={qrResolution.salonAvatarUrl}
+              alt={`Ảnh đại diện ${qrResolution.salonName}`}
+              onError={() => setSalonAvatarFailed(true)}
+            />
+          ) : (
+            <BrandLogo />
+          )}
+        </div>
+
+        <div className="salon-identity-copy">
+          <span>Salon phục vụ</span>
+          <h2>{loadingQr ? "Đang xác minh salon..." : qrResolution?.salonName || "HAIRCUT"}</h2>
+          <strong>
+            {loadingQr
+              ? "Đang tải chi nhánh"
+              : selectedBranch?.name ||
+                (qrResolution?.selectionRequired ? "Chọn chi nhánh bên dưới" : "Chi nhánh")}
+          </strong>
+          {!loadingQr && selectedBranch?.address ? <small>{selectedBranch.address}</small> : null}
+        </div>
+      </section>
 
       {zaloRequired ? (
         <div className="panel zalo-required-card">
@@ -326,9 +375,9 @@ export function ScanEntryPage({ onReady }: Props) {
             ) : null}
 
             {isZaloRuntime ? (
-              <button className="secondary-button" onClick={loadZaloIdentity}>
+              <button className="secondary-button" onClick={() => loadZaloIdentity(true)}>
                 <RefreshCcw size={18} aria-hidden="true" />
-                Thử lấy lại thông tin
+                Cho phép đọc tên Zalo
               </button>
             ) : null}
           </div>
@@ -378,11 +427,18 @@ export function ScanEntryPage({ onReady }: Props) {
           </div>
 
           {qrError ? <p className="alert error">{qrError}</p> : null}
+          {checkinUnavailable ? (
+            <p className="alert error" role="status">
+              {qrResolution?.features?.maintenanceMode
+                ? "Hệ thống đang bảo trì. Vui lòng thử lại sau."
+                : "Salon đang tạm ngừng nhận lượt check-in mới."}
+            </p>
+          ) : null}
 
           <div className="panel zalo-profile-card" aria-live="polite">
             <div className="zalo-profile-avatar" aria-hidden="true">
-              {avatarUrl ? (
-                <img src={avatarUrl} alt="" referrerPolicy="no-referrer" />
+              {zaloAvatarUrl ? (
+                <img src={zaloAvatarUrl} alt="" referrerPolicy="no-referrer" />
               ) : (
                 <UserRound />
               )}
@@ -437,11 +493,11 @@ export function ScanEntryPage({ onReady }: Props) {
                   inputMode="tel"
                   value={phone}
                   onChange={(event) => setPhone(event.target.value)}
-                  placeholder="Tự lấy từ Zalo khi xác nhận"
+                  placeholder="Nhập nếu bạn muốn salon liên hệ"
                   disabled={loading}
                 />
 
-                <small>Zalo sẽ hỏi bạn trước; nhân viên chỉ thấy 4 số cuối.</small>
+                <small>Không bắt buộc; nhân viên chỉ thấy 4 số cuối.</small>
               </label>
 
               <label className="toggle-row photo-consent">
@@ -449,7 +505,7 @@ export function ScanEntryPage({ onReady }: Props) {
                   type="checkbox"
                   checked={allowPhoto}
                   onChange={(event) => setAllowPhoto(event.target.checked)}
-                  disabled={loading}
+                  disabled={loading || qrResolution?.features?.photoUploadEnabled === false}
                 />
 
                 <Camera size={18} aria-hidden="true" />
@@ -470,6 +526,7 @@ export function ScanEntryPage({ onReady }: Props) {
               loadingQr ||
               loadingIdentity ||
               !selectedBranchId ||
+              checkinUnavailable ||
               Boolean(qrError) ||
               displayName.trim().length === 0
             }

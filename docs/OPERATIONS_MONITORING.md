@@ -1,143 +1,81 @@
-# Quản lý và giám sát HAIRCUT
+# Giám sát HAIRCUT
 
-Tài liệu này dành cho giai đoạn chạy thật. Mục tiêu là biết app còn sống không,
-khách/nhân viên/chủ salon đang dùng luồng nào, thao tác nào lỗi, và khi nào cần xử lý.
+Tài liệu này mô tả tín hiệu cần theo dõi khi chạy pilot và production. Quy trình backup, restore và rollback chi tiết nằm tại `docs/PRODUCTION_OPERATIONS.md`.
 
-## Bộ công cụ nên dùng
+## Nguồn giám sát
 
-### 1. Firebase Console
+### Firebase và Google Cloud
 
-Dùng để quản lý hạ tầng chính:
+- Hosting: trạng thái release và lỗi phân phối tài nguyên.
+- Cloud Functions: tỷ lệ lỗi, độ trễ p95, cold start, số lần gọi và retry.
+- Firestore: reads/writes, lỗi Rules, index, quota và dung lượng.
+- Authentication: lỗi đăng nhập, tài khoản bị khóa và hoạt động bất thường.
+- Storage: dung lượng ảnh, lỗi quyền và egress.
+- App Check: tỷ lệ request hợp lệ trước khi bật enforce.
+- Cloud Logging/Error Reporting: lỗi backend theo function, `requestId` và `salonId` đã làm sạch.
 
-- Hosting: kiểm tra bản deploy web.
-- Firestore: kiểm tra dữ liệu salon, khách, điểm, mã quà.
-- Authentication: quản lý tài khoản chủ salon/nhân viên.
-- Analytics: xem số lượt mở app, check-in, quay vòng, duyệt điểm.
-- Performance Monitoring: xem tốc độ tải app và các trace quan trọng.
+### Sentry frontend
 
-App đã bật sẵn Firebase Analytics/Performance khi có:
-
-```text
-VITE_FIREBASE_MEASUREMENT_ID=G-XXXXXXXXXX
-```
-
-### 2. Sentry
-
-Dùng để bắt lỗi frontend:
-
-- lỗi trắng màn hình;
-- lỗi đăng nhập;
-- lỗi check-in;
-- lỗi gửi yêu cầu cộng điểm;
-- lỗi quay vòng;
-- lỗi đổi mã quà.
-
-App đã chuẩn bị sẵn Sentry. Khi có DSN, điền:
+Biến cấu hình chỉ ghi trong môi trường deploy, không commit giá trị thật:
 
 ```text
-VITE_SENTRY_DSN=https://...
-VITE_SENTRY_TRACES_SAMPLE_RATE=0.1
+VITE_SENTRY_DSN
+VITE_SENTRY_TRACES_SAMPLE_RATE
 VITE_SENTRY_REPLAY_SAMPLE_RATE=0
 VITE_SENTRY_REPLAY_ON_ERROR_SAMPLE_RATE=0
 ```
 
-Mặc định không bật Session Replay để tránh ghi lại dữ liệu nhạy cảm của khách.
+Không bật Session Replay cho dữ liệu khách. Cơ chế scrub phải loại token, QR token, số điện thoại, email, tên khách, ghi chú và URL ảnh trước khi gửi.
 
-### 3. Better Stack hoặc UptimeRobot
+### Uptime monitor
 
-Dùng để kiểm tra app còn online hay không.
-
-Monitor URL nên dùng:
+Theo dõi tối thiểu:
 
 ```text
 https://haircut-c7d12.web.app/health.json
 ```
 
-Điều kiện pass:
+Kỳ vọng HTTP `200` và body có `"status": "ok"`. Nên có thêm synthetic check cho `/privacy`, `/terms` và callable health trên staging nếu được triển khai.
 
-- HTTP status: `200`
-- Body có: `"status": "ok"`
+## Chỉ số và cảnh báo đề xuất
 
-Nếu monitor báo down, kiểm tra theo thứ tự:
+| Tín hiệu | Cảnh báo ban đầu |
+| --- | --- |
+| Hosting/health thất bại | 2 lần liên tiếp trong 5 phút |
+| Callable lỗi 5xx | trên 2% trong 10 phút |
+| Độ trễ callable p95 | trên 3 giây trong 15 phút |
+| Check-in thất bại | tăng gấp 2 nền 7 ngày hoặc trên 5% |
+| Duyệt điểm/đổi quà lỗi | trên 1% trong 15 phút |
+| App Check invalid | tăng đột biến sau mỗi release |
+| Firestore/Functions quota | đạt 80% giới hạn |
+| Deletion job `failed` | có ít nhất 1 job |
+| Push token lỗi lặp | trên 5% số lần gửi |
 
-1. Firebase Hosting có lỗi deploy không.
-2. Firebase project có bị quota/billing không.
-3. Firestore/Auth có sự cố không.
-4. Sentry có lỗi frontend mới không.
+Các ngưỡng trên là điểm bắt đầu; điều chỉnh sau pilot dựa trên lưu lượng thật.
 
-## Event đã được gắn trong app
+## Sự kiện sản phẩm tối thiểu
 
-### Khách hàng
+- Khách: bắt đầu/xong check-in, mở tab, quay và nhận kết quả.
+- Nhân viên: nhận lượt, gửi yêu cầu điểm, tra cứu/đổi mã quà.
+- Chủ salon: duyệt/từ chối điểm, quản lý chi nhánh/nhân viên/QR/vòng quay.
+- Hệ thống: từ chối truy cập chéo tenant, khóa salon, deletion job và lỗi tác vụ nền.
 
-- `page_view`
-- `customer_checkin_started`
-- `customer_checkin`
-- `customer_checkin_created`
-- `customer_tab_opened`
-- `customer_session_reset`
-- `lucky_wheel_spin_started`
-- `lucky_wheel_spin`
-- `lucky_wheel_spin_completed`
-
-### Nhân viên
-
-- `ops_user_authenticated`
-- `staff_point_request_started`
-- `staff_point_request`
-- `staff_point_request_submitted`
-- `reward_code_lookup`
-- `reward_code_lookup_completed`
-- `reward_code_redeem`
-- `reward_code_redeemed`
-
-### Chủ salon
-
-- `owner_signup_started`
-- `owner_signup_completed`
-- `ops_signin_started`
-- `ops_signin_completed`
-- `ops_signout`
-- `owner_tab_opened`
-- `owner_save_salon_profile`
-- `owner_salon_profile_saved`
-- `owner_save_avatar`
-- `owner_avatar_saved`
-- `owner_approve_point_request`
-- `owner_point_request_approved`
-- `owner_reject_point_request`
-- `owner_point_request_rejected`
-- `owner_save_wheel_config`
-- `owner_wheel_config_saved`
+Không dùng Analytics làm nguồn sự thật cho điểm hoặc phần thưởng. Dữ liệu nghiệp vụ trong Firestore và audit server-side mới là căn cứ đối soát.
 
 ## Quy tắc dữ liệu nhạy cảm
 
-Không gửi các dữ liệu này vào Analytics/Sentry:
+Không gửi vào log, Analytics, Sentry hoặc breadcrumb:
 
-- số điện thoại đầy đủ;
-- tên khách;
-- nội dung ghi chú kiểu tóc;
-- mã quà đầy đủ;
-- email người dùng;
-- URL avatar.
+- access token, App Secret, appsecret proof và QR token;
+- số điện thoại, email, Zalo ID hoặc tên khách đầy đủ;
+- ghi chú kiểu tóc, mã quà đầy đủ và URL ảnh;
+- payload webhook hoặc nội dung Firebase credential.
 
-Chỉ gửi dữ liệu vận hành:
+Cho phép các trường vận hành đã làm sạch như `salonId`, `branchId`, vai trò, tên function, mã lỗi ổn định, trạng thái và `requestId`.
 
-- `salon_id`;
-- `role`;
-- `tab`;
-- trạng thái phiên;
-- số điểm;
-- thao tác thành công/thất bại.
+## Nhịp vận hành
 
-## Việc cần bạn làm để bật giám sát đầy đủ
-
-1. Vào Firebase Console, kiểm tra Analytics và Performance đã có dữ liệu.
-2. Tạo project Sentry cho React/Vite.
-3. Gửi `VITE_SENTRY_DSN` cho Codex để điền vào `.env`.
-4. Tạo monitor trong Better Stack hoặc UptimeRobot với URL `/health.json`.
-5. Bật email cảnh báo cho uptime monitor.
-6. Mỗi ngày khi chạy pilot, kiểm tra:
-   - số lượt check-in;
-   - số yêu cầu cộng điểm;
-   - lỗi mới trong Sentry;
-   - app có downtime không.
+- Mỗi ngày pilot: xem health, lỗi mới, check-in, yêu cầu điểm và deletion jobs.
+- Mỗi tuần: rà chi phí/quota, token push lỗi, audit truy cập bị từ chối và phiên bản app tối thiểu.
+- Mỗi tháng: kiểm tra backup, diễn tập restore trên staging và rà quyền system admin.
+- Sau mỗi release: theo dõi lỗi/độ trễ/App Check ít nhất 60 phút và chuẩn bị rollback theo release tag.

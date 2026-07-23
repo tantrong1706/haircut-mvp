@@ -1,5 +1,36 @@
 # KIỂM TOÁN TOÀN DIỆN ỨNG DỤNG HAIRCUT
 
+## Cập nhật production ngày 16/07/2026
+
+Phần kiểm toán gốc bên dưới được giữ nguyên để làm lịch sử. Kiến trúc hiện tại trên nhánh `main` đã bổ sung tenant isolation, contract dùng chung, Admin Web, Manager Mobile, feature flags, idempotency, audit, xóa tài khoản/salon theo job và bộ công cụ backup/restore/rollback.
+
+Kết quả xác minh cục bộ mới nhất:
+
+| Nhóm | Kết quả |
+| --- | --- |
+| Functions typecheck, lint, format | Pass |
+| Functions unit | 55/55 pass |
+| Callable integration trên Firestore Emulator | 13/13 pass |
+| Firestore/Storage Rules Emulator | 17/17 pass |
+| Zalo Mini App lint, format, unit | Pass; 64/64 test |
+| Zalo production build | Pass; `www` hợp lệ, chunk lớn nhất 368,26 KB |
+| Admin Web | Type/lint pass; 3/3 test; build pass, chunk lớn nhất 291,20 KB |
+| Manager Mobile | Typecheck pass; 2/2 test; build pass, chunk lớn nhất 334,29 KB |
+| Capacitor sync | Pass; nhận đủ 10 plugin trên Android và iOS |
+| Script migration/backup/restore/release | JavaScript syntax và PowerShell parser pass |
+
+Các cổng còn cần thao tác thủ công trước production rộng:
+
+- Chạy audit tenant ở chế độ dry-run trên staging, duyệt mapping rồi mới chạy migration có xác nhận project.
+- Thêm `google-services.json` và `GoogleService-Info.plist` cục bộ; cấu hình APNs, App Check và push notification.
+- Biên dịch/kiểm thử Android native sau khi Gradle toolchain tải đầy đủ; lần kiểm tra trên máy này hết thời gian khi tải Gradle và chưa tạo APK.
+- Biên dịch iOS, ký và kiểm thử thiết bị thật trên Mac/Xcode.
+- Tạo Firebase Hosting site cho Admin Web, thiết lập system admin, monitoring, backup và diễn tập restore trên staging.
+- Kiểm tra dependency advisory theo từng workspace; không dùng `npm audit fix --force` nếu chưa đánh giá breaking change.
+- Smoke test Zalo trên Android/iPhone thật, sau đó mới deploy/enforce App Check hoặc phát hành store.
+
+Không deploy, chạy migration thật, thay đổi dữ liệu Firebase, commit hoặc push trong lần cập nhật này.
+
 - Repository: tantrong1706/haircut-mvp
 - Nhánh kiểm toán: ui-ux-upgrade
 - Ngày kiểm toán: 12/07/2026

@@ -1,0 +1,17 @@
+{
+  "name": "@haircut/contracts",
+  "version": "0.2.0",
+  "private": true,
+  "main": "index.js",
+  "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "require": "./index.js",
+      "import": "./index.js"
+    }
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
+  }
+}
