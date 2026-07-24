@@ -49,6 +49,12 @@ const tabs: Array<{ key: TabKey; label: string; Icon: LucideIcon }> = [
 ];
 
 const managementRoutes = ["/staff", "/owner", "/admin", "/delete-account"];
+type LegalPageKey = "privacy" | "terms";
+
+function legalPageFromHash(hash: string): LegalPageKey | null {
+  const route = hash.replace(/^#/, "").split(/[/?]/, 1)[0];
+  return route === "privacy" || route === "terms" ? route : null;
+}
 
 function PageLoading() {
   return (
@@ -82,9 +88,10 @@ function AdminPortalRedirect() {
 }
 
 export default function App() {
+  const isZaloRuntime = isZaloMiniAppRuntime();
   const requestedPath = window.location.pathname;
   const path =
-    isZaloMiniAppRuntime() && managementRoutes.some((route) => requestedPath.startsWith(route))
+    isZaloRuntime && managementRoutes.some((route) => requestedPath.startsWith(route))
       ? "/"
       : requestedPath;
   const isCustomerRoute = ![
@@ -100,6 +107,9 @@ export default function App() {
     isCustomerRoute ? loadSavedSession(currentQr) : null,
   );
   const [activeTab, setActiveTab] = useState<TabKey>("home");
+  const [legalPage, setLegalPage] = useState<LegalPageKey | null>(() =>
+    isZaloRuntime ? legalPageFromHash(window.location.hash) : null,
+  );
   const [isOnline, setIsOnline] = useState(() => navigator.onLine);
   const [syncAttempt, setSyncAttempt] = useState(0);
   const [sessionSync, setSessionSync] = useState<{
@@ -109,12 +119,29 @@ export default function App() {
   }>({ status: "idle", message: "", syncedAtMs: null });
 
   useEffect(() => {
+    if (!isZaloRuntime) {
+      return undefined;
+    }
+
+    function syncLegalPage() {
+      setLegalPage(legalPageFromHash(window.location.hash));
+    }
+
+    window.addEventListener("hashchange", syncLegalPage);
+    window.addEventListener("popstate", syncLegalPage);
+    return () => {
+      window.removeEventListener("hashchange", syncLegalPage);
+      window.removeEventListener("popstate", syncLegalPage);
+    };
+  }, [isZaloRuntime]);
+
+  useEffect(() => {
     trackEvent("page_view", {
-      page_path: path,
+      page_path: legalPage ? `#${legalPage}` : path,
       has_customer_session: Boolean(session),
       salon_id: session?.qr.salonId || currentQr.salonId,
     });
-  }, [currentQr.salonId, path, session?.sessionId]);
+  }, [currentQr.salonId, legalPage, path, session?.sessionId]);
 
   useEffect(() => {
     function updateOnlineState() {
@@ -208,6 +235,54 @@ export default function App() {
     });
   }
 
+  function openLegalPage(nextPage: LegalPageKey) {
+    if (!isZaloRuntime) {
+      window.location.assign(`/${nextPage}`);
+      return;
+    }
+
+    const nextHash = `#${nextPage}`;
+    if (window.location.hash !== nextHash) {
+      window.history.pushState(
+        { ...window.history.state, haircutLegalPage: nextPage },
+        "",
+        `${window.location.pathname}${window.location.search}${nextHash}`,
+      );
+    }
+    setLegalPage(nextPage);
+  }
+
+  function closeLegalPage() {
+    if (window.history.state?.haircutLegalPage) {
+      window.history.back();
+      return;
+    }
+
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${window.location.pathname}${window.location.search}`,
+    );
+    setLegalPage(null);
+  }
+
+  if (isZaloRuntime && legalPage) {
+    const legalContent =
+      legalPage === "privacy" ? (
+        <PrivacyPage onBack={closeLegalPage} onNavigate={openLegalPage} />
+      ) : (
+        <TermsPage onBack={closeLegalPage} onNavigate={openLegalPage} />
+      );
+
+    return (
+      <div className="app-shell">
+        <main className="app-main">
+          <Suspense fallback={<PageLoading />}>{legalContent}</Suspense>
+        </main>
+      </div>
+    );
+  }
+
   if (path.startsWith("/staff")) {
     return (
       <div className="app-shell ops-shell">
@@ -296,7 +371,7 @@ export default function App() {
     );
   }
 
-  let content = <ScanEntryPage onReady={setSession} />;
+  let content = <ScanEntryPage onReady={setSession} onOpenLegalPage={openLegalPage} />;
 
   if (session && activeTab === "history") {
     content = <HistoryPage session={session} />;

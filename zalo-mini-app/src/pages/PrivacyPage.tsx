@@ -1,12 +1,24 @@
+import { ArrowLeft } from "lucide-react";
 import { BrandLogo } from "../components/BrandLogo";
 
-export function PrivacyPage() {
+type Props = {
+  onBack?: () => void;
+  onNavigate?: (page: "privacy" | "terms") => void;
+};
+
+export function PrivacyPage({ onBack, onNavigate }: Props = {}) {
   const supportEmail = String(import.meta.env.VITE_SUPPORT_EMAIL || "").trim();
   const supportPhone = String(import.meta.env.VITE_SUPPORT_PHONE || "").trim();
 
   return (
     <section className="privacy-page">
       <header className="page-header">
+        {onBack ? (
+          <button type="button" className="secondary-button legal-back-button" onClick={onBack}>
+            <ArrowLeft size={18} aria-hidden="true" />
+            Quay lại
+          </button>
+        ) : null}
         <BrandLogo />
         <p className="eyebrow">HAIRCUT</p>
         <h1>Chính sách quyền riêng tư</h1>
@@ -93,9 +105,23 @@ export function PrivacyPage() {
           ) : null}
         </p>
         <p>
-          <a href="/terms">Đọc Điều khoản sử dụng của HAIRCUT</a>
-          <br />
-          <a href="/delete-account">Yêu cầu xóa tài khoản hoặc salon</a>
+          <a
+            href={onNavigate ? "#terms" : "/terms"}
+            onClick={(event) => {
+              if (onNavigate) {
+                event.preventDefault();
+                onNavigate("terms");
+              }
+            }}
+          >
+            Đọc Điều khoản sử dụng của HAIRCUT
+          </a>
+          {onNavigate ? null : (
+            <>
+              <br />
+              <a href="/delete-account">Yêu cầu xóa tài khoản hoặc salon</a>
+            </>
+          )}
         </p>
       </div>
     </section>
