@@ -3,159 +3,146 @@
 ## Trạng thái
 
 - Nhánh: `fix/cross-tenant-data-leak`
-- Base: `6ecce4fb88d68f2cddf2f056a751ba6e3cf6834c`
+- Base mới: `378fcf6084a75de1f752c201e82afa1671f5a20a`
   (`origin/codex/production-platform-upgrade`)
+- Head trước rebase: `9a9c0131d5f63f959a005b4a6840e27c04243eeb`
+- Commit code đã xác minh:
+  `62f1c0f52ae0f15981b8becd6284224df52d5dd6`
 - Phát hiện xử lý: `SR-01`
-- Trạng thái code: đã sửa và hòa giải với integration mới nhất; chưa deploy
-- Trạng thái xác minh: đã hoàn tất kiểm tra cục bộ trên Node.js 22.23.1
-- Commit bản vá: `586501905d9f6c45d42ecde1d0796a9a8fc11fcf`
-- Commit hòa giải integration:
-  `f61ca9756d6b44bb2d17eddf8019241e88c1c1c1`
-- Pull request: Draft PR `#19`
+- Trạng thái code: đã sửa và kiểm tra cục bộ; chưa deploy
+- Pull request `#19`: đã được merge trước khi thực hiện lượt khắc phục này
+
+## Kết quả rebase
+
+Nhánh `fix/cross-tenant-data-leak` được cập nhật lên
+`origin/codex/production-platform-upgrade` bằng fast-forward. Head cũ của PR là
+tổ tiên trực tiếp của base mới nên không có conflict, không cần force-push và
+không có commit chức năng nào từ base bị loại bỏ.
+
+Các chức năng mới của `searchSalonCustomers` vẫn được giữ nguyên:
+
+- lịch sử và tên chi nhánh;
+- `branchId`, `branchName` và `branchVisits`;
+- ảnh kiểu tóc chỉ dành cho owner;
+- lịch sử quà đầy đủ dành cho owner;
+- giới hạn dữ liệu khác nhau giữa owner và staff.
 
 ## Audit finding
 
-`searchSalonCustomers` và `lookupRewardCode` chỉ xác thực ở mức salon. Staff
-được phân công chi nhánh A1 có thể gọi callable trực tiếp để đọc khách, ghi chú
-cắt tóc và mã quà của chi nhánh A2 trong cùng salon.
+`searchSalonCustomers` áp dụng phạm vi chi nhánh lên document khách bằng
+`lastBranchId`. Trường này chỉ mô tả lần ghé gần nhất, không chứng minh khách
+thuộc một chi nhánh.
 
-Khi rà lại cùng mẫu lỗi, `redeemRewardCode` cũng có khoảng trống: endpoint xác
-thực `branchId` được gửi lên nhưng chưa buộc reward trong transaction phải
-thuộc đúng chi nhánh đó.
+Khách từng ghé A1 nhưng vừa ghé A2 vì vậy biến mất khỏi kết quả của staff A1.
+Khách cũ không có `lastBranchId` cũng không thể được tìm thấy, dù hồ sơ khách và
+điểm phải dùng chung trong toàn salon.
 
 ## Nguyên nhân gốc
 
-- Query nhạy cảm chỉ lọc `salonId`, chưa có phạm vi `branchId` dành cho staff.
-- `branchId` từ client chưa được đối chiếu thống nhất với hồ sơ user phía server.
-- Cursor tìm khách chưa bị ràng buộc vào chi nhánh.
-- Reward được tìm theo salon và code trước khi transaction, nhưng transaction
-  chưa so sánh `reward.branchId` với chi nhánh đã cấp quyền.
+- Phạm vi tenant của hồ sơ khách và phạm vi nghiệp vụ theo chi nhánh bị đồng
+  nhất sai.
+- Query và cursor khách cùng tin `lastBranchId` như quan hệ sở hữu chi nhánh.
+- `lastBranchId` là dữ liệu gần nhất, không phải danh sách chi nhánh khách từng
+  sử dụng.
 
 ## Thay đổi
 
-- Thêm helper xác định phạm vi chi nhánh từ user profile phía server.
-- Staff chỉ được dùng chi nhánh đã phân công; staff có nhiều chi nhánh phải chọn
-  một chi nhánh cụ thể.
-- Owner vẫn được xem toàn salon hoặc lọc một chi nhánh hợp lệ.
-- Tìm khách của staff lọc theo `lastBranchId`; lịch sử và mã quà tiếp tục được
-  lọc theo `branchId`.
-- Staff không có `canRedeemRewards` không nhận reward code trong kết quả tìm
-  khách.
-- Cursor sai salon hoặc sai chi nhánh trả cùng lỗi trang không hợp lệ.
-- Lookup mã quà sai salon/sai chi nhánh trả cùng trạng thái công khai với mã
-  không tồn tại.
-- Redeem giữ transaction/idempotency hiện có và kiểm tra lại salon, branch bên
-  trong transaction.
-- Frontend gửi `branchId` tới lookup; fallback query cũng áp dụng branch filter.
-- Bổ sung composite indexes cho các query branch-scoped.
+- Query document khách chỉ lọc theo `salonId` và tiêu chí tìm tên hoặc bốn số
+  cuối điện thoại.
+- Cursor chỉ hợp lệ khi document tồn tại và thuộc đúng salon đã xác thực.
+- Staff vẫn phải chọn chi nhánh được phân công từ hồ sơ user phía server.
+- `haircut_records` và `reward_history` tiếp tục được query theo `salonId`,
+  `customerId` và chi nhánh đã cấp quyền trước khi giới hạn kết quả.
+- Staff không nhận số điện thoại đầy đủ, ảnh kiểu tóc, `branchVisits` hoặc lịch
+  sử quà đầy đủ.
+- Staff không có `canRedeemRewards` luôn nhận danh sách quà rỗng.
+- Owner vẫn xem được toàn salon hoặc giới hạn dữ liệu nghiệp vụ theo chi nhánh
+  được chọn.
+- Giữ nguyên kiểm tra salon/branch trong `lookupRewardCode` và transaction của
+  `redeemRewardCode`, bao gồm idempotency.
+- Xóa hai composite index chỉ phục vụ tìm khách bằng `lastBranchId` kết hợp với
+  `namePrefixes` hoặc `phoneLast4`.
+- Giữ index `salonId + lastBranchId + lastVisitAt` vì dashboard vẫn dùng để lọc
+  khách lâu chưa quay lại theo chi nhánh.
 
 ## Mô hình phân quyền sau sửa
 
 1. Lấy `request.auth.uid`.
 2. Tải `users/{uid}` phía server.
-3. `assertSalonRole` kiểm tra user active, role và salon thật khớp `salonId`
-   được gửi để tương thích client hiện tại.
-4. `resolveAuthorizedBranchScope` kiểm tra branch assignment và trạng thái
-   branch phía server.
-5. Query chỉ chạy sau khi các bước trên thành công.
-6. Mutation redeem kiểm tra lại reward, salon và branch trong transaction.
+3. Xác minh user active, role và salon.
+4. Xác minh chi nhánh yêu cầu nằm trong `branchId` hoặc `branchIds` được phân
+   công và chi nhánh đang hoạt động.
+5. Tìm hồ sơ khách trong toàn salon.
+6. Chỉ tải records, ghi chú và rewards trong phạm vi chi nhánh đã xác minh cho
+   staff.
+7. Owner có thể xem dữ liệu toàn salon hoặc lọc dữ liệu nghiệp vụ theo chi
+   nhánh.
 
-Frontend không phải nguồn sự thật về role, salon hay branch.
+Frontend không phải nguồn sự thật về role, salon hoặc branch.
 
-## Rà endpoint cùng mẫu lỗi
-
-### Đã sửa
-
-- `searchSalonCustomers`
-- `lookupRewardCode`
-- `redeemRewardCode`
-
-### Đã có kiểm soát server phù hợp
-
-- Nhóm owner-only: quản lý salon, chi nhánh, nhân viên, QR, cấu hình vòng quay,
-  duyệt/từ chối điểm, xóa dữ liệu khách và hoàn tác mã quà.
-- Nhóm owner/staff: `listBranches`, `submitPointRequest`,
-  `claimServiceSession`, `cancelServiceSession`, đăng ký device token. Các
-  endpoint nghiệp vụ lấy branch từ hồ sơ hoặc document server và gọi
-  `assertBranchAccess`.
-- Nhóm customer/Zalo: resolve QR, check-in, lịch sử, điểm, vòng quay và quà dùng
-  xác minh QR/Zalo phía server.
-- Nhóm system admin: dùng `assertSystemAdmin`.
-
-### Chưa đủ bằng chứng production
-
-- App Check effective configuration.
-- Error/crash tracking và correlation log.
-- Backup/restore drill.
-
-Các mục này không cùng nguyên nhân với `SR-01` và không được sửa trong nhánh
-này.
-
-## Test đối kháng
+## Test regression
 
 File: `firebase/functions/test/adversarial.audit.test.ts`
 
-17 trường hợp bao phủ:
+Các tình huống mới hoặc được cập nhật:
 
-- owner đúng/sai salon;
-- staff đúng/sai chi nhánh;
-- customer role và caller chưa đăng nhập;
-- không trả khách, lịch sử hoặc reward code ngoài branch;
-- không trả reward code cho staff thiếu quyền đổi quà;
-- mã không tồn tại và mã ngoài salon có cùng trạng thái công khai;
-- chặn redeem chéo branch;
-- retry redeem cùng idempotency key không dùng quà hai lần.
+- khách có lịch sử A1 và A2, `lastBranchId` là A2, staff A1 vẫn tìm thấy bằng
+  tên và bốn số cuối điện thoại;
+- staff A1 chỉ thấy record, ghi chú và quà của A1;
+- staff không thấy số điện thoại đầy đủ, ảnh owner, `branchVisits` hoặc lịch sử
+  quà đầy đủ;
+- staff thiếu quyền đổi quà nhận danh sách quà rỗng;
+- khách cũ không có `lastBranchId` vẫn được tìm thấy;
+- owner xem được lịch sử toàn salon và lọc theo chi nhánh;
+- khách của salon khác không xuất hiện với owner hoặc staff salon A;
+- lookup và redeem quà tiếp tục chặn chéo salon/chi nhánh;
+- redeem lặp lại cùng idempotency key không dùng quà hai lần.
 
 ## Kết quả kiểm tra cục bộ
 
-Môi trường xác minh: Node.js `22.23.1`, Java `21.0.11`, Firebase CLI
+Môi trường Functions: Node.js `22.23.1`, Java `21.0.11`, Firebase CLI
 `15.22.3`.
 
-| Kiểm tra                            | Kết quả              |
-| ----------------------------------- | -------------------- |
-| Functions typecheck                 | Đạt                  |
-| Functions lint                      | Đạt                  |
-| Functions build                     | Đạt                  |
-| Functions unit                      | 63/63 đạt            |
-| Firestore và Storage Rules Emulator | 18/18 đạt, 0 skipped |
-| Callable integration                | Đạt                  |
-| Adversarial Emulator                | 17/17 đạt, 0 skipped |
-| Tổng integration và adversarial     | 36/36 đạt            |
-| Zalo TypeScript                     | Đạt                  |
-| Zalo lint                           | Đạt                  |
-| Zalo unit                           | 67/67 đạt            |
-| Zalo `build:zmp`                    | Đạt                  |
-| Conflict-file Prettier              | 2/2 file đạt         |
-| `git diff --check`                  | Đạt                  |
-| `git diff --cached --check`         | Đạt                  |
+| Kiểm tra                                     | Passed | Failed | Skipped | Kết quả |
+| -------------------------------------------- | -----: | -----: | ------: | ------- |
+| Functions `npm ci`                           |      - |      0 |       0 | Đạt     |
+| Functions typecheck                          |      - |      0 |       0 | Đạt     |
+| Functions lint                               |      - |      0 |       0 | Đạt     |
+| Functions build                              |      - |      0 |       0 | Đạt     |
+| Functions unit                               |     63 |      0 |       0 | Đạt     |
+| Firestore và Storage Rules Emulator          |     18 |      0 |       0 | Đạt     |
+| Callable integration và adversarial Emulator |     39 |      0 |       0 | Đạt     |
+| Zalo `npm ci`                                |      - |      0 |       0 | Đạt     |
+| Zalo TypeScript (`npx tsc --noEmit`)         |      - |      0 |       0 | Đạt     |
+| Zalo lint                                    |      - |      0 |       0 | Đạt     |
+| Zalo unit                                    |     70 |      0 |       0 | Đạt     |
+| Zalo `build:zmp`                             |      - |      0 |       0 | Đạt     |
+| Prettier trên file thay đổi                  |      4 |      0 |       0 | Đạt     |
+| `git diff --check`                           |      - |      0 |       0 | Đạt     |
 
-Lệnh `format:check` toàn bộ Zalo Mini App phát hiện 86 file có định dạng cũ từ
-nhánh nền. Không chạy Prettier tự động trên toàn dự án để tránh thay đổi các file
-không thuộc phạm vi bản vá. Ba file Zalo được sửa trong PR đều đạt Prettier.
+Tổng các bộ test có số lượng: `190 passed`, `0 failed`, `0 skipped`.
 
-Các test Emulator đã được chạy lại sau khi hòa giải conflict bằng Node.js
-`22.23.1` và kết thúc thành công với mã thoát `0`.
+Package Zalo không khai báo script `typecheck`; lệnh tương đương
+`npx tsc --noEmit` đã được dùng. Không chạy Prettier toàn repository và không
+thay đổi dependency.
 
 ## Rủi ro còn lại
 
-- Composite indexes đã được thêm vào repository nhưng chưa triển khai và xác minh
-  trên Firebase test project hoặc production.
-- Chưa xác minh hành vi trên dữ liệu production; không deploy hoặc merge trước
-  khi CI và quá trình review độc lập hoàn tất.
-- App Check effective configuration, error/crash tracking, correlation log và
-  backup/restore drill vẫn chưa có đủ bằng chứng production.
-- Hai phát hiện High còn lại của audit về observability và restore drill phải
-  được xử lý trong các nhánh riêng.
-- `npm ci` ghi nhận các lỗ hổng dependency hiện có, nhưng không tự động chạy
-  `npm audit fix` hoặc thay đổi dependency trong PR bảo mật này để tránh mở rộng
-  phạm vi và gây breaking change.
-- Kiểm tra Prettier toàn bộ Zalo Mini App vẫn phát hiện 86 file định dạng cũ từ
-  nhánh nền; ba file Zalo thuộc bản vá này đều đạt kiểm tra định dạng.
+- Chưa truy cập hoặc xác minh trên dữ liệu production.
+- Hai index tìm khách không còn dùng đã được xóa khỏi cấu hình nhưng chưa
+  deploy; index hiện có trên Firebase chỉ nên xóa trong một đợt vận hành riêng
+  sau khi bản Functions mới được phát hành và theo dõi ổn định.
+- App Check effective configuration, error/crash tracking và backup/restore
+  drill vẫn chưa có đủ bằng chứng production.
+- `npm ci` ghi nhận 13 lỗ hổng dependency hiện có trong Functions và 24 trong
+  Zalo Mini App. Không chạy `npm audit fix` để tránh thay đổi dependency ngoài
+  phạm vi.
+- GitHub CI cho head mới cần được quan sát sau khi push.
 
 ## Production
 
 - Deploy: không
 - Migration: không
 - Restore: không
-- Merge: không
+- Merge: không thực hiện trong lượt này
 - Dữ liệu thật: không truy cập
