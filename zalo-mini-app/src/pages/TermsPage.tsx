@@ -1,12 +1,24 @@
+import { ArrowLeft } from "lucide-react";
 import { BrandLogo } from "../components/BrandLogo";
 
-export function TermsPage() {
+type Props = {
+  onBack?: () => void;
+  onNavigate?: (page: "privacy" | "terms") => void;
+};
+
+export function TermsPage({ onBack, onNavigate }: Props = {}) {
   const supportEmail = String(import.meta.env.VITE_SUPPORT_EMAIL || "").trim();
   const supportPhone = String(import.meta.env.VITE_SUPPORT_PHONE || "").trim();
 
   return (
     <section className="privacy-page">
       <header className="page-header">
+        {onBack ? (
+          <button type="button" className="secondary-button legal-back-button" onClick={onBack}>
+            <ArrowLeft size={18} aria-hidden="true" />
+            Quay lại
+          </button>
+        ) : null}
         <BrandLogo />
         <p className="eyebrow">HAIRCUT</p>
         <h1>Điều khoản sử dụng</h1>
@@ -53,9 +65,19 @@ export function TermsPage() {
         <h2>6. Dữ liệu cá nhân</h2>
         <p>
           Việc thu thập, sử dụng, bảo vệ và xóa dữ liệu được mô tả tại{" "}
-          <a href="/privacy">Chính sách quyền riêng tư</a>. Khi khách rút lại đồng ý hoặc gửi yêu
-          cầu xóa hợp lệ qua Zalo, hệ thống sẽ tiếp nhận và xử lý dữ liệu liên quan theo quy trình
-          bảo mật của HAIRCUT.
+          <a
+            href={onNavigate ? "#privacy" : "/privacy"}
+            onClick={(event) => {
+              if (onNavigate) {
+                event.preventDefault();
+                onNavigate("privacy");
+              }
+            }}
+          >
+            Chính sách quyền riêng tư
+          </a>
+          . Khi khách rút lại đồng ý hoặc gửi yêu cầu xóa hợp lệ qua Zalo, hệ thống sẽ tiếp nhận và
+          xử lý dữ liệu liên quan theo quy trình bảo mật của HAIRCUT.
         </p>
 
         <h2>7. Tính sẵn sàng của dịch vụ</h2>
@@ -96,9 +118,29 @@ export function TermsPage() {
           ) : null}
         </p>
         <p>
-          <a href="/privacy">Chính sách quyền riêng tư</a>
+          <a
+            href={onNavigate ? "#privacy" : "/privacy"}
+            onClick={(event) => {
+              if (onNavigate) {
+                event.preventDefault();
+                onNavigate("privacy");
+              }
+            }}
+          >
+            Chính sách quyền riêng tư
+          </a>
           <br />
-          <a href="/privacy#data-rights">Hướng dẫn yêu cầu xem, sửa hoặc xóa dữ liệu</a>
+          <a
+            href={onNavigate ? "#privacy" : "/privacy#data-rights"}
+            onClick={(event) => {
+              if (onNavigate) {
+                event.preventDefault();
+                onNavigate("privacy");
+              }
+            }}
+          >
+            Hướng dẫn yêu cầu xem, sửa hoặc xóa dữ liệu
+          </a>
         </p>
       </div>
     </section>
