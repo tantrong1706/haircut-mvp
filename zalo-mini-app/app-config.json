@@ -1,7 +1,7 @@
 {
   "app": {
-    "title": "HAIRCUT",
-    "headerTitle": "HAIRCUT",
+    "title": "CH Hair Studio",
+    "headerTitle": "CH Hair Studio",
     "headerColor": "#151917",
     "textColor": "white",
     "leftButton": "back",
@@ -14,7 +14,7 @@
     "./assets/index.Dmi5cRad.css"
   ],
   "listSyncJS": [
-    "./assets/index.LZFHOcGj.module.js"
+    "./assets/index.OwSTJ7mR.module.js"
   ],
   "listAsyncJS": []
 }

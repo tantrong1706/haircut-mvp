@@ -83,6 +83,7 @@ import {
   assertSalonIsOperational,
   createAuthorization,
   salonStatus,
+  type AppUser,
   type UserRole,
 } from "./authz/authorization";
 import { auditEventData } from "./domains/audit/auditEvent";
@@ -236,6 +237,42 @@ function optionalLimitedString(
     throw new HttpsError("invalid-argument", `${field} không được vượt quá ${maxLength} ký tự`);
   }
   return result;
+}
+
+async function resolveAuthorizedBranchScope(
+  user: AppUser,
+  salonId: string,
+  requestedBranchId: unknown,
+): Promise<string | undefined> {
+  let branchId = optionalLimitedString(requestedBranchId, "branchId", 128);
+  if (!branchId && user.role === "staff") {
+    const assignedBranchIds = [
+      ...new Set(
+        [user.branchId, ...(user.branchIds ?? [])].filter(
+          (value): value is string => typeof value === "string" && value.length > 0,
+        ),
+      ),
+    ];
+    if (assignedBranchIds.length === 1) {
+      branchId = assignedBranchIds[0];
+    }
+  }
+  if (!branchId) {
+    if (user.role === "staff") {
+      throw apiError(
+        "invalid-argument",
+        ApiErrorCode.INVALID_REQUEST,
+        "Vui lòng chọn chi nhánh được phân công",
+        { field: "branchId" },
+      );
+    }
+    return undefined;
+  }
+
+  await assertBranchAccess(user, branchId);
+  const branchSnap = await db.collection("branches").doc(branchId).get();
+  assertBranchIsOperational(branchSnap.data(), salonId, branchId);
+  return branchId;
 }
 
 function boundedQueryLimit(value: unknown, fallback: number, max: number): number {
@@ -4356,6 +4393,7 @@ export const searchSalonCustomers = onCall(functionOptions, async (request) => {
     ? Math.min(Math.max(Math.floor(requestedPageSize), 5), 20)
     : 10;
   const user = await assertSalonRole(uid, salonId, ["owner", "staff"]);
+  const branchId = await resolveAuthorizedBranchScope(user, salonId, request.data?.branchId);
 
   const normalizedTerm = normalizeSearchText(term);
   if (normalizedTerm.length < 2) {
@@ -4368,21 +4406,23 @@ export const searchSalonCustomers = onCall(functionOptions, async (request) => {
     throw new HttpsError("invalid-argument", "Vui lòng nhập đủ 4 số cuối điện thoại");
   }
 
-  let customersQuery = isPhoneSearch
-    ? db
-        .collection("customers")
-        .where("salonId", "==", salonId)
-        .where("phoneLast4", "==", phoneDigits)
-        .orderBy(FieldPath.documentId())
-    : db
-        .collection("customers")
-        .where("salonId", "==", salonId)
-        .where("namePrefixes", "array-contains", normalizedTerm)
-        .orderBy(FieldPath.documentId());
+  let customersQuery = db.collection("customers").where("salonId", "==", salonId);
+  if (branchId) {
+    customersQuery = customersQuery.where("lastBranchId", "==", branchId);
+  }
+  customersQuery = (
+    isPhoneSearch
+      ? customersQuery.where("phoneLast4", "==", phoneDigits)
+      : customersQuery.where("namePrefixes", "array-contains", normalizedTerm)
+  ).orderBy(FieldPath.documentId());
 
   if (cursor) {
     const cursorSnap = await db.collection("customers").doc(cursor).get();
-    if (!cursorSnap.exists || cursorSnap.data()?.salonId !== salonId) {
+    if (
+      !cursorSnap.exists ||
+      cursorSnap.data()?.salonId !== salonId ||
+      (branchId && cursorSnap.data()?.lastBranchId !== branchId)
+    ) {
       throw new HttpsError("invalid-argument", "Trang dữ liệu không còn hợp lệ");
     }
     customersQuery = customersQuery.startAfter(cursorSnap);
@@ -4406,21 +4446,30 @@ export const searchSalonCustomers = onCall(functionOptions, async (request) => {
 
   const enriched = await Promise.all(
     customers.map(async (customer) => {
+      let recordsQuery = db
+        .collection("haircut_records")
+        .where("salonId", "==", salonId)
+        .where("customerId", "==", customer.id);
+      let rewardsQuery = db
+        .collection("reward_history")
+        .where("salonId", "==", salonId)
+        .where("customerId", "==", customer.id);
+      if (branchId) {
+        recordsQuery = recordsQuery.where("branchId", "==", branchId);
+        rewardsQuery = rewardsQuery.where("branchId", "==", branchId);
+      }
+      const canReadRewardCodes = user.role === "owner" || user.canRedeemRewards === true;
       const [recordsSnap, rewardsSnap] = await Promise.all([
-        db
-          .collection("haircut_records")
-          .where("salonId", "==", salonId)
-          .where("customerId", "==", customer.id)
+        recordsQuery
           .orderBy("createdAt", "desc")
           .limit(user.role === "owner" ? 20 : 5)
           .get(),
-        db
-          .collection("reward_history")
-          .where("salonId", "==", salonId)
-          .where("customerId", "==", customer.id)
-          .orderBy("createdAt", "desc")
-          .limit(user.role === "owner" ? 20 : 10)
-          .get(),
+        canReadRewardCodes
+          ? rewardsQuery
+              .orderBy("createdAt", "desc")
+              .limit(user.role === "owner" ? 20 : 10)
+              .get()
+          : Promise.resolve(null),
       ]);
 
       const recentRecords = recordsSnap.docs.map((doc) => {
@@ -4443,7 +4492,7 @@ export const searchSalonCustomers = onCall(functionOptions, async (request) => {
               : [],
         };
       });
-      const rewardHistory = rewardsSnap.docs.flatMap((doc) => {
+      const rewardHistory = (rewardsSnap?.docs ?? []).flatMap((doc) => {
         const data = doc.data();
         const status = effectiveRewardStatus(
           data.status,
@@ -5032,12 +5081,15 @@ export const lookupRewardCode = onCall(functionOptions, async (request) => {
     throw new HttpsError("permission-denied", "Nhân viên chưa được phép kiểm tra mã quà");
   }
 
-  const query = await db
+  const branchId = await resolveAuthorizedBranchScope(user, salonId, request.data?.branchId);
+  let rewardQuery = db
     .collection("reward_history")
     .where("salonId", "==", salonId)
-    .where("rewardCode", "==", rewardCodeInput)
-    .limit(1)
-    .get();
+    .where("rewardCode", "==", rewardCodeInput);
+  if (branchId) {
+    rewardQuery = rewardQuery.where("branchId", "==", branchId);
+  }
+  const query = await rewardQuery.limit(1).get();
 
   if (query.empty) {
     return {
@@ -5081,7 +5133,6 @@ export const redeemRewardCode = onCall(functionOptions, async (request) => {
   const salonId = requireString(request.data?.salonId, "salonId");
   const rewardCodeInput = requireString(request.data?.rewardCode, "rewardCode");
   const idempotencyKey = requireIdempotencyKey(request.data?.idempotencyKey);
-  const requestedBranchId = optionalLimitedString(request.data?.branchId, "branchId", 128);
   const user = await assertSalonRole(uid, salonId, ["owner", "staff"]);
   await enforceAuthenticatedRateLimit("redeemRewardCode", uid, salonId);
   await assertFeatureEnabled(
@@ -5095,12 +5146,15 @@ export const redeemRewardCode = onCall(functionOptions, async (request) => {
     throw new HttpsError("permission-denied", "Nhân viên chưa được phép xác nhận mã quà");
   }
 
-  const query = await db
+  const branchId = await resolveAuthorizedBranchScope(user, salonId, request.data?.branchId);
+  let rewardQuery = db
     .collection("reward_history")
     .where("salonId", "==", salonId)
-    .where("rewardCode", "==", rewardCodeInput)
-    .limit(1)
-    .get();
+    .where("rewardCode", "==", rewardCodeInput);
+  if (branchId) {
+    rewardQuery = rewardQuery.where("branchId", "==", branchId);
+  }
+  const query = await rewardQuery.limit(1).get();
 
   if (query.empty) {
     throw new HttpsError("not-found", "Không tìm thấy mã quà");
@@ -5108,18 +5162,7 @@ export const redeemRewardCode = onCall(functionOptions, async (request) => {
 
   const rewardRef = query.docs[0].ref;
   const rewardBeforeTransaction = query.docs[0].data();
-  const staffBranchIds = [
-    ...new Set(
-      [user.branchId, ...(user.branchIds ?? [])].filter(
-        (value): value is string => typeof value === "string" && value.length > 0,
-      ),
-    ),
-  ];
-  const usedBranchId =
-    requestedBranchId ||
-    (user.role === "staff" && staffBranchIds.length === 1
-      ? staffBranchIds[0]
-      : String(rewardBeforeTransaction.branchId || ""));
+  const usedBranchId = branchId || String(rewardBeforeTransaction.branchId || "");
   if (!usedBranchId) {
     throw apiError(
       "failed-precondition",
@@ -5139,7 +5182,7 @@ export const redeemRewardCode = onCall(functionOptions, async (request) => {
     ]);
     const reward = rewardSnap.data();
 
-    if (!rewardSnap.exists || reward?.salonId !== salonId) {
+    if (!rewardSnap.exists || reward?.salonId !== salonId || reward?.branchId !== usedBranchId) {
       throw new HttpsError("not-found", "Không tìm thấy mã quà");
     }
     assertBranchIsOperational(branchSnap.data(), salonId, usedBranchId);

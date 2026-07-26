@@ -62,7 +62,7 @@ export function RedeemRewardPanel({
     try {
       const nextInfo = await withMonitoringTrace(
         "reward_code_lookup",
-        () => lookupRewardCode({ salonId, rewardCode }),
+        () => lookupRewardCode({ salonId, branchId, rewardCode }),
         {
           salon_id: salonId,
         },

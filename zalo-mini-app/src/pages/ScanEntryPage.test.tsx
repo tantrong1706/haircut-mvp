@@ -118,8 +118,9 @@ describe("ScanEntryPage", () => {
 
   it("mở link chung không QR mà không hiện lối vào quản lý", async () => {
     window.history.replaceState({}, "", "/");
+    const onOpenLegalPage = vi.fn();
 
-    render(<ScanEntryPage onReady={vi.fn()} />);
+    render(<ScanEntryPage onReady={vi.fn()} onOpenLegalPage={onOpenLegalPage} />);
 
     expect(screen.getByRole("heading", { name: "Quét QR tại salon" })).toBeInTheDocument();
     expect(
@@ -129,12 +130,19 @@ describe("ScanEntryPage", () => {
     expect(screen.queryByText("Trang nhân viên")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Chính sách quyền riêng tư" })).toHaveAttribute(
       "href",
-      "/privacy",
+      "#privacy",
     );
     expect(screen.getByRole("link", { name: "Điều khoản sử dụng" })).toHaveAttribute(
       "href",
-      "/terms",
+      "#terms",
     );
+
+    fireEvent.click(screen.getByRole("link", { name: "Chính sách quyền riêng tư" }));
+    fireEvent.click(screen.getByRole("link", { name: "Điều khoản sử dụng" }));
+
+    expect(onOpenLegalPage).toHaveBeenNthCalledWith(1, "privacy");
+    expect(onOpenLegalPage).toHaveBeenNthCalledWith(2, "terms");
+    expect(window.location.pathname).toBe("/");
     expect(mocks.resolveCustomerQr).not.toHaveBeenCalled();
     expect(mocks.getZaloIdentity).not.toHaveBeenCalled();
   });

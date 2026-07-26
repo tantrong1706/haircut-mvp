@@ -26,9 +26,10 @@ import { getZaloIdentity } from "../services/zalo";
 
 type Props = {
   onReady: (session: AppSession) => void;
+  onOpenLegalPage?: (page: "privacy" | "terms") => void;
 };
 
-export function ScanEntryPage({ onReady }: Props) {
+export function ScanEntryPage({ onReady, onOpenLegalPage }: Props) {
   const [allowPhoto, setAllowPhoto] = useState(false);
   const [phone, setPhone] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -272,8 +273,28 @@ export function ScanEntryPage({ onReady }: Props) {
 
         {isZaloRuntime ? (
           <nav className="entry-help-links" aria-label="Thông tin HAIRCUT">
-            <a href="/privacy">Chính sách quyền riêng tư</a>
-            <a href="/terms">Điều khoản sử dụng</a>
+            <a
+              href="#privacy"
+              onClick={(event) => {
+                if (onOpenLegalPage) {
+                  event.preventDefault();
+                  onOpenLegalPage("privacy");
+                }
+              }}
+            >
+              Chính sách quyền riêng tư
+            </a>
+            <a
+              href="#terms"
+              onClick={(event) => {
+                if (onOpenLegalPage) {
+                  event.preventDefault();
+                  onOpenLegalPage("terms");
+                }
+              }}
+            >
+              Điều khoản sử dụng
+            </a>
           </nav>
         ) : (
           <div className="quick-actions">
