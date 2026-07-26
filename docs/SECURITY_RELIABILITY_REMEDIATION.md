@@ -3,12 +3,14 @@
 ## Trạng thái
 
 - Nhánh: `fix/cross-tenant-data-leak`
-- Base: `534ab3ff004b26bb6b05d7b02ac103c22f827928`
+- Base: `6ecce4fb88d68f2cddf2f056a751ba6e3cf6834c`
   (`origin/codex/production-platform-upgrade`)
 - Phát hiện xử lý: `SR-01`
-- Trạng thái code: đã sửa, đã commit và đã push; chưa deploy
+- Trạng thái code: đã sửa và hòa giải với integration mới nhất; chưa deploy
 - Trạng thái xác minh: đã hoàn tất kiểm tra cục bộ trên Node.js 22.23.1
-- Commit SHA: `586501905d9f6c45d42ecde1d0796a9a8fc11fcf`
+- Commit bản vá: `586501905d9f6c45d42ecde1d0796a9a8fc11fcf`
+- Commit hòa giải integration:
+  `f61ca9756d6b44bb2d17eddf8019241e88c1c1c1`
 - Pull request: Draft PR `#19`
 
 ## Audit finding
@@ -118,12 +120,12 @@ Môi trường xác minh: Node.js `22.23.1`, Java `21.0.11`, Firebase CLI
 | Firestore và Storage Rules Emulator | 18/18 đạt, 0 skipped |
 | Callable integration                | Đạt                  |
 | Adversarial Emulator                | 17/17 đạt, 0 skipped |
-| Tổng integration và adversarial     | 32/32 đạt            |
+| Tổng integration và adversarial     | 36/36 đạt            |
 | Zalo TypeScript                     | Đạt                  |
 | Zalo lint                           | Đạt                  |
 | Zalo unit                           | 67/67 đạt            |
 | Zalo `build:zmp`                    | Đạt                  |
-| Modified-file Prettier              | 3/3 file đạt         |
+| Conflict-file Prettier              | 2/2 file đạt         |
 | `git diff --check`                  | Đạt                  |
 | `git diff --cached --check`         | Đạt                  |
 
@@ -131,8 +133,8 @@ Lệnh `format:check` toàn bộ Zalo Mini App phát hiện 86 file có định 
 nhánh nền. Không chạy Prettier tự động trên toàn dự án để tránh thay đổi các file
 không thuộc phạm vi bản vá. Ba file Zalo được sửa trong PR đều đạt Prettier.
 
-Các test Emulator đã được chạy ngoài sandbox và kết thúc thành công với mã thoát
-`0`.
+Các test Emulator đã được chạy lại sau khi hòa giải conflict bằng Node.js
+`22.23.1` và kết thúc thành công với mã thoát `0`.
 
 ## Rủi ro còn lại
 
