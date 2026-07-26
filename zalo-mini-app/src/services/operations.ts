@@ -925,6 +925,7 @@ export async function updateStaffProfile(input: {
 
 export async function searchSalonCustomers(input: {
   salonId: string;
+  branchId?: string;
   term: string;
   cursor?: string | null;
   pageSize?: number;
@@ -940,18 +941,25 @@ export async function searchSalonCustomers(input: {
   }
 
   return callFunctionOrFallback<
-    { salonId: string; term: string; cursor?: string; pageSize: number },
+    { salonId: string; branchId?: string; term: string; cursor?: string; pageSize: number },
     CustomerSearchPage
   >(
     "searchSalonCustomers",
     {
       salonId: input.salonId,
+      branchId: input.branchId,
       term,
       cursor: input.cursor || undefined,
       pageSize: input.pageSize || 10,
     },
     () =>
-      searchSalonCustomersDirect(input.salonId, term, input.cursor || null, input.pageSize || 10),
+      searchSalonCustomersDirect(
+        input.salonId,
+        input.branchId,
+        term,
+        input.cursor || null,
+        input.pageSize || 10,
+      ),
   );
 }
 
@@ -977,6 +985,7 @@ export async function deleteCustomerData(input: {
 
 export async function lookupRewardCode(input: {
   salonId: string;
+  branchId?: string;
   rewardCode: string;
 }): Promise<RewardCodeInfo> {
   const rewardCode = normalizeRewardCode(input.rewardCode);
@@ -985,10 +994,11 @@ export async function lookupRewardCode(input: {
     throw new Error("Vui lòng nhập mã quà");
   }
 
-  return callFunctionOrFallback<{ salonId: string; rewardCode: string }, RewardCodeInfo>(
-    "lookupRewardCode",
-    { salonId: input.salonId, rewardCode },
-    () => lookupRewardCodeDirect(input.salonId, rewardCode),
+  return callFunctionOrFallback<
+    { salonId: string; branchId?: string; rewardCode: string },
+    RewardCodeInfo
+  >("lookupRewardCode", { salonId: input.salonId, branchId: input.branchId, rewardCode }, () =>
+    lookupRewardCodeDirect(input.salonId, input.branchId, rewardCode),
   );
 }
 
@@ -1752,6 +1762,7 @@ async function updateStaffProfileDirect(input: {
 
 async function searchSalonCustomersDirect(
   salonId: string,
+  branchId: string | undefined,
   term: string,
   cursor: string | null,
   pageSize: number,
@@ -1763,7 +1774,13 @@ async function searchSalonCustomersDirect(
   }
 
   const normalized = normalizeCustomerSearch(term);
-  const snap = await getDocs(query(collection(db, "customers"), where("salonId", "==", salonId)));
+  const snap = await getDocs(
+    query(
+      collection(db, "customers"),
+      where("salonId", "==", salonId),
+      ...(branchId ? [where("lastBranchId", "==", branchId)] : []),
+    ),
+  );
   const matches = snap.docs
     .map((docSnap) => {
       const data = docSnap.data();
@@ -1794,7 +1811,7 @@ async function searchSalonCustomersDirect(
 
   return {
     customers: await Promise.all(
-      customers.map((customer) => attachCustomerInsight(salonId, customer)),
+      customers.map((customer) => attachCustomerInsight(salonId, branchId, customer)),
     ),
     nextCursor: hasMore ? (customers[customers.length - 1]?.id ?? null) : null,
   };
@@ -1867,6 +1884,7 @@ async function deleteCustomerDocsDirect(
 
 async function attachCustomerInsight(
   salonId: string,
+  branchId: string | undefined,
   customer: CustomerLookupResult,
 ): Promise<CustomerLookupResult> {
   const db = getFirebaseDb();
@@ -1881,6 +1899,7 @@ async function attachCustomerInsight(
         collection(db, "haircut_records"),
         where("salonId", "==", salonId),
         where("customerId", "==", customer.id),
+        ...(branchId ? [where("branchId", "==", branchId)] : []),
       ),
     ),
     getDocs(
@@ -1888,6 +1907,7 @@ async function attachCustomerInsight(
         collection(db, "reward_history"),
         where("salonId", "==", salonId),
         where("customerId", "==", customer.id),
+        ...(branchId ? [where("branchId", "==", branchId)] : []),
       ),
     ),
   ]);
@@ -1924,6 +1944,7 @@ async function attachCustomerInsight(
 
 async function lookupRewardCodeDirect(
   salonId: string,
+  branchId: string | undefined,
   rewardCode: string,
 ): Promise<RewardCodeInfo> {
   const db = getFirebaseDb();
@@ -1944,6 +1965,7 @@ async function lookupRewardCodeDirect(
       collection(db, "reward_history"),
       where("salonId", "==", salonId),
       where("rewardCode", "==", rewardCode),
+      ...(branchId ? [where("branchId", "==", branchId)] : []),
       firestoreLimit(1),
     ),
   );

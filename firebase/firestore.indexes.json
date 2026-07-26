@@ -195,6 +195,16 @@
       ]
     },
     {
+      "collectionGroup": "haircut_records",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "salonId", "order": "ASCENDING" },
+        { "fieldPath": "branchId", "order": "ASCENDING" },
+        { "fieldPath": "customerId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "reward_history",
       "queryScope": "COLLECTION",
       "fields": [
@@ -226,6 +236,16 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "salonId", "order": "ASCENDING" },
+        { "fieldPath": "branchId", "order": "ASCENDING" },
+        { "fieldPath": "customerId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reward_history",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "salonId", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
       ]
     },
@@ -242,6 +262,15 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "salonId", "order": "ASCENDING" },
+        { "fieldPath": "rewardCode", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reward_history",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "salonId", "order": "ASCENDING" },
+        { "fieldPath": "branchId", "order": "ASCENDING" },
         { "fieldPath": "rewardCode", "order": "ASCENDING" }
       ]
     },
@@ -316,6 +345,24 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "salonId", "order": "ASCENDING" },
+        { "fieldPath": "lastBranchId", "order": "ASCENDING" },
+        { "fieldPath": "namePrefixes", "arrayConfig": "CONTAINS" }
+      ]
+    },
+    {
+      "collectionGroup": "customers",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "salonId", "order": "ASCENDING" },
+        { "fieldPath": "phoneLast4", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "customers",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "salonId", "order": "ASCENDING" },
+        { "fieldPath": "lastBranchId", "order": "ASCENDING" },
         { "fieldPath": "phoneLast4", "order": "ASCENDING" }
       ]
     },

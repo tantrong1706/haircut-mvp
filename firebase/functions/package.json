@@ -16,7 +16,7 @@
     "test": "vitest",
     "test:unit": "vitest run test/contracts.test.ts test/security.test.ts test/businessRules.test.ts test/customerSearch.test.ts test/customerPhotos.test.ts test/salonBranding.test.ts test/salonDeletionJob.test.ts test/tenantMigration.test.ts test/zaloClient.test.ts test/zaloPhone.test.ts test/zaloContract.test.ts test/zaloPrivacyWebhook.test.ts",
     "test:rules": "vitest run test/firestore.rules.test.ts",
-    "test:integration": "vitest run --no-file-parallelism --testTimeout=20000 test/callables.integration.test.ts test/salonBranding.integration.test.ts",
+    "test:integration": "vitest run --no-file-parallelism --testTimeout=20000 test/callables.integration.test.ts test/salonBranding.integration.test.ts test/adversarial.audit.test.ts",
     "test:salon-branding:integration": "vitest run test/salonBranding.integration.test.ts",
     "seed:demo": "npm run build && node lib/seedDemo.js",
     "serve": "npm run build && firebase emulators:start --only functions,firestore,storage",

@@ -43,10 +43,15 @@ describe("RedeemRewardPanel", () => {
 
   it("chỉ đổi quà sau bước xác nhận", async () => {
     const user = userEvent.setup();
-    render(<RedeemRewardPanel salonId="salon-a" />);
+    render(<RedeemRewardPanel salonId="salon-a" branchId="branch-a1" />);
 
     await user.type(screen.getByLabelText("Mã quà"), "hc-test");
     await user.click(screen.getByRole("button", { name: "Kiểm tra mã" }));
+    expect(mocks.lookupRewardCode).toHaveBeenCalledWith({
+      salonId: "salon-a",
+      branchId: "branch-a1",
+      rewardCode: "HC-TEST",
+    });
     await user.click(await screen.findByRole("button", { name: "Đánh dấu đã sử dụng" }));
 
     expect(screen.getByRole("dialog", { name: "Xác nhận sử dụng quà?" })).toBeInTheDocument();
