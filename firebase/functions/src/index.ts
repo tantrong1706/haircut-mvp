@@ -4407,9 +4407,6 @@ export const searchSalonCustomers = onCall(functionOptions, async (request) => {
   }
 
   let customersQuery = db.collection("customers").where("salonId", "==", salonId);
-  if (branchId) {
-    customersQuery = customersQuery.where("lastBranchId", "==", branchId);
-  }
   customersQuery = (
     isPhoneSearch
       ? customersQuery.where("phoneLast4", "==", phoneDigits)
@@ -4418,11 +4415,7 @@ export const searchSalonCustomers = onCall(functionOptions, async (request) => {
 
   if (cursor) {
     const cursorSnap = await db.collection("customers").doc(cursor).get();
-    if (
-      !cursorSnap.exists ||
-      cursorSnap.data()?.salonId !== salonId ||
-      (branchId && cursorSnap.data()?.lastBranchId !== branchId)
-    ) {
+    if (!cursorSnap.exists || cursorSnap.data()?.salonId !== salonId) {
       throw new HttpsError("invalid-argument", "Trang dữ liệu không còn hợp lệ");
     }
     customersQuery = customersQuery.startAfter(cursorSnap);

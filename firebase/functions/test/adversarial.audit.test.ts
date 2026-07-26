@@ -1,6 +1,7 @@
 import { deleteApp, getApps } from "firebase-admin/app";
 import { Timestamp, getFirestore } from "firebase-admin/firestore";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { buildNameSearchPrefixes } from "../src/customerSearch";
 import { lookupRewardCode, redeemRewardCode, searchSalonCustomers } from "../src/index";
 
 const emulatorHost = process.env.FIRESTORE_EMULATOR_HOST;
@@ -45,22 +46,65 @@ describe.skipIf(!emulatorHost)("adversarial tenant access", () => {
       ).rejects.toMatchObject({ code: "permission-denied" });
     });
 
-    it("allows staff to search the assigned branch", async () => {
-      const result = await searchSalonCustomers.run(
+    it("does not expose a customer from another salon", async () => {
+      const [ownerResult, staffResult] = await Promise.all([
+        searchSalonCustomers.run(requestFor("owner-a", { salonId: SALON_A, term: "3333" })),
+        searchSalonCustomers.run(
+          requestFor("staff-a1", {
+            salonId: SALON_A,
+            branchId: BRANCH_A1,
+            term: "3333",
+          }),
+        ),
+      ]);
+
+      expect(ownerResult.customers).toEqual([]);
+      expect(staffResult.customers).toEqual([]);
+    });
+
+    it("keeps a moved customer searchable while restricting branch data", async () => {
+      const phoneResult = await searchSalonCustomers.run(
         requestFor("staff-a1", {
           salonId: SALON_A,
           branchId: BRANCH_A1,
           term: "1111",
         }),
       );
+      const nameResult = await searchSalonCustomers.run(
+        requestFor("staff-a1", {
+          salonId: SALON_A,
+          branchId: BRANCH_A1,
+          term: "customer a1",
+        }),
+      );
 
-      expect(result.customers).toHaveLength(1);
-      expect(result.customers[0]).toMatchObject({ id: "customer-a1", phoneLast4: "1111" });
-      expect(result.customers[0].recentRecords).toHaveLength(1);
-      expect(result.customers[0].unusedRewards).toHaveLength(1);
+      for (const result of [phoneResult, nameResult]) {
+        expect(result.customers).toHaveLength(1);
+        expect(result.customers[0]).toMatchObject({ id: "customer-a1", phoneLast4: "1111" });
+        expect(result.customers[0]).not.toHaveProperty("phone");
+        expect(result.customers[0].recentRecords).toEqual([
+          expect.objectContaining({
+            id: "record-a1",
+            branchId: BRANCH_A1,
+            note: "A1 note",
+            photoUrls: [],
+          }),
+        ]);
+        expect(result.customers[0].recentRecords).not.toEqual(
+          expect.arrayContaining([expect.objectContaining({ note: "A2 private note" })]),
+        );
+        expect(result.customers[0].branchVisits).toEqual([]);
+        expect(result.customers[0].rewardHistory).toEqual([]);
+        expect(result.customers[0].unusedRewards).toEqual([
+          expect.objectContaining({ id: "reward-a1", branchId: BRANCH_A1, rewardCode: "" }),
+        ]);
+        expect(result.customers[0].unusedRewards).not.toEqual(
+          expect.arrayContaining([expect.objectContaining({ id: "reward-a1-a2" })]),
+        );
+      }
     });
 
-    it("does not return a customer from another branch through an allowed scope", async () => {
+    it("returns shared customer data without exposing another branch's business data", async () => {
       const result = await searchSalonCustomers.run(
         requestFor("staff-a1", {
           salonId: SALON_A,
@@ -69,7 +113,13 @@ describe.skipIf(!emulatorHost)("adversarial tenant access", () => {
         }),
       );
 
-      expect(result.customers).toEqual([]);
+      expect(result.customers).toHaveLength(1);
+      expect(result.customers[0]).toMatchObject({ id: "customer-a2", phoneLast4: "2222" });
+      expect(result.customers[0]).not.toHaveProperty("phone");
+      expect(result.customers[0].recentRecords).toEqual([]);
+      expect(result.customers[0].branchVisits).toEqual([]);
+      expect(result.customers[0].rewardHistory).toEqual([]);
+      expect(result.customers[0].unusedRewards).toEqual([]);
     });
 
     it("does not expose reward codes to staff without redemption permission", async () => {
@@ -83,6 +133,75 @@ describe.skipIf(!emulatorHost)("adversarial tenant access", () => {
 
       expect(result.customers).toHaveLength(1);
       expect(result.customers[0].unusedRewards).toEqual([]);
+    });
+
+    it("keeps legacy customers without lastBranchId searchable and branch-scoped", async () => {
+      const result = await searchSalonCustomers.run(
+        requestFor("staff-a1", {
+          salonId: SALON_A,
+          branchId: BRANCH_A1,
+          term: "4444",
+        }),
+      );
+
+      expect(result.customers).toHaveLength(1);
+      expect(result.customers[0]).toMatchObject({ id: "customer-legacy", phoneLast4: "4444" });
+      expect(result.customers[0]).not.toHaveProperty("phone");
+      expect(result.customers[0].recentRecords).toEqual([
+        expect.objectContaining({
+          id: "record-legacy-a1",
+          branchId: BRANCH_A1,
+          note: "Legacy A1 note",
+        }),
+      ]);
+      expect(result.customers[0].recentRecords).not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ note: "Legacy A2 private note" })]),
+      );
+      expect(result.customers[0].unusedRewards).toEqual([]);
+    });
+
+    it("keeps full owner history and supports branch-scoped owner views", async () => {
+      const salonResult = await searchSalonCustomers.run(
+        requestFor("owner-a", { salonId: SALON_A, term: "1111" }),
+      );
+      const branchResult = await searchSalonCustomers.run(
+        requestFor("owner-a", {
+          salonId: SALON_A,
+          branchId: BRANCH_A1,
+          term: "1111",
+        }),
+      );
+
+      expect(salonResult.customers).toHaveLength(1);
+      expect(salonResult.customers[0].recentRecords).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: "record-a1", branchId: BRANCH_A1 }),
+          expect.objectContaining({ id: "record-a1-a2", branchId: BRANCH_A2 }),
+        ]),
+      );
+      expect(salonResult.customers[0].branchVisits).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ branchId: BRANCH_A1 }),
+          expect.objectContaining({ branchId: BRANCH_A2 }),
+        ]),
+      );
+      expect(salonResult.customers[0].rewardHistory).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: "reward-a1", rewardCode: "HC-A1" }),
+          expect.objectContaining({ id: "reward-a1-a2", rewardCode: "HC-A1-A2" }),
+        ]),
+      );
+
+      expect(branchResult.customers).toHaveLength(1);
+      expect(branchResult.customers[0].recentRecords).toEqual([
+        expect.objectContaining({ id: "record-a1", branchId: BRANCH_A1 }),
+      ]);
+      expect(branchResult.customers[0].branchVisits).toEqual([
+        expect.objectContaining({ branchId: BRANCH_A1 }),
+      ]);
+      expect(branchResult.customers[0].rewardHistory).toEqual([
+        expect.objectContaining({ id: "reward-a1", rewardCode: "HC-A1" }),
+      ]);
     });
 
     it("rejects staff that submits an unassigned branch", async () => {
@@ -265,16 +384,43 @@ async function seedFixture() {
     seedUser("staff-a1", SALON_A, "staff", [BRANCH_A1], true),
     seedUser("staff-a1-view-only", SALON_A, "staff", [BRANCH_A1]),
     seedUser("customer-user", SALON_A, "customer", []),
-    seedCustomer("customer-a1", SALON_A, BRANCH_A1, "1111"),
+    seedCustomer("customer-a1", SALON_A, BRANCH_A2, "1111"),
     seedCustomer("customer-a2", SALON_A, BRANCH_A2, "2222"),
     seedCustomer("customer-b1", SALON_B, BRANCH_B1, "3333"),
+    seedCustomer("customer-legacy", SALON_A, undefined, "4444"),
   ]);
   await Promise.all([
     seedRecord("record-a1", SALON_A, BRANCH_A1, "customer-a1", "A1 note", now),
+    seedRecord(
+      "record-a1-a2",
+      SALON_A,
+      BRANCH_A2,
+      "customer-a1",
+      "A2 private note",
+      Timestamp.fromMillis(now.toMillis() + 1),
+    ),
     seedRecord("record-a2", SALON_A, BRANCH_A2, "customer-a2", "A2 note", now),
+    seedRecord("record-legacy-a1", SALON_A, BRANCH_A1, "customer-legacy", "Legacy A1 note", now),
+    seedRecord(
+      "record-legacy-a2",
+      SALON_A,
+      BRANCH_A2,
+      "customer-legacy",
+      "Legacy A2 private note",
+      Timestamp.fromMillis(now.toMillis() + 1),
+    ),
     seedReward("reward-a1", SALON_A, BRANCH_A1, "customer-a1", "HC-A1", now),
+    seedReward(
+      "reward-a1-a2",
+      SALON_A,
+      BRANCH_A2,
+      "customer-a1",
+      "HC-A1-A2",
+      Timestamp.fromMillis(now.toMillis() + 1),
+    ),
     seedReward("reward-a2", SALON_A, BRANCH_A2, "customer-a2", "HC-A2", now),
     seedReward("reward-b1", SALON_B, BRANCH_B1, "customer-b1", "HC-B1", now),
+    seedReward("reward-legacy-a2", SALON_A, BRANCH_A2, "customer-legacy", "HC-LEGACY-A2", now),
   ]);
 }
 
@@ -310,18 +456,23 @@ function seedUser(
 function seedCustomer(
   customerId: string,
   salonId: string,
-  lastBranchId: string,
+  lastBranchId: string | undefined,
   phoneLast4: string,
 ) {
-  return db.collection("customers").doc(customerId).set({
-    salonId,
-    name: customerId,
-    phoneLast4,
-    points: 1,
-    allowPhoto: false,
-    lastBranchId,
-    lastVisitAt: Timestamp.now(),
-  });
+  const name = customerId.replaceAll("-", " ");
+  return db
+    .collection("customers")
+    .doc(customerId)
+    .set({
+      salonId,
+      name,
+      namePrefixes: buildNameSearchPrefixes(name),
+      phoneLast4,
+      points: 1,
+      allowPhoto: false,
+      ...(lastBranchId ? { lastBranchId } : {}),
+      lastVisitAt: Timestamp.now(),
+    });
 }
 
 function seedRecord(
