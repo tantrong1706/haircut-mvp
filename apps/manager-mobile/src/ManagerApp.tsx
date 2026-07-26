@@ -1,11 +1,19 @@
-import { AuthGate } from "../../../zalo-mini-app/src/pages/AuthGate";
-import { OwnerPage } from "../../../zalo-mini-app/src/pages/OwnerPage";
-import { StaffPage } from "../../../zalo-mini-app/src/pages/StaffPage";
-import type { AppUser } from "../../../zalo-mini-app/src/services/auth";
+import { ManagerAuthGate } from "./app/ManagerAuthGate";
+import { ManagerPreview } from "./dev/ManagerPreview";
+import { OwnerWorkspace } from "./features/owner/OwnerWorkspace";
+import { StaffWorkspace } from "./features/staff/StaffWorkspace";
 import { NativeManagerShell } from "./NativeManagerShell";
 import { initializeManagerFirebase } from "./services/firebase";
+import type { AppUser } from "./services/managerApi";
 
 export function ManagerApp() {
+  const previewScenario = import.meta.env.DEV
+    ? new URLSearchParams(window.location.search).get("preview") || ""
+    : "";
+  if (previewScenario) {
+    return <ManagerPreview scenario={previewScenario} />;
+  }
+
   const firebase = initializeManagerFirebase();
   if (!firebase.ok) {
     return (
@@ -18,17 +26,17 @@ export function ManagerApp() {
   }
 
   return (
-    <AuthGate allowedRoles={["owner", "staff"]}>
+    <ManagerAuthGate allowedRoles={["owner", "staff"]}>
       {(user) => (
         <NativeManagerShell user={user}>
           {user.role === "owner" ? (
-            <OwnerPage currentUser={user} />
+            <OwnerWorkspace currentUser={user} />
           ) : (
-            <StaffPage currentUser={user} />
+            <StaffWorkspace currentUser={user} />
           )}
         </NativeManagerShell>
       )}
-    </AuthGate>
+    </ManagerAuthGate>
   );
 }
 

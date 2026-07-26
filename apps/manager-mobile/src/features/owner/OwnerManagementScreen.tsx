@@ -1,0 +1,169 @@
+import {
+  BarChart3,
+  ContactRound,
+  History,
+  MapPin,
+  Settings2,
+  SlidersHorizontal,
+  Star,
+  TicketCheck,
+  UsersRound,
+  ShieldCheck,
+} from "lucide-react";
+import { useEffect, useState } from "react";
+import { EmptyState } from "../../components/Feedback";
+import { RewardRedemption } from "../../components/RewardRedemption";
+import { ActionRow, DetailHeader, ScreenHeader, Section } from "../../components/ScreenPrimitives";
+import type { ConfirmDialogRequest } from "../../components/ConfirmDialog";
+import type { OwnerManagementSection, OwnerPrimaryTab } from "../../navigation/managerNavigation";
+import type { SalonBranch } from "../../services/managerApi";
+import type { SystemFeatures } from "@haircut/contracts";
+import { BranchesManager } from "./management/BranchesManager";
+import { StaffManager } from "./management/StaffManager";
+import { WheelManager } from "./management/WheelManager";
+import { OwnerAuditScreen } from "./OwnerAuditScreen";
+
+export function OwnerManagementScreen({
+  salonId,
+  initialSection,
+  branchFilter,
+  onBranchesChange,
+  onConfirm,
+  onOpenScanner,
+  onOpenTab,
+  features,
+}: {
+  salonId: string;
+  initialSection: OwnerManagementSection | null;
+  branchFilter: string;
+  onBranchesChange: (branches: SalonBranch[]) => void;
+  onConfirm: (request: ConfirmDialogRequest) => void;
+  onOpenScanner: () => void;
+  onOpenTab: (tab: OwnerPrimaryTab) => void;
+  features: SystemFeatures;
+}) {
+  const [section, setSection] = useState<OwnerManagementSection | null>(initialSection);
+
+  useEffect(() => {
+    if (initialSection) setSection(initialSection);
+  }, [initialSection]);
+
+  if (section) {
+    const title =
+      section === "branches"
+        ? "Chi nhánh và QR"
+        : section === "staff"
+          ? "Nhân viên"
+          : section === "wheel"
+            ? "Vòng quay"
+            : section === "redeem"
+              ? "Đổi quà"
+              : "Nhật ký hoạt động";
+    return (
+      <div className="manager-screen">
+        <DetailHeader title={title} onBack={() => setSection(null)} />
+        {section === "branches" ? (
+          <BranchesManager
+            salonId={salonId}
+            onConfirm={onConfirm}
+            onBranchesChange={onBranchesChange}
+          />
+        ) : section === "staff" ? (
+          <StaffManager salonId={salonId} />
+        ) : section === "wheel" && features.luckyWheelEnabled ? (
+          <WheelManager salonId={salonId} />
+        ) : section === "redeem" && features.rewardRedeemEnabled ? (
+          <RewardRedemption
+            salonId={salonId}
+            branchId={branchFilter === "all" ? undefined : branchFilter}
+            allowRestore
+            onOpenScanner={onOpenScanner}
+          />
+        ) : section === "wheel" || section === "redeem" ? (
+          <EmptyState
+            icon={<ShieldCheck aria-hidden="true" />}
+            title="Tính năng đang tạm ngừng"
+            description="Cấu hình hệ thống đang tắt tính năng này. Dữ liệu hiện có không bị thay đổi."
+          />
+        ) : (
+          <OwnerAuditScreen
+            salonId={salonId}
+            branchId={branchFilter === "all" ? null : branchFilter}
+          />
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="manager-screen">
+      <ScreenHeader
+        eyebrow="Thiết lập vận hành"
+        title="Quản lý salon"
+        description="Mỗi nhóm được tách riêng để thao tác nhanh và tránh nhầm."
+      />
+      <Section>
+        <div className="manager-action-list">
+          <ActionRow
+            icon={MapPin}
+            title="Chi nhánh và QR"
+            description="Tạo chi nhánh, tải QR, khóa hoặc tạo lại QR."
+            onClick={() => setSection("branches")}
+          />
+          <ActionRow
+            icon={UsersRound}
+            title="Nhân viên"
+            description="Tạo tài khoản, phân chi nhánh và cấp quyền."
+            onClick={() => setSection("staff")}
+          />
+          <ActionRow
+            icon={ContactRound}
+            title="Khách hàng"
+            description="Xem lượt hiện tại, tìm hồ sơ, lịch sử và quà."
+            onClick={() => onOpenTab("customers")}
+          />
+          <ActionRow
+            icon={Star}
+            title="Điểm"
+            description="Duyệt yêu cầu điểm và theo dõi lượt chờ xử lý."
+            onClick={() => onOpenTab("approvals")}
+          />
+          <ActionRow
+            icon={SlidersHorizontal}
+            title="Quà và vòng quay"
+            description="Điểm quay, hạn mã quà và nội dung phần thưởng."
+            disabled={!features.luckyWheelEnabled}
+            meta={!features.luckyWheelEnabled ? "Tạm ngừng" : undefined}
+            onClick={() => setSection("wheel")}
+          />
+          <ActionRow
+            icon={TicketCheck}
+            title="Đổi quà"
+            description="Kiểm tra mã trước khi xác nhận đã sử dụng."
+            disabled={!features.rewardRedeemEnabled}
+            meta={!features.rewardRedeemEnabled ? "Tạm ngừng" : undefined}
+            onClick={() => setSection("redeem")}
+          />
+          <ActionRow
+            icon={BarChart3}
+            title="Báo cáo"
+            description="Khách, điểm, lượt quay và quà theo thời gian."
+            onClick={() => onOpenTab("today")}
+          />
+          <ActionRow
+            icon={History}
+            title="Nhật ký hoạt động"
+            description="Xem ai đã thực hiện các thao tác quan trọng và thời điểm thực hiện."
+            onClick={() => setSection("audit")}
+          />
+          <ActionRow
+            icon={Settings2}
+            title="Quản lý thêm"
+            description="Thương hiệu, bảo mật, dữ liệu và hỗ trợ."
+            onClick={() => onOpenTab("settings")}
+          />
+        </div>
+      </Section>
+    </div>
+  );
+}
