@@ -3,13 +3,13 @@
 ## Trạng thái
 
 - Nhánh: `fix/cross-tenant-data-leak`
-- Base cục bộ: `534ab3ff004b26bb6b05d7b02ac103c22f827928`
+- Base: `534ab3ff004b26bb6b05d7b02ac103c22f827928`
   (`origin/codex/production-platform-upgrade`)
 - Phát hiện xử lý: `SR-01`
-- Trạng thái code: đã sửa, chưa deploy
-- Trạng thái xác minh: chưa hoàn tất vì Firebase Emulator không thể khởi động
-  trong sandbox hiện tại
-- Commit SHA: chưa có; chưa commit do test Emulator bắt buộc chưa chạy đạt
+- Trạng thái code: đã sửa, đã commit và đã push; chưa deploy
+- Trạng thái xác minh: đã hoàn tất kiểm tra cục bộ trên Node.js 22.23.1
+- Commit SHA: `586501905d9f6c45d42ecde1d0796a9a8fc11fcf`
+- Pull request: Draft PR `#19`
 
 ## Audit finding
 
@@ -106,37 +106,49 @@ File: `firebase/functions/test/adversarial.audit.test.ts`
 
 ## Kết quả kiểm tra cục bộ
 
-| Kiểm tra               | Kết quả                                               |
-| ---------------------- | ----------------------------------------------------- |
-| Functions typecheck    | Đạt                                                   |
-| Functions lint         | Đạt                                                   |
-| Functions unit         | 63/63 đạt                                             |
-| Functions build        | Đạt                                                   |
-| Zalo TypeScript        | Đạt                                                   |
-| Zalo lint              | Đạt                                                   |
-| Zalo unit              | 67/67 đạt                                             |
-| Zalo `build:zmp`       | Đạt                                                   |
-| JSON indexes           | Hợp lệ                                                |
-| Modified-file Prettier | Đạt                                                   |
-| `git diff --check`     | Đạt trước khi tạo tài liệu này                        |
-| Adversarial Emulator   | 17 test được nạp nhưng bị skip do Emulator không chạy |
-| Rules Emulator         | Chưa chạy do cùng giới hạn môi trường                 |
+Môi trường xác minh: Node.js `22.23.1`, Java `21.0.11`, Firebase CLI
+`15.22.3`.
 
-Máy hiện dùng Node.js 24 trong khi repository yêu cầu Node.js 22. CI hoặc môi
-trường Node.js 22 vẫn phải chạy lại toàn bộ kiểm tra trước review/merge.
+| Kiểm tra                            | Kết quả              |
+| ----------------------------------- | -------------------- |
+| Functions typecheck                 | Đạt                  |
+| Functions lint                      | Đạt                  |
+| Functions build                     | Đạt                  |
+| Functions unit                      | 63/63 đạt            |
+| Firestore và Storage Rules Emulator | 18/18 đạt, 0 skipped |
+| Callable integration                | Đạt                  |
+| Adversarial Emulator                | 17/17 đạt, 0 skipped |
+| Tổng integration và adversarial     | 32/32 đạt            |
+| Zalo TypeScript                     | Đạt                  |
+| Zalo lint                           | Đạt                  |
+| Zalo unit                           | 67/67 đạt            |
+| Zalo `build:zmp`                    | Đạt                  |
+| Modified-file Prettier              | 3/3 file đạt         |
+| `git diff --check`                  | Đạt                  |
+| `git diff --cached --check`         | Đạt                  |
 
-Firebase Emulator thất bại trước khi test bắt đầu vì Java không được phép tạo
-loopback selector trong sandbox. Yêu cầu chạy ngoài sandbox bị từ chối do giới
-hạn sử dụng Codex, không phải do assertion của test.
+Lệnh `format:check` toàn bộ Zalo Mini App phát hiện 86 file có định dạng cũ từ
+nhánh nền. Không chạy Prettier tự động trên toàn dự án để tránh thay đổi các file
+không thuộc phạm vi bản vá. Ba file Zalo được sửa trong PR đều đạt Prettier.
+
+Các test Emulator đã được chạy ngoài sandbox và kết thúc thành công với mã thoát
+`0`.
 
 ## Rủi ro còn lại
 
-- Chưa có bằng chứng 17 test adversarial và Rules test đạt trên Emulator.
-- Chưa xác minh composite indexes trên Firebase test project.
-- Chưa xác minh hành vi production; không được coi nhánh này là sẵn sàng merge
-  cho đến khi test bắt buộc đạt trên Node.js 22.
-- Hai High khác của audit là production observability và restore drill vẫn còn,
-  phải xử lý ở branch riêng.
+- Composite indexes đã được thêm vào repository nhưng chưa triển khai và xác minh
+  trên Firebase test project hoặc production.
+- Chưa xác minh hành vi trên dữ liệu production; không deploy hoặc merge trước
+  khi CI và quá trình review độc lập hoàn tất.
+- App Check effective configuration, error/crash tracking, correlation log và
+  backup/restore drill vẫn chưa có đủ bằng chứng production.
+- Hai phát hiện High còn lại của audit về observability và restore drill phải
+  được xử lý trong các nhánh riêng.
+- `npm ci` ghi nhận các lỗ hổng dependency hiện có, nhưng không tự động chạy
+  `npm audit fix` hoặc thay đổi dependency trong PR bảo mật này để tránh mở rộng
+  phạm vi và gây breaking change.
+- Kiểm tra Prettier toàn bộ Zalo Mini App vẫn phát hiện 86 file định dạng cũ từ
+  nhánh nền; ba file Zalo thuộc bản vá này đều đạt kiểm tra định dạng.
 
 ## Production
 
