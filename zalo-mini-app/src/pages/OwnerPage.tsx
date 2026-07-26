@@ -680,33 +680,12 @@ export function OwnerPage({ currentUser }: Props) {
       ) : null}
 
       {activeTab === "overview" ? (
-        <>
-          <SalonBrandingPanel
-            salonName={salonProfile?.name || "Salon"}
-            avatarUrl={salonProfile?.avatarUrl || ""}
-            saving={savingSalonAvatar}
-            onUpload={uploadSalonAvatar}
-            onClear={clearSalonAvatar}
-          />
-          <OwnerProfilePanel
-            currentUser={currentUser}
-            avatarUrl={ownerAvatarUrl}
-            saving={savingAvatar}
-            onUpload={uploadOwnerAvatar}
-            onClear={() => saveOwnerAvatar("")}
-          />
-          <SalonProfilePanel
-            profile={salonProfile}
-            saving={savingSalonProfile}
-            onSave={saveSalonProfile}
-          />
-          <OverviewPanel
-            overview={overview}
-            loading={loadingOverview}
-            onRefresh={refreshOverview}
-            onOpenTab={setActiveTab}
-          />
-        </>
+        <OverviewPanel
+          overview={overview}
+          loading={loadingOverview}
+          onRefresh={refreshOverview}
+          onOpenTab={setActiveTab}
+        />
       ) : activeTab === "approvals" ? (
         <ApprovalsPanel
           requests={requests}
@@ -747,7 +726,28 @@ export function OwnerPage({ currentUser }: Props) {
           allowRestore
         />
       ) : (
-        <AccountDeletionPanel currentUser={currentUser} />
+        <>
+          <SalonProfilePanel
+            profile={salonProfile}
+            saving={savingSalonProfile}
+            onSave={saveSalonProfile}
+          />
+          <SalonBrandingPanel
+            salonName={salonProfile?.name || "Salon"}
+            avatarUrl={salonProfile?.avatarUrl || ""}
+            saving={savingSalonAvatar}
+            onUpload={uploadSalonAvatar}
+            onClear={clearSalonAvatar}
+          />
+          <OwnerProfilePanel
+            currentUser={currentUser}
+            avatarUrl={ownerAvatarUrl}
+            saving={savingAvatar}
+            onUpload={uploadOwnerAvatar}
+            onClear={() => saveOwnerAvatar("")}
+          />
+          <AccountDeletionPanel currentUser={currentUser} />
+        </>
       )}
 
       {message ? <p className="alert success">{message}</p> : null}
@@ -867,8 +867,8 @@ function OwnerProfilePanel({
       <div className="owner-profile-form">
         <div className="dashboard-heading">
           <div>
-            <p className="eyebrow">Hồ sơ</p>
-            <h2>Avatar chủ salon</h2>
+            <p className="eyebrow">Tài khoản cá nhân</p>
+            <h2>Ảnh tài khoản</h2>
           </div>
           <span className="pill muted-pill">{currentUser.name || "Chủ salon"}</span>
         </div>
@@ -888,7 +888,7 @@ function OwnerProfilePanel({
             <ImageIcon size={18} aria-hidden="true" />
           </span>
           <span>
-            <strong>{selectedFile ? selectedFile.name : "Chọn ảnh avatar"}</strong>
+            <strong>{selectedFile ? selectedFile.name : "Chọn ảnh tài khoản"}</strong>
             <small>
               {selectedFile
                 ? `${formatUploadSize(selectedFile.size)} · bấm Lưu để tải lên`
@@ -908,7 +908,7 @@ function OwnerProfilePanel({
             }}
           >
             <Save size={18} aria-hidden="true" />
-            {saving ? "Đang tải lên..." : "Lưu avatar"}
+            {saving ? "Đang tải lên..." : "Lưu ảnh tài khoản"}
           </button>
           {selectedFile ? (
             <button
@@ -922,7 +922,7 @@ function OwnerProfilePanel({
           ) : null}
           <button className="secondary-button" disabled={saving || !avatarUrl} onClick={onClear}>
             <Trash2 size={18} aria-hidden="true" />
-            Xóa avatar
+            Xóa ảnh tài khoản
           </button>
         </div>
       </div>
