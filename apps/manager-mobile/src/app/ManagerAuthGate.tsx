@@ -27,11 +27,7 @@ import {
   type AppRole,
   type AppUser,
 } from "../services/managerApi";
-import {
-  clearMonitoringUser,
-  setMonitoringUser,
-  trackEvent,
-} from "../services/monitoring";
+import { clearMonitoringUser, setMonitoringUser } from "../services/monitoring";
 
 type AuthMode = "signin" | "signup" | "reset";
 type UnlinkedUser = { uid: string; email: string; displayName: string };
@@ -344,8 +340,7 @@ export function ManagerAuthGate({
               submitting ||
               !isValidAuthEmail(email) ||
               (!resetting && password.length < (signup ? 8 : 6)) ||
-              (signup &&
-                (!ownerName.trim() || !salonName.trim() || password !== confirmPassword))
+              (signup && (!ownerName.trim() || !salonName.trim() || password !== confirmPassword))
             }
           >
             {resetting ? <Send aria-hidden="true" /> : <LockKeyhole aria-hidden="true" />}

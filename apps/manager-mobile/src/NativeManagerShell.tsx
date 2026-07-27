@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AlertTriangle, LoaderCircle, RotateCcw, ShieldCheck, X } from "lucide-react";
 import { InlineFeedback, OfflineNotice } from "./components/Feedback";
 import { ManagerNativeContext } from "./hooks/useManagerNative";
@@ -23,7 +23,6 @@ export function NativeManagerShell({ user, children }: { user: AppUser; children
   const currentUserKey = useRef(userKey);
   const bootstrapGeneration = useRef(0);
   const pushGeneration = useRef(0);
-  currentUserKey.current = userKey;
   const [online, setOnline] = useState(navigator.onLine);
   const [nativeReady, setNativeReady] = useState(false);
   const [nativeReadyUserKey, setNativeReadyUserKey] = useState<string | null>(null);
@@ -44,6 +43,10 @@ export function NativeManagerShell({ user, children }: { user: AppUser; children
     code: string;
     requestId: string;
   } | null>(null);
+
+  useEffect(() => {
+    currentUserKey.current = userKey;
+  }, [userKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -92,7 +95,7 @@ export function NativeManagerShell({ user, children }: { user: AppUser; children
       if (bootstrapGeneration.current === generation) bootstrapGeneration.current += 1;
       void attempt.invalidate();
     };
-  }, [bootstrapAttempt, userKey]);
+  }, [bootstrapAttempt, user, userKey]);
 
   useEffect(() => {
     if (!nativeReady || nativeReadyUserKey !== userKey || bootstrapping || bootstrapError) {
@@ -129,9 +132,9 @@ export function NativeManagerShell({ user, children }: { user: AppUser; children
       if (pushGeneration.current === generation) pushGeneration.current += 1;
       void attempt.invalidate();
     };
-  }, [bootstrapError, bootstrapping, nativeReady, nativeReadyUserKey, pushAttempt, userKey]);
+  }, [bootstrapError, bootstrapping, nativeReady, nativeReadyUserKey, pushAttempt, user, userKey]);
 
-  async function scan() {
+  const scan = useCallback(async () => {
     setScanning(true);
     setMessage("");
     try {
@@ -142,9 +145,9 @@ export function NativeManagerShell({ user, children }: { user: AppUser; children
     } finally {
       setScanning(false);
     }
-  }
+  }, []);
 
-  async function toggleBiometric() {
+  const toggleBiometric = useCallback(async () => {
     setMessage("");
     try {
       if (biometricEnabled) {
@@ -159,7 +162,7 @@ export function NativeManagerShell({ user, children }: { user: AppUser; children
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Không đổi được khóa sinh trắc học.");
     }
-  }
+  }, [biometricEnabled]);
 
   async function unlock() {
     if (unlocking) return;
@@ -187,7 +190,7 @@ export function NativeManagerShell({ user, children }: { user: AppUser; children
       toggleBiometric,
       retryPush: () => setPushAttempt((value) => value + 1),
     }),
-    [nativeReady, online, biometricEnabled, scanning, pushStatus],
+    [nativeReady, online, biometricEnabled, scanning, pushStatus, scan, toggleBiometric],
   );
 
   if (locked) {

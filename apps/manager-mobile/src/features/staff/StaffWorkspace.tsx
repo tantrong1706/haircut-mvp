@@ -100,7 +100,7 @@ export function StaffWorkspace({ currentUser }: { currentUser: AppUser }) {
       .catch((caught) =>
         setError(caught instanceof Error ? caught.message : "Không tải được cấu hình nhân viên."),
       );
-  }, [assignedBranchIds.join("|"), salonId]);
+  }, [assignedBranchIds, salonId]);
 
   useEffect(() => {
     if (!salonId || !branchFilter) {
