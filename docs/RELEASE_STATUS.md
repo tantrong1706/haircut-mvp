@@ -1,6 +1,6 @@
 # Trạng thái phát hành HAIRCUT
 
-Cập nhật: 16/07/2026
+Cập nhật: 27/07/2026
 
 ## Ba sản phẩm
 
@@ -12,10 +12,14 @@ Cập nhật: 16/07/2026
 
 Mini App ID được giữ nguyên: `2038116772828167300`. Bundle ID Manager: `vn.haircut.manager`.
 
-## Baseline Git
+## Trạng thái theo lớp
 
-- Commit `main` trước các thay đổi chưa commit hiện tại: `32a2dfcbaffd1ac6e378b6d6f80e6be786199e05`.
-- Commit SHA đang chạy production phải được điền vào biên bản sau mỗi lần deploy; không suy ra từ nhánh local.
+- **Source:** nhánh remediation bắt đầu từ `origin/main`
+  `0d4fbf996f6a0f30f1e8bfa6fd2c106167622bbf`; thay đổi chưa được merge.
+- **GitHub:** CI chỉ được xem là đạt sau khi Draft PR chạy xanh trên HEAD cuối.
+- **Firebase:** chưa xác minh SHA đang deploy; không suy ra từ nhánh hoặc Hosting URL.
+- **Zalo:** trạng thái Testing/Production phải xem trực tiếp trên Zalo Portal.
+- **Manager/Admin:** chưa xác minh phát hành store hoặc Hosting riêng.
 - Tạo tag `vX.Y.Z` chỉ sau khi CI, backup và smoke test đều đạt.
 
 ## Đã triển khai trong source
@@ -30,8 +34,13 @@ Mini App ID được giữ nguyên: `2038116772828167300`. Bundle ID Manager: `v
 
 ## Đang phát triển
 
+- Cổng emulator fail-fast, readiness evidence theo SHA và deploy gate.
+- Lint/format gate Manager; còn baseline 68 file định dạng cũ cần xử lý dần.
+- CSP vẫn ở Report-Only chờ kiểm tra Zalo Testing và thiết bị thật.
 - Kiểm thử Manager trên thiết bị thật sau khi thêm file cấu hình Firebase native.
 - Xác minh hai job CI `Manager Android` và `Manager iOS Simulator` trên SHA phát hành cuối cùng.
+- Local Windows đã `cap sync android` thành công; Gradle bị chặn vì máy chưa có
+  Android SDK. iOS Simulator vẫn phải chạy trên macOS/Xcode hoặc GitHub Actions.
 - Cấu hình APNs, Play Integrity, App Attest/DeviceCheck và bật enforcement theo rollout.
 - Tạo Hosting site riêng cho Admin và điền `VITE_ADMIN_URL`.
 - Chụp screenshot store, tạo tài khoản demo và hoàn thiện biểu mẫu App Privacy/Data Safety.

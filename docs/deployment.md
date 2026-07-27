@@ -2,7 +2,9 @@
 
 ## Bí mật và môi trường
 
-- Firebase public config và Zalo Mini App ID nằm trong `.env.production`.
+- Firebase public config và Zalo Mini App ID được cấp bằng biến CI hoặc file local
+  bị ignore `zalo-mini-app/.env.production.local`. File mẫu duy nhất được commit
+  là `.env.production.example`.
 - Firebase Auth phải bật Email/Password; domain Hosting phải nằm trong Authorized domains và mẫu email đặt lại mật khẩu phải dùng thương hiệu HAIRCUT.
 - `ZALO_APP_SECRET` phải nằm trong Firebase Secret Manager.
 - `ZALO_APP_ID` là App ID của ứng dụng Zalo liên kết với OA và được đặt trong `firebase/functions/.env`; đây không phải Mini App ID.
@@ -35,7 +37,8 @@ cd ..
 
 ## Thứ tự deploy
 
-1. Chạy readiness, test liên quan và tạo release SHA/tag ở trạng thái working tree sạch.
+1. Trên commit sạch thuộc `main` hoặc `release/*`, chạy
+   `.\scripts\check.ps1 -Full`; xác minh evidence đúng SHA và tạo release tag.
 2. Dry-run audit tenant, export Firestore bằng `scripts/backup-firestore.ps1`, ghi URL backup vào biên bản.
 3. Deploy Functions tương thích ngược theo nhóm nhỏ.
 4. Chạy migration đã phê duyệt; không tự suy đoán document thiếu `salonId`.
@@ -43,6 +46,22 @@ cd ..
 6. Build/deploy Hosting khách; kiểm tra Privacy, Terms, deletion và webhook.
 7. Chạy `npm run deploy:zmp:test`, kiểm tra Zalo Android/iPhone rồi mới phát hành.
 8. Manager đi qua Internal Testing/TestFlight; Admin dùng Hosting site riêng, không ghi đè site khách.
+
+`scripts/deploy-firebase.ps1` hiển thị branch/SHA và từ chối worktree bẩn, branch
+không được phép hoặc evidence sai SHA. `-DryRun` chỉ kiểm tra cổng và không deploy.
+Các flag override phải được dùng có chủ đích và ghi vào biên bản phát hành.
+
+## CSP Testing
+
+Nguồn CSP nằm tại `config/content-security-policy.txt`; chạy
+`node scripts/sync-csp.mjs --check` để bảo đảm Firebase Hosting khớp. Hiện policy
+ở `Content-Security-Policy-Report-Only` vì chưa có endpoint báo cáo được vận hành
+và chưa đủ bằng chứng thiết bị thật. Trước khi enforce:
+
+1. Build/deploy vào Zalo Testing, không production.
+2. Kiểm tra Firebase Auth, Functions, Firestore, Storage, Zalo runtime và Sentry.
+3. Xác minh console không có CSP violation chặn luồng QR/check-in.
+4. Chỉ đổi header sang `Content-Security-Policy` trong một PR riêng có rollback.
 
 ## Audit tenant và migration
 

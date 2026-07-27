@@ -3,22 +3,15 @@
 ## Kiểm tra tự động
 
 ```powershell
-.\scripts\check-production-readiness.ps1 -RunBuild -CheckLiveUrls
-
-cd firebase\functions
-npm run typecheck
-npm run lint
-npm run test:unit
-
-cd ..
-firebase emulators:exec --project demo-haircut --only firestore,storage "npm --prefix functions run test:rules"
-firebase emulators:exec --project demo-haircut --only firestore "npm --prefix functions run test:integration"
-
-cd ..\zalo-mini-app
-npm run check
+.\scripts\check.ps1
+.\scripts\check.ps1 -Full
+.\scripts\check-production-readiness.ps1 -CheckLiveUrls
 ```
 
-Admin Web phải qua `npm run check`. Manager phải qua typecheck, unit test, build, `cap sync`, Android Gradle và iOS Simulator CI không ký.
+`check.ps1` hiển thị riêng Passed, Failed, Blocked và Not run. Full suite tạo
+`.tmp/release-readiness.json` cho đúng SHA; deploy script từ chối evidence của
+commit khác. Admin và Manager đều phải qua `npm run check`; Android Gradle và iOS
+Simulator chỉ được ghi đạt khi job CI tương ứng thực sự xanh trên HEAD.
 
 ## Cổng dữ liệu và bảo mật
 
@@ -28,6 +21,8 @@ Admin Web phải qua `npm run check`. Manager phải qua typecheck, unit test, b
 - [ ] Firestore/Storage Rules test đạt và không có `allow read, write: if true`.
 - [ ] Secrets nằm trong Secret Manager; Git/history/log không chứa token hoặc dữ liệu khách.
 - [ ] App Check monitor trước, enforce sau khi Zalo web và Manager native đều có token hợp lệ.
+- [ ] CSP Report-Only đã được kiểm tra trên Zalo Testing; chỉ chuyển sang enforce
+      sau khi Auth, Functions, Firestore, Storage, Zalo runtime và Sentry không bị chặn.
 - [ ] Feature flags và maintenance mode đã được thử bằng dữ liệu demo.
 
 ## Cổng nghiệp vụ
