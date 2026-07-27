@@ -63,10 +63,24 @@ function listFiles(root) {
   return files;
 }
 
-const productionEnv = parseEnv(readText(resolve(appRoot, ".env.production")));
+const productionEnv = new Map();
+for (const envPath of [".env.production", ".env.production.local"]) {
+  const absolutePath = resolve(appRoot, envPath);
+  if (existsSync(absolutePath)) {
+    for (const [key, value] of parseEnv(readFileSync(absolutePath, "utf8"))) {
+      productionEnv.set(key, value);
+    }
+  }
+}
+for (const [key, value] of Object.entries(process.env)) {
+  if (key.startsWith("VITE_") && typeof value === "string") {
+    productionEnv.set(key, value);
+  }
+}
 check(
   productionEnv.get("VITE_ZALO_MINI_APP_ID") === expectedMiniAppId,
   "Mini App ID production chính xác",
+  "Cấu hình qua biến CI hoặc .env.production.local",
 );
 check(productionEnv.get("VITE_ZALO_PREVIEW") !== "true", "Production không bật danh tính preview");
 check(productionEnv.get("VITE_APP_ENV") === "production", "Môi trường build là production");

@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 const appDir = resolve(import.meta.dirname, "..");
 const env = {
   ...process.env,
-  ...supportEnvironment(resolve(appDir, ".env.production")),
+  ...supportEnvironment(resolve(appDir, ".env.production.local")),
   VITE_ZALO_PREVIEW: "true",
   HAIRCUT_CAPTURE_REVIEW_SCREENSHOTS: "1",
 };

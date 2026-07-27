@@ -19,6 +19,7 @@ firebase/public/
 codeql-results/
 tmp/
 .tmp/
+.tmp/release-readiness.json
 *.tmp
 *.swp
 *.pid
@@ -37,6 +38,8 @@ pnpm-debug.log*
 # Zalo Mini App env
 zalo-mini-app/.env
 zalo-mini-app/.env.local
+zalo-mini-app/.env.production
+zalo-mini-app/.env.production.local
 firebase/functions/.env
 zalo-mini-app/qr-*-dev.png
 
@@ -58,6 +61,7 @@ zalo-mini-app/qr-*-dev.png
 .trae/
 .warp/
 .windsurf/
+.codex/
 
 # OS and accidental command artifacts
 .DS_Store
