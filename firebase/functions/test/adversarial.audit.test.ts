@@ -3,9 +3,9 @@ import { Timestamp, getFirestore } from "firebase-admin/firestore";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { buildNameSearchPrefixes } from "../src/customerSearch";
 import { lookupRewardCode, redeemRewardCode, searchSalonCustomers } from "../src/index";
+import { requireFirestoreEmulator } from "./emulatorEnvironment";
 
-const emulatorHost = process.env.FIRESTORE_EMULATOR_HOST;
-const projectId = process.env.GCLOUD_PROJECT || "demo-haircut-security-fix";
+const { emulatorHost, projectId } = requireFirestoreEmulator();
 const db = getFirestore();
 
 const SALON_A = "salon-a";
@@ -14,7 +14,7 @@ const BRANCH_A1 = "branch-a1";
 const BRANCH_A2 = "branch-a2";
 const BRANCH_B1 = "branch-b1";
 
-describe.skipIf(!emulatorHost)("adversarial tenant access", () => {
+describe("adversarial tenant access", () => {
   beforeEach(async () => {
     const response = await fetch(
       `http://${emulatorHost}/emulator/v1/projects/${projectId}/databases/(default)/documents`,

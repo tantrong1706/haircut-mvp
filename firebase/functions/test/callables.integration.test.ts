@@ -25,13 +25,13 @@ import {
   updateSystemAdminSalonStatus,
   updateSystemFeatureFlags,
 } from "../src/index";
+import { requireFirestoreEmulator } from "./emulatorEnvironment";
 
-const emulatorHost = process.env.FIRESTORE_EMULATOR_HOST;
-const projectId = process.env.GCLOUD_PROJECT || "demo-haircut";
+const { emulatorHost, projectId } = requireFirestoreEmulator();
 const db = getFirestore();
 const originalAdminWriteFlag = process.env.ADMIN_WRITE_OPERATIONS_ENABLED;
 
-describe.skipIf(!emulatorHost)("callable transactions", () => {
+describe("callable transactions", () => {
   beforeEach(async () => {
     delete process.env.ADMIN_WRITE_OPERATIONS_ENABLED;
     const response = await fetch(

@@ -37,6 +37,15 @@ function Read-EnvFile($Path) {
   return $map
 }
 
+function Merge-ProcessEnvironment($Map, $Keys) {
+  foreach ($key in $Keys) {
+    $value = [Environment]::GetEnvironmentVariable($key)
+    if ($value) {
+      $Map[$key] = $value
+    }
+  }
+}
+
 function Test-Url($Url) {
   try {
     $response = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 20
@@ -89,17 +98,31 @@ if (Test-Path -LiteralPath $firebaserc) {
   Add-Result "Firebase project" "FAIL" "Thiếu firebase\.firebaserc"
 }
 
-$envPath = Join-Path $root "zalo-mini-app\.env.production"
-$env = Read-EnvFile $envPath
+$webEnv = Read-EnvFile (Join-Path $root "zalo-mini-app\.env.production")
 $envLocalPath = Join-Path $root "zalo-mini-app\.env.production.local"
 $envLocal = Read-EnvFile $envLocalPath
 foreach ($entry in $envLocal.GetEnumerator()) {
-  $env[$entry.Key] = $entry.Value
+  $webEnv[$entry.Key] = $entry.Value
 }
-if ($env.Count -eq 0) {
-  Add-Result "Zalo web production env" "FAIL" "Thiếu zalo-mini-app\.env.production"
+Merge-ProcessEnvironment $webEnv @(
+  "VITE_FIREBASE_API_KEY",
+  "VITE_FIREBASE_AUTH_DOMAIN",
+  "VITE_FIREBASE_PROJECT_ID",
+  "VITE_FIREBASE_STORAGE_BUCKET",
+  "VITE_FIREBASE_MESSAGING_SENDER_ID",
+  "VITE_FIREBASE_APP_ID",
+  "VITE_ZALO_MINI_APP_ID",
+  "VITE_FUNCTION_WRITE_MODE",
+  "VITE_FIREBASE_APP_CHECK_SITE_KEY",
+  "VITE_MONITORING_DISABLED",
+  "VITE_SENTRY_DSN",
+  "VITE_SUPPORT_EMAIL",
+  "VITE_SUPPORT_PHONE"
+)
+if ($webEnv.Count -eq 0) {
+  Add-Result "Zalo web production env" "FAIL" "Thiếu biến CI hoặc zalo-mini-app\.env.production.local"
 } else {
-  $mode = $env["VITE_FUNCTION_WRITE_MODE"]
+  $mode = $webEnv["VITE_FUNCTION_WRITE_MODE"]
   if (-not $mode) {
     Add-Result "VITE_FUNCTION_WRITE_MODE" "FAIL" "Chưa đặt required"
   } elseif ($mode -eq "required") {
@@ -111,7 +134,7 @@ if ($env.Count -eq 0) {
   }
 }
 
-if ($env["VITE_SUPPORT_EMAIL"] -or $env["VITE_SUPPORT_PHONE"]) {
+if ($webEnv["VITE_SUPPORT_EMAIL"] -or $webEnv["VITE_SUPPORT_PHONE"]) {
   Add-Result "Privacy contact" "OK" "Đã cấu hình ít nhất một kênh hỗ trợ"
 } else {
   Add-Result "Privacy contact" "FAIL" "Thiếu VITE_SUPPORT_EMAIL hoặc VITE_SUPPORT_PHONE"
@@ -172,22 +195,58 @@ if (Test-CommandExists "zmp") {
 }
 
 $functionsEnv = Read-EnvFile (Join-Path $root "firebase\functions\.env")
+Merge-ProcessEnvironment $functionsEnv @(
+  "ZALO_MINI_APP_ID",
+  "ENFORCE_APP_CHECK",
+  "REQUIRE_ZALO_APP_CHECK",
+  "ADMIN_WRITE_OPERATIONS_ENABLED"
+)
 if ($functionsEnv["ZALO_MINI_APP_ID"]) {
   Add-Result "Functions Zalo App ID" "OK" "Đã cấu hình"
 } else {
   Add-Result "Functions Zalo App ID" "FAIL" "Thiếu ZALO_MINI_APP_ID trong firebase/functions/.env"
 }
 
-if ($functionsEnv["REQUIRE_ZALO_APP_CHECK"] -eq "true") {
-  if ($env["VITE_FIREBASE_APP_CHECK_SITE_KEY"]) {
-    Add-Result "Firebase App Check" "OK" "Frontend và Functions đều đã bật cấu hình"
-  } else {
-    Add-Result "Firebase App Check" "FAIL" "Functions đang bắt buộc App Check nhưng frontend thiếu site key"
-  }
-} elseif ($env["VITE_FIREBASE_APP_CHECK_SITE_KEY"]) {
-  Add-Result "Firebase App Check" "WARN" "Frontend đã có provider nhưng Functions chưa bắt buộc token"
+if ($functionsEnv["ENFORCE_APP_CHECK"] -eq "true") {
+  Add-Result "Functions App Check chung" "OK" "Callable options đang enforcement"
 } else {
-  Add-Result "Firebase App Check" "WARN" "Chưa cấu hình rollout App Check production"
+  Add-Result "Functions App Check chung" "WARN" "Source hỗ trợ nhưng chưa xác minh ENFORCE_APP_CHECK=true"
+}
+
+if ($functionsEnv["REQUIRE_ZALO_APP_CHECK"] -eq "true") {
+  if ($webEnv["VITE_FIREBASE_APP_CHECK_SITE_KEY"]) {
+    Add-Result "Zalo App Check" "OK" "Public Zalo endpoint enforcement và frontend provider đã cấu hình"
+  } else {
+    Add-Result "Zalo App Check" "FAIL" "REQUIRE_ZALO_APP_CHECK=true nhưng frontend thiếu site key"
+  }
+} elseif ($webEnv["VITE_FIREBASE_APP_CHECK_SITE_KEY"]) {
+  Add-Result "Zalo App Check" "WARN" "Frontend provider đã cấu hình; public endpoint vẫn ở monitor mode"
+} else {
+  Add-Result "Zalo App Check" "WARN" "Source hỗ trợ; provider và enforcement production chưa được xác minh"
+}
+
+$managerFirebaseSource = Get-Content -Raw -LiteralPath (Join-Path $root "apps\manager-mobile\src\services\firebase.ts")
+$managerNativeSource = Get-Content -Raw -LiteralPath (Join-Path $root "apps\manager-mobile\src\nativeRuntime.ts")
+if ($managerFirebaseSource -match "VITE_FIREBASE_APP_CHECK_SITE_KEY" -and $managerNativeSource -match "FirebaseAppCheck\.initialize") {
+  Add-Result "Manager App Check source" "OK" "Có web provider và native provider"
+  Add-Result "Manager App Check thiết bị thật" "WARN" "Chưa xác minh token trên Android/iOS thật"
+} else {
+  Add-Result "Manager App Check source" "FAIL" "Thiếu web hoặc native provider"
+}
+
+$adminFirebaseSource = Get-Content -Raw -LiteralPath (Join-Path $root "apps\admin-web\src\services\firebase.ts")
+if ($adminFirebaseSource -match "VITE_FIREBASE_APP_CHECK_SITE_KEY") {
+  Add-Result "Admin App Check source" "OK" "Có reCAPTCHA Enterprise provider"
+} else {
+  Add-Result "Admin App Check source" "FAIL" "Thiếu App Check provider"
+}
+
+if ($webEnv["VITE_MONITORING_DISABLED"] -eq "true") {
+  Add-Result "Frontend monitoring" "OK" "Đang tắt có chủ đích"
+} elseif ($webEnv["VITE_SENTRY_DSN"]) {
+  Add-Result "Frontend monitoring" "OK" "Sentry DSN đã cấu hình"
+} else {
+  Add-Result "Frontend monitoring" "WARN" "Monitoring không bị tắt có chủ đích nhưng chưa có Sentry DSN"
 }
 
 $functionsPackage = Get-Content -Raw -LiteralPath (Join-Path $root "firebase\functions\package.json") | ConvertFrom-Json
@@ -206,12 +265,15 @@ if (Test-Path -LiteralPath (Join-Path $root "firebase\functions\package-lock.jso
 if ($RunBuild) {
   try {
     powershell -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "check.ps1")
-    Add-Result "Build local" "OK" "Functions và web build pass"
+    if ($LASTEXITCODE -ne 0) {
+      throw "Quick repository checks trả mã $LASTEXITCODE"
+    }
+    Add-Result "Kiểm tra repository nhanh" "OK" "Functions, Zalo, Admin, Manager và repository gates đạt"
   } catch {
-    Add-Result "Build local" "FAIL" $_.Exception.Message
+    Add-Result "Kiểm tra repository nhanh" "FAIL" $_.Exception.Message
   }
 } else {
-  Add-Result "Build local" "WARN" "Chưa chạy trong lần kiểm tra này. Dùng -RunBuild để chạy."
+  Add-Result "Kiểm tra repository nhanh" "WARN" "Chưa chạy trong lần kiểm tra này. Dùng -RunBuild để chạy."
 }
 
 if ($CheckLiveUrls) {

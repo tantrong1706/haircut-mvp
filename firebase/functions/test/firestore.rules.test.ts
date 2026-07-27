@@ -19,8 +19,9 @@ import {
 } from "firebase/firestore";
 import { deleteObject, getBytes, ref, uploadBytes } from "firebase/storage";
 import { afterAll, beforeAll, beforeEach, describe, it } from "vitest";
+import { requireRulesEmulators } from "./emulatorEnvironment";
 
-const projectId = process.env.GCLOUD_PROJECT || "demo-haircut";
+const { projectId } = requireRulesEmulators();
 const salonA = "salon-a";
 const salonB = "salon-b";
 const branchA = "branch-a";

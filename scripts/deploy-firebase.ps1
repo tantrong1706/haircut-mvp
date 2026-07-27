@@ -3,7 +3,11 @@
   [switch]$OnlyHosting,
   [switch]$IncludeFirestore,
   [switch]$IncludeFunctions,
-  [switch]$IncludeStorage
+  [switch]$IncludeStorage,
+  [switch]$AllowDirtyWorktree,
+  [switch]$AllowNonReleaseBranch,
+  [switch]$SkipReadinessEvidence,
+  [switch]$DryRun
 )
 
 $ErrorActionPreference = "Stop"
@@ -12,6 +16,7 @@ $env:FUNCTIONS_DISCOVERY_TIMEOUT = "60"
 $root = Resolve-Path (Join-Path $PSScriptRoot "..")
 $firebaseDir = Join-Path $root "firebase"
 $firebaserc = Join-Path $firebaseDir ".firebaserc"
+$evidencePath = Join-Path $root ".tmp\release-readiness.json"
 
 function Assert-NativeSuccess([string]$Step) {
   if ($LASTEXITCODE -ne 0) {
@@ -25,6 +30,39 @@ if (-not (Get-Command firebase -ErrorAction SilentlyContinue)) {
 
 if (-not (Test-Path -LiteralPath $firebaserc)) {
   throw "Thiếu firebase/.firebaserc. Hãy chạy .\scripts\set-firebase-project.ps1 -ProjectId your-project-id trước."
+}
+
+$branch = (git -C $root branch --show-current).Trim()
+$headSha = (git -C $root rev-parse HEAD).Trim()
+$gitStatus = @(git -C $root status --porcelain)
+Write-Host "Branch sắp deploy: $branch" -ForegroundColor Cyan
+Write-Host "Commit sắp deploy: $headSha" -ForegroundColor Cyan
+
+if ($gitStatus.Count -gt 0 -and -not $AllowDirtyWorktree) {
+  throw "Working tree chưa sạch. Commit hoặc loại bỏ thay đổi, hoặc dùng -AllowDirtyWorktree có chủ đích."
+}
+
+$allowedBranch = $branch -eq "main" -or $branch -like "release/*"
+if (-not $allowedBranch -and -not $AllowNonReleaseBranch) {
+  throw "Chỉ main hoặc release/* được deploy mặc định. Dùng -AllowNonReleaseBranch có chủ đích."
+}
+
+if (-not $SkipReadinessEvidence) {
+  if (-not (Test-Path -LiteralPath $evidencePath)) {
+    throw "Thiếu .tmp/release-readiness.json. Chạy .\scripts\check.ps1 -Full trước."
+  }
+  $evidence = Get-Content -Raw -LiteralPath $evidencePath | ConvertFrom-Json
+  if ([string]$evidence.headSha -ne $headSha) {
+    throw "Readiness evidence thuộc commit khác: $($evidence.headSha)"
+  }
+  if ($evidence.mode -ne "full" -or $evidence.readyForFirebaseDeploy -ne $true) {
+    throw "Readiness evidence chưa xác nhận full suite đạt."
+  }
+}
+
+if ($DryRun) {
+  Write-Host "Dry run đạt: deploy gates hợp lệ, không có lệnh deploy nào được chạy." -ForegroundColor Green
+  exit 0
 }
 
 $deploysHosting = $OnlyHosting -or (-not $OnlyRules)

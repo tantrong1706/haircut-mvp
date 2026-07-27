@@ -1,0 +1,27 @@
+# Legacy baseline: 26 existing files. Remove entries as each file is formatted.
+src/authz/authorization.ts
+src/businessRules.ts
+src/customerPhotos.ts
+src/customerSearch.ts
+src/domains/audit/auditEvent.ts
+src/domains/salons/branding.ts
+src/domains/salons/deletionJob.ts
+src/index.ts
+src/security.ts
+src/seedDemo.ts
+src/shared/errors.ts
+src/zaloClient.ts
+src/zaloPhone.ts
+src/zaloPrivacyWebhook.ts
+test/businessRules.test.ts
+test/contracts.test.ts
+test/customerPhotos.test.ts
+test/customerSearch.test.ts
+test/salonBranding.test.ts
+test/salonDeletionJob.test.ts
+test/security.test.ts
+test/tenantMigration.test.ts
+test/zaloClient.test.ts
+test/zaloContract.test.ts
+test/zaloPhone.test.ts
+test/zaloPrivacyWebhook.test.ts

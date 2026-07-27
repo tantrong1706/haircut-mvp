@@ -2,12 +2,12 @@ import { deleteApp, getApps } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { updateSalonAvatar } from "../src/index";
+import { requireFirestoreEmulator } from "./emulatorEnvironment";
 
-const emulatorHost = process.env.FIRESTORE_EMULATOR_HOST;
-const projectId = process.env.GCLOUD_PROJECT || "demo-haircut";
+const { emulatorHost, projectId } = requireFirestoreEmulator();
 const db = getFirestore();
 
-describe.skipIf(!emulatorHost)("updateSalonAvatar callable", () => {
+describe("updateSalonAvatar callable", () => {
   beforeEach(async () => {
     const response = await fetch(
       `http://${emulatorHost}/emulator/v1/projects/${projectId}/databases/(default)/documents`,
