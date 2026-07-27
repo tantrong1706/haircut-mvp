@@ -60,7 +60,12 @@ Write-Host "Thư mục: $root"
 Write-Host ""
 
 if (Test-CommandExists "node") {
-  Add-Result "Node.js" "OK" (node --version)
+  $nodeVersion = (node --version).Trim()
+  if ($nodeVersion -match "^v22\.") {
+    Add-Result "Node.js" "OK" $nodeVersion
+  } else {
+    Add-Result "Node.js" "FAIL" "$nodeVersion; production checks yêu cầu Node.js 22"
+  }
 } else {
   Add-Result "Node.js" "FAIL" "Chưa cài Node.js"
 }

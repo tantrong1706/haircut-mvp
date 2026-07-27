@@ -74,6 +74,18 @@ $mode = if ($Full) { "full" } else { "quick" }
 Write-Host "== HAIRCUT repository checks ($mode) ==" -ForegroundColor Green
 Write-Host "Root: $root"
 
+if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+  Write-Host "[FAILED] Node.js 22 runtime: Chưa cài Node.js" -ForegroundColor Red
+  exit 1
+}
+
+$nodeVersion = (node --version).Trim()
+if ($nodeVersion -notmatch "^v22\.") {
+  Write-Host "[FAILED] Node.js 22 runtime: Đang dùng $nodeVersion" -ForegroundColor Red
+  Write-Host "Dùng Node.js 22 như Functions và GitHub Actions trước khi chạy readiness." -ForegroundColor Yellow
+  exit 1
+}
+
 Invoke-Step "Functions npm ci" (Join-Path $root "firebase/functions") { npm ci }
 Invoke-Step "Functions source checks" (Join-Path $root "firebase/functions") { npm run check }
 Invoke-Step "Functions build" (Join-Path $root "firebase/functions") { npm run build }
