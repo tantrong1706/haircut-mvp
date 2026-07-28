@@ -46,6 +46,14 @@ function Merge-ProcessEnvironment($Map, $Keys) {
   }
 }
 
+function Test-PlaceholderValue($Value) {
+  if (-not $Value) {
+    return $true
+  }
+
+  return [string]$Value -match "^(your-|example|changeme|\.{3}|<|\[)"
+}
+
 function Test-Url($Url) {
   try {
     $response = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 20
@@ -127,6 +135,30 @@ Merge-ProcessEnvironment $webEnv @(
 if ($webEnv.Count -eq 0) {
   Add-Result "Zalo web production env" "FAIL" "Thiếu biến CI hoặc zalo-mini-app\.env.production.local"
 } else {
+  $requiredWebEnv = @(
+    "VITE_FIREBASE_API_KEY",
+    "VITE_FIREBASE_AUTH_DOMAIN",
+    "VITE_FIREBASE_PROJECT_ID",
+    "VITE_FIREBASE_STORAGE_BUCKET",
+    "VITE_FIREBASE_MESSAGING_SENDER_ID",
+    "VITE_FIREBASE_APP_ID",
+    "VITE_ZALO_MINI_APP_ID"
+  )
+  $missingWebEnv = @(
+    $requiredWebEnv | Where-Object { Test-PlaceholderValue $webEnv[$_] }
+  )
+  if ($missingWebEnv.Count -gt 0) {
+    Add-Result "Firebase web production config" "FAIL" ("Thiếu hoặc còn placeholder: " + ($missingWebEnv -join ", "))
+  } else {
+    Add-Result "Firebase web production config" "OK" "Đã cấu hình đủ biến bắt buộc"
+  }
+
+  if ($webEnv["VITE_ZALO_MINI_APP_ID"] -eq "2038116772828167300") {
+    Add-Result "Zalo Mini App ID production" "OK" "Đúng ứng dụng CH Hair Studio"
+  } else {
+    Add-Result "Zalo Mini App ID production" "FAIL" "Phải là 2038116772828167300"
+  }
+
   $mode = $webEnv["VITE_FUNCTION_WRITE_MODE"]
   if (-not $mode) {
     Add-Result "VITE_FUNCTION_WRITE_MODE" "FAIL" "Chưa đặt required"
