@@ -106,12 +106,14 @@ Kết quả đã chạy trong quá trình sửa:
 | Manager unit | 73 | 0 | 0 |
 | Admin unit | 8 | 0 | 0 |
 | Manager Android Capacitor sync | 1 | 0 | 0 |
-| Manager Android Gradle | 0 | 0 | 1 - máy local thiếu Android SDK |
+| Manager Android Gradle | 3 | 0 | 0 |
 | Manager iOS Simulator | 0 | 0 | 1 - yêu cầu macOS/Xcode |
 
 Zalo lint, format baseline, `build:zmp` và review readiness `24/24` đều đạt.
 Functions/Manager/Admin typecheck, lint, format baseline và build đều đạt.
-Android/iOS chỉ được xem là đạt sau khi job CI tương ứng xanh trên HEAD cuối.
+Android đã đạt `assembleDebug`, `testDebugUnitTest` và `lintDebug` bằng SDK 36/Java 21
+trong môi trường kiểm tra cục bộ. iOS chỉ được xem là đạt sau khi build Simulator
+trên macOS/Xcode hoặc job CI tương ứng xanh trên HEAD cuối.
 
 ## CSP, App Check và monitoring
 
@@ -140,12 +142,17 @@ Android/iOS chỉ được xem là đạt sau khi job CI tương ứng xanh trê
 | Workspace | Production Critical | High | Moderate | Ghi chú |
 | --- | ---: | ---: | ---: | --- |
 | Functions | 0 | 0 | 9 | Npm đề xuất thay đổi major/downgrade Firebase; không áp dụng |
-| Zalo Mini App | 0 | 5 | 1 | Nằm trong chuỗi ZMP SDK; cần PR tương thích riêng |
+| Zalo Mini App | 0 | 5 | 1 | `zmp-sdk` stable mới nhất vẫn khai báo dependency cũ |
 | Admin Web | 0 | 0 | 0 | Cảnh báo chỉ nằm ở dev dependency |
 | Manager Mobile | 0 | 0 | 0 | Cảnh báo chỉ nằm ở dev dependency |
 
-Lockfile Zalo cập nhật patch tương thích cho `brace-expansion` và `protobufjs`.
-Không chạy `npm audit fix --force` và không tự nâng major.
+Zalo Mini App đã ghim `zmp-sdk@2.51.8`, là bản stable mới nhất tại thời điểm kiểm tra,
+và toàn bộ lint/test/build/readiness đều đạt. Audit vẫn báo chuỗi `@babel/cli`/`glob`
+và `@sentry/browser` do SDK khai báo dependency cũ; mã SDK phân phối là bundle dựng
+sẵn và source ứng dụng không import trực tiếp các dependency này. `npm audit` chỉ đề
+nghị hạ SDK xuống `2.9.4`, nên không áp dụng vì có nguy cơ phá API/runtime. Tiếp tục
+theo dõi bản stable ZMP sửa dependency upstream; không dùng override major hoặc
+`npm audit fix --force` để làm đẹp báo cáo.
 
 ## Ngoài repository
 

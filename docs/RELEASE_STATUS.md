@@ -69,8 +69,8 @@ Readiness production hiện **chưa đạt** vì còn các bước thủ công:
 - Cấu hình Functions production, App Check và monitoring bằng secret/biến môi trường thật.
 - Chạy iOS Simulator hoặc thiết bị iOS thật.
 - Chạy CI trên HEAD cuối sau khi GitHub Actions không còn bị chặn bởi billing.
-- Xử lý riêng cảnh báo bảo mật gián tiếp của `zmp-sdk`; không tự hạ phiên bản SDK bằng
-  `npm audit fix`.
+- `zmp-sdk` đã ghim bản stable `2.51.8`; tiếp tục theo dõi bản upstream loại dependency
+  cũ, không hạ xuống `2.9.4` hoặc dùng `npm audit fix --force`.
 
 ## Chưa thực hiện trong giai đoạn này
 
