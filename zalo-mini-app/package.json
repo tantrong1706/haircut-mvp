@@ -38,7 +38,7 @@
     "qrcode": "^1.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "zmp-sdk": "^2.43.0"
+    "zmp-sdk": "2.51.8"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
