@@ -12,6 +12,25 @@ type ZaloIdentityOptions = {
 };
 
 const ZALO_REQUIRED_MESSAGE = "Vui lòng mở HAIRCUT trong Zalo để xác nhận danh tính khách hàng.";
+const ZALO_PROFILE_PERMISSION_CODE = "ZALO_PROFILE_PERMISSION_REQUIRED";
+
+export class ZaloProfilePermissionError extends Error {
+  readonly code = ZALO_PROFILE_PERMISSION_CODE;
+
+  constructor() {
+    super("Bạn chưa cho phép đọc tên Zalo. Hãy mở cài đặt quyền và bật Thông tin người dùng.");
+    this.name = "ZaloProfilePermissionError";
+  }
+}
+
+export function isZaloProfilePermissionError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === ZALO_PROFILE_PERMISSION_CODE
+  );
+}
 
 function previewIdentity(): ZaloIdentity | null {
   if (import.meta.env.VITE_ZALO_PREVIEW !== "true") {
@@ -72,9 +91,26 @@ export async function getZaloIdentity(options: ZaloIdentityOptions = {}): Promis
       avatar: userInfo.avatar,
     };
   } catch {
+    if (options.requestProfilePermission === true) {
+      throw new ZaloProfilePermissionError();
+    }
+
     return {
       accessToken,
       name: "",
     };
+  }
+}
+
+export async function openZaloProfilePermissionSettings(): Promise<void> {
+  if (!isZaloMiniAppRuntime()) {
+    throw new Error(ZALO_REQUIRED_MESSAGE);
+  }
+
+  try {
+    const { openPermissionSetting } = await import("zmp-sdk/apis");
+    await openPermissionSetting();
+  } catch {
+    throw new Error("Không mở được cài đặt quyền Zalo. Vui lòng đóng Mini App rồi mở lại.");
   }
 }

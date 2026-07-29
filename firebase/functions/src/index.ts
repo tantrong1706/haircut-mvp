@@ -922,7 +922,7 @@ async function verifyZaloAccessToken(accessTokenInput: unknown): Promise<ZaloPro
 
   const appsecretProof = createHmac("sha256", appSecret).update(accessToken).digest("hex");
   const endpoint = new URL(process.env.ZALO_PROFILE_ENDPOINT || "https://graph.zalo.me/v2.0/me");
-  endpoint.searchParams.set("fields", "id,name,picture");
+  endpoint.searchParams.set("fields", "id");
 
   let payload: Record<string, unknown>;
   let responseStatus: number | "network-error" = "network-error";
@@ -975,13 +975,7 @@ async function verifyZaloAccessToken(accessTokenInput: unknown): Promise<ZaloPro
     throw new HttpsError("unauthenticated", message);
   }
 
-  const picture = payload.picture as { data?: { url?: unknown } } | undefined;
-
-  const profile = {
-    zaloUserId,
-    name: optionalString(payload.name),
-    avatar: optionalString(picture?.data?.url),
-  };
+  const profile = { zaloUserId };
   if (zaloProfileCache.size >= ZALO_PROFILE_CACHE_MAX_SIZE) {
     const oldestKey = zaloProfileCache.keys().next().value;
     if (oldestKey) {

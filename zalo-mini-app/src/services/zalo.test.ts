@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getZaloIdentity } from "./zalo";
+import { getZaloIdentity, openZaloProfilePermissionSettings } from "./zalo";
 
 const mocks = vi.hoisted(() => ({
   getAccessToken: vi.fn(),
   getUserInfo: vi.fn(),
   isZaloMiniAppRuntime: vi.fn(),
+  openPermissionSetting: vi.fn(),
 }));
 
 vi.mock("./runtime", () => ({
@@ -14,6 +15,7 @@ vi.mock("./runtime", () => ({
 vi.mock("zmp-sdk/apis", () => ({
   getAccessToken: mocks.getAccessToken,
   getUserInfo: mocks.getUserInfo,
+  openPermissionSetting: mocks.openPermissionSetting,
 }));
 
 describe("getZaloIdentity", () => {
@@ -62,6 +64,24 @@ describe("getZaloIdentity", () => {
       autoRequestPermission: true,
       avatarType: "normal",
     });
+  });
+
+  it("yêu cầu mở cài đặt khi quyền hồ sơ đã bị từ chối", async () => {
+    mocks.getUserInfo.mockRejectedValue(new Error("permission denied"));
+
+    await expect(
+      getZaloIdentity({ requestProfilePermission: true }),
+    ).rejects.toMatchObject({
+      code: "ZALO_PROFILE_PERMISSION_REQUIRED",
+    });
+  });
+
+  it("mở cài đặt quyền Zalo bằng SDK", async () => {
+    mocks.openPermissionSetting.mockResolvedValue(undefined);
+
+    await openZaloProfilePermissionSettings();
+
+    expect(mocks.openPermissionSetting).toHaveBeenCalledTimes(1);
   });
 
   it("dùng danh tính mô phỏng chỉ trong chế độ xem trước", async () => {

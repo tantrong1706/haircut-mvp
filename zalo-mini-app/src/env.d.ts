@@ -44,6 +44,8 @@ interface Window {
 declare module "zmp-sdk/apis" {
   export function getAccessToken(): Promise<string>;
 
+  export function openPermissionSetting(): Promise<void>;
+
   export function getUserInfo(options?: {
     autoRequestPermission?: boolean;
     avatarType?: "small" | "normal" | "large";

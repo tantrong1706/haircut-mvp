@@ -22,7 +22,11 @@ import { captureError, trackEvent, withMonitoringTrace } from "../services/monit
 import { hasQrContext, parseQrContext } from "../services/qr";
 import { isZaloMiniAppRuntime } from "../services/runtime";
 import type { AppSession } from "../services/types";
-import { getZaloIdentity } from "../services/zalo";
+import {
+  getZaloIdentity,
+  isZaloProfilePermissionError,
+  openZaloProfilePermissionSettings,
+} from "../services/zalo";
 
 type Props = {
   onReady: (session: AppSession) => void;
@@ -42,6 +46,7 @@ export function ScanEntryPage({ onReady, onOpenLegalPage }: Props) {
   const [qrError, setQrError] = useState("");
   const [zaloRequired, setZaloRequired] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [permissionSettingsRequired, setPermissionSettingsRequired] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const mountedRef = useRef(false);
@@ -126,6 +131,9 @@ export function ScanEntryPage({ onReady, onOpenLegalPage }: Props) {
     setLoadingIdentity(true);
     setZaloRequired(false);
     setError(null);
+    if (requestProfilePermission) {
+      setPermissionSettingsRequired(false);
+    }
 
     getZaloIdentity({ requestProfilePermission })
       .then((nextIdentity) => {
@@ -140,6 +148,7 @@ export function ScanEntryPage({ onReady, onOpenLegalPage }: Props) {
 
         setDisplayName(nextDisplayName);
         setZaloAvatarUrl(nextIdentity.avatar || "");
+        setPermissionSettingsRequired(false);
       })
       .catch((err) => {
         captureError(err, {
@@ -149,6 +158,9 @@ export function ScanEntryPage({ onReady, onOpenLegalPage }: Props) {
         });
 
         if (mountedRef.current) {
+          if (isZaloProfilePermissionError(err)) {
+            setPermissionSettingsRequired(true);
+          }
           setZaloRequired(true);
           setError(
             err instanceof Error
@@ -159,6 +171,34 @@ export function ScanEntryPage({ onReady, onOpenLegalPage }: Props) {
       })
       .finally(() => {
         if (mountedRef.current) {
+          setLoadingIdentity(false);
+        }
+      });
+  }
+
+  function openProfilePermissionSettings() {
+    setLoadingIdentity(true);
+    setError(null);
+
+    openZaloProfilePermissionSettings()
+      .then(() => {
+        if (mountedRef.current) {
+          loadZaloIdentity(false);
+        }
+      })
+      .catch((err) => {
+        captureError(err, {
+          area: "zalo_profile_permission_settings",
+          salon_id: qr.salonId,
+          branch_id: selectedBranchId,
+        });
+
+        if (mountedRef.current) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Không mở được cài đặt quyền Zalo. Vui lòng thử lại.",
+          );
           setLoadingIdentity(false);
         }
       });
@@ -385,7 +425,7 @@ export function ScanEntryPage({ onReady, onOpenLegalPage }: Props) {
           </div>
 
           <div className="button-row wrap-row">
-            {zaloOpenUrl(qr) ? (
+            {!isZaloRuntime && zaloOpenUrl(qr) ? (
               <button
                 className="primary-button"
                 onClick={() => window.location.assign(zaloOpenUrl(qr))}
@@ -396,9 +436,21 @@ export function ScanEntryPage({ onReady, onOpenLegalPage }: Props) {
             ) : null}
 
             {isZaloRuntime ? (
-              <button className="secondary-button" onClick={() => loadZaloIdentity(true)}>
+              <button
+                className="secondary-button"
+                onClick={
+                  permissionSettingsRequired
+                    ? openProfilePermissionSettings
+                    : () => loadZaloIdentity(true)
+                }
+                disabled={loadingIdentity}
+              >
                 <RefreshCcw size={18} aria-hidden="true" />
-                Cho phép đọc tên Zalo
+                {loadingIdentity
+                  ? "Đang kiểm tra quyền..."
+                  : permissionSettingsRequired
+                    ? "Mở cài đặt quyền Zalo"
+                    : "Cho phép đọc tên Zalo"}
               </button>
             ) : null}
           </div>
@@ -480,7 +532,7 @@ export function ScanEntryPage({ onReady, onOpenLegalPage }: Props) {
             ) : null}
           </div>
 
-          <details className="panel entry-options">
+          <details className="panel entry-options" open>
             <summary>
               <span>
                 <strong>Thông tin tùy chọn</strong>

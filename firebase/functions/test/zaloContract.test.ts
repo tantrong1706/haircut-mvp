@@ -22,6 +22,9 @@ describe("hợp đồng xác minh Zalo", () => {
     expect(verificationBody).toContain("access_token: accessToken");
     expect(verificationBody).toContain("appsecret_proof: appsecretProof");
     expect(verificationBody).toContain('"https://graph.zalo.me/v2.0/me"');
+    expect(verificationBody).toContain('endpoint.searchParams.set("fields", "id")');
+    expect(verificationBody).not.toContain('"id,name,picture"');
+    expect(verificationBody).not.toContain("payload.picture");
   });
 
   it.each([

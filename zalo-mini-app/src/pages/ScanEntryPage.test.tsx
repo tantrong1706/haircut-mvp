@@ -9,6 +9,8 @@ const mocks = vi.hoisted(() => ({
   getZaloIdentity: vi.fn(),
   registerCustomer: vi.fn(),
   resolveCustomerQr: vi.fn(),
+  isZaloProfilePermissionError: vi.fn(),
+  openZaloProfilePermissionSettings: vi.fn(),
 }));
 
 vi.mock("../services/runtime", () => ({
@@ -17,6 +19,8 @@ vi.mock("../services/runtime", () => ({
 
 vi.mock("../services/zalo", () => ({
   getZaloIdentity: mocks.getZaloIdentity,
+  isZaloProfilePermissionError: mocks.isZaloProfilePermissionError,
+  openZaloProfilePermissionSettings: mocks.openZaloProfilePermissionSettings,
 }));
 
 vi.mock("../services/api", () => ({
@@ -86,6 +90,11 @@ describe("ScanEntryPage", () => {
     });
     mocks.buildRegisterInput.mockReturnValue({ request: "register" });
     mocks.registerCustomer.mockResolvedValue(session);
+    mocks.isZaloProfilePermissionError.mockImplementation(
+      (error: unknown) =>
+        typeof error === "object" && error !== null && "code" in error,
+    );
+    mocks.openZaloProfilePermissionSettings.mockResolvedValue(undefined);
   });
 
   it("tự hiện thông tin Zalo và tạo lượt chỉ bằng nút xác nhận", async () => {
@@ -95,7 +104,7 @@ describe("ScanEntryPage", () => {
 
     expect(await screen.findByText("Anh Tân")).toBeInTheDocument();
     expect(screen.getAllByText("123 Nguyễn Huệ, Quận 1, TP.HCM")).not.toHaveLength(0);
-    expect(screen.getByText("Thông tin tùy chọn").closest("details")).not.toHaveAttribute("open");
+    expect(screen.getByText("Thông tin tùy chọn").closest("details")).toHaveAttribute("open");
 
     await user.click(screen.getByRole("button", { name: "Xác nhận vào hàng chờ" }));
 
@@ -103,7 +112,10 @@ describe("ScanEntryPage", () => {
     expect(mocks.getZaloIdentity).toHaveBeenCalledTimes(2);
     expect(mocks.buildRegisterInput).toHaveBeenCalledWith(
       expect.objectContaining({ salonId: "salon-a", branchId: "branch-a" }),
-      expect.objectContaining({ name: "Anh Tân", zaloUserId: "zalo-a" }),
+      expect.objectContaining({
+        name: "Anh Tân",
+        zaloUserId: "zalo-a",
+      }),
       false,
       undefined,
       undefined,
@@ -164,6 +176,7 @@ describe("ScanEntryPage", () => {
 
     expect(await screen.findByText("Chưa nhận được thông tin Zalo")).toBeInTheDocument();
     expect(screen.getByText(/Cho phép HAIRCUT đọc tên hiển thị/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Mở trong Zalo" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Cho phép đọc tên Zalo" }));
 
@@ -171,6 +184,37 @@ describe("ScanEntryPage", () => {
     expect(mocks.getZaloIdentity).toHaveBeenNthCalledWith(2, {
       requestProfilePermission: true,
     });
+  });
+
+  it("mở cài đặt để phục hồi quyền hồ sơ đã bị từ chối", async () => {
+    const user = userEvent.setup();
+    const permissionError = Object.assign(new Error("Quyền hồ sơ đã bị từ chối"), {
+      code: "ZALO_PROFILE_PERMISSION_REQUIRED",
+    });
+    mocks.getZaloIdentity
+      .mockResolvedValueOnce({
+        accessToken: "access-token-test",
+        name: "",
+      })
+      .mockRejectedValueOnce(permissionError)
+      .mockResolvedValueOnce({
+        accessToken: "access-token-test",
+        zaloUserId: "zalo-a",
+        name: "Anh Tân",
+      });
+
+    render(<ScanEntryPage onReady={vi.fn()} />);
+
+    await user.click(await screen.findByRole("button", { name: "Cho phép đọc tên Zalo" }));
+
+    expect(
+      await screen.findByRole("button", { name: "Mở cài đặt quyền Zalo" }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Mở cài đặt quyền Zalo" }));
+
+    expect(mocks.openZaloProfilePermissionSettings).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText("Anh Tân")).toBeInTheDocument();
   });
 
   it("hiển thị ảnh salon và quay về logo mặc định khi ảnh lỗi", async () => {
@@ -187,7 +231,6 @@ describe("ScanEntryPage", () => {
     render(<ScanEntryPage onReady={vi.fn()} />);
 
     await screen.findByText("Anh Tân");
-    await user.click(screen.getByText("Thông tin tùy chọn"));
     await user.type(screen.getByRole("textbox", { name: /^Số điện thoại/ }), "0912345678");
     await user.click(screen.getByRole("button", { name: "Xác nhận vào hàng chờ" }));
 
