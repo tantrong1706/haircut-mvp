@@ -183,14 +183,16 @@ Không deploy trực tiếp từ working tree chưa kiểm tra. Trước thay đ
 ```powershell
 cd C:\tantrong\haircut-mvp
 .\scripts\check.ps1 -Full
-.\scripts\check-production-readiness.ps1 -CheckLiveUrls
+node .\scripts\check-secrets.mjs --include-working-tree
+.\scripts\check-production-readiness.ps1 -StrictRelease -CheckLiveUrls
 .\scripts\deploy-firebase.ps1 -IncludeFunctions -IncludeFirestore -IncludeStorage
 ```
 
 Deploy script mặc định yêu cầu worktree sạch, branch `main`/`release/*` và
-readiness evidence đúng `HEAD`. Thứ tự Functions tương thích, migration đã phê
+full-suite evidence đúng `HEAD`, sau đó tự chạy strict readiness. Thứ tự Functions tương thích, migration đã phê
 duyệt, indexes/Rules, Storage Rules rồi Hosting vẫn là bắt buộc khi có thay đổi
-dữ liệu. Không dùng các flag override để thay thế review phát hành.
+dữ liệu. Các flag override cần break-glass có lý do và xác nhận tương tác ngoài CI;
+không dùng để thay thế review phát hành.
 
 ### Zalo Testing
 

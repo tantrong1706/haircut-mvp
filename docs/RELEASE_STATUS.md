@@ -1,6 +1,33 @@
 # Trạng thái phát hành HAIRCUT
 
-Cập nhật: 28/07/2026
+Cập nhật: 29/07/2026
+
+## Cập nhật remediation 29/07/2026
+
+Source hiện đã bổ sung các bảo vệ sau, nhưng **chưa production-ready và chưa deploy**:
+
+- Session `waiting`, `serving` và `pending_approval` hết hạn được đóng idempotent; yêu cầu
+  điểm liên quan bị từ chối bởi hệ thống, ảnh tạm được dọn và không phát sinh điểm/lịch sử cắt.
+- Lời mời staff chỉ chuyển sang `accepted` sau thao tác đồng ý rõ ràng; việc đọc hồ sơ không
+  còn âm thầm chấp nhận lời mời.
+- Tìm khách trả danh sách tóm tắt; chi tiết chỉ tải cho một khách qua callable có kiểm tra
+  salon/chi nhánh/quyền, không còn N+1 hoặc fallback Firestore trực tiếp.
+- Job xóa khách dùng phân trang Firestore và Storage, lưu cursor/progress, retry an toàn,
+  xóa customer cuối cùng và không trừ `customerCount` hai lần.
+- Lỗi Zalo phân biệt thiếu quyền với lỗi tạm thời; UI không lặp xin quyền vô hạn.
+- Secret scanner hỗ trợ cả file tracked và working tree; strict release gate fail-closed theo SHA.
+
+Các blocker ngoài source vẫn còn:
+
+- GitHub Actions Billing/spending limit: **Deferred/external**, CI chưa xác minh HEAD cuối.
+- Chưa build iOS trên macOS/Xcode.
+- Chưa xác minh App Check trên Android và iPhone thật; chưa có App Check site key.
+- Chưa có Sentry DSN production.
+- Chưa deploy production hoặc chạy migration production.
+
+Local production-readiness đạt chỉ chứng minh cấu hình/source cục bộ; **không phải production
+release approval**. Strict release phải tiếp tục fail cho tới khi toàn bộ bằng chứng vận hành
+khớp đúng SHA.
 
 ## Ba sản phẩm
 
@@ -15,7 +42,7 @@ Mini App ID được giữ nguyên: `2038116772828167300`. Bundle ID Manager: `v
 ## Trạng thái theo lớp
 
 - **Source:** nhánh remediation bắt đầu từ `origin/main`
-  `0d4fbf996f6a0f30f1e8bfa6fd2c106167622bbf`; thay đổi chưa được merge.
+  `3e55436ec2228f18f106b0b8ee3c918c18d20dfd`; thay đổi chưa được merge.
 - **GitHub:** CI chỉ được xem là đạt sau khi Draft PR chạy xanh trên HEAD cuối.
 - **Firebase:** chưa xác minh SHA đang deploy; không suy ra từ nhánh hoặc Hosting URL.
 - **Zalo:** trạng thái Testing/Production phải xem trực tiếp trên Zalo Portal.
@@ -49,23 +76,24 @@ Mini App ID được giữ nguyên: `2038116772828167300`. Bundle ID Manager: `v
 
 ## Bằng chứng kiểm tra cục bộ
 
-Các kiểm tra ngày 28/07/2026 được chạy trên source hiện tại, không deploy và không truy cập
+Các kiểm tra ngày 03/08/2026 được chạy trên source hiện tại, không deploy và không truy cập
 dữ liệu Firebase production:
 
 - Functions: typecheck/lint/build đạt; `63/63` unit test đạt.
-- Firestore/Storage Rules: `18/18` test đạt.
-- Functions integration với Firebase Emulator: `39/39` test đạt.
-- Zalo Mini App: lint/format/build ZMP đạt; `70/70` unit test đạt; readiness Zalo `24/24`.
+- Firestore/Storage Rules: `19/19` test đạt.
+- Functions integration với Firebase Emulator: `45/45` test đạt.
+- Zalo Mini App: lint/format/build ZMP đạt; `85/85` unit test đạt; readiness Zalo `24/24`.
 - Admin Web: check/build đạt; `8/8` test đạt.
 - Manager: check/build đạt; `73/73` test đạt.
 - Browser E2E: `15` test đạt; `9` test ảnh xét duyệt được bỏ qua có chủ đích vì chỉ chạy
   khi bật bộ tạo ảnh review.
-- Android: `assembleDebug`, `testDebugUnitTest` và `lintDebug` đạt.
+- Android: `cap sync android` đạt; Gradle chưa được chạy lại trên HEAD cuối vì máy hiện tại không có Android SDK.
 - iOS: chỉ xác minh `cap sync`; chưa có bằng chứng build Simulator trên macOS.
 
 Readiness production hiện **chưa đạt** vì còn các bước thủ công:
 
-- Tạo `firebase/.firebaserc` đúng project được phép deploy.
+- `firebase/.firebaserc` local đã trỏ `haircut-c7d12`; vẫn phải xác minh quyền và SHA deploy
+  ngay trước release.
 - Cấu hình Functions production, App Check và monitoring bằng secret/biến môi trường thật.
 - Chạy iOS Simulator hoặc thiết bị iOS thật.
 - Chạy CI trên HEAD cuối sau khi GitHub Actions không còn bị chặn bởi billing.

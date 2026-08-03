@@ -1,13 +1,26 @@
 # Khắc phục Security & Release Readiness
 
-Cập nhật: 27/07/2026
+Cập nhật: 29/07/2026
 
 ## Phạm vi
 
 - Branch: `fix/repository-readiness-remediation`
-- Base `origin/main`: `0d4fbf996f6a0f30f1e8bfa6fd2c106167622bbf`
+- Base `origin/main`: `3e55436ec2228f18f106b0b8ee3c918c18d20dfd`
 - Production deploy, migration và dữ liệu thật: không truy cập
 - Trạng thái GitHub Actions: chỉ xác nhận sau khi Draft PR chạy trên HEAD cuối
+
+## Cập nhật reliability
+
+- Scheduler hết hạn session xử lý transaction cho cả `waiting`, `serving` và
+  `pending_approval`, dọn active pointer, từ chối point request liên quan và audit idempotent.
+- Staff invite chỉ được nhận qua `acceptStaffInvite` sau thao tác đồng ý; đọc hồ sơ không
+  còn làm thay đổi trạng thái lời mời.
+- Search khách trả summary; callable chi tiết kiểm tra tenant/branch/quyền và không có
+  direct Firestore fallback.
+- Xóa khách giới hạn 250 document/trang và 2 trang/lần gọi; Storage giới hạn 100 file/trang,
+  10 thao tác đồng thời, có retry lỗi tạm thời. Job lưu cursor/progress và xác minh residue
+  trước khi xóa customer cuối cùng.
+- Zalo phân loại lỗi quyền và lỗi tạm thời để retry/settings không tạo vòng lặp.
 
 ## Khách dùng chung toàn salon
 
@@ -47,8 +60,8 @@ Kết quả đã chạy trong quá trình sửa:
 
 | Suite | Passed | Failed | Skipped |
 | --- | ---: | ---: | ---: |
-| Rules emulator | 18 | 0 | 0 |
-| Integration/adversarial emulator | 39 | 0 | 0 |
+| Rules emulator | 19 | 0 | 0 |
+| Integration/adversarial emulator | 45 | 0 | 0 |
 | Integration thiếu emulator (negative gate) | 0 | 3 suite bị từ chối đúng | 0 |
 
 ## Readiness và deploy gate
@@ -67,8 +80,12 @@ Kết quả đã chạy trong quá trình sửa:
 - Working tree bẩn.
 - Branch ngoài `main`/`release/*`.
 - Thiếu evidence, evidence không full, không đạt hoặc sai SHA.
+- Strict readiness chưa đạt App Check, monitoring, live URL, project/Zalo/contact hoặc
+  bằng chứng thiết bị tương ứng.
 
 `-DryRun` kiểm tra gate mà không deploy.
+Các cờ bỏ qua chỉ hoạt động ngoài CI khi có `HAIRCUT_BREAK_GLASS=true`, lý do cụ thể
+và xác nhận tương tác. Không dùng break-glass trong remediation này.
 
 ## CI và dependency automation
 
@@ -99,20 +116,20 @@ Kết quả đã chạy trong quá trình sửa:
 | Kiểm tra | Passed | Failed | Skipped/Blocked |
 | --- | ---: | ---: | ---: |
 | Functions unit | 63 | 0 | 0 |
-| Rules emulator | 18 | 0 | 0 |
-| Functions integration/adversarial | 39 | 0 | 0 |
-| Zalo unit | 70 | 0 | 0 |
+| Rules emulator | 19 | 0 | 0 |
+| Functions integration/adversarial | 45 | 0 | 0 |
+| Zalo unit | 85 | 0 | 0 |
 | Zalo browser E2E | 15 | 0 | 9 screenshot-only |
 | Manager unit | 73 | 0 | 0 |
 | Admin unit | 8 | 0 | 0 |
 | Manager Android Capacitor sync | 1 | 0 | 0 |
-| Manager Android Gradle | 3 | 0 | 0 |
+| Manager Android Gradle | 0 | 0 | 1 - máy hiện tại không có Android SDK |
 | Manager iOS Simulator | 0 | 0 | 1 - yêu cầu macOS/Xcode |
 
 Zalo lint, format baseline, `build:zmp` và review readiness `24/24` đều đạt.
 Functions/Manager/Admin typecheck, lint, format baseline và build đều đạt.
-Android đã đạt `assembleDebug`, `testDebugUnitTest` và `lintDebug` bằng SDK 36/Java 21
-trong môi trường kiểm tra cục bộ. iOS chỉ được xem là đạt sau khi build Simulator
+Android đã đạt `cap sync android`; Gradle trên HEAD cuối đang bị chặn vì máy hiện tại không có
+Android SDK. iOS chỉ được xem là đạt sau khi build Simulator
 trên macOS/Xcode hoặc job CI tương ứng xanh trên HEAD cuối.
 
 ## CSP, App Check và monitoring
@@ -134,7 +151,11 @@ trên macOS/Xcode hoặc job CI tương ứng xanh trên HEAD cuối.
 - File example chỉ chứa placeholder, không chứa liên hệ cá nhân.
 - `.codex/skills` gồm 146 file local tooling, không có tham chiếu runtime,
   binary hay mẫu secret; đã loại khỏi Git và ignore `.codex/`.
-- `scripts/check-secrets.mjs` quét file Git mà không in giá trị credential.
+- `scripts/check-secrets.mjs` quét file Git; thêm `--include-working-tree` để quét cả
+  file untracked không bị ignore. Kết quả chỉ ghi file/dòng/loại, không in credential,
+  đồng thời xác minh các artifact nhạy cảm vẫn được `.gitignore` bảo vệ.
+- Lịch sử Git phải được quét bằng Gitleaks hoặc TruffleHog trong CI/máy release đã
+  cài công cụ; remediation không tự cài hay rewrite lịch sử.
 - Giá trị từng có trong lịch sử Git không bị rewrite trong nhiệm vụ này.
 
 ## Dependency audit

@@ -38,7 +38,10 @@ cd ..
 ## Thứ tự deploy
 
 1. Trên commit sạch thuộc `main` hoặc `release/*`, chạy
-   `.\scripts\check.ps1 -Full`; xác minh evidence đúng SHA và tạo release tag.
+   `.\scripts\check.ps1 -Full`; sau đó chạy
+   `.\scripts\check-production-readiness.ps1 -StrictRelease -CheckLiveUrls`
+   (thêm `-ReleaseIncludesIos` nếu phát hành iOS), xác minh evidence đúng SHA rồi
+   mới tạo release tag.
 2. Dry-run audit tenant, export Firestore bằng `scripts/backup-firestore.ps1`, ghi URL backup vào biên bản.
 3. Deploy Functions tương thích ngược theo nhóm nhỏ.
 4. Chạy migration đã phê duyệt; không tự suy đoán document thiếu `salonId`.
@@ -49,7 +52,19 @@ cd ..
 
 `scripts/deploy-firebase.ps1` hiển thị branch/SHA và từ chối worktree bẩn, branch
 không được phép hoặc evidence sai SHA. `-DryRun` chỉ kiểm tra cổng và không deploy.
-Các flag override phải được dùng có chủ đích và ghi vào biên bản phát hành.
+Luồng bình thường luôn chạy strict readiness. Các flag override yêu cầu
+`HAIRCUT_BREAK_GLASS=true`, `HAIRCUT_BREAK_GLASS_REASON` đủ rõ và xác nhận tương tác
+ngoài CI; mọi ngoại lệ phải ghi vào biên bản phát hành.
+
+Quét secret trước release:
+
+```powershell
+node .\scripts\check-secrets.mjs
+node .\scripts\check-secrets.mjs --include-working-tree
+```
+
+Máy/CI release cần chạy thêm Gitleaks hoặc TruffleHog trên lịch sử Git. Không dùng
+`npm audit fix --force`, không in credential và không rewrite lịch sử trong quy trình deploy.
 
 ## CSP Testing
 

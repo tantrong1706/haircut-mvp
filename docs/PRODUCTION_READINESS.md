@@ -6,12 +6,20 @@
 .\scripts\check.ps1
 .\scripts\check.ps1 -Full
 .\scripts\check-production-readiness.ps1 -CheckLiveUrls
+.\scripts\check-production-readiness.ps1 -StrictRelease -CheckLiveUrls
+node .\scripts\check-secrets.mjs --include-working-tree
 ```
 
 `check.ps1` hiển thị riêng Passed, Failed, Blocked và Not run. Full suite tạo
 `.tmp/release-readiness.json` cho đúng SHA; deploy script từ chối evidence của
 commit khác. Admin và Manager đều phải qua `npm run check`; Android Gradle và iOS
 Simulator chỉ được ghi đạt khi job CI tương ứng thực sự xanh trên HEAD.
+
+`-StrictRelease` là cổng fail-closed cho phát hành, khác với readiness local. Nó
+yêu cầu working tree sạch, full-suite evidence đúng HEAD, Firebase project mapping,
+Zalo production config, contact hỗ trợ, App Check enforcement và bằng chứng thiết bị,
+Sentry DSN, live URLs; thêm `-ReleaseIncludesIos` khi release có iOS để bắt buộc
+Xcode evidence đúng SHA. Readiness local pass không phải phê duyệt phát hành production.
 
 ## Cổng dữ liệu và bảo mật
 
@@ -32,6 +40,7 @@ Simulator chỉ được ghi đạt khi job CI tương ứng thực sự xanh tr
 - [ ] Retry check-in, submit/approve điểm, spin và redeem không tạo dữ liệu trùng.
 - [ ] Owner/staff không đọc tenant khác; system admin chỉ dùng Admin Web.
 - [ ] Ảnh chỉ lưu khi consent; xóa khách/salon không báo hoàn tất khi còn residue.
+      Job xóa khách phải lưu cursor/progress, tiếp tục được sau lỗi và chỉ xóa customer cuối cùng.
 
 ## Cổng phát hành
 
@@ -42,5 +51,13 @@ Simulator chỉ được ghi đạt khi job CI tương ứng thực sự xanh tr
 - [ ] Admin có Hosting site riêng; `/admin` không còn cấp quyền owner.
 - [ ] Privacy, Terms, Support và Account deletion truy cập công khai.
 - [ ] Uptime, error/quota/billing alerts đã gửi thử tới đúng người trực.
+
+## Blocker hiện tại
+
+- GitHub Actions Billing/spending limit: **Deferred/external**; chưa có CI evidence trên HEAD cuối.
+- iOS build: **Blocked** cho tới khi chạy trên macOS/Xcode.
+- App Check: chưa có site key production và chưa xác minh Android/iPhone thật.
+- Monitoring: chưa có Sentry DSN production.
+- Production deploy/migration: chưa thực hiện.
 
 Không đánh dấu production-ready chỉ vì build thành công. Trạng thái hiện tại nằm ở [RELEASE_STATUS.md](RELEASE_STATUS.md).
