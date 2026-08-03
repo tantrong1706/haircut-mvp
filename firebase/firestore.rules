@@ -137,6 +137,10 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    match /photo_upload_operations/{operationId} {
+      allow read, write: if false;
+    }
+
     match /audit_events/{eventId} {
       allow read, write: if false;
     }
