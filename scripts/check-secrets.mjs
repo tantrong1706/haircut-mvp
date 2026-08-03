@@ -3,14 +3,27 @@ import { extname, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
 const root = resolve(import.meta.dirname, "..");
-const git = spawnSync("git", ["ls-files", "-z"], {
-  cwd: root,
-  encoding: "utf8",
-  windowsHide: true,
-});
-if (git.status !== 0) {
-  throw new Error("Không đọc được danh sách file Git.");
+const includeWorkingTree = process.argv.includes("--include-working-tree");
+
+function gitFiles(args, errorMessage) {
+  const result = spawnSync("git", args, {
+    cwd: root,
+    encoding: "utf8",
+    windowsHide: true,
+  });
+  if (result.status !== 0) {
+    throw new Error(errorMessage);
+  }
+  return result.stdout.split("\0").filter(Boolean);
 }
+
+const trackedFiles = gitFiles(["ls-files", "-z"], "Không đọc được danh sách file Git.");
+const files = includeWorkingTree
+  ? gitFiles(
+      ["ls-files", "-co", "--exclude-standard", "-z"],
+      "Không đọc được danh sách file working tree.",
+    )
+  : trackedFiles;
 
 const forbiddenExtensions = new Set([
   ".jks",
@@ -48,7 +61,38 @@ const patterns = [
 ];
 
 const findings = [];
-const files = git.stdout.split("\0").filter(Boolean);
+const forbiddenTrackedPaths = [
+  /(^|\/)\.env(?:\.|$)/u,
+  /(^|\/)google-services\.json$/u,
+  /(^|\/)GoogleService-Info\.plist$/u,
+];
+for (const file of trackedFiles) {
+  if (
+    forbiddenTrackedPaths.some((pattern) => pattern.test(file)) &&
+    !file.endsWith(".example") &&
+    file !== "zalo-mini-app/.env.test"
+  ) {
+    findings.push({ file, line: 1, type: "tracked local credential/config file" });
+  }
+}
+
+const requiredIgnoredPaths = [
+  "zalo-mini-app/.env.production.local",
+  "firebase/functions/.env",
+  "apps/manager-mobile/android/app/google-services.json",
+  "apps/manager-mobile/ios/App/App/GoogleService-Info.plist",
+  ".tmp/release-readiness.json",
+];
+for (const file of requiredIgnoredPaths) {
+  const ignored = spawnSync("git", ["check-ignore", "--quiet", "--no-index", file], {
+    cwd: root,
+    windowsHide: true,
+  });
+  if (ignored.status !== 0) {
+    findings.push({ file, line: 1, type: "missing ignore rule for sensitive artifact" });
+  }
+}
+
 for (const file of files) {
   const extension = extname(file).toLowerCase();
   if (forbiddenExtensions.has(extension)) {
@@ -81,5 +125,8 @@ if (findings.length > 0) {
   }
   process.exitCode = 1;
 } else {
-  console.log(`Secret scan đạt trên ${files.length} file Git; không in nội dung credential.`);
+  const scope = includeWorkingTree ? "tracked + untracked working tree" : "tracked Git files";
+  console.log(
+    `Secret scan đạt trên ${files.length} file (${scope}); không in nội dung credential.`,
+  );
 }

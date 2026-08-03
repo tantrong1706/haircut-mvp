@@ -116,6 +116,9 @@ if ($Full) {
     npm run check:zalo-review
   }
   Invoke-Step "Browser E2E" (Join-Path $root "zalo-mini-app") { npm run test:e2e }
+  Invoke-Step "Restore Zalo production package" (Join-Path $root "zalo-mini-app") {
+    npm run build:zmp
+  }
   Invoke-Step "Manager Android sync" (Join-Path $root "apps/manager-mobile") {
     npx cap sync android
   } $false
