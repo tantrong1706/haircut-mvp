@@ -1346,6 +1346,7 @@ small {
   opacity: 0.72;
 }
 
+.photo-hidden-input,
 .photo-capture-button input {
   position: absolute;
   width: 1px;

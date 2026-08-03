@@ -1152,7 +1152,8 @@ img {
   gap: 8px;
 }
 
-.manager-photo-actions label {
+.manager-photo-actions label,
+.manager-photo-actions button {
   position: relative;
   min-width: 0;
   min-height: 64px;
@@ -1167,32 +1168,38 @@ img {
   cursor: pointer;
 }
 
-.manager-photo-actions label.secondary {
+.manager-photo-actions label.secondary,
+.manager-photo-actions button.secondary {
   color: var(--manager-green-dark);
   background: #fff;
 }
 
-.manager-photo-actions label.disabled {
+.manager-photo-actions label.disabled,
+.manager-photo-actions button.disabled {
   cursor: not-allowed;
   opacity: 0.5;
 }
 
-.manager-photo-actions label > svg {
+.manager-photo-actions label > svg,
+.manager-photo-actions button > svg {
   width: 22px;
   height: 22px;
   flex: 0 0 auto;
 }
 
-.manager-photo-actions label span {
+.manager-photo-actions label span,
+.manager-photo-actions button span {
   min-width: 0;
   display: grid;
 }
 
-.manager-photo-actions label small {
+.manager-photo-actions label small,
+.manager-photo-actions button small {
   opacity: 0.8;
 }
 
 .manager-photo-actions input,
+.manager-hidden-input,
 .manager-upload-control input {
   position: absolute;
   inset: 0;
@@ -1229,6 +1236,37 @@ img {
   height: 48px;
   color: #fff;
   background: rgba(22, 31, 27, 0.82);
+}
+
+.manager-photo-progress,
+.manager-photo-drafts {
+  display: grid;
+  gap: 8px;
+}
+
+.manager-photo-progress {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+}
+
+.manager-photo-progress progress {
+  width: 100%;
+  accent-color: var(--manager-green);
+}
+
+.manager-photo-progress button {
+  min-height: 40px;
+  border: 1px solid var(--manager-line);
+  border-radius: 7px;
+  background: #fff;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.manager-photo-progress button svg {
+  width: 16px;
+  height: 16px;
 }
 
 .manager-quick-notes {
