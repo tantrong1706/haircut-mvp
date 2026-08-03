@@ -47,6 +47,7 @@ import {
   getLuckyWheelConfig,
   getBranchQrSettings,
   getOwnerOverview,
+  getSalonCustomerDetails,
   getSalonProfile,
   listenStaffProfiles,
   listenPendingPointRequests,
@@ -2152,6 +2153,7 @@ function CustomerSearchPanel({
   const [results, setResults] = useState<CustomerLookupResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [busyCustomerId, setBusyCustomerId] = useState("");
+  const [detailsCustomerId, setDetailsCustomerId] = useState("");
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [searchedTerm, setSearchedTerm] = useState("");
   const compactTerm = term.trim().replace(/\s/g, "");
@@ -2186,6 +2188,22 @@ function CustomerSearchPanel({
   async function copyReward(code: string) {
     await navigator.clipboard.writeText(code);
     onMessage("Đã copy mã quà.");
+  }
+
+  async function loadCustomerDetails(customerId: string) {
+    setDetailsCustomerId(customerId);
+    onMessage("");
+    onError("");
+    try {
+      const details = await getSalonCustomerDetails({ salonId, customerId });
+      setResults((current) =>
+        current.map((customer) => (customer.id === customerId ? details : customer)),
+      );
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Không tải được hồ sơ khách");
+    } finally {
+      setDetailsCustomerId("");
+    }
   }
 
   function deleteCustomer(customer: CustomerLookupResult) {
@@ -2266,39 +2284,53 @@ function CustomerSearchPanel({
               <span>SĐT: {ownerPhoneLabel(customer)}</span>
               <span>Lần ghé gần nhất: {formatDateTime(customer.lastVisitAtMs) || "Chưa có"}</span>
 
-              <div className="customer-insight-grid">
-                <div>
-                  <strong>Lịch sử gần đây</strong>
-                  {customer.recentRecords.length === 0 ? (
-                    <small>Chưa có lịch sử</small>
-                  ) : (
-                    customer.recentRecords.map((record) => (
-                      <small key={record.id}>
-                        {formatDateTime(record.createdAtMs)} · {record.staffName || "Nhân viên"} ·{" "}
-                        {record.note || "Không ghi chú"}
-                      </small>
-                    ))
-                  )}
+              {customer.detailsLoaded ? (
+                <div className="customer-insight-grid">
+                  <div>
+                    <strong>Lịch sử gần đây</strong>
+                    {customer.recentRecords.length === 0 ? (
+                      <small>Chưa có lịch sử</small>
+                    ) : (
+                      customer.recentRecords.map((record) => (
+                        <small key={record.id}>
+                          {formatDateTime(record.createdAtMs)} · {record.staffName || "Nhân viên"} ·{" "}
+                          {record.note || "Không ghi chú"}
+                        </small>
+                      ))
+                    )}
+                  </div>
+                  <div>
+                    <strong>Mã quà chưa dùng</strong>
+                    {customer.unusedRewards.length === 0 ? (
+                      <small>Không có mã quà</small>
+                    ) : (
+                      customer.unusedRewards.map((reward) => (
+                        <button
+                          className="reward-code-button"
+                          key={reward.id}
+                          type="button"
+                          onClick={() => copyReward(reward.rewardCode)}
+                        >
+                          <Gift size={16} aria-hidden="true" />
+                          {reward.rewardName}: {reward.rewardCode}
+                        </button>
+                      ))
+                    )}
+                  </div>
                 </div>
-                <div>
-                  <strong>Mã quà chưa dùng</strong>
-                  {customer.unusedRewards.length === 0 ? (
-                    <small>Không có mã quà</small>
-                  ) : (
-                    customer.unusedRewards.map((reward) => (
-                      <button
-                        className="reward-code-button"
-                        key={reward.id}
-                        type="button"
-                        onClick={() => copyReward(reward.rewardCode)}
-                      >
-                        <Gift size={16} aria-hidden="true" />
-                        {reward.rewardName}: {reward.rewardCode}
-                      </button>
-                    ))
-                  )}
-                </div>
-              </div>
+              ) : (
+                <button
+                  className="secondary-button"
+                  type="button"
+                  disabled={detailsCustomerId === customer.id}
+                  onClick={() => void loadCustomerDetails(customer.id)}
+                >
+                  <UserRound size={18} aria-hidden="true" />
+                  {detailsCustomerId === customer.id
+                    ? "Đang tải hồ sơ..."
+                    : "Xem hồ sơ chi tiết"}
+                </button>
+              )}
 
               <div className="button-row wrap-row">
                 <button

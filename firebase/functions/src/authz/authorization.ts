@@ -5,7 +5,6 @@ import {
   type SalonStatus,
 } from "@haircut/contracts";
 import type { DocumentData, Firestore } from "firebase-admin/firestore";
-import { Timestamp } from "firebase-admin/firestore";
 import { auditEventData } from "../domains/audit/auditEvent";
 import { canUserAccessBranch } from "../security";
 import { apiError } from "../shared/errors";
@@ -62,18 +61,17 @@ export function createAuthorization(db: Firestore) {
       role: data.role,
       isActive: true,
     };
-    if (user.role === "staff" && user.inviteStatus === "pending") {
-      await snap.ref.set(
-        {
-          inviteStatus: "accepted",
-          inviteAcceptedAt: Timestamp.now(),
-          updatedAt: Timestamp.now(),
-        },
-        { merge: true },
-      );
-      user.inviteStatus = "accepted";
-    }
     return user;
+  }
+
+  function assertAcceptedStaffInvite(user: AppUser) {
+    if (user.role === "staff" && user.inviteStatus === "pending") {
+      throw apiError(
+        "permission-denied",
+        ApiErrorCode.FORBIDDEN,
+        "Hãy xác nhận lời mời nhân viên trước khi sử dụng salon",
+      );
+    }
   }
 
   async function assertSystemAdmin(uid: string): Promise<SystemAdminUser> {
@@ -117,6 +115,7 @@ export function createAuthorization(db: Firestore) {
         "Vai trò hiện tại không được phép thực hiện thao tác này",
       );
     }
+    assertAcceptedStaffInvite(user);
     const salonSnap = await db.collection("salons").doc(user.salonId).get();
     if (!salonSnap.exists) {
       throw apiError("not-found", ApiErrorCode.INVALID_SALON, "Không tìm thấy salon của tài khoản");
@@ -134,6 +133,7 @@ export function createAuthorization(db: Firestore) {
     if (user.salonId !== requestedSalonId || !allowedRoles.includes(user.role)) {
       throw apiError("permission-denied", ApiErrorCode.FORBIDDEN, "Không có quyền với salon này");
     }
+    assertAcceptedStaffInvite(user);
     return user;
   }
 

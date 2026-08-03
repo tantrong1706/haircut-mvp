@@ -60,6 +60,11 @@ service firebase.storage {
       return userExists()
         && userDoc().data.salonId == salonId
         && userDoc().data.isActive == true
+        && (
+          userDoc().data.role != "staff"
+          || !("inviteStatus" in userDoc().data)
+          || userDoc().data.inviteStatus == "accepted"
+        )
         && salonOperational(salonId);
     }
 

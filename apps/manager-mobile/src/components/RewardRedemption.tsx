@@ -1,4 +1,4 @@
-import { BadgeCheck, Copy, ScanLine, Search, ShieldCheck } from "lucide-react";
+import { BadgeCheck, Copy, ScanLine, Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ConfirmDialog, type ConfirmDialogRequest } from "./ConfirmDialog";
 import { InlineFeedback } from "./Feedback";
@@ -234,8 +234,7 @@ export function RewardRedemption({
             ) : undefined
           }
         >
-          Đã xác nhận {result.rewardName || "mã quà"} cho{" "}
-          {result.customerName || "khách hàng"}.
+          Đã xác nhận {result.rewardName || "mã quà"} cho {result.customerName || "khách hàng"}.
         </InlineFeedback>
       ) : null}
       {message ? <InlineFeedback tone="success">{message}</InlineFeedback> : null}

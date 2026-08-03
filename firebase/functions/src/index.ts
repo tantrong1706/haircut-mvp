@@ -922,7 +922,7 @@ async function verifyZaloAccessToken(accessTokenInput: unknown): Promise<ZaloPro
 
   const appsecretProof = createHmac("sha256", appSecret).update(accessToken).digest("hex");
   const endpoint = new URL(process.env.ZALO_PROFILE_ENDPOINT || "https://graph.zalo.me/v2.0/me");
-  endpoint.searchParams.set("fields", "id,name,picture");
+  endpoint.searchParams.set("fields", "id");
 
   let payload: Record<string, unknown>;
   let responseStatus: number | "network-error" = "network-error";
@@ -975,13 +975,7 @@ async function verifyZaloAccessToken(accessTokenInput: unknown): Promise<ZaloPro
     throw new HttpsError("unauthenticated", message);
   }
 
-  const picture = payload.picture as { data?: { url?: unknown } } | undefined;
-
-  const profile = {
-    zaloUserId,
-    name: optionalString(payload.name),
-    avatar: optionalString(picture?.data?.url),
-  };
+  const profile = { zaloUserId };
   if (zaloProfileCache.size >= ZALO_PROFILE_CACHE_MAX_SIZE) {
     const oldestKey = zaloProfileCache.keys().next().value;
     if (oldestKey) {
@@ -1668,6 +1662,99 @@ export const createStaffProfile = onCall(functionOptions, async (request) => {
     }
     throw new HttpsError("internal", "Không tạo được lời mời nhân viên");
   }
+});
+
+export const acceptStaffInvite = onCall(functionOptions, async (request) => {
+  const uid = currentUid(request.auth);
+  const authenticatedEmail =
+    typeof request.auth?.token.email === "string"
+      ? request.auth.token.email.trim().toLowerCase()
+      : "";
+  const appUser = await getAppUser(uid);
+  if (appUser.role !== "staff") {
+    throw apiError(
+      "permission-denied",
+      ApiErrorCode.FORBIDDEN,
+      "Chỉ tài khoản nhân viên mới có thể xác nhận lời mời",
+    );
+  }
+
+  const staffRef = db.collection("users").doc(uid);
+  const salonRef = db.collection("salons").doc(appUser.salonId);
+  const now = Timestamp.now();
+  const result = await db.runTransaction(async (tx) => {
+    const [staffSnap, salonSnap] = await Promise.all([tx.get(staffRef), tx.get(salonRef)]);
+    const staff = staffSnap.data();
+    if (
+      !staffSnap.exists ||
+      staff?.role !== "staff" ||
+      staff?.salonId !== appUser.salonId ||
+      staff?.isActive !== true
+    ) {
+      throw apiError(
+        "permission-denied",
+        ApiErrorCode.FORBIDDEN,
+        "Lời mời nhân viên không còn hợp lệ",
+      );
+    }
+    if (!salonSnap.exists) {
+      throw apiError(
+        "not-found",
+        ApiErrorCode.INVALID_SALON,
+        "Không tìm thấy salon của lời mời nhân viên",
+      );
+    }
+    assertSalonIsOperational(salonSnap.data());
+
+    const invitedEmail =
+      typeof staff.email === "string" ? staff.email.trim().toLowerCase() : "";
+    if (invitedEmail && (!authenticatedEmail || authenticatedEmail !== invitedEmail)) {
+      throw apiError(
+        "permission-denied",
+        ApiErrorCode.FORBIDDEN,
+        "Email đăng nhập không khớp với lời mời nhân viên",
+      );
+    }
+
+    if (staff.inviteStatus === "accepted") {
+      return { accepted: true, alreadyAccepted: true };
+    }
+    if (staff.inviteStatus !== "pending") {
+      throw apiError(
+        "failed-precondition",
+        ApiErrorCode.INVALID_REQUEST,
+        "Lời mời nhân viên không ở trạng thái chờ xác nhận",
+      );
+    }
+
+    tx.set(
+      staffRef,
+      {
+        inviteStatus: "accepted",
+        inviteAcceptedAt: now,
+        acceptedBy: uid,
+        updatedAt: now,
+      },
+      { merge: true },
+    );
+    tx.set(
+      db.collection("audit_events").doc(),
+      auditEventData({
+        salonId: appUser.salonId,
+        actorId: uid,
+        actorRole: "staff",
+        action: "staff.invite_accepted",
+        targetType: "user",
+        targetId: uid,
+        before: { inviteStatus: "pending" },
+        after: { inviteStatus: "accepted" },
+        createdAt: now,
+      }),
+    );
+    return { accepted: true, alreadyAccepted: false };
+  });
+
+  return result;
 });
 
 export const createMirror = onCall(functionOptions, async (request) => {
@@ -3260,7 +3347,7 @@ export const expireStaleServiceSessions = onSchedule(
 
     let expiredCount = 0;
     for (const staleDoc of staleSnap.docs) {
-      const expired = await db.runTransaction(async (tx) => {
+      const expiredSession = await db.runTransaction(async (tx) => {
         const sessionSnap = await tx.get(staleDoc.ref);
         const session = sessionSnap.data() ?? {};
         if (
@@ -3271,14 +3358,33 @@ export const expireStaleServiceSessions = onSchedule(
           ) ||
           !isServiceSessionExpired(timestampMillis(session.expiresAt), now.toMillis())
         ) {
-          return false;
+          return null;
         }
 
-        const activeRef = activeSessionRefFor(
-          String(session.salonId || ""),
-          String(session.customerId || ""),
-        );
-        const activeSnap = await tx.get(activeRef);
+        const salonId = String(session.salonId || "");
+        const branchId = String(session.branchId || "");
+        const customerId = String(session.customerId || "");
+        if (!salonId || !customerId) {
+          console.warn("Không thể hết hạn lượt thiếu thông tin tenant", {
+            sessionId: staleDoc.id,
+          });
+          return null;
+        }
+
+        const activeRef = activeSessionRefFor(salonId, customerId);
+        const pointRequestRef = db.collection("point_requests").doc(staleDoc.id);
+        const [activeSnap, pointRequestSnap] = await Promise.all([
+          tx.get(activeRef),
+          tx.get(pointRequestRef),
+        ]);
+        const pointRequest = pointRequestSnap.data();
+        const shouldRejectPointRequest =
+          pointRequestSnap.exists &&
+          pointRequest?.status === "pending" &&
+          pointRequest.salonId === salonId &&
+          pointRequest.customerId === customerId &&
+          pointRequest.sessionId === staleDoc.id;
+
         tx.set(
           staleDoc.ref,
           {
@@ -3293,11 +3399,67 @@ export const expireStaleServiceSessions = onSchedule(
         if (activeSnap.exists && activeSnap.data()?.sessionId === staleDoc.id) {
           tx.delete(activeRef);
         }
-        return true;
+        tx.set(
+          db.collection("audit_events").doc(),
+          auditEventData({
+            salonId,
+            branchId,
+            actorId: "system",
+            actorRole: "system",
+            action: "session.expired",
+            targetType: "chair_session",
+            targetId: staleDoc.id,
+            before: { status: session.status ?? null },
+            after: { status: "cancelled", cancellationReason: "expired" },
+            createdAt: now,
+          }),
+        );
+
+        if (shouldRejectPointRequest) {
+          tx.set(
+            pointRequestRef,
+            {
+              status: "rejected",
+              rejectedBy: "system",
+              rejectedAt: now,
+              processedBy: "system",
+              processedAt: now,
+              rejectionReason: "expired",
+              photoUrls: [],
+              updatedAt: now,
+            },
+            { merge: true },
+          );
+          tx.set(
+            db.collection("audit_events").doc(),
+            auditEventData({
+              salonId,
+              branchId,
+              actorId: "system",
+              actorRole: "system",
+              action: "point_request.rejected",
+              targetType: "point_request",
+              targetId: staleDoc.id,
+              before: { status: "pending" },
+              after: { status: "rejected", rejectionReason: "expired" },
+              createdAt: now,
+            }),
+          );
+        }
+
+        return {
+          salonId,
+          customerId,
+          sessionId: staleDoc.id,
+          photoUrls: shouldRejectPointRequest ? pointRequest?.photoUrls : [],
+        };
       });
-      if (expired) {
-        expiredCount += 1;
+      if (!expiredSession) {
+        continue;
       }
+
+      expiredCount += 1;
+      await deleteSubmittedHaircutPhotos(expiredSession);
     }
 
     console.info("Đã xử lý lượt cắt hết hạn", { expiredCount });
@@ -4393,7 +4555,7 @@ export const searchSalonCustomers = onCall(functionOptions, async (request) => {
     ? Math.min(Math.max(Math.floor(requestedPageSize), 5), 20)
     : 10;
   const user = await assertSalonRole(uid, salonId, ["owner", "staff"]);
-  const branchId = await resolveAuthorizedBranchScope(user, salonId, request.data?.branchId);
+  await resolveAuthorizedBranchScope(user, salonId, request.data?.branchId);
 
   const normalizedTerm = normalizeSearchText(term);
   if (normalizedTerm.length < 2) {
@@ -4407,9 +4569,6 @@ export const searchSalonCustomers = onCall(functionOptions, async (request) => {
   }
 
   let customersQuery = db.collection("customers").where("salonId", "==", salonId);
-  if (branchId) {
-    customersQuery = customersQuery.where("lastBranchId", "==", branchId);
-  }
   customersQuery = (
     isPhoneSearch
       ? customersQuery.where("phoneLast4", "==", phoneDigits)
@@ -4418,11 +4577,7 @@ export const searchSalonCustomers = onCall(functionOptions, async (request) => {
 
   if (cursor) {
     const cursorSnap = await db.collection("customers").doc(cursor).get();
-    if (
-      !cursorSnap.exists ||
-      cursorSnap.data()?.salonId !== salonId ||
-      (branchId && cursorSnap.data()?.lastBranchId !== branchId)
-    ) {
+    if (!cursorSnap.exists || cursorSnap.data()?.salonId !== salonId) {
       throw new HttpsError("invalid-argument", "Trang dữ liệu không còn hợp lệ");
     }
     customersQuery = customersQuery.startAfter(cursorSnap);
@@ -4444,101 +4599,206 @@ export const searchSalonCustomers = onCall(functionOptions, async (request) => {
     };
   });
 
-  const enriched = await Promise.all(
-    customers.map(async (customer) => {
-      let recordsQuery = db
-        .collection("haircut_records")
-        .where("salonId", "==", salonId)
-        .where("customerId", "==", customer.id);
-      let rewardsQuery = db
+  return {
+    customers: customers.map((customer) => ({
+      ...customer,
+      detailsLoaded: false,
+      recentRecords: [],
+      branchVisits: [],
+      rewardHistory: [],
+      unusedRewards: [],
+    })),
+    nextCursor: hasMore ? (pageDocs[pageDocs.length - 1]?.id ?? null) : null,
+  };
+});
+
+async function customerRewardDocsForDetails(input: {
+  salonId: string;
+  customerId: string;
+  branchId?: string;
+  limit: number;
+}): Promise<QueryDocumentSnapshot<DocumentData>[]> {
+  if (!input.branchId) {
+    return (
+      await db
         .collection("reward_history")
-        .where("salonId", "==", salonId)
-        .where("customerId", "==", customer.id);
-      if (branchId) {
-        recordsQuery = recordsQuery.where("branchId", "==", branchId);
-        rewardsQuery = rewardsQuery.where("branchId", "==", branchId);
-      }
-      const canReadRewardCodes = user.role === "owner" || user.canRedeemRewards === true;
-      const [recordsSnap, rewardsSnap] = await Promise.all([
-        recordsQuery
-          .orderBy("createdAt", "desc")
-          .limit(user.role === "owner" ? 20 : 5)
-          .get(),
-        canReadRewardCodes
-          ? rewardsQuery
-              .orderBy("createdAt", "desc")
-              .limit(user.role === "owner" ? 20 : 10)
-              .get()
-          : Promise.resolve(null),
-      ]);
+        .where("salonId", "==", input.salonId)
+        .where("customerId", "==", input.customerId)
+        .orderBy("createdAt", "desc")
+        .limit(input.limit)
+        .get()
+    ).docs;
+  }
 
-      const recentRecords = recordsSnap.docs.map((doc) => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          branchId: String(data.branchId || ""),
-          branchName: String(data.branchName || ""),
-          staffName: String(data.staffName || ""),
-          note: String(data.note || ""),
-          pointsAdded: Number(data.pointsAdded ?? 1),
-          createdAtMs: timestampMillis(data.createdAt),
-          photoUrls:
-            user.role === "owner" && customer.allowPhoto
-              ? trustedStoredHaircutPhotoUrls(data.photoUrls, {
-                  salonId,
-                  customerId: customer.id,
-                  sessionId: String(data.pointRequestId || ""),
-                })
-              : [],
-        };
-      });
-      const rewardHistory = (rewardsSnap?.docs ?? []).flatMap((doc) => {
-        const data = doc.data();
-        const status = effectiveRewardStatus(
-          data.status,
-          timestampMillis(data.expiresAt),
-          Date.now(),
-        );
-        if (status === "no_prize") return [];
-        return [
-          {
-            id: doc.id,
-            rewardName: String(data.rewardName || ""),
-            rewardCode: user.role === "owner" ? String(data.rewardCode || "") : "",
-            status,
-            branchId: String(data.usedBranchId || data.branchId || ""),
-            createdAtMs: timestampMillis(data.createdAt),
-            usedAtMs: timestampMillis(data.usedAt),
-            expiresAtMs: timestampMillis(data.expiresAt),
-          },
-        ];
-      });
-      const branchVisits = Array.from(
-        recentRecords.reduce((visits, record) => {
-          if (record.branchId && !visits.has(record.branchId)) {
-            visits.set(record.branchId, {
-              branchId: record.branchId,
-              branchName: record.branchName || "Chi nhánh",
-              lastVisitAtMs: record.createdAtMs,
-            });
-          }
-          return visits;
-        }, new Map<string, { branchId: string; branchName: string; lastVisitAtMs: number | null }>()),
-      ).map(([, visit]) => visit);
-
-      return {
-        ...customer,
-        recentRecords,
-        branchVisits: user.role === "owner" ? branchVisits : [],
-        rewardHistory: user.role === "owner" ? rewardHistory : [],
-        unusedRewards: rewardHistory.filter((reward) => reward.status === "unused"),
-      };
-    }),
+  const currentQuery = db
+    .collection("reward_history")
+    .where("salonId", "==", input.salonId)
+    .where("usedBranchId", "==", input.branchId)
+    .where("customerId", "==", input.customerId);
+  const legacyQuery = db
+    .collection("reward_history")
+    .where("salonId", "==", input.salonId)
+    .where("branchId", "==", input.branchId)
+    .where("customerId", "==", input.customerId);
+  const currentSnap = await currentQuery.orderBy("createdAt", "desc").limit(input.limit).get();
+  const byId = new Map<string, QueryDocumentSnapshot<DocumentData>>(
+    currentSnap.docs.map((doc) => [doc.id, doc]),
   );
 
+  const pageSize = Math.min(Math.max(input.limit, 20), 50);
+  let legacyCount = 0;
+  let cursor: QueryDocumentSnapshot<DocumentData> | undefined;
+  while (legacyCount < input.limit) {
+    let pageQuery = legacyQuery.orderBy("createdAt", "desc").limit(pageSize);
+    if (cursor) pageQuery = pageQuery.startAfter(cursor);
+    const page = await pageQuery.get();
+    for (const doc of page.docs) {
+      if (!doc.data().usedBranchId && !byId.has(doc.id)) {
+        byId.set(doc.id, doc);
+        legacyCount += 1;
+      }
+      if (legacyCount >= input.limit) break;
+    }
+    if (page.size < pageSize) break;
+    cursor = page.docs[page.docs.length - 1];
+  }
+
+  return [...byId.values()]
+    .sort(
+      (left, right) =>
+        (timestampMillis(right.data().createdAt) ?? 0) -
+        (timestampMillis(left.data().createdAt) ?? 0),
+    )
+    .slice(0, input.limit);
+}
+
+async function managerCustomerDetails(input: {
+  user: AppUser;
+  salonId: string;
+  branchId?: string;
+  customerDoc: QueryDocumentSnapshot<DocumentData> | DocumentData;
+  customerId: string;
+}) {
+  const data =
+    typeof input.customerDoc.data === "function" ? input.customerDoc.data() : input.customerDoc;
+  const customer = {
+    id: input.customerId,
+    name: String(data.name ?? ""),
+    ...(input.user.role === "owner" ? { phone: String(data.phone ?? "") } : {}),
+    phoneLast4: String(data.phoneLast4 ?? ""),
+    points: Number(data.points ?? 0),
+    allowPhoto: Boolean(data.allowPhoto),
+    lastVisitAtMs: timestampMillis(data.lastVisitAt),
+  };
+  let recordsQuery = db
+    .collection("haircut_records")
+    .where("salonId", "==", input.salonId)
+    .where("customerId", "==", input.customerId);
+  if (input.branchId) recordsQuery = recordsQuery.where("branchId", "==", input.branchId);
+
+  const canReadRewardCodes =
+    input.user.role === "owner" || input.user.canRedeemRewards === true;
+  const [recordsSnap, rewardDocs] = await Promise.all([
+    recordsQuery
+      .orderBy("createdAt", "desc")
+      .limit(input.user.role === "owner" ? 20 : 5)
+      .get(),
+    canReadRewardCodes
+      ? customerRewardDocsForDetails({
+          salonId: input.salonId,
+          customerId: input.customerId,
+          branchId: input.branchId,
+          limit: input.user.role === "owner" ? 20 : 10,
+        })
+      : Promise.resolve([]),
+  ]);
+  const recentRecords = recordsSnap.docs.map((doc) => {
+    const record = doc.data();
+    return {
+      id: doc.id,
+      branchId: String(record.branchId || ""),
+      branchName: String(record.branchName || ""),
+      staffName: String(record.staffName || ""),
+      note: String(record.note || ""),
+      pointsAdded: Number(record.pointsAdded ?? 1),
+      createdAtMs: timestampMillis(record.createdAt),
+      photoUrls:
+        input.user.role === "owner" && customer.allowPhoto
+          ? trustedStoredHaircutPhotoUrls(record.photoUrls, {
+              salonId: input.salonId,
+              customerId: input.customerId,
+              sessionId: String(record.pointRequestId || ""),
+            })
+          : [],
+    };
+  });
+  const rewardHistory = rewardDocs.flatMap((doc) => {
+    const reward = doc.data();
+    const status = effectiveRewardStatus(
+      reward.status,
+      timestampMillis(reward.expiresAt),
+      Date.now(),
+    );
+    if (status === "no_prize") return [];
+    return [
+      {
+        id: doc.id,
+        rewardName: String(reward.rewardName || ""),
+        rewardCode: canReadRewardCodes ? String(reward.rewardCode || "") : "",
+        status,
+        branchId: String(reward.usedBranchId || reward.branchId || ""),
+        createdAtMs: timestampMillis(reward.createdAt),
+        usedAtMs: timestampMillis(reward.usedAt),
+        expiresAtMs: timestampMillis(reward.expiresAt),
+      },
+    ];
+  });
+  const branchVisits = Array.from(
+    recentRecords.reduce((visits, record) => {
+      if (record.branchId && !visits.has(record.branchId)) {
+        visits.set(record.branchId, {
+          branchId: record.branchId,
+          branchName: record.branchName || "Chi nhánh",
+          lastVisitAtMs: record.createdAtMs,
+        });
+      }
+      return visits;
+    }, new Map<string, { branchId: string; branchName: string; lastVisitAtMs: number | null }>()),
+  ).map(([, visit]) => visit);
+
   return {
-    customers: enriched,
-    nextCursor: hasMore ? (pageDocs[pageDocs.length - 1]?.id ?? null) : null,
+    ...customer,
+    detailsLoaded: true,
+    recentRecords,
+    branchVisits: input.user.role === "owner" ? branchVisits : [],
+    rewardHistory: input.user.role === "owner" ? rewardHistory : [],
+    unusedRewards: rewardHistory.filter((reward) => reward.status === "unused"),
+  };
+}
+
+export const getSalonCustomerDetails = onCall(functionOptions, async (request) => {
+  const uid = currentUid(request.auth);
+  const salonId = requireString(request.data?.salonId, "salonId");
+  const customerId = requireString(request.data?.customerId, "customerId");
+  const user = await assertSalonRole(uid, salonId, ["owner", "staff"]);
+  const branchId = await resolveAuthorizedBranchScope(user, salonId, request.data?.branchId);
+  const customerSnap = await db.collection("customers").doc(customerId).get();
+  if (!customerSnap.exists || customerSnap.data()?.salonId !== salonId) {
+    throw apiError(
+      "not-found",
+      ApiErrorCode.INVALID_REQUEST,
+      "Không tìm thấy hồ sơ khách trong salon này",
+    );
+  }
+
+  return {
+    customer: await managerCustomerDetails({
+      user,
+      salonId,
+      branchId,
+      customerDoc: customerSnap.data() ?? {},
+      customerId,
+    }),
   };
 });
 
@@ -4563,6 +4823,13 @@ type CustomerDeletionJobInput = {
   requestSource: "owner" | "zalo_privacy_webhook";
   sourceEventId?: string;
 };
+
+const CUSTOMER_DELETION_COLLECTION_PAGE_SIZE = 250;
+const CUSTOMER_DELETION_COLLECTION_PAGES_PER_ATTEMPT = 2;
+const CUSTOMER_DELETION_STORAGE_PAGE_SIZE = 100;
+const CUSTOMER_DELETION_STORAGE_PAGES_PER_ATTEMPT = 4;
+const CUSTOMER_DELETION_STORAGE_CONCURRENCY = 10;
+const CUSTOMER_DELETION_STORAGE_DELETE_ATTEMPTS = 3;
 
 async function runCustomerDeletionJob(input: CustomerDeletionJobInput) {
   const { salonId, customerId, requestedBy, requestSource, sourceEventId } = input;
@@ -4607,9 +4874,20 @@ async function runCustomerDeletionJob(input: CustomerDeletionJobInput) {
     "point_requests",
     "chair_sessions",
   ] as const;
+  const existingCollectionCursors =
+    existingJob.collectionCursors && typeof existingJob.collectionCursors === "object"
+      ? (existingJob.collectionCursors as Record<string, unknown>)
+      : {};
   const collectionResults = await Promise.all(
     collectionNames.map((collectionName) =>
-      deleteCustomerCollectionDocs(collectionName, salonId, customerId),
+      deleteCustomerCollectionDocs(
+        collectionName,
+        salonId,
+        customerId,
+        typeof existingCollectionCursors[collectionName] === "string"
+          ? String(existingCollectionCursors[collectionName])
+          : null,
+      ),
     ),
   );
   let operationFailed = collectionResults.some((result) => result.failed);
@@ -4632,6 +4910,7 @@ async function runCustomerDeletionJob(input: CustomerDeletionJobInput) {
 
   const storageResult = await deleteStoragePrefixStrict(
     `salons/${salonId}/customers/${customerId}/`,
+    typeof existingJob.storagePageToken === "string" ? existingJob.storagePageToken : null,
   );
   operationFailed ||= storageResult.failed > 0 || storageResult.listFailed;
 
@@ -4694,6 +4973,23 @@ async function runCustomerDeletionJob(input: CustomerDeletionJobInput) {
       remainingDocuments,
       remainingStorageFiles: storageResult.remaining,
       failedStorageFiles: storageResult.failed,
+      collectionCursors: Object.fromEntries(
+        collectionNames.map((collectionName, index) => [
+          collectionName,
+          collectionResults[index].nextCursor,
+        ]),
+      ),
+      collectionProgress: Object.fromEntries(
+        collectionNames.map((collectionName, index) => [
+          collectionName,
+          {
+            deletedThisAttempt: collectionResults[index].deleted,
+            remaining: collectionResults[index].remaining,
+            failed: collectionResults[index].failed,
+          },
+        ]),
+      ),
+      storagePageToken: storageResult.nextPageToken,
       updatedAt: FieldValue.serverTimestamp(),
       completedAt: status === "completed" ? FieldValue.serverTimestamp() : null,
     },
@@ -4714,37 +5010,64 @@ async function deleteCustomerCollectionDocs(
   collectionName: string,
   salonId: string,
   customerId: string,
-): Promise<{ deleted: number; remaining: number; failed: boolean }> {
+  initialCursor: string | null,
+): Promise<{
+  deleted: number;
+  remaining: number;
+  failed: boolean;
+  nextCursor: string | null;
+}> {
   const customerQuery = db
     .collection(collectionName)
     .where("salonId", "==", salonId)
-    .where("customerId", "==", customerId);
+    .where("customerId", "==", customerId)
+    .orderBy(FieldPath.documentId());
   let deleted = 0;
   let failed = false;
+  let nextCursor = initialCursor;
 
-  try {
-    const snap = await customerQuery.get();
-    for (let start = 0; start < snap.docs.length; start += 450) {
-      const batchDocs = snap.docs.slice(start, start + 450);
-      const batch = db.batch();
-      batchDocs.forEach((doc) => batch.delete(doc.ref));
-      try {
-        await batch.commit();
-        deleted += batchDocs.length;
-      } catch {
-        failed = true;
+  for (
+    let pageNumber = 0;
+    pageNumber < CUSTOMER_DELETION_COLLECTION_PAGES_PER_ATTEMPT;
+    pageNumber += 1
+  ) {
+    try {
+      let pageQuery = customerQuery.limit(CUSTOMER_DELETION_COLLECTION_PAGE_SIZE);
+      if (nextCursor) {
+        pageQuery = pageQuery.startAfter(nextCursor);
+      }
+      const page = await pageQuery.get();
+      if (page.empty) {
+        nextCursor = null;
         break;
       }
+
+      const batch = db.batch();
+      page.docs.forEach((doc) => batch.delete(doc.ref));
+      await batch.commit();
+      deleted += page.size;
+      nextCursor = page.docs[page.docs.length - 1].id;
+
+      if (page.size < CUSTOMER_DELETION_COLLECTION_PAGE_SIZE) {
+        nextCursor = null;
+        break;
+      }
+    } catch {
+      failed = true;
+      break;
     }
-  } catch {
-    failed = true;
   }
 
   try {
-    const remaining = (await customerQuery.get()).size;
-    return { deleted, remaining, failed };
+    const remaining = (await customerQuery.limit(1).get()).empty ? 0 : 1;
+    return {
+      deleted,
+      remaining,
+      failed,
+      nextCursor: remaining > 0 ? nextCursor : null,
+    };
   } catch {
-    return { deleted, remaining: 1, failed: true };
+    return { deleted, remaining: 1, failed: true, nextCursor };
   }
 }
 
@@ -5037,37 +5360,141 @@ async function backfillSalonCollection(
   return updated;
 }
 
-async function deleteStoragePrefixStrict(prefix: string): Promise<{
+type DeletableStorageFile = {
+  delete(): Promise<unknown>;
+};
+
+function storageDeleteErrorCode(error: unknown) {
+  if (!error || typeof error !== "object" || !("code" in error)) {
+    return "";
+  }
+  return String((error as { code?: unknown }).code ?? "").toUpperCase();
+}
+
+function isStorageObjectAlreadyDeleted(error: unknown) {
+  const code = storageDeleteErrorCode(error);
+  return code === "404" || code === "NOT_FOUND";
+}
+
+function isRetryableStorageDeleteError(error: unknown) {
+  const code = storageDeleteErrorCode(error);
+  return [
+    "408",
+    "409",
+    "429",
+    "500",
+    "502",
+    "503",
+    "504",
+    "ETIMEDOUT",
+    "ECONNRESET",
+    "EAI_AGAIN",
+  ].includes(code);
+}
+
+async function deleteStorageFileWithRetry(file: DeletableStorageFile) {
+  for (let attempt = 1; attempt <= CUSTOMER_DELETION_STORAGE_DELETE_ATTEMPTS; attempt += 1) {
+    try {
+      await file.delete();
+      return true;
+    } catch (error) {
+      if (isStorageObjectAlreadyDeleted(error)) {
+        return true;
+      }
+      if (
+        attempt === CUSTOMER_DELETION_STORAGE_DELETE_ATTEMPTS ||
+        !isRetryableStorageDeleteError(error)
+      ) {
+        return false;
+      }
+    }
+  }
+  return false;
+}
+
+async function deleteStoragePrefixStrict(
+  prefix: string,
+  initialPageToken: string | null,
+): Promise<{
   deleted: number;
   failed: number;
   remaining: number;
   listFailed: boolean;
+  nextPageToken: string | null;
 }> {
-  let files;
-  try {
-    [files] = await storage.bucket().getFiles({ prefix });
-  } catch {
-    return { deleted: 0, failed: 1, remaining: 1, listFailed: true };
+  const bucket = storage.bucket();
+  let pageToken = initialPageToken;
+  let deleted = 0;
+  let failed = 0;
+  let listFailed = false;
+
+  for (
+    let pageNumber = 0;
+    pageNumber < CUSTOMER_DELETION_STORAGE_PAGES_PER_ATTEMPT;
+    pageNumber += 1
+  ) {
+    let files;
+    let nextQuery;
+    try {
+      [files, nextQuery] = await bucket.getFiles({
+        prefix,
+        autoPaginate: false,
+        maxResults: CUSTOMER_DELETION_STORAGE_PAGE_SIZE,
+        pageToken: pageToken ?? undefined,
+      });
+    } catch {
+      listFailed = true;
+      pageToken = null;
+      break;
+    }
+
+    let pageFailed = 0;
+    for (let start = 0; start < files.length; start += CUSTOMER_DELETION_STORAGE_CONCURRENCY) {
+      const fileGroup = files.slice(start, start + CUSTOMER_DELETION_STORAGE_CONCURRENCY);
+      const groupResults = await Promise.all(
+        fileGroup.map((file) => deleteStorageFileWithRetry(file)),
+      );
+      const groupDeleted = groupResults.filter(Boolean).length;
+      deleted += groupDeleted;
+      pageFailed += groupResults.length - groupDeleted;
+    }
+    failed += pageFailed;
+    if (pageFailed > 0) {
+      pageToken = null;
+      break;
+    }
+
+    pageToken =
+      nextQuery && typeof nextQuery.pageToken === "string" && nextQuery.pageToken
+        ? nextQuery.pageToken
+        : null;
+    if (!pageToken) {
+      break;
+    }
   }
 
-  const deletionResults = await Promise.all(
-    files.map(async (file) => {
-      try {
-        await file.delete();
-        return true;
-      } catch {
-        return false;
-      }
-    }),
-  );
-  const deleted = deletionResults.filter(Boolean).length;
-  const failed = deletionResults.length - deleted;
-
   try {
-    const [remainingFiles] = await storage.bucket().getFiles({ prefix });
-    return { deleted, failed, remaining: remainingFiles.length, listFailed: false };
+    const [remainingFiles] = await bucket.getFiles({
+      prefix,
+      autoPaginate: false,
+      maxResults: 1,
+    });
+    const remaining = remainingFiles.length > 0 ? 1 : 0;
+    return {
+      deleted,
+      failed,
+      remaining,
+      listFailed,
+      nextPageToken: remaining > 0 && failed === 0 && !listFailed ? pageToken : null,
+    };
   } catch {
-    return { deleted, failed: failed + 1, remaining: 1, listFailed: true };
+    return {
+      deleted,
+      failed,
+      remaining: 1,
+      listFailed: true,
+      nextPageToken: null,
+    };
   }
 }
 

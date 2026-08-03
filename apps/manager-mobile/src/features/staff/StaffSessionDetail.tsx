@@ -1,9 +1,4 @@
-import {
-  ClipboardPenLine,
-  Send,
-  UserRoundCheck,
-  XCircle,
-} from "lucide-react";
+import { ClipboardPenLine, Send, UserRoundCheck, XCircle } from "lucide-react";
 import { useState } from "react";
 import { ConfirmDialog, type ConfirmDialogRequest } from "../../components/ConfirmDialog";
 import { InlineFeedback } from "../../components/Feedback";
@@ -20,7 +15,7 @@ import {
   type StaffSession,
   type UploadedHaircutPhoto,
 } from "../../services/managerApi";
-import { trackEvent, withMonitoringTrace } from "../../services/monitoring";
+import { withMonitoringTrace } from "../../services/monitoring";
 import { maskedPhone, sessionStatusText, staffStatusLabel } from "./staffFormatters";
 
 const QUICK_NOTES = ["Fade thấp", "Fade cao", "Cắt ngắn", "Tỉa mái", "Giữ form cũ", "Nhuộm / uốn"];
@@ -219,7 +214,9 @@ export function StaffSessionDetail({
             <strong>{maskedPhone(session)}</strong>
             <span>{session.customer?.points ?? 0} điểm hiện có</span>
           </div>
-          <span className={`manager-pill ${session.status}`}>{staffStatusLabel(session.status)}</span>
+          <span className={`manager-pill ${session.status}`}>
+            {staffStatusLabel(session.status)}
+          </span>
         </div>
         <div className="manager-calm-status">
           <UserRoundCheck aria-hidden="true" />
@@ -270,8 +267,8 @@ export function StaffSessionDetail({
               !photoUploadEnabled
                 ? "Tính năng tải ảnh đang tạm ngừng."
                 : assignedToMe
-                ? "Có thể thêm ảnh trước khi gửi duyệt."
-                : `Lượt đang do ${session.assignedStaffName || "nhân viên khác"} phụ trách.`
+                  ? "Có thể thêm ảnh trước khi gửi duyệt."
+                  : `Lượt đang do ${session.assignedStaffName || "nhân viên khác"} phụ trách.`
             }
             maxPhotos={MAX_HAIRCUT_PHOTOS}
             onFilesSelected={addPhotos}

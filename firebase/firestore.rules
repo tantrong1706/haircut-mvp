@@ -40,6 +40,11 @@ service cloud.firestore {
       return hasUserProfile()
         && appUser().salonId == salonId
         && appUser().isActive == true
+        && (
+          appUser().role != "staff"
+          || !("inviteStatus" in appUser())
+          || appUser().inviteStatus == "accepted"
+        )
         && salonOperational(salonId);
     }
 

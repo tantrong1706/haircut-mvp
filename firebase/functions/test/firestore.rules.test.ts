@@ -19,8 +19,9 @@ import {
 } from "firebase/firestore";
 import { deleteObject, getBytes, ref, uploadBytes } from "firebase/storage";
 import { afterAll, beforeAll, beforeEach, describe, it } from "vitest";
+import { requireRulesEmulators } from "./emulatorEnvironment";
 
-const projectId = process.env.GCLOUD_PROJECT || "demo-haircut";
+const { projectId } = requireRulesEmulators();
 const salonA = "salon-a";
 const salonB = "salon-b";
 const branchA = "branch-a";
@@ -48,6 +49,10 @@ beforeEach(async () => {
       setDoc(doc(db, "users", "owner-a"), member(salonA, "owner")),
       setDoc(doc(db, "users", "staff-a"), member(salonA, "staff", [branchA])),
       setDoc(doc(db, "users", "staff-other-a"), member(salonA, "staff", [branchB])),
+      setDoc(doc(db, "users", "staff-pending-a"), {
+        ...member(salonA, "staff", [branchA]),
+        inviteStatus: "pending",
+      }),
       setDoc(doc(db, "users", "owner-b"), member(salonB, "owner")),
       setDoc(doc(db, "users", "owner-suspended"), member("salon-suspended", "owner")),
       setDoc(doc(db, "users", "inactive-a"), {
@@ -94,6 +99,11 @@ beforeEach(async () => {
         ...session(salonA, branchA, "customer-photo"),
         status: "serving",
         assignedStaffId: "staff-a",
+      }),
+      setDoc(doc(db, "chair_sessions", "session-pending-invite"), {
+        ...session(salonA, branchA, "customer-photo"),
+        status: "serving",
+        assignedStaffId: "staff-pending-a",
       }),
       setDoc(doc(db, "chair_sessions", "session-owner-photo"), {
         ...session(salonA, branchA, "customer-photo"),
@@ -194,6 +204,29 @@ describe("Firestore production rules", () => {
     await assertFails(getDoc(doc(inactiveDb, "chair_sessions", "session-a")));
     await assertFails(getDoc(doc(fakeRoleDb, "chair_sessions", "session-a")));
     await assertFails(getDoc(doc(fakeRoleDb, "salons", salonA)));
+  });
+
+  it("chặn staff đang chờ xác nhận lời mời ở Firestore và Storage", async () => {
+    const pendingDb = testEnv.authenticatedContext("staff-pending-a").firestore();
+    const pendingStorage = testEnv.authenticatedContext("staff-pending-a").storage();
+    const photoPath =
+      `salons/${salonA}/customers/customer-photo/haircuts/session-pending-invite/` +
+      "photo-pending1234.jpg";
+
+    await assertFails(getDoc(doc(pendingDb, "salons", salonA)));
+    await assertFails(getDoc(doc(pendingDb, "chair_sessions", "session-pending-invite")));
+    await assertFails(
+      uploadBytes(ref(pendingStorage, photoPath), new Uint8Array([1, 2, 3]), {
+        contentType: "image/jpeg",
+        customMetadata: {
+          salonId: salonA,
+          customerId: "customer-photo",
+          sessionId: "session-pending-invite",
+          branchId: branchA,
+          uploaderUid: "staff-pending-a",
+        },
+      }),
+    );
   });
 
   it("chặn toàn bộ thành viên khi salon bị khóa", async () => {

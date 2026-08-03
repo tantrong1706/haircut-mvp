@@ -1,9 +1,12 @@
 ﻿param(
   [switch]$RunBuild,
-  [switch]$CheckLiveUrls
+  [switch]$CheckLiveUrls,
+  [switch]$StrictRelease,
+  [switch]$ReleaseIncludesIos
 )
 
 $ErrorActionPreference = "Stop"
+$env:FIREBASE_CLI_DISABLE_UPDATE_CHECK = "true"
 $root = Resolve-Path (Join-Path $PSScriptRoot "..")
 
 $results = New-Object System.Collections.Generic.List[object]
@@ -37,6 +40,23 @@ function Read-EnvFile($Path) {
   return $map
 }
 
+function Merge-ProcessEnvironment($Map, $Keys) {
+  foreach ($key in $Keys) {
+    $value = [Environment]::GetEnvironmentVariable($key)
+    if ($value) {
+      $Map[$key] = $value
+    }
+  }
+}
+
+function Test-PlaceholderValue($Value) {
+  if (-not $Value) {
+    return $true
+  }
+
+  return [string]$Value -match "^(your-|example|changeme|\.{3}|<|\[)"
+}
+
 function Test-Url($Url) {
   try {
     $response = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 20
@@ -48,10 +68,18 @@ function Test-Url($Url) {
 
 Write-Host "== Kiểm tra sẵn sàng production HAIRCUT ==" -ForegroundColor Green
 Write-Host "Thư mục: $root"
+Write-Host "Chế độ: $(if ($StrictRelease) { 'strict release' } else { 'local readiness' })"
 Write-Host ""
 
+$headSha = (git -C $root rev-parse HEAD).Trim()
+
 if (Test-CommandExists "node") {
-  Add-Result "Node.js" "OK" (node --version)
+  $nodeVersion = (node --version).Trim()
+  if ($nodeVersion -match "^v22\.") {
+    Add-Result "Node.js" "OK" $nodeVersion
+  } else {
+    Add-Result "Node.js" "FAIL" "$nodeVersion; production checks yêu cầu Node.js 22"
+  }
 } else {
   Add-Result "Node.js" "FAIL" "Chưa cài Node.js"
 }
@@ -63,7 +91,14 @@ if (Test-CommandExists "npm") {
 }
 
 if (Test-CommandExists "firebase") {
-  Add-Result "Firebase CLI" "OK" (firebase --version)
+  $firebaseOutput = & firebase --version 2>$null
+  $firebaseSucceeded = $?
+  $firebaseVersion = $firebaseOutput | Select-Object -First 1
+  if ($firebaseSucceeded -and $firebaseVersion) {
+    Add-Result "Firebase CLI" "OK" $firebaseVersion
+  } else {
+    Add-Result "Firebase CLI" "FAIL" "Không đọc được phiên bản Firebase CLI"
+  }
 } else {
   Add-Result "Firebase CLI" "FAIL" "Chưa cài Firebase CLI"
 }
@@ -76,30 +111,101 @@ if (Test-CommandExists "gh") {
 
 $gitStatus = git -C $root status --porcelain
 if ($gitStatus) {
-  Add-Result "Git worktree" "WARN" "Đang có thay đổi chưa commit"
+  if ($StrictRelease) {
+    Add-Result "Git worktree" "FAIL" "Strict release yêu cầu working tree sạch"
+  } else {
+    Add-Result "Git worktree" "WARN" "Đang có thay đổi chưa commit"
+  }
 } else {
   Add-Result "Git worktree" "OK" "Sạch"
 }
 
 $firebaserc = Join-Path $root "firebase\.firebaserc"
 if (Test-Path -LiteralPath $firebaserc) {
-  $projectText = Get-Content -Raw -LiteralPath $firebaserc
-  Add-Result "Firebase project" "OK" ($projectText -replace "\s+", " ").Trim()
+  try {
+    $firebaseProject = Get-Content -Raw -LiteralPath $firebaserc | ConvertFrom-Json
+    $defaultProjectId = [string]$firebaseProject.projects.default
+    if ($defaultProjectId -eq "haircut-c7d12") {
+      Add-Result "Firebase project" "OK" "default=haircut-c7d12"
+    } else {
+      Add-Result "Firebase project" "FAIL" "Project mặc định phải là haircut-c7d12"
+    }
+  } catch {
+    Add-Result "Firebase project" "FAIL" "firebase/.firebaserc không phải JSON hợp lệ"
+  }
 } else {
   Add-Result "Firebase project" "FAIL" "Thiếu firebase\.firebaserc"
 }
 
-$envPath = Join-Path $root "zalo-mini-app\.env.production"
-$env = Read-EnvFile $envPath
+$webEnv = Read-EnvFile (Join-Path $root "zalo-mini-app\.env.production")
 $envLocalPath = Join-Path $root "zalo-mini-app\.env.production.local"
 $envLocal = Read-EnvFile $envLocalPath
 foreach ($entry in $envLocal.GetEnumerator()) {
-  $env[$entry.Key] = $entry.Value
+  $webEnv[$entry.Key] = $entry.Value
 }
-if ($env.Count -eq 0) {
-  Add-Result "Zalo web production env" "FAIL" "Thiếu zalo-mini-app\.env.production"
+Merge-ProcessEnvironment $webEnv @(
+  "VITE_FIREBASE_API_KEY",
+  "VITE_FIREBASE_AUTH_DOMAIN",
+  "VITE_FIREBASE_PROJECT_ID",
+  "VITE_FIREBASE_STORAGE_BUCKET",
+  "VITE_FIREBASE_MESSAGING_SENDER_ID",
+  "VITE_FIREBASE_APP_ID",
+  "VITE_ZALO_MINI_APP_ID",
+  "VITE_APP_ENV",
+  "VITE_ZALO_PREVIEW",
+  "VITE_FUNCTION_WRITE_MODE",
+  "VITE_FIREBASE_APP_CHECK_SITE_KEY",
+  "VITE_MONITORING_DISABLED",
+  "VITE_SENTRY_DSN",
+  "VITE_SUPPORT_EMAIL",
+  "VITE_SUPPORT_PHONE"
+)
+if ($webEnv.Count -eq 0) {
+  Add-Result "Zalo web production env" "FAIL" "Thiếu biến CI hoặc zalo-mini-app\.env.production.local"
 } else {
-  $mode = $env["VITE_FUNCTION_WRITE_MODE"]
+  $requiredWebEnv = @(
+    "VITE_FIREBASE_API_KEY",
+    "VITE_FIREBASE_AUTH_DOMAIN",
+    "VITE_FIREBASE_PROJECT_ID",
+    "VITE_FIREBASE_STORAGE_BUCKET",
+    "VITE_FIREBASE_MESSAGING_SENDER_ID",
+    "VITE_FIREBASE_APP_ID",
+    "VITE_ZALO_MINI_APP_ID"
+  )
+  $missingWebEnv = @(
+    $requiredWebEnv | Where-Object { Test-PlaceholderValue $webEnv[$_] }
+  )
+  if ($missingWebEnv.Count -gt 0) {
+    Add-Result "Firebase web production config" "FAIL" ("Thiếu hoặc còn placeholder: " + ($missingWebEnv -join ", "))
+  } else {
+    Add-Result "Firebase web production config" "OK" "Đã cấu hình đủ biến bắt buộc"
+  }
+
+  if ($webEnv["VITE_ZALO_MINI_APP_ID"] -eq "2038116772828167300") {
+    Add-Result "Zalo Mini App ID production" "OK" "Đúng ứng dụng CH Hair Studio"
+  } else {
+    Add-Result "Zalo Mini App ID production" "FAIL" "Phải là 2038116772828167300"
+  }
+
+  if (
+    $webEnv["VITE_FIREBASE_PROJECT_ID"] -eq "haircut-c7d12" -and
+    $defaultProjectId -eq "haircut-c7d12"
+  ) {
+    Add-Result "Firebase project mapping" "OK" "Frontend và Firebase CLI cùng trỏ haircut-c7d12"
+  } else {
+    Add-Result "Firebase project mapping" "FAIL" "Frontend và firebase/.firebaserc phải cùng trỏ haircut-c7d12"
+  }
+
+  if (
+    $webEnv["VITE_APP_ENV"] -eq "production" -and
+    $webEnv["VITE_ZALO_PREVIEW"] -ne "true"
+  ) {
+    Add-Result "Zalo production mode" "OK" "Production env, preview identity đã tắt"
+  } else {
+    Add-Result "Zalo production mode" "FAIL" "Cần VITE_APP_ENV=production và không bật VITE_ZALO_PREVIEW"
+  }
+
+  $mode = $webEnv["VITE_FUNCTION_WRITE_MODE"]
   if (-not $mode) {
     Add-Result "VITE_FUNCTION_WRITE_MODE" "FAIL" "Chưa đặt required"
   } elseif ($mode -eq "required") {
@@ -111,7 +217,10 @@ if ($env.Count -eq 0) {
   }
 }
 
-if ($env["VITE_SUPPORT_EMAIL"] -or $env["VITE_SUPPORT_PHONE"]) {
+if (
+  (-not (Test-PlaceholderValue $webEnv["VITE_SUPPORT_EMAIL"])) -or
+  (-not (Test-PlaceholderValue $webEnv["VITE_SUPPORT_PHONE"]))
+) {
   Add-Result "Privacy contact" "OK" "Đã cấu hình ít nhất một kênh hỗ trợ"
 } else {
   Add-Result "Privacy contact" "FAIL" "Thiếu VITE_SUPPORT_EMAIL hoặc VITE_SUPPORT_PHONE"
@@ -146,7 +255,11 @@ $manifestPath = Join-Path $root "zalo-mini-app\www\.vite\manifest.json"
 if (-not (Test-Path -LiteralPath $appConfigPath)) {
   Add-Result "ZMP app-config" "FAIL" "Thiếu app-config.json"
 } elseif (-not (Test-Path -LiteralPath $manifestPath)) {
-  Add-Result "ZMP app-config" "WARN" "Chưa có www manifest; chạy npm run build:zmp để kiểm tra asset"
+  if ($StrictRelease) {
+    Add-Result "ZMP app-config" "FAIL" "Strict release yêu cầu www manifest từ build:zmp"
+  } else {
+    Add-Result "ZMP app-config" "WARN" "Chưa có www manifest; chạy npm run build:zmp để kiểm tra asset"
+  }
 } else {
   try {
     $appConfig = Get-Content -Raw -LiteralPath $appConfigPath | ConvertFrom-Json
@@ -157,6 +270,14 @@ if (-not (Test-Path -LiteralPath $appConfigPath)) {
     })
     if ($missingAssets.Count -gt 0) {
       Add-Result "ZMP app-config" "FAIL" "Có asset không tồn tại: $($missingAssets -join ', ')"
+    } elseif (
+      $StrictRelease -and
+      (
+        [string]$appConfig.app.title -ne "CH Hair Studio" -or
+        [string]$appConfig.app.headerTitle -ne "CH Hair Studio"
+      )
+    ) {
+      Add-Result "ZMP app-config" "FAIL" "title và headerTitle phải là CH Hair Studio"
     } else {
       Add-Result "ZMP app-config" "OK" "Mọi JS/CSS trong app-config đều tồn tại"
     }
@@ -172,22 +293,86 @@ if (Test-CommandExists "zmp") {
 }
 
 $functionsEnv = Read-EnvFile (Join-Path $root "firebase\functions\.env")
+Merge-ProcessEnvironment $functionsEnv @(
+  "ZALO_MINI_APP_ID",
+  "ENFORCE_APP_CHECK",
+  "REQUIRE_ZALO_APP_CHECK",
+  "ADMIN_WRITE_OPERATIONS_ENABLED"
+)
 if ($functionsEnv["ZALO_MINI_APP_ID"]) {
   Add-Result "Functions Zalo App ID" "OK" "Đã cấu hình"
 } else {
   Add-Result "Functions Zalo App ID" "FAIL" "Thiếu ZALO_MINI_APP_ID trong firebase/functions/.env"
 }
 
-if ($functionsEnv["REQUIRE_ZALO_APP_CHECK"] -eq "true") {
-  if ($env["VITE_FIREBASE_APP_CHECK_SITE_KEY"]) {
-    Add-Result "Firebase App Check" "OK" "Frontend và Functions đều đã bật cấu hình"
-  } else {
-    Add-Result "Firebase App Check" "FAIL" "Functions đang bắt buộc App Check nhưng frontend thiếu site key"
-  }
-} elseif ($env["VITE_FIREBASE_APP_CHECK_SITE_KEY"]) {
-  Add-Result "Firebase App Check" "WARN" "Frontend đã có provider nhưng Functions chưa bắt buộc token"
+if ($functionsEnv["ENFORCE_APP_CHECK"] -eq "true") {
+  Add-Result "Functions App Check chung" "OK" "Callable options đang enforcement"
 } else {
-  Add-Result "Firebase App Check" "WARN" "Chưa cấu hình rollout App Check production"
+  if ($StrictRelease) {
+    Add-Result "Functions App Check chung" "FAIL" "Strict release yêu cầu ENFORCE_APP_CHECK=true"
+  } else {
+    Add-Result "Functions App Check chung" "WARN" "Source hỗ trợ nhưng chưa xác minh ENFORCE_APP_CHECK=true"
+  }
+}
+
+if ($functionsEnv["REQUIRE_ZALO_APP_CHECK"] -eq "true") {
+  if ($webEnv["VITE_FIREBASE_APP_CHECK_SITE_KEY"]) {
+    Add-Result "Zalo App Check" "OK" "Public Zalo endpoint enforcement và frontend provider đã cấu hình"
+  } else {
+    Add-Result "Zalo App Check" "FAIL" "REQUIRE_ZALO_APP_CHECK=true nhưng frontend thiếu site key"
+  }
+} elseif ($webEnv["VITE_FIREBASE_APP_CHECK_SITE_KEY"]) {
+  if ($StrictRelease) {
+    Add-Result "Zalo App Check" "FAIL" "Strict release yêu cầu REQUIRE_ZALO_APP_CHECK=true"
+  } else {
+    Add-Result "Zalo App Check" "WARN" "Frontend provider đã cấu hình; public endpoint vẫn ở monitor mode"
+  }
+} else {
+  if ($StrictRelease) {
+    Add-Result "Zalo App Check" "FAIL" "Thiếu site key và bằng chứng enforcement production"
+  } else {
+    Add-Result "Zalo App Check" "WARN" "Source hỗ trợ; provider và enforcement production chưa được xác minh"
+  }
+}
+
+$managerFirebaseSource = Get-Content -Raw -LiteralPath (Join-Path $root "apps\manager-mobile\src\services\firebase.ts")
+$managerNativeSource = Get-Content -Raw -LiteralPath (Join-Path $root "apps\manager-mobile\src\nativeRuntime.ts")
+if ($managerFirebaseSource -match "VITE_FIREBASE_APP_CHECK_SITE_KEY" -and $managerNativeSource -match "FirebaseAppCheck\.initialize") {
+  Add-Result "Manager App Check source" "OK" "Có web provider và native provider"
+  if ($StrictRelease) {
+    if ($env:HAIRCUT_MANAGER_APP_CHECK_VERIFIED_SHA -eq $headSha) {
+      Add-Result "Manager App Check thiết bị thật" "OK" "Bằng chứng Android/iPhone khớp HEAD"
+    } else {
+      Add-Result "Manager App Check thiết bị thật" "FAIL" "Thiếu HAIRCUT_MANAGER_APP_CHECK_VERIFIED_SHA khớp HEAD"
+    }
+  } else {
+    Add-Result "Manager App Check thiết bị thật" "WARN" "Chưa xác minh token trên Android/iOS thật"
+  }
+} else {
+  Add-Result "Manager App Check source" "FAIL" "Thiếu web hoặc native provider"
+}
+
+$adminFirebaseSource = Get-Content -Raw -LiteralPath (Join-Path $root "apps\admin-web\src\services\firebase.ts")
+if ($adminFirebaseSource -match "VITE_FIREBASE_APP_CHECK_SITE_KEY") {
+  Add-Result "Admin App Check source" "OK" "Có reCAPTCHA Enterprise provider"
+} else {
+  Add-Result "Admin App Check source" "FAIL" "Thiếu App Check provider"
+}
+
+if ($webEnv["VITE_MONITORING_DISABLED"] -eq "true") {
+  if ($StrictRelease) {
+    Add-Result "Frontend monitoring" "FAIL" "Strict release không cho phép tắt monitoring"
+  } else {
+    Add-Result "Frontend monitoring" "OK" "Đang tắt có chủ đích"
+  }
+} elseif ($webEnv["VITE_SENTRY_DSN"]) {
+  Add-Result "Frontend monitoring" "OK" "Sentry DSN đã cấu hình"
+} else {
+  if ($StrictRelease) {
+    Add-Result "Frontend monitoring" "FAIL" "Thiếu VITE_SENTRY_DSN cho strict release"
+  } else {
+    Add-Result "Frontend monitoring" "WARN" "Monitoring không bị tắt có chủ đích nhưng chưa có Sentry DSN"
+  }
 }
 
 $functionsPackage = Get-Content -Raw -LiteralPath (Join-Path $root "firebase\functions\package.json") | ConvertFrom-Json
@@ -206,12 +391,37 @@ if (Test-Path -LiteralPath (Join-Path $root "firebase\functions\package-lock.jso
 if ($RunBuild) {
   try {
     powershell -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "check.ps1")
-    Add-Result "Build local" "OK" "Functions và web build pass"
+    if ($LASTEXITCODE -ne 0) {
+      throw "Quick repository checks trả mã $LASTEXITCODE"
+    }
+    Add-Result "Kiểm tra repository nhanh" "OK" "Functions, Zalo, Admin, Manager và repository gates đạt"
   } catch {
-    Add-Result "Build local" "FAIL" $_.Exception.Message
+    Add-Result "Kiểm tra repository nhanh" "FAIL" $_.Exception.Message
   }
 } else {
-  Add-Result "Build local" "WARN" "Chưa chạy trong lần kiểm tra này. Dùng -RunBuild để chạy."
+  if ($StrictRelease) {
+    $evidencePath = Join-Path $root ".tmp\release-readiness.json"
+    if (Test-Path -LiteralPath $evidencePath) {
+      try {
+        $evidence = Get-Content -Raw -LiteralPath $evidencePath | ConvertFrom-Json
+        if (
+          [string]$evidence.headSha -eq $headSha -and
+          $evidence.mode -eq "full" -and
+          $evidence.readyForFirebaseDeploy -eq $true
+        ) {
+          Add-Result "Readiness evidence SHA" "OK" "Full-suite evidence khớp HEAD"
+        } else {
+          Add-Result "Readiness evidence SHA" "FAIL" "Evidence phải là full suite đạt trên đúng HEAD"
+        }
+      } catch {
+        Add-Result "Readiness evidence SHA" "FAIL" "Không đọc được release-readiness.json"
+      }
+    } else {
+      Add-Result "Readiness evidence SHA" "FAIL" "Thiếu .tmp/release-readiness.json"
+    }
+  } else {
+    Add-Result "Kiểm tra repository nhanh" "WARN" "Chưa chạy trong lần kiểm tra này. Dùng -RunBuild để chạy."
+  }
 }
 
 if ($CheckLiveUrls) {
@@ -219,7 +429,8 @@ if ($CheckLiveUrls) {
     "https://haircut-c7d12.web.app",
     "https://haircut-c7d12.web.app/staff",
     "https://haircut-c7d12.web.app/owner",
-    "https://haircut-c7d12.web.app/privacy"
+    "https://haircut-c7d12.web.app/privacy",
+    "https://haircut-c7d12.web.app/terms"
   )
 
   foreach ($url in $urls) {
@@ -231,7 +442,19 @@ if ($CheckLiveUrls) {
     }
   }
 } else {
-  Add-Result "Live URLs" "WARN" "Chưa kiểm tra trong lần này. Dùng -CheckLiveUrls để kiểm tra."
+  if ($StrictRelease) {
+    Add-Result "Live URLs" "FAIL" "Strict release yêu cầu -CheckLiveUrls"
+  } else {
+    Add-Result "Live URLs" "WARN" "Chưa kiểm tra trong lần này. Dùng -CheckLiveUrls để kiểm tra."
+  }
+}
+
+if ($StrictRelease -and $ReleaseIncludesIos) {
+  if ($env:HAIRCUT_IOS_BUILD_VERIFIED_SHA -eq $headSha) {
+    Add-Result "iOS release evidence" "OK" "Xcode build evidence khớp HEAD"
+  } else {
+    Add-Result "iOS release evidence" "FAIL" "Thiếu HAIRCUT_IOS_BUILD_VERIFIED_SHA khớp HEAD"
+  }
 }
 
 $colors = @{

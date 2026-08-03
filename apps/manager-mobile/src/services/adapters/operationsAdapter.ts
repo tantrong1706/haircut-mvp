@@ -13,6 +13,7 @@ import {
   getManagerRewardHistory as sharedGetManagerRewardHistory,
   getManagerSessionHistory as sharedGetManagerSessionHistory,
   getOwnerOverview as sharedGetOwnerOverview,
+  getSalonCustomerDetails as sharedGetSalonCustomerDetails,
   getSalonProfile as sharedGetSalonProfile,
   listenActiveSessions as sharedListenActiveSessions,
   listenPendingPointRequests as sharedListenPendingPointRequests,
@@ -67,6 +68,7 @@ export const getManagerPointRequestHistory = sharedGetManagerPointRequestHistory
 export const getManagerRewardHistory = sharedGetManagerRewardHistory;
 export const getManagerSessionHistory = sharedGetManagerSessionHistory;
 export const getOwnerOverview = sharedGetOwnerOverview;
+export const getSalonCustomerDetails = sharedGetSalonCustomerDetails;
 export const getSalonProfile = sharedGetSalonProfile;
 export const listenActiveSessions = sharedListenActiveSessions;
 export const listenPendingPointRequests = sharedListenPendingPointRequests;

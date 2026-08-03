@@ -11,14 +11,10 @@ import {
   Share2,
 } from "lucide-react";
 import QRCode from "qrcode";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { type ConfirmDialogRequest } from "../../../components/ConfirmDialog";
 import { EmptyState, InlineFeedback, LoadingState } from "../../../components/Feedback";
-import {
-  ActionRow,
-  DetailHeader,
-  Section,
-} from "../../../components/ScreenPrimitives";
+import { ActionRow, DetailHeader, Section } from "../../../components/ScreenPrimitives";
 import {
   createBranch,
   getBranchQrSettings,
@@ -30,7 +26,8 @@ import {
 } from "../../../services/managerApi";
 import { escapeHtml, safeFileName } from "../ownerFormatters";
 
-type DetailTarget = { kind: "salon"; title: string; qrUrl: string } | { kind: "branch"; branch: SalonBranch };
+type DetailTarget =
+  { kind: "salon"; title: string; qrUrl: string } | { kind: "branch"; branch: SalonBranch };
 
 export function BranchesManager({
   salonId,
@@ -53,11 +50,7 @@ export function BranchesManager({
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    void refresh();
-  }, [salonId]);
-
-  async function refresh() {
+  const refresh = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
@@ -70,7 +63,11 @@ export function BranchesManager({
     } finally {
       setLoading(false);
     }
-  }
+  }, [onBranchesChange, salonId]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
 
   function commitBranches(next: SalonBranch[]) {
     const sorted = [...next].sort((a, b) => a.name.localeCompare(b.name, "vi"));
@@ -164,7 +161,11 @@ export function BranchesManager({
           </label>
           <label className="manager-field">
             <span>Số điện thoại</span>
-            <input inputMode="tel" value={phone} onChange={(event) => setPhone(event.target.value)} />
+            <input
+              inputMode="tel"
+              value={phone}
+              onChange={(event) => setPhone(event.target.value)}
+            />
           </label>
           <div className="manager-button-row">
             <button
@@ -451,7 +452,11 @@ function QrDetail({
           </label>
           <label className="manager-field">
             <span>Số điện thoại</span>
-            <input inputMode="tel" value={phone} onChange={(event) => setPhone(event.target.value)} />
+            <input
+              inputMode="tel"
+              value={phone}
+              onChange={(event) => setPhone(event.target.value)}
+            />
           </label>
           <button
             className="manager-button primary wide"

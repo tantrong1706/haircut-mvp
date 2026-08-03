@@ -21,7 +21,7 @@ loadDotEnv(resolve(appDir, ".env.production.local"), true);
 
 const projectId = requiredEnv("VITE_FIREBASE_PROJECT_ID");
 const region = process.env.VITE_FIREBASE_REGION || "asia-southeast1";
-const supportPhone = process.env.VITE_SUPPORT_PHONE || "0838098761";
+const supportPhone = process.env.VITE_SUPPORT_PHONE || "";
 const state = readOrCreateState();
 
 const app = initializeApp({

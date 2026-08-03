@@ -1,5 +1,5 @@
 import { ShieldCheck } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ConfirmDialog, type ConfirmDialogRequest } from "../../components/ConfirmDialog";
 import { ErrorState } from "../../components/Feedback";
 import { useManagerNative } from "../../hooks/useManagerNative";
@@ -48,6 +48,22 @@ export function OwnerWorkspace({ currentUser }: { currentUser: AppUser }) {
   const native = useManagerNative();
   const managerFeatures = useManagerFeatures(profile);
 
+  const refreshOverview = useCallback(
+    async (silent = false) => {
+      if (!salonId) return;
+      if (!silent) setOverviewLoading(true);
+      setOverviewError("");
+      try {
+        setOverview(await getOwnerOverview(salonId, branchFilter === "all" ? null : branchFilter));
+      } catch (caught) {
+        setOverviewError(caught instanceof Error ? caught.message : "Không tải được tổng quan.");
+      } finally {
+        if (!silent) setOverviewLoading(false);
+      }
+    },
+    [branchFilter, salonId],
+  );
+
   useEffect(() => {
     setUser(currentUser);
   }, [currentUser]);
@@ -95,7 +111,7 @@ export function OwnerWorkspace({ currentUser }: { currentUser: AppUser }) {
       window.removeEventListener("focus", refreshVisible);
       document.removeEventListener("visibilitychange", refreshVisible);
     };
-  }, [branchFilter, salonId]);
+  }, [refreshOverview, salonId]);
 
   useEffect(() => {
     if (!salonId) return undefined;
@@ -128,19 +144,6 @@ export function OwnerWorkspace({ currentUser }: { currentUser: AppUser }) {
   useEffect(() => {
     trackEvent("manager_owner_tab_opened", { salon_id: salonId, tab: activeTab });
   }, [activeTab, salonId]);
-
-  async function refreshOverview(silent = false) {
-    if (!salonId) return;
-    if (!silent) setOverviewLoading(true);
-    setOverviewError("");
-    try {
-      setOverview(await getOwnerOverview(salonId, branchFilter === "all" ? null : branchFilter));
-    } catch (caught) {
-      setOverviewError(caught instanceof Error ? caught.message : "Không tải được tổng quan.");
-    } finally {
-      if (!silent) setOverviewLoading(false);
-    }
-  }
 
   function openManagement(section: OwnerManagementSection) {
     setManagementSection(section);

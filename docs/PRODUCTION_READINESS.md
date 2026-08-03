@@ -3,22 +3,23 @@
 ## Kiểm tra tự động
 
 ```powershell
-.\scripts\check-production-readiness.ps1 -RunBuild -CheckLiveUrls
-
-cd firebase\functions
-npm run typecheck
-npm run lint
-npm run test:unit
-
-cd ..
-firebase emulators:exec --project demo-haircut --only firestore,storage "npm --prefix functions run test:rules"
-firebase emulators:exec --project demo-haircut --only firestore "npm --prefix functions run test:integration"
-
-cd ..\zalo-mini-app
-npm run check
+.\scripts\check.ps1
+.\scripts\check.ps1 -Full
+.\scripts\check-production-readiness.ps1 -CheckLiveUrls
+.\scripts\check-production-readiness.ps1 -StrictRelease -CheckLiveUrls
+node .\scripts\check-secrets.mjs --include-working-tree
 ```
 
-Admin Web phải qua `npm run check`. Manager phải qua typecheck, unit test, build, `cap sync`, Android Gradle và iOS Simulator CI không ký.
+`check.ps1` hiển thị riêng Passed, Failed, Blocked và Not run. Full suite tạo
+`.tmp/release-readiness.json` cho đúng SHA; deploy script từ chối evidence của
+commit khác. Admin và Manager đều phải qua `npm run check`; Android Gradle và iOS
+Simulator chỉ được ghi đạt khi job CI tương ứng thực sự xanh trên HEAD.
+
+`-StrictRelease` là cổng fail-closed cho phát hành, khác với readiness local. Nó
+yêu cầu working tree sạch, full-suite evidence đúng HEAD, Firebase project mapping,
+Zalo production config, contact hỗ trợ, App Check enforcement và bằng chứng thiết bị,
+Sentry DSN, live URLs; thêm `-ReleaseIncludesIos` khi release có iOS để bắt buộc
+Xcode evidence đúng SHA. Readiness local pass không phải phê duyệt phát hành production.
 
 ## Cổng dữ liệu và bảo mật
 
@@ -28,6 +29,8 @@ Admin Web phải qua `npm run check`. Manager phải qua typecheck, unit test, b
 - [ ] Firestore/Storage Rules test đạt và không có `allow read, write: if true`.
 - [ ] Secrets nằm trong Secret Manager; Git/history/log không chứa token hoặc dữ liệu khách.
 - [ ] App Check monitor trước, enforce sau khi Zalo web và Manager native đều có token hợp lệ.
+- [ ] CSP Report-Only đã được kiểm tra trên Zalo Testing; chỉ chuyển sang enforce
+      sau khi Auth, Functions, Firestore, Storage, Zalo runtime và Sentry không bị chặn.
 - [ ] Feature flags và maintenance mode đã được thử bằng dữ liệu demo.
 
 ## Cổng nghiệp vụ
@@ -37,6 +40,7 @@ Admin Web phải qua `npm run check`. Manager phải qua typecheck, unit test, b
 - [ ] Retry check-in, submit/approve điểm, spin và redeem không tạo dữ liệu trùng.
 - [ ] Owner/staff không đọc tenant khác; system admin chỉ dùng Admin Web.
 - [ ] Ảnh chỉ lưu khi consent; xóa khách/salon không báo hoàn tất khi còn residue.
+      Job xóa khách phải lưu cursor/progress, tiếp tục được sau lỗi và chỉ xóa customer cuối cùng.
 
 ## Cổng phát hành
 
@@ -47,5 +51,13 @@ Admin Web phải qua `npm run check`. Manager phải qua typecheck, unit test, b
 - [ ] Admin có Hosting site riêng; `/admin` không còn cấp quyền owner.
 - [ ] Privacy, Terms, Support và Account deletion truy cập công khai.
 - [ ] Uptime, error/quota/billing alerts đã gửi thử tới đúng người trực.
+
+## Blocker hiện tại
+
+- GitHub Actions Billing/spending limit: **Deferred/external**; chưa có CI evidence trên HEAD cuối.
+- iOS build: **Blocked** cho tới khi chạy trên macOS/Xcode.
+- App Check: chưa có site key production và chưa xác minh Android/iPhone thật.
+- Monitoring: chưa có Sentry DSN production.
+- Production deploy/migration: chưa thực hiện.
 
 Không đánh dấu production-ready chỉ vì build thành công. Trạng thái hiện tại nằm ở [RELEASE_STATUS.md](RELEASE_STATUS.md).

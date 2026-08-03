@@ -102,12 +102,28 @@ npm run build
 Rules test chạy hoàn toàn trên project emulator `demo-haircut`, không truy cập dữ liệu production:
 
 ```powershell
-cd firebase
-firebase emulators:exec --project demo-haircut --only firestore,storage "npm --prefix functions run test:rules"
-firebase emulators:exec --project demo-haircut --only firestore "npm --prefix functions run test:integration"
+cd firebase\functions
+npm run test:rules
+npm run test:integration
 ```
 
-Lệnh tổng hợp tương ứng với CI: `npm run check` trong từng workspace. Kiểm tra production bổ sung nằm tại `scripts/check-production-readiness.ps1`.
+Hai lệnh trên tự khởi động emulator và fail nếu thiếu host/project test. Script hậu tố
+`:emulator` chỉ dành cho CI hoặc khi đã chạy bên trong `firebase emulators:exec`.
+
+Kiểm tra nhanh toàn repository:
+
+```powershell
+.\scripts\check.ps1
+```
+
+Kiểm tra đầy đủ gồm emulator, browser E2E, Zalo review readiness và Capacitor sync:
+
+```powershell
+.\scripts\check.ps1 -Full
+```
+
+Kết quả đầy đủ tạo `.tmp/release-readiness.json` bị Git bỏ qua và gắn với đúng
+commit SHA. Mục `BLOCKED`/`NOT RUN` không được tính là `PASSED`.
 
 ### Admin Web và Manager
 
@@ -116,8 +132,7 @@ cd apps\admin-web
 npm run check
 
 cd ..\manager-mobile
-npm run typecheck
-npm run test
+npm run check       # typecheck, lint, format baseline, unit và build
 npm run sync        # build và cap sync Android/iOS
 ```
 
@@ -135,7 +150,10 @@ Chỉ ghi **tên biến** trong tài liệu/repository. Giá trị thật phải
 - Hỗ trợ và giám sát: `VITE_SUPPORT_EMAIL`, `VITE_SUPPORT_PHONE`, `VITE_MONITORING_DISABLED`, `VITE_SENTRY_DSN`, `VITE_SENTRY_TRACES_SAMPLE_RATE`, `VITE_SENTRY_REPLAY_SAMPLE_RATE`, `VITE_SENTRY_REPLAY_ON_ERROR_SAMPLE_RATE`.
 - Source map khi deploy: `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT` trong môi trường deploy, không dùng tiền tố `VITE_`.
 
-Production bắt buộc `VITE_FUNCTION_WRITE_MODE=required`. Tham khảo mẫu tại [`zalo-mini-app/.env.example`](zalo-mini-app/.env.example).
+Production bắt buộc `VITE_FUNCTION_WRITE_MODE=required`. Cấu hình bằng biến môi
+trường CI hoặc file local `zalo-mini-app/.env.production.local`; không commit
+`.env.production`. Tham khảo
+[`zalo-mini-app/.env.production.example`](zalo-mini-app/.env.production.example).
 
 ### Cloud Functions
 
@@ -164,19 +182,17 @@ Không deploy trực tiếp từ working tree chưa kiểm tra. Trước thay đ
 
 ```powershell
 cd C:\tantrong\haircut-mvp
-.\scripts\check-production-readiness.ps1 -RunBuild -CheckLiveUrls
-
-cd firebase
-firebase deploy --only functions
-# Chạy migration chi nhánh và kiểm tra dữ liệu theo tài liệu.
-firebase deploy --only firestore:rules,firestore:indexes
-firebase deploy --only storage
-
-cd ..
-.\scripts\deploy-firebase.ps1 -OnlyHosting
+.\scripts\check.ps1 -Full
+node .\scripts\check-secrets.mjs --include-working-tree
+.\scripts\check-production-readiness.ps1 -StrictRelease -CheckLiveUrls
+.\scripts\deploy-firebase.ps1 -IncludeFunctions -IncludeFirestore -IncludeStorage
 ```
 
-Thứ tự trên là bắt buộc khi có migration: Functions tương thích trước, migration dữ liệu, indexes/Rules, Storage Rules, rồi Hosting. Không chạy full deploy để bỏ qua các cổng kiểm tra.
+Deploy script mặc định yêu cầu worktree sạch, branch `main`/`release/*` và
+full-suite evidence đúng `HEAD`, sau đó tự chạy strict readiness. Thứ tự Functions tương thích, migration đã phê
+duyệt, indexes/Rules, Storage Rules rồi Hosting vẫn là bắt buộc khi có thay đổi
+dữ liệu. Các flag override cần break-glass có lý do và xác nhận tương tác ngoài CI;
+không dùng để thay thế review phát hành.
 
 ### Zalo Testing
 
@@ -208,7 +224,10 @@ Lệnh sẽ build `www/`, đồng bộ asset hash vào `app-config.json`, kiểm
 
 ## Trạng thái dự án
 
-HAIRCUT đã có source cho Zalo Mini App, Manager và Admin cùng backend nhiều salon. Đây chưa phải xác nhận đã phát hành Manager/Admin; trước khi phục vụ khách thật vẫn phải hoàn thành các cổng thủ công sau:
+HAIRCUT đã có source cho Zalo Mini App, Manager và Admin cùng backend nhiều salon.
+Trạng thái CI, Firebase đang deploy và Zalo Portal phải được xác minh độc lập;
+source hoặc build đạt không đồng nghĩa production đã phát hành. Trước khi phục vụ
+khách thật vẫn phải hoàn thành các cổng thủ công sau:
 
 - [ ] Firebase Auth, Authorized Domains, App Check và mẫu email đã được cấu hình đúng.
 - [ ] Tất cả secret production đã nằm trong Secret Manager; repository và lịch sử Git không chứa secret.
