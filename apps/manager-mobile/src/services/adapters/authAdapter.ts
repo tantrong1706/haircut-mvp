@@ -1,4 +1,5 @@
 import {
+  acceptPendingStaffInvite as sharedAcceptPendingStaffInvite,
   completeOwnerSalonProfile as sharedCompleteOwnerSalonProfile,
   getAppUser as sharedGetAppUser,
   isValidAuthEmail as sharedIsValidAuthEmail,
@@ -16,6 +17,7 @@ export type {
   AppUser,
 } from "../../../../../zalo-mini-app/src/services/auth";
 
+export const acceptPendingStaffInvite = sharedAcceptPendingStaffInvite;
 export const completeOwnerSalonProfile = sharedCompleteOwnerSalonProfile;
 export const getAppUser = sharedGetAppUser;
 export const isValidAuthEmail = sharedIsValidAuthEmail;

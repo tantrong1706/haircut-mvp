@@ -17,6 +17,7 @@ import {
   deleteCustomerData,
   formatDateTime,
   getManagerSessionHistory,
+  getSalonCustomerDetails,
   searchSalonCustomers,
   type CustomerLookupResult,
   type ManagerSessionHistoryItem,
@@ -43,6 +44,7 @@ export function OwnerCustomersScreen({
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState("");
+  const [detailsId, setDetailsId] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [sessionHistory, setSessionHistory] = useState<ManagerSessionHistoryItem[]>([]);
@@ -74,6 +76,26 @@ export function OwnerCustomersScreen({
       setError(caught instanceof Error ? caught.message : "Không tìm được khách.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadCustomerDetails(customerId: string) {
+    setDetailsId(customerId);
+    setMessage("");
+    setError("");
+    try {
+      const details = await getSalonCustomerDetails({
+        salonId,
+        customerId,
+        branchId: branchId || undefined,
+      });
+      setResults((current) =>
+        current.map((customer) => (customer.id === customerId ? details : customer)),
+      );
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Không tải được hồ sơ khách.");
+    } finally {
+      setDetailsId("");
     }
   }
 
@@ -229,7 +251,21 @@ export function OwnerCustomersScreen({
                     </div>
                   </dl>
 
-                  <details>
+                  {!customer.detailsLoaded ? (
+                    <button
+                      className="manager-button secondary"
+                      type="button"
+                      disabled={detailsId === customer.id}
+                      onClick={() => void loadCustomerDetails(customer.id)}
+                    >
+                      <UserRoundCheck aria-hidden="true" />
+                      {detailsId === customer.id
+                        ? "Đang tải hồ sơ..."
+                        : "Xem hồ sơ chi tiết"}
+                    </button>
+                  ) : null}
+
+                  <details hidden={!customer.detailsLoaded}>
                     <summary>Lịch sử gần đây ({customer.recentRecords.length})</summary>
                     {customer.recentRecords.length === 0 ? (
                       <p className="manager-field-note">Chưa có lịch sử.</p>
@@ -264,7 +300,7 @@ export function OwnerCustomersScreen({
                     )}
                   </details>
 
-                  <details>
+                  <details hidden={!customer.detailsLoaded}>
                     <summary>Chi nhánh từng ghé ({customer.branchVisits.length})</summary>
                     {customer.branchVisits.length === 0 ? (
                       <p className="manager-field-note">Chưa có dữ liệu chi nhánh.</p>
@@ -280,7 +316,7 @@ export function OwnerCustomersScreen({
                     )}
                   </details>
 
-                  <details>
+                  <details hidden={!customer.detailsLoaded}>
                     <summary>Lịch sử quà ({customer.rewardHistory.length})</summary>
                     {customer.rewardHistory.length === 0 ? (
                       <p className="manager-field-note">Khách chưa có lịch sử quà.</p>
@@ -306,7 +342,7 @@ export function OwnerCustomersScreen({
                     )}
                   </details>
 
-                  <details>
+                  <details hidden={!customer.detailsLoaded}>
                     <summary>Mã quà chưa dùng ({customer.unusedRewards.length})</summary>
                     {customer.unusedRewards.length === 0 ? (
                       <p className="manager-field-note">Khách chưa có mã quà.</p>

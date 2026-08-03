@@ -30,6 +30,7 @@ export type AppUser = {
   role: AppRole;
   isActive: boolean;
   canRedeemRewards?: boolean;
+  inviteStatus?: "pending" | "accepted";
   branchId?: string;
   branchIds?: string[];
 };
@@ -358,6 +359,21 @@ async function updateOwnerAvatarDirect(avatarUrl: string): Promise<{ avatarUrl: 
   return { avatarUrl };
 }
 
+export async function acceptPendingStaffInvite(profile: AppUser): Promise<AppUser> {
+  if (profile.role !== "staff" || profile.inviteStatus !== "pending") {
+    return profile;
+  }
+
+  await callFunction<Record<string, never>, { accepted: boolean; alreadyAccepted: boolean }>(
+    "acceptStaffInvite",
+    {},
+  );
+  return {
+    ...profile,
+    inviteStatus: "accepted",
+  };
+}
+
 export async function getAppUser(uid: string): Promise<AppUser | null> {
   const db = getFirebaseDb();
 
@@ -386,6 +402,10 @@ export async function getAppUser(uid: string): Promise<AppUser | null> {
     role,
     isActive: Boolean(data.isActive),
     canRedeemRewards: Boolean(data.canRedeemRewards),
+    inviteStatus:
+      data.inviteStatus === "pending" || data.inviteStatus === "accepted"
+        ? data.inviteStatus
+        : undefined,
     branchId: String(data.branchId || ""),
     branchIds: Array.isArray(data.branchIds)
       ? data.branchIds.filter((value): value is string => typeof value === "string")

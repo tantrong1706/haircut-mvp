@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   registerCustomer: vi.fn(),
   resolveCustomerQr: vi.fn(),
   isZaloProfilePermissionError: vi.fn(),
+  isZaloProfileRetryableError: vi.fn(),
   openZaloProfilePermissionSettings: vi.fn(),
 }));
 
@@ -20,6 +21,7 @@ vi.mock("../services/runtime", () => ({
 vi.mock("../services/zalo", () => ({
   getZaloIdentity: mocks.getZaloIdentity,
   isZaloProfilePermissionError: mocks.isZaloProfilePermissionError,
+  isZaloProfileRetryableError: mocks.isZaloProfileRetryableError,
   openZaloProfilePermissionSettings: mocks.openZaloProfilePermissionSettings,
 }));
 
@@ -92,7 +94,17 @@ describe("ScanEntryPage", () => {
     mocks.registerCustomer.mockResolvedValue(session);
     mocks.isZaloProfilePermissionError.mockImplementation(
       (error: unknown) =>
-        typeof error === "object" && error !== null && "code" in error,
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        error.code === "ZALO_PROFILE_PERMISSION_REQUIRED",
+    );
+    mocks.isZaloProfileRetryableError.mockImplementation(
+      (error: unknown) =>
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        error.code === "ZALO_PROFILE_RETRY_REQUIRED",
     );
     mocks.openZaloProfilePermissionSettings.mockResolvedValue(undefined);
   });
@@ -215,6 +227,60 @@ describe("ScanEntryPage", () => {
 
     expect(mocks.openZaloProfilePermissionSettings).toHaveBeenCalledTimes(1);
     expect(await screen.findByText("Anh Tân")).toBeInTheDocument();
+  });
+
+  it.each([
+    ["mạng", "Không thể kết nối với Zalo. Vui lòng kiểm tra mạng và thử lại."],
+    ["SDK", "Chưa đọc được thông tin Zalo. Vui lòng thử lại sau ít phút."],
+  ])("hiện thử lại cho lỗi %s mà không mở cài đặt quyền", async (_kind, message) => {
+    const user = userEvent.setup();
+    const retryableError = Object.assign(new Error(message), {
+      code: "ZALO_PROFILE_RETRY_REQUIRED",
+      retryable: true,
+    });
+    mocks.getZaloIdentity.mockRejectedValueOnce(retryableError).mockResolvedValueOnce({
+      accessToken: "access-token-test",
+      zaloUserId: "zalo-a",
+      name: "Anh Tân",
+    });
+
+    render(<ScanEntryPage onReady={vi.fn()} />);
+
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Mở cài đặt quyền Zalo" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Thử lại" }));
+
+    expect(await screen.findByText("Anh Tân")).toBeInTheDocument();
+    expect(mocks.getZaloIdentity).toHaveBeenNthCalledWith(2, {
+      requestProfilePermission: false,
+    });
+    expect(mocks.openZaloProfilePermissionSettings).not.toHaveBeenCalled();
+  });
+
+  it("không lặp yêu cầu quyền khi vẫn bị từ chối sau khi trở về từ cài đặt", async () => {
+    const user = userEvent.setup();
+    const permissionError = Object.assign(new Error("Quyền hồ sơ đã bị từ chối"), {
+      code: "ZALO_PROFILE_PERMISSION_REQUIRED",
+    });
+    mocks.getZaloIdentity
+      .mockResolvedValueOnce({
+        accessToken: "access-token-test",
+        name: "",
+      })
+      .mockRejectedValueOnce(permissionError)
+      .mockRejectedValueOnce(permissionError);
+
+    render(<ScanEntryPage onReady={vi.fn()} />);
+
+    await user.click(await screen.findByRole("button", { name: "Cho phép đọc tên Zalo" }));
+    await user.click(await screen.findByRole("button", { name: "Mở cài đặt quyền Zalo" }));
+
+    expect(
+      await screen.findByRole("button", { name: "Mở cài đặt quyền Zalo" }),
+    ).toBeInTheDocument();
+    expect(mocks.openZaloProfilePermissionSettings).toHaveBeenCalledTimes(1);
+    expect(mocks.getZaloIdentity).toHaveBeenCalledTimes(3);
   });
 
   it("hiển thị ảnh salon và quay về logo mặc định khi ảnh lỗi", async () => {

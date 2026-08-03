@@ -13,6 +13,15 @@ type ZaloIdentityOptions = {
 
 const ZALO_REQUIRED_MESSAGE = "Vui lòng mở HAIRCUT trong Zalo để xác nhận danh tính khách hàng.";
 const ZALO_PROFILE_PERMISSION_CODE = "ZALO_PROFILE_PERMISSION_REQUIRED";
+const ZALO_PROFILE_RETRY_CODE = "ZALO_PROFILE_RETRY_REQUIRED";
+const PROFILE_PERMISSION_ERROR_CODES = new Set([-1401, -2002]);
+const PROFILE_TIMEOUT_ERROR_CODES = new Set([-1408, -14]);
+
+export type ZaloProfileErrorClassification =
+  | { kind: "permission"; message: string }
+  | { kind: "network"; message: string }
+  | { kind: "timeout"; message: string }
+  | { kind: "unavailable"; message: string };
 
 export class ZaloProfilePermissionError extends Error {
   readonly code = ZALO_PROFILE_PERMISSION_CODE;
@@ -23,6 +32,17 @@ export class ZaloProfilePermissionError extends Error {
   }
 }
 
+export class ZaloProfileRetryableError extends Error {
+  readonly code = ZALO_PROFILE_RETRY_CODE;
+  readonly kind: Exclude<ZaloProfileErrorClassification["kind"], "permission">;
+
+  constructor(classification: Exclude<ZaloProfileErrorClassification, { kind: "permission" }>) {
+    super(classification.message);
+    this.name = "ZaloProfileRetryableError";
+    this.kind = classification.kind;
+  }
+}
+
 export function isZaloProfilePermissionError(error: unknown): boolean {
   return (
     typeof error === "object" &&
@@ -30,6 +50,87 @@ export function isZaloProfilePermissionError(error: unknown): boolean {
     "code" in error &&
     error.code === ZALO_PROFILE_PERMISSION_CODE
   );
+}
+
+export function isZaloProfileRetryableError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === ZALO_PROFILE_RETRY_CODE
+  );
+}
+
+function errorRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
+}
+
+function zaloErrorCode(error: unknown): number | null {
+  const root = errorRecord(error);
+  const candidates = [
+    root?.code,
+    root?.error_code,
+    errorRecord(root?.error)?.code,
+    errorRecord(root?.data)?.code,
+    errorRecord(root?.data)?.error_code,
+    errorRecord(root?.response)?.code,
+  ];
+
+  for (const candidate of candidates) {
+    const numericCode = typeof candidate === "string" ? Number(candidate) : candidate;
+    if (typeof numericCode === "number" && Number.isFinite(numericCode)) {
+      return numericCode;
+    }
+  }
+  return null;
+}
+
+function zaloErrorMessage(error: unknown): string {
+  const root = errorRecord(error);
+  const candidates = [
+    error instanceof Error ? error.message : "",
+    root?.message,
+    root?.error_message,
+    errorRecord(root?.error)?.message,
+    errorRecord(root?.data)?.message,
+  ];
+  return candidates.find((candidate): candidate is string => typeof candidate === "string") || "";
+}
+
+export function classifyZaloProfileError(error: unknown): ZaloProfileErrorClassification {
+  const code = zaloErrorCode(error);
+  const normalizedMessage = zaloErrorMessage(error).trim().toLocaleLowerCase("vi");
+
+  if (
+    (code !== null && PROFILE_PERMISSION_ERROR_CODES.has(code)) ||
+    /\b(permission denied|user denied)\b/.test(normalizedMessage) ||
+    /từ chối (cung cấp|quyền|truy cập)/.test(normalizedMessage)
+  ) {
+    return {
+      kind: "permission",
+      message: "Bạn chưa cho phép đọc tên Zalo. Hãy mở cài đặt quyền và bật Thông tin người dùng.",
+    };
+  }
+  if (
+    (code !== null && PROFILE_TIMEOUT_ERROR_CODES.has(code)) ||
+    /\b(timeout|timed out)\b/.test(normalizedMessage) ||
+    /quá thời gian/.test(normalizedMessage)
+  ) {
+    return {
+      kind: "timeout",
+      message: "Zalo phản hồi quá lâu. Vui lòng kiểm tra kết nối và thử lại.",
+    };
+  }
+  if (/\b(network|internet|offline|failed to fetch|connection)\b/.test(normalizedMessage)) {
+    return {
+      kind: "network",
+      message: "Không thể kết nối với Zalo. Vui lòng kiểm tra mạng và thử lại.",
+    };
+  }
+  return {
+    kind: "unavailable",
+    message: "Chưa đọc được thông tin Zalo. Vui lòng thử lại sau ít phút.",
+  };
 }
 
 function previewIdentity(): ZaloIdentity | null {
@@ -90,15 +191,20 @@ export async function getZaloIdentity(options: ZaloIdentityOptions = {}): Promis
       name: userInfo.name || "Khách hàng",
       avatar: userInfo.avatar,
     };
-  } catch {
-    if (options.requestProfilePermission === true) {
-      throw new ZaloProfilePermissionError();
+  } catch (error) {
+    const classification = classifyZaloProfileError(error);
+    if (classification.kind === "permission") {
+      if (options.requestProfilePermission === true) {
+        throw new ZaloProfilePermissionError();
+      }
+
+      return {
+        accessToken,
+        name: "",
+      };
     }
 
-    return {
-      accessToken,
-      name: "",
-    };
+    throw new ZaloProfileRetryableError(classification);
   }
 }
 

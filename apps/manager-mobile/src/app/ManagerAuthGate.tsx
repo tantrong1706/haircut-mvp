@@ -16,6 +16,7 @@ import {
 import { BrandMark } from "../components/BrandMark";
 import { InlineFeedback, LoadingState } from "../components/Feedback";
 import {
+  acceptPendingStaffInvite,
   completeOwnerSalonProfile,
   getAppUser,
   isValidAuthEmail,
@@ -152,6 +153,21 @@ export function ManagerAuthGate({
     }
   }
 
+  async function acceptInvite() {
+    if (!appUser || appUser.role !== "staff" || appUser.inviteStatus !== "pending") return;
+
+    setSubmitting(true);
+    setError("");
+    try {
+      const acceptedProfile = await acceptPendingStaffInvite(appUser);
+      setAppUser(acceptedProfile);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Không xác nhận được lời mời nhân viên.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   if (loading) {
     return (
       <main className="manager-auth-page">
@@ -172,6 +188,35 @@ export function ManagerAuthGate({
           <button className="manager-button secondary" onClick={() => void signOutOwnerStaff()}>
             Đăng xuất
           </button>
+        </section>
+      </main>
+    );
+  }
+
+  if (appUser?.role === "staff" && appUser.inviteStatus === "pending") {
+    return (
+      <main className="manager-auth-page">
+        <BrandMark />
+        <section className="manager-auth-card">
+          <p className="manager-eyebrow">Lời mời nhân viên</p>
+          <h1>Xác nhận tham gia salon</h1>
+          <p>Bạn chỉ được vào khu vực nhân viên sau khi chủ động xác nhận lời mời này.</p>
+          <button
+            className="manager-button primary"
+            disabled={submitting}
+            onClick={() => void acceptInvite()}
+          >
+            <CheckCircle2 aria-hidden="true" />
+            {submitting ? "Đang xác nhận..." : "Xác nhận lời mời"}
+          </button>
+          <button
+            className="manager-button secondary"
+            disabled={submitting}
+            onClick={() => void signOutOwnerStaff()}
+          >
+            Đăng xuất
+          </button>
+          {error ? <InlineFeedback tone="error">{error}</InlineFeedback> : null}
         </section>
       </main>
     );

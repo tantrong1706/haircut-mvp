@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { BrandLogo } from "../components/BrandLogo";
 import {
+  acceptPendingStaffInvite,
   AppRole,
   AppUser,
   completeOwnerSalonProfile,
@@ -226,6 +227,24 @@ export function AuthGate({ allowedRoles, children }: Props) {
     clearMonitoringUser();
     setUnlinkedUser(null);
     setAppUser(null);
+  }
+
+  async function handleAcceptStaffInvite() {
+    if (!appUser || appUser.role !== "staff" || appUser.inviteStatus !== "pending") return;
+
+    setSubmitting(true);
+    setError("");
+    try {
+      const acceptedProfile = await acceptPendingStaffInvite(appUser);
+      setAppUser(acceptedProfile);
+      trackEvent("staff_invite_accepted", {
+        salon_id: acceptedProfile.salonId,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không xác nhận được lời mời nhân viên");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   if (loading) {
@@ -587,6 +606,33 @@ export function AuthGate({ allowedRoles, children }: Props) {
           <LogOut size={18} aria-hidden="true" />
           Đăng xuất
         </button>
+      </section>
+    );
+  }
+
+  if (appUser.role === "staff" && appUser.inviteStatus === "pending") {
+    return (
+      <section className="entry-page auth-entry">
+        <header className="page-header">
+          <p className="eyebrow">Lời mời nhân viên</p>
+          <h1>Xác nhận tham gia salon</h1>
+          <p className="muted">
+            Bạn chỉ được vào khu vực nhân viên sau khi chủ động xác nhận lời mời này.
+          </p>
+        </header>
+        <button
+          className="primary-button"
+          disabled={submitting}
+          onClick={() => void handleAcceptStaffInvite()}
+        >
+          <CircleCheckBig size={19} aria-hidden="true" />
+          {submitting ? "Đang xác nhận..." : "Xác nhận lời mời"}
+        </button>
+        <button className="secondary-button" disabled={submitting} onClick={handleSignOut}>
+          <LogOut size={18} aria-hidden="true" />
+          Đăng xuất
+        </button>
+        {error ? <p className="alert error">{error}</p> : null}
       </section>
     );
   }

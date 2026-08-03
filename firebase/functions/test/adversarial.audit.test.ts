@@ -2,7 +2,12 @@ import { deleteApp, getApps } from "firebase-admin/app";
 import { Timestamp, getFirestore } from "firebase-admin/firestore";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { buildNameSearchPrefixes } from "../src/customerSearch";
-import { lookupRewardCode, redeemRewardCode, searchSalonCustomers } from "../src/index";
+import {
+  getSalonCustomerDetails,
+  lookupRewardCode,
+  redeemRewardCode,
+  searchSalonCustomers,
+} from "../src/index";
 import { requireFirestoreEmulator } from "./emulatorEnvironment";
 
 const { emulatorHost, projectId } = requireFirestoreEmulator();
@@ -80,28 +85,44 @@ describe("adversarial tenant access", () => {
 
       for (const result of [phoneResult, nameResult]) {
         expect(result.customers).toHaveLength(1);
-        expect(result.customers[0]).toMatchObject({ id: "customer-a1", phoneLast4: "1111" });
+        expect(result.customers[0]).toMatchObject({
+          id: "customer-a1",
+          phoneLast4: "1111",
+          detailsLoaded: false,
+        });
         expect(result.customers[0]).not.toHaveProperty("phone");
-        expect(result.customers[0].recentRecords).toEqual([
-          expect.objectContaining({
-            id: "record-a1",
-            branchId: BRANCH_A1,
-            note: "A1 note",
-            photoUrls: [],
-          }),
-        ]);
-        expect(result.customers[0].recentRecords).not.toEqual(
-          expect.arrayContaining([expect.objectContaining({ note: "A2 private note" })]),
-        );
+        expect(result.customers[0].recentRecords).toEqual([]);
         expect(result.customers[0].branchVisits).toEqual([]);
         expect(result.customers[0].rewardHistory).toEqual([]);
-        expect(result.customers[0].unusedRewards).toEqual([
-          expect.objectContaining({ id: "reward-a1", branchId: BRANCH_A1, rewardCode: "" }),
-        ]);
-        expect(result.customers[0].unusedRewards).not.toEqual(
-          expect.arrayContaining([expect.objectContaining({ id: "reward-a1-a2" })]),
-        );
+        expect(result.customers[0].unusedRewards).toEqual([]);
       }
+
+      const details = await getSalonCustomerDetails.run(
+        requestFor("staff-a1", {
+          salonId: SALON_A,
+          branchId: BRANCH_A1,
+          customerId: "customer-a1",
+        }),
+      );
+      expect(details.customer.recentRecords).toEqual([
+        expect.objectContaining({
+          id: "record-a1",
+          branchId: BRANCH_A1,
+          note: "A1 note",
+          photoUrls: [],
+        }),
+      ]);
+      expect(details.customer.recentRecords).not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ note: "A2 private note" })]),
+      );
+      expect(details.customer.branchVisits).toEqual([]);
+      expect(details.customer.rewardHistory).toEqual([]);
+      expect(details.customer.unusedRewards).toEqual([
+        expect.objectContaining({ id: "reward-a1", branchId: BRANCH_A1, rewardCode: "HC-A1" }),
+      ]);
+      expect(details.customer.unusedRewards).not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ id: "reward-a1-a2" })]),
+      );
     });
 
     it("returns shared customer data without exposing another branch's business data", async () => {
@@ -120,6 +141,16 @@ describe("adversarial tenant access", () => {
       expect(result.customers[0].branchVisits).toEqual([]);
       expect(result.customers[0].rewardHistory).toEqual([]);
       expect(result.customers[0].unusedRewards).toEqual([]);
+
+      const details = await getSalonCustomerDetails.run(
+        requestFor("staff-a1", {
+          salonId: SALON_A,
+          branchId: BRANCH_A1,
+          customerId: "customer-a2",
+        }),
+      );
+      expect(details.customer.recentRecords).toEqual([]);
+      expect(details.customer.unusedRewards).toEqual([]);
     });
 
     it("does not expose reward codes to staff without redemption permission", async () => {
@@ -133,6 +164,15 @@ describe("adversarial tenant access", () => {
 
       expect(result.customers).toHaveLength(1);
       expect(result.customers[0].unusedRewards).toEqual([]);
+
+      const details = await getSalonCustomerDetails.run(
+        requestFor("staff-a1-view-only", {
+          salonId: SALON_A,
+          branchId: BRANCH_A1,
+          customerId: "customer-a1",
+        }),
+      );
+      expect(details.customer.unusedRewards).toEqual([]);
     });
 
     it("keeps legacy customers without lastBranchId searchable and branch-scoped", async () => {
@@ -147,17 +187,26 @@ describe("adversarial tenant access", () => {
       expect(result.customers).toHaveLength(1);
       expect(result.customers[0]).toMatchObject({ id: "customer-legacy", phoneLast4: "4444" });
       expect(result.customers[0]).not.toHaveProperty("phone");
-      expect(result.customers[0].recentRecords).toEqual([
+      expect(result.customers[0].recentRecords).toEqual([]);
+
+      const details = await getSalonCustomerDetails.run(
+        requestFor("staff-a1", {
+          salonId: SALON_A,
+          branchId: BRANCH_A1,
+          customerId: "customer-legacy",
+        }),
+      );
+      expect(details.customer.recentRecords).toEqual([
         expect.objectContaining({
           id: "record-legacy-a1",
           branchId: BRANCH_A1,
           note: "Legacy A1 note",
         }),
       ]);
-      expect(result.customers[0].recentRecords).not.toEqual(
+      expect(details.customer.recentRecords).not.toEqual(
         expect.arrayContaining([expect.objectContaining({ note: "Legacy A2 private note" })]),
       );
-      expect(result.customers[0].unusedRewards).toEqual([]);
+      expect(details.customer.unusedRewards).toEqual([]);
     });
 
     it("keeps full owner history and supports branch-scoped owner views", async () => {
@@ -171,21 +220,32 @@ describe("adversarial tenant access", () => {
           term: "1111",
         }),
       );
+      const salonDetails = await getSalonCustomerDetails.run(
+        requestFor("owner-a", { salonId: SALON_A, customerId: "customer-a1" }),
+      );
+      const branchDetails = await getSalonCustomerDetails.run(
+        requestFor("owner-a", {
+          salonId: SALON_A,
+          branchId: BRANCH_A1,
+          customerId: "customer-a1",
+        }),
+      );
 
       expect(salonResult.customers).toHaveLength(1);
-      expect(salonResult.customers[0].recentRecords).toEqual(
+      expect(salonResult.customers[0].recentRecords).toEqual([]);
+      expect(salonDetails.customer.recentRecords).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ id: "record-a1", branchId: BRANCH_A1 }),
           expect.objectContaining({ id: "record-a1-a2", branchId: BRANCH_A2 }),
         ]),
       );
-      expect(salonResult.customers[0].branchVisits).toEqual(
+      expect(salonDetails.customer.branchVisits).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ branchId: BRANCH_A1 }),
           expect.objectContaining({ branchId: BRANCH_A2 }),
         ]),
       );
-      expect(salonResult.customers[0].rewardHistory).toEqual(
+      expect(salonDetails.customer.rewardHistory).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ id: "reward-a1", rewardCode: "HC-A1" }),
           expect.objectContaining({ id: "reward-a1-a2", rewardCode: "HC-A1-A2" }),
@@ -193,13 +253,13 @@ describe("adversarial tenant access", () => {
       );
 
       expect(branchResult.customers).toHaveLength(1);
-      expect(branchResult.customers[0].recentRecords).toEqual([
+      expect(branchDetails.customer.recentRecords).toEqual([
         expect.objectContaining({ id: "record-a1", branchId: BRANCH_A1 }),
       ]);
-      expect(branchResult.customers[0].branchVisits).toEqual([
+      expect(branchDetails.customer.branchVisits).toEqual([
         expect.objectContaining({ branchId: BRANCH_A1 }),
       ]);
-      expect(branchResult.customers[0].rewardHistory).toEqual([
+      expect(branchDetails.customer.rewardHistory).toEqual([
         expect.objectContaining({ id: "reward-a1", rewardCode: "HC-A1" }),
       ]);
     });

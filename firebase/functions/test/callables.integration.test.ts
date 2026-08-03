@@ -1,12 +1,17 @@
+import { createHash } from "node:crypto";
 import { deleteApp, getApps } from "firebase-admin/app";
 import { Timestamp, getFirestore } from "firebase-admin/firestore";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import {
+  acceptStaffInvite,
   approvePointRequest,
   cancelSessionAsSystemAdmin,
   cancelSalonDeletion,
   claimServiceSession,
   createManualCustomer,
+  deleteCustomerData,
+  expireStaleServiceSessions,
+  getSalonCustomerDetails,
   getManagerAuditEvents,
   getSystemAdminOverview,
   getSalonDeletionStatus,
@@ -267,8 +272,9 @@ describe("callable transactions", () => {
   it("chỉ owner nhận số điện thoại đầy đủ khi tìm khách", async () => {
     const salonId = "salon-customer-phone";
     const branchId = "branch-customer-phone";
+    const otherBranchId = "branch-customer-other";
     await seedOwner("owner-customer-phone", salonId, { customerCount: 1 });
-    await seedBranch(salonId, branchId);
+    await Promise.all([seedBranch(salonId, branchId), seedBranch(salonId, otherBranchId)]);
     await db
       .collection("users")
       .doc("staff-customer-phone")
@@ -278,6 +284,7 @@ describe("callable transactions", () => {
         name: "Nhân viên",
         isActive: true,
         branchIds: [branchId],
+        canRedeemRewards: true,
       });
     await db.collection("customers").doc("customer-phone").set({
       salonId,
@@ -307,16 +314,41 @@ describe("callable transactions", () => {
         pointsAdded: 1,
         createdAt: Timestamp.now(),
       });
+    await db
+      .collection("haircut_records")
+      .doc("record-customer-other")
+      .set({
+        salonId,
+        branchId: otherBranchId,
+        branchName: "Chi nhánh khác",
+        customerId: "customer-phone",
+        staffName: "Nhân viên khác",
+        pointRequestId: "session-customer-other",
+        photoUrls: [],
+        pointsAdded: 1,
+        createdAt: Timestamp.fromMillis(Date.now() - 1_000),
+      });
     await db.collection("reward_history").doc("reward-customer-phone").set({
       salonId,
       branchId,
       customerId: "customer-phone",
       rewardName: "Gội đầu",
       rewardCode: "PHONE-REWARD-1234",
-      status: "used",
+      status: "unused",
       createdAt: Timestamp.now(),
-      usedAt: Timestamp.now(),
     });
+    await db
+      .collection("reward_history")
+      .doc("reward-customer-other")
+      .set({
+        salonId,
+        branchId: otherBranchId,
+        customerId: "customer-phone",
+        rewardName: "Giảm giá",
+        rewardCode: "OTHER-REWARD-5678",
+        status: "unused",
+        createdAt: Timestamp.fromMillis(Date.now() - 1_000),
+      });
 
     const ownerResult = await searchSalonCustomers.run(
       requestFor("owner-customer-phone", { salonId, term: "5678" }),
@@ -328,18 +360,85 @@ describe("callable transactions", () => {
     expect(ownerResult.customers[0]).toMatchObject({
       phone: "84912345678",
       phoneLast4: "5678",
+      detailsLoaded: false,
     });
-    expect(ownerResult.customers[0].branchVisits).toEqual([
-      expect.objectContaining({ branchId, branchName: "Chi nhánh kiểm thử" }),
-    ]);
-    expect(ownerResult.customers[0].recentRecords[0].photoUrls).toHaveLength(1);
-    expect(ownerResult.customers[0].rewardHistory).toEqual([
-      expect.objectContaining({ rewardCode: "PHONE-REWARD-1234", status: "used" }),
-    ]);
+    expect(ownerResult.customers[0].recentRecords).toEqual([]);
+    expect(ownerResult.customers[0].rewardHistory).toEqual([]);
     expect(staffResult.customers[0]).toMatchObject({ phoneLast4: "5678" });
     expect(staffResult.customers[0]).not.toHaveProperty("phone");
-    expect(staffResult.customers[0].recentRecords[0].photoUrls).toEqual([]);
-    expect(staffResult.customers[0].rewardHistory).toEqual([]);
+
+    const ownerDetails = await getSalonCustomerDetails.run(
+      requestFor("owner-customer-phone", { salonId, customerId: "customer-phone" }),
+    );
+    expect(ownerDetails.customer).toMatchObject({
+      phone: "84912345678",
+      detailsLoaded: true,
+    });
+    expect(ownerDetails.customer.recentRecords).toHaveLength(2);
+    expect(ownerDetails.customer.recentRecords[0].photoUrls).toHaveLength(1);
+    expect(ownerDetails.customer.branchVisits).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ branchId, branchName: "Chi nhánh kiểm thử" }),
+        expect.objectContaining({ branchId: otherBranchId, branchName: "Chi nhánh khác" }),
+      ]),
+    );
+    expect(ownerDetails.customer.rewardHistory).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ rewardCode: "PHONE-REWARD-1234", status: "unused" }),
+        expect.objectContaining({ rewardCode: "OTHER-REWARD-5678", status: "unused" }),
+      ]),
+    );
+
+    const staffDetails = await getSalonCustomerDetails.run(
+      requestFor("staff-customer-phone", {
+        salonId,
+        branchId,
+        customerId: "customer-phone",
+      }),
+    );
+    expect(staffDetails.customer).not.toHaveProperty("phone");
+    expect(staffDetails.customer.recentRecords).toHaveLength(1);
+    expect(staffDetails.customer.recentRecords[0]).toMatchObject({
+      branchId,
+      photoUrls: [],
+    });
+    expect(staffDetails.customer.branchVisits).toEqual([]);
+    expect(staffDetails.customer.rewardHistory).toEqual([]);
+    expect(staffDetails.customer.unusedRewards).toEqual([
+      expect.objectContaining({ rewardCode: "PHONE-REWARD-1234", branchId }),
+    ]);
+    await expect(
+      getSalonCustomerDetails.run(
+        requestFor("staff-customer-phone", {
+          salonId,
+          branchId: otherBranchId,
+          customerId: "customer-phone",
+        }),
+      ),
+    ).rejects.toMatchObject({ details: { errorCode: "BRANCH_ACCESS_DENIED" } });
+
+    await seedOwner("owner-customer-other-salon", "salon-customer-other", { customerCount: 1 });
+    await db.collection("customers").doc("customer-other-salon").set({
+      salonId: "salon-customer-other",
+      name: "Khách salon khác",
+      phoneLast4: "9999",
+    });
+    await expect(
+      getSalonCustomerDetails.run(
+        requestFor("owner-customer-phone", {
+          salonId,
+          customerId: "customer-other-salon",
+        }),
+      ),
+    ).rejects.toMatchObject({ details: { errorCode: "INVALID_REQUEST" } });
+    await expect(
+      getSalonCustomerDetails.run(
+        requestFor("owner-customer-phone", {
+          salonId: "salon-customer-other",
+          customerId: "customer-other-salon",
+        }),
+      ),
+    ).rejects.toMatchObject({ details: { errorCode: "FORBIDDEN" } });
   });
 
   it("cô lập lịch sử Manager theo salon, chi nhánh và nhân viên", async () => {
@@ -1293,6 +1392,326 @@ describe("callable transactions", () => {
       "cancelled",
     );
   });
+
+  it("xóa dữ liệu khách theo trang, tiếp tục sau retry và không trừ số khách hai lần", async () => {
+    const salonId = "salon-customer-deletion";
+    const customerId = "customer-deletion";
+    const ownerId = "owner-customer-deletion";
+    const recordCount = 620;
+    await seedOwner(ownerId, salonId, { customerCount: 1 });
+    await db.collection("customers").doc(customerId).set({
+      salonId,
+      name: "Khách cần xóa",
+      points: 3,
+      createdAt: Timestamp.now(),
+    });
+
+    for (let start = 0; start < recordCount; start += 400) {
+      const batch = db.batch();
+      for (let index = start; index < Math.min(start + 400, recordCount); index += 1) {
+        batch.set(
+          db.collection("haircut_records").doc(`deletion-record-${String(index).padStart(4, "0")}`),
+          {
+            salonId,
+            customerId,
+            branchId: "branch-deletion",
+            createdAt: Timestamp.fromMillis(1_700_000_000_000 + index),
+          },
+        );
+      }
+      await batch.commit();
+    }
+
+    const deletionRequest = requestFor(ownerId, { salonId, customerId });
+    await expect(deleteCustomerData.run(deletionRequest)).rejects.toMatchObject({
+      code: "unavailable",
+    });
+
+    const jobId = createHash("sha256")
+      .update(`customer-deletion:${salonId}:${customerId}`)
+      .digest("hex");
+    const firstJob = (await db.collection("customer_deletion_jobs").doc(jobId).get()).data();
+    expect(firstJob).toMatchObject({
+      status: "partial",
+      deletedRecords: 500,
+      remainingDocuments: 2,
+    });
+    expect(firstJob?.collectionCursors?.haircut_records).toEqual(expect.any(String));
+    expect((await db.collection("customers").doc(customerId).get()).exists).toBe(true);
+    expect((await db.collection("salons").doc(salonId).get()).data()?.customerCount).toBe(1);
+
+    const remainingAfterFirstAttempt = await db
+      .collection("haircut_records")
+      .where("salonId", "==", salonId)
+      .where("customerId", "==", customerId)
+      .get();
+    expect(remainingAfterFirstAttempt.size).toBe(120);
+
+    const completed = await deleteCustomerData.run(deletionRequest);
+    expect(completed).toMatchObject({
+      status: "completed",
+      deletedRecords: recordCount,
+    });
+    expect((await db.collection("customers").doc(customerId).get()).exists).toBe(false);
+    expect((await db.collection("salons").doc(salonId).get()).data()?.customerCount).toBe(0);
+    expect(
+      (
+        await db
+          .collection("haircut_records")
+          .where("salonId", "==", salonId)
+          .where("customerId", "==", customerId)
+          .get()
+      ).empty,
+    ).toBe(true);
+
+    const repeated = await deleteCustomerData.run(deletionRequest);
+    expect(repeated).toMatchObject({
+      status: "completed",
+      deletedRecords: recordCount,
+    });
+    expect((await db.collection("salons").doc(salonId).get()).data()?.customerCount).toBe(0);
+  });
+
+  it.each(["waiting", "serving"] as const)(
+    "đóng lượt %s hết hạn, xóa con trỏ active và ghi audit đúng một lần",
+    async (status) => {
+      const salonId = `salon-expiry-${status}`;
+      const branchId = `branch-expiry-${status}`;
+      const customerId = `customer-expiry-${status}`;
+      const sessionId = `session-expiry-${status}`;
+      const now = Timestamp.now();
+      const activeRef = db
+        .collection("active_service_sessions")
+        .doc(activeSessionDocId(salonId, customerId));
+
+      await Promise.all([
+        db
+          .collection("chair_sessions")
+          .doc(sessionId)
+          .set({
+            salonId,
+            branchId,
+            customerId,
+            status,
+            isOpen: true,
+            expiresAt: Timestamp.fromMillis(now.toMillis() - 60_000),
+            updatedAt: now,
+          }),
+        activeRef.set({
+          salonId,
+          branchId,
+          customerId,
+          sessionId,
+          status,
+          updatedAt: now,
+        }),
+      ]);
+
+      await runExpirySweep();
+
+      expect((await db.collection("chair_sessions").doc(sessionId).get()).data()).toMatchObject({
+        status: "cancelled",
+        isOpen: false,
+        cancellationReason: "expired",
+      });
+      expect((await activeRef.get()).exists).toBe(false);
+      const audits = await db
+        .collection("audit_events")
+        .where("action", "==", "session.expired")
+        .where("targetId", "==", sessionId)
+        .get();
+      expect(audits.size).toBe(1);
+      expect(audits.docs[0]?.data()).toMatchObject({
+        salonId,
+        branchId,
+        actorId: "system",
+        actorRole: "system",
+      });
+    },
+  );
+
+  it("hết hạn pending_approval đồng bộ yêu cầu điểm và chặn owner duyệt", async () => {
+    const salonId = "salon-expiry-pending";
+    const branchId = "branch-expiry-pending";
+    const customerId = "customer-expiry-pending";
+    const sessionId = "session-expiry-pending";
+    const ownerId = "owner-expiry-pending";
+    const now = Timestamp.now();
+    const activeRef = db
+      .collection("active_service_sessions")
+      .doc(activeSessionDocId(salonId, customerId));
+
+    await seedOwner(ownerId, salonId, { customerCount: 1 });
+    await seedBranch(salonId, branchId);
+    await Promise.all([
+      db.collection("customers").doc(customerId).set({
+        salonId,
+        name: "Khách hết hạn",
+        points: 7,
+        allowPhoto: true,
+      }),
+      db
+        .collection("chair_sessions")
+        .doc(sessionId)
+        .set({
+          salonId,
+          branchId,
+          customerId,
+          status: "pending_approval",
+          isOpen: true,
+          expiresAt: Timestamp.fromMillis(now.toMillis() - 60_000),
+          updatedAt: now,
+        }),
+      db
+        .collection("point_requests")
+        .doc(sessionId)
+        .set({
+          salonId,
+          branchId,
+          customerId,
+          sessionId,
+          status: "pending",
+          pointsRequested: 1,
+          photoUrls: ["https://example.test/not-a-storage-photo.jpg"],
+          createdAt: now,
+          updatedAt: now,
+        }),
+      activeRef.set({
+        salonId,
+        branchId,
+        customerId,
+        sessionId,
+        status: "pending_approval",
+        updatedAt: now,
+      }),
+    ]);
+
+    await runExpirySweep();
+
+    expect((await db.collection("point_requests").doc(sessionId).get()).data()).toMatchObject({
+      status: "rejected",
+      rejectedBy: "system",
+      processedBy: "system",
+      rejectionReason: "expired",
+      photoUrls: [],
+    });
+    expect((await db.collection("chair_sessions").doc(sessionId).get()).data()).toMatchObject({
+      status: "cancelled",
+      isOpen: false,
+      cancellationReason: "expired",
+    });
+    expect((await activeRef.get()).exists).toBe(false);
+    await expect(
+      approvePointRequest.run(requestFor(ownerId, { salonId, requestId: sessionId })),
+    ).rejects.toMatchObject({
+      details: { errorCode: "REQUEST_ALREADY_PROCESSED" },
+    });
+    expect((await db.collection("customers").doc(customerId).get()).data()?.points).toBe(7);
+    expect(
+      (
+        await db
+          .collection("audit_events")
+          .where("action", "==", "point_request.rejected")
+          .where("targetId", "==", sessionId)
+          .get()
+      ).size,
+    ).toBe(1);
+  });
+
+  it("chạy lại scheduler không ghi audit hoặc xử lý lượt hết hạn lần hai", async () => {
+    const salonId = "salon-expiry-retry";
+    const branchId = "branch-expiry-retry";
+    const customerId = "customer-expiry-retry";
+    const sessionId = "session-expiry-retry";
+    const now = Timestamp.now();
+
+    await db
+      .collection("chair_sessions")
+      .doc(sessionId)
+      .set({
+        salonId,
+        branchId,
+        customerId,
+        status: "waiting",
+        isOpen: true,
+        expiresAt: Timestamp.fromMillis(now.toMillis() - 60_000),
+        updatedAt: now,
+      });
+
+    await runExpirySweep();
+    await runExpirySweep();
+
+    const audits = await db
+      .collection("audit_events")
+      .where("action", "==", "session.expired")
+      .where("targetId", "==", sessionId)
+      .get();
+    expect(audits.size).toBe(1);
+    expect((await db.collection("chair_sessions").doc(sessionId).get()).data()).toMatchObject({
+      status: "cancelled",
+      isOpen: false,
+    });
+  });
+
+  it("chỉ xác nhận lời mời nhân viên qua callable tường minh và idempotent", async () => {
+    const salonId = "salon-staff-invite";
+    const branchId = "branch-staff-invite";
+    const staffId = "staff-invite";
+    await seedOwner("owner-staff-invite", salonId);
+    await seedBranch(salonId, branchId);
+    await db
+      .collection("users")
+      .doc(staffId)
+      .set({
+        salonId,
+        role: "staff",
+        name: "Nhân viên được mời",
+        email: "staff-invite@example.test",
+        isActive: true,
+        branchId,
+        branchIds: [branchId],
+        inviteStatus: "pending",
+      });
+
+    await expect(
+      getManagerSessionHistory.run(requestFor(staffId, { salonId, branchId, limit: 10 })),
+    ).rejects.toMatchObject({
+      details: { errorCode: "FORBIDDEN" },
+    });
+    expect((await db.collection("users").doc(staffId).get()).data()?.inviteStatus).toBe("pending");
+
+    await expect(
+      acceptStaffInvite.run(requestFor(staffId, {}, { email: "another-person@example.test" })),
+    ).rejects.toMatchObject({
+      details: { errorCode: "FORBIDDEN" },
+    });
+    expect((await db.collection("users").doc(staffId).get()).data()?.inviteStatus).toBe("pending");
+
+    const authToken = { email: "staff-invite@example.test" };
+    const first = await acceptStaffInvite.run(requestFor(staffId, {}, authToken));
+    const repeated = await acceptStaffInvite.run(requestFor(staffId, {}, authToken));
+
+    expect(first).toEqual({ accepted: true, alreadyAccepted: false });
+    expect(repeated).toEqual({ accepted: true, alreadyAccepted: true });
+    expect((await db.collection("users").doc(staffId).get()).data()).toMatchObject({
+      inviteStatus: "accepted",
+      acceptedBy: staffId,
+    });
+    await expect(
+      getManagerSessionHistory.run(requestFor(staffId, { salonId, branchId, limit: 10 })),
+    ).resolves.toMatchObject({ sessions: [] });
+    const audits = await db
+      .collection("audit_events")
+      .where("action", "==", "staff.invite_accepted")
+      .where("targetId", "==", staffId)
+      .get();
+    expect(audits.size).toBe(1);
+    expect(audits.docs[0]?.data()).toMatchObject({
+      salonId,
+      actorId: staffId,
+      actorRole: "staff",
+    });
+  });
 });
 
 async function seedOwner(uid: string, salonId: string, salonPatch: Record<string, unknown> = {}) {
@@ -1327,10 +1746,22 @@ async function seedBranch(salonId: string, branchId: string, isActive = true) {
   });
 }
 
-function requestFor(uid: string, data: Record<string, unknown>) {
+function activeSessionDocId(salonId: string, customerId: string) {
+  return createHash("sha256").update(`${salonId}:${customerId}`).digest("hex").slice(0, 40);
+}
+
+async function runExpirySweep() {
+  await expireStaleServiceSessions.run({ scheduleTime: new Date().toISOString() });
+}
+
+function requestFor(
+  uid: string,
+  data: Record<string, unknown>,
+  token: Record<string, unknown> = {},
+) {
   return {
     data,
-    auth: { uid, token: {} },
+    auth: { uid, token },
     rawRequest: { headers: {}, ip: "127.0.0.1" },
   } as never;
 }

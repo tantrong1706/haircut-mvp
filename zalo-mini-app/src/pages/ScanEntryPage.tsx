@@ -25,6 +25,7 @@ import type { AppSession } from "../services/types";
 import {
   getZaloIdentity,
   isZaloProfilePermissionError,
+  isZaloProfileRetryableError,
   openZaloProfilePermissionSettings,
 } from "../services/zalo";
 
@@ -47,6 +48,7 @@ export function ScanEntryPage({ onReady, onOpenLegalPage }: Props) {
   const [zaloRequired, setZaloRequired] = useState(false);
   const [loading, setLoading] = useState(false);
   const [permissionSettingsRequired, setPermissionSettingsRequired] = useState(false);
+  const [identityRetryRequired, setIdentityRetryRequired] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const mountedRef = useRef(false);
@@ -143,11 +145,13 @@ export function ScanEntryPage({ onReady, onOpenLegalPage }: Props) {
 
         const nextDisplayName = normalizeDisplayName(nextIdentity.name);
         if (!nextDisplayName) {
+          setIdentityRetryRequired(false);
           throw new Error("Chưa nhận được tên Zalo. Vui lòng cho phép đọc hồ sơ rồi thử lại.");
         }
 
         setDisplayName(nextDisplayName);
         setZaloAvatarUrl(nextIdentity.avatar || "");
+        setIdentityRetryRequired(false);
         setPermissionSettingsRequired(false);
       })
       .catch((err) => {
@@ -160,6 +164,10 @@ export function ScanEntryPage({ onReady, onOpenLegalPage }: Props) {
         if (mountedRef.current) {
           if (isZaloProfilePermissionError(err)) {
             setPermissionSettingsRequired(true);
+            setIdentityRetryRequired(false);
+          } else if (isZaloProfileRetryableError(err)) {
+            setPermissionSettingsRequired(false);
+            setIdentityRetryRequired(true);
           }
           setZaloRequired(true);
           setError(
@@ -441,7 +449,9 @@ export function ScanEntryPage({ onReady, onOpenLegalPage }: Props) {
                 onClick={
                   permissionSettingsRequired
                     ? openProfilePermissionSettings
-                    : () => loadZaloIdentity(true)
+                    : identityRetryRequired
+                      ? () => loadZaloIdentity(false)
+                      : () => loadZaloIdentity(true)
                 }
                 disabled={loadingIdentity}
               >
@@ -450,7 +460,9 @@ export function ScanEntryPage({ onReady, onOpenLegalPage }: Props) {
                   ? "Đang kiểm tra quyền..."
                   : permissionSettingsRequired
                     ? "Mở cài đặt quyền Zalo"
-                    : "Cho phép đọc tên Zalo"}
+                    : identityRetryRequired
+                      ? "Thử lại"
+                      : "Cho phép đọc tên Zalo"}
               </button>
             ) : null}
           </div>

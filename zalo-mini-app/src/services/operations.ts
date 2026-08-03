@@ -224,6 +224,7 @@ export type CustomerBranchVisit = {
 };
 
 export type CustomerLookupResult = CustomerSummary & {
+  detailsLoaded: boolean;
   lastVisitAtMs: number | null;
   recentRecords: CustomerRecordSummary[];
   rewardHistory: CustomerRewardSummary[];
@@ -940,27 +941,35 @@ export async function searchSalonCustomers(input: {
     throw new Error("Vui lòng nhập đủ 4 số cuối điện thoại");
   }
 
-  return callFunctionOrFallback<
+  return callFunction<
     { salonId: string; branchId?: string; term: string; cursor?: string; pageSize: number },
     CustomerSearchPage
+  >("searchSalonCustomers", {
+    salonId: input.salonId,
+    branchId: input.branchId,
+    term,
+    cursor: input.cursor || undefined,
+    pageSize: input.pageSize || 10,
+  });
+}
+
+export async function getSalonCustomerDetails(input: {
+  salonId: string;
+  customerId: string;
+  branchId?: string;
+}): Promise<CustomerLookupResult> {
+  const result = await callFunction<
+    { salonId: string; customerId: string; branchId?: string },
+    { customer: CustomerLookupResult }
   >(
-    "searchSalonCustomers",
+    "getSalonCustomerDetails",
     {
       salonId: input.salonId,
       branchId: input.branchId,
-      term,
-      cursor: input.cursor || undefined,
-      pageSize: input.pageSize || 10,
+      customerId: input.customerId,
     },
-    () =>
-      searchSalonCustomersDirect(
-        input.salonId,
-        input.branchId,
-        term,
-        input.cursor || null,
-        input.pageSize || 10,
-      ),
   );
+  return result.customer;
 }
 
 export async function deleteCustomerData(input: {
@@ -1760,63 +1769,6 @@ async function updateStaffProfileDirect(input: {
   await setDoc(staffRef, payload, { merge: true });
 }
 
-async function searchSalonCustomersDirect(
-  salonId: string,
-  branchId: string | undefined,
-  term: string,
-  cursor: string | null,
-  pageSize: number,
-): Promise<CustomerSearchPage> {
-  const db = getFirebaseDb();
-
-  if (!isFirebaseConfigured() || !db) {
-    return { customers: [], nextCursor: null };
-  }
-
-  const normalized = normalizeCustomerSearch(term);
-  const snap = await getDocs(
-    query(
-      collection(db, "customers"),
-      where("salonId", "==", salonId),
-      ...(branchId ? [where("lastBranchId", "==", branchId)] : []),
-    ),
-  );
-  const matches = snap.docs
-    .map((docSnap) => {
-      const data = docSnap.data();
-      return {
-        id: docSnap.id,
-        name: String(data.name || "Khách hàng"),
-        phone: String(data.phone || ""),
-        phoneLast4: String(data.phoneLast4 || ""),
-        points: Number(data.points ?? 0),
-        allowPhoto: Boolean(data.allowPhoto),
-        lastVisitAtMs: toMillis(data.lastVisitAt),
-        recentRecords: [],
-        rewardHistory: [],
-        unusedRewards: [],
-        branchVisits: [],
-      } satisfies CustomerLookupResult;
-    })
-    .filter(
-      (customer) =>
-        normalizeCustomerSearch(customer.name).startsWith(normalized) ||
-        customer.phoneLast4.includes(normalized),
-    )
-    .sort((a, b) => a.name.localeCompare(b.name, "vi"));
-  const cursorIndex = cursor ? matches.findIndex((customer) => customer.id === cursor) : -1;
-  const safePageSize = Math.min(Math.max(Math.floor(pageSize), 5), 20);
-  const customers = matches.slice(cursorIndex + 1, cursorIndex + 1 + safePageSize);
-  const hasMore = cursorIndex + 1 + safePageSize < matches.length;
-
-  return {
-    customers: await Promise.all(
-      customers.map((customer) => attachCustomerInsight(salonId, branchId, customer)),
-    ),
-    nextCursor: hasMore ? (customers[customers.length - 1]?.id ?? null) : null,
-  };
-}
-
 async function deleteCustomerDataDirect(
   salonId: string,
   customerId: string,
@@ -1880,66 +1832,6 @@ async function deleteCustomerDocsDirect(
 
   await Promise.all(snap.docs.map((docSnap) => deleteDoc(docSnap.ref)));
   return snap.size;
-}
-
-async function attachCustomerInsight(
-  salonId: string,
-  branchId: string | undefined,
-  customer: CustomerLookupResult,
-): Promise<CustomerLookupResult> {
-  const db = getFirebaseDb();
-
-  if (!db) {
-    return customer;
-  }
-
-  const [recordsSnap, rewardsSnap] = await Promise.all([
-    getDocs(
-      query(
-        collection(db, "haircut_records"),
-        where("salonId", "==", salonId),
-        where("customerId", "==", customer.id),
-        ...(branchId ? [where("branchId", "==", branchId)] : []),
-      ),
-    ),
-    getDocs(
-      query(
-        collection(db, "reward_history"),
-        where("salonId", "==", salonId),
-        where("customerId", "==", customer.id),
-        ...(branchId ? [where("branchId", "==", branchId)] : []),
-      ),
-    ),
-  ]);
-
-  const recentRecords = recordsSnap.docs
-    .map(mapCustomerRecordSummary)
-    .sort((a, b) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0))
-    .slice(0, 20);
-  const rewardHistory = rewardsSnap.docs
-    .map(mapCustomerRewardSummary)
-    .sort((a, b) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0))
-    .slice(0, 20);
-  const branchVisits = Array.from(
-    recentRecords.reduce((visits, record) => {
-      if (record.branchId && !visits.has(record.branchId)) {
-        visits.set(record.branchId, {
-          branchId: record.branchId,
-          branchName: record.branchName || "Chi nhánh",
-          lastVisitAtMs: record.createdAtMs,
-        });
-      }
-      return visits;
-    }, new Map<string, CustomerBranchVisit>()),
-  ).map(([, visit]) => visit);
-
-  return {
-    ...customer,
-    recentRecords,
-    rewardHistory,
-    unusedRewards: rewardHistory.filter((reward) => reward.status === "unused"),
-    branchVisits,
-  };
 }
 
 async function lookupRewardCodeDirect(
@@ -2063,40 +1955,6 @@ function mapStaffProfile(docSnap: QueryDocumentSnapshot<DocumentData>): StaffPro
         ? [String(data.branchId)]
         : [],
     inviteStatus: data.inviteStatus === "pending" ? "pending" : "accepted",
-  };
-}
-
-function mapCustomerRecordSummary(
-  docSnap: QueryDocumentSnapshot<DocumentData>,
-): CustomerRecordSummary {
-  const data = docSnap.data();
-
-  return {
-    id: docSnap.id,
-    branchId: String(data.branchId || ""),
-    branchName: String(data.branchName || ""),
-    staffName: String(data.staffName || ""),
-    note: String(data.note || ""),
-    photoUrls: [],
-    pointsAdded: Number(data.pointsAdded ?? 1),
-    createdAtMs: toMillis(data.createdAt),
-  };
-}
-
-function mapCustomerRewardSummary(
-  docSnap: QueryDocumentSnapshot<DocumentData>,
-): CustomerRewardSummary {
-  const data = docSnap.data();
-
-  return {
-    id: docSnap.id,
-    rewardName: String(data.rewardName || ""),
-    rewardCode: String(data.rewardCode || ""),
-    status: normalizeRewardStatus(data.status),
-    branchId: String(data.usedBranchId || data.branchId || ""),
-    createdAtMs: toMillis(data.createdAt),
-    usedAtMs: toMillis(data.usedAt),
-    expiresAtMs: toMillis(data.expiresAt),
   };
 }
 
@@ -2307,16 +2165,6 @@ function errorMessage(error: unknown) {
 
 function normalizeRewardCode(value: string) {
   return value.trim().toUpperCase().replace(/\s+/g, "");
-}
-
-function normalizeCustomerSearch(value: string) {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
 }
 
 function buildQrUrl(salonId: string, mirrorId: string, qrToken: string) {
