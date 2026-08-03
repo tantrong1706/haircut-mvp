@@ -54,15 +54,23 @@ jobs:
 
       - name: Test callable transactions
         working-directory: firebase
-        run: npx --yes firebase-tools@15.22.3 emulators:exec --project demo-haircut --only firestore "npm --prefix functions run test:integration:emulator"
+        run: npx --yes firebase-tools@15.22.3 emulators:exec --project demo-haircut --only firestore,storage "npm --prefix functions run test:integration:emulator"
 
   zalo-mini-app:
     name: Zalo Mini App
     runs-on: ubuntu-latest
     env:
+      # Public, non-production Firebase fixture used only to validate the CI bundle.
+      VITE_FIREBASE_API_KEY: "ci-public-api-key"
+      VITE_FIREBASE_AUTH_DOMAIN: "haircut-ci.firebaseapp.com"
+      VITE_FIREBASE_PROJECT_ID: "haircut-ci"
+      VITE_FIREBASE_STORAGE_BUCKET: "haircut-ci.appspot.com"
+      VITE_FIREBASE_MESSAGING_SENDER_ID: "100000000000"
+      VITE_FIREBASE_APP_ID: "1:100000000000:web:ci"
       VITE_ZALO_MINI_APP_ID: "2038116772828167300"
       VITE_APP_ENV: production
       VITE_FUNCTION_WRITE_MODE: required
+      VITE_MONITORING_DISABLED: "true"
 
     steps:
       - name: Checkout
