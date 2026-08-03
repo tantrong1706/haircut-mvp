@@ -105,6 +105,9 @@ jobs:
 
       - name: Check Zalo review readiness
         working-directory: zalo-mini-app
+        env:
+          VITE_ZALO_MINI_APP_ID: "2038116772828167300"
+          VITE_APP_ENV: production
         run: npm run check:zalo-review
 
   admin-web:
