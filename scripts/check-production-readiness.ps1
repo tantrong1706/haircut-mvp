@@ -182,7 +182,7 @@ if ($webEnv.Count -eq 0) {
   }
 
   if ($webEnv["VITE_ZALO_MINI_APP_ID"] -eq "2038116772828167300") {
-    Add-Result "Zalo Mini App ID production" "OK" "Đúng ứng dụng CH Hair Studio"
+    Add-Result "Zalo Mini App ID production" "OK" "Đúng ứng dụng HAIRCUT"
   } else {
     Add-Result "Zalo Mini App ID production" "FAIL" "Phải là 2038116772828167300"
   }
@@ -273,11 +273,11 @@ if (-not (Test-Path -LiteralPath $appConfigPath)) {
     } elseif (
       $StrictRelease -and
       (
-        [string]$appConfig.app.title -ne "CH Hair Studio" -or
-        [string]$appConfig.app.headerTitle -ne "CH Hair Studio"
+        [string]$appConfig.app.title -ne "HAIRCUT" -or
+        [string]$appConfig.app.headerTitle -ne "HAIRCUT"
       )
     ) {
-      Add-Result "ZMP app-config" "FAIL" "title và headerTitle phải là CH Hair Studio"
+      Add-Result "ZMP app-config" "FAIL" "title và headerTitle phải là HAIRCUT"
     } else {
       Add-Result "ZMP app-config" "OK" "Mọi JS/CSS trong app-config đều tồn tại"
     }

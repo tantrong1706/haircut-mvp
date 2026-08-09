@@ -6,6 +6,7 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const appRoot = resolve(repoRoot, "zalo-mini-app");
 const buildRoot = resolve(appRoot, "www");
 const expectedMiniAppId = "2038116772828167300";
+const expectedMiniAppName = "HAIRCUT";
 const maxAssetBytes = 500 * 1024;
 const failures = [];
 const passed = [];
@@ -124,6 +125,20 @@ try {
 }
 
 if (sourceConfig && outputConfig) {
+  check(
+    sourceConfig.app?.title === expectedMiniAppName &&
+      sourceConfig.app?.headerTitle === expectedMiniAppName,
+    "Tên Mini App nguồn là HAIRCUT",
+  );
+  check(
+    outputConfig.app?.title === expectedMiniAppName &&
+      outputConfig.app?.headerTitle === expectedMiniAppName,
+    "Tên Mini App build là HAIRCUT",
+  );
+  check(
+    !/CH Hair Studio/iu.test(JSON.stringify(sourceConfig)),
+    "app-config không dùng tên salon làm tên Mini App",
+  );
   check(
     JSON.stringify(sourceConfig) === JSON.stringify(outputConfig),
     "app-config nguồn khớp bản build",
