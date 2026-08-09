@@ -4874,6 +4874,7 @@ export const getCustomerSessionFromZalo = onCall(zaloFunctionOptions, async (req
     : [];
 
   return {
+    identityBinding: createHash("sha256").update(zaloProfile.zaloUserId).digest("hex"),
     sessionStatus:
       session.status === "serving" && !session.assignedStaffId
         ? "pending_approval"

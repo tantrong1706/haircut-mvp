@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Download } from "lucide-react";
+import { safeStorageGet, safeStorageSet } from "../services/safeStorage";
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -9,7 +10,7 @@ type BeforeInstallPromptEvent = Event & {
 export function InstallAppPrompt() {
   const [installEvent, setInstallEvent] = useState<BeforeInstallPromptEvent | null>(null);
   const [hidden, setHidden] = useState(
-    () => localStorage.getItem("haircut_install_hidden") === "1",
+    () => safeStorageGet("haircut_install_hidden") === "1",
   );
 
   useEffect(() => {
@@ -39,7 +40,7 @@ export function InstallAppPrompt() {
   }
 
   function dismiss() {
-    localStorage.setItem("haircut_install_hidden", "1");
+    safeStorageSet("haircut_install_hidden", "1");
     setHidden(true);
   }
 

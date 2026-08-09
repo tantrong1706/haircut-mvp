@@ -1,36 +1,47 @@
 import { expect, test } from "@playwright/test";
 
 const qr = {
+  qrType: "branch",
   salonId: "salon-e2e",
-  mirrorId: "Gương 1",
-  qrToken: "token-e2e",
+  branchId: "branch-e2e",
+  qrToken: "signed-e2e",
 };
+
+const previewIdentityBinding =
+  "af6043a4c7f067471d233c0e7775b52b302f0acbcb68fe356b7be4a58dc9bbee";
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(
-    (session) => {
-      localStorage.setItem("haircut_app_session_v1", JSON.stringify(session));
+    ({ identityBinding, sessionQr }) => {
+      const savedAt = Date.now();
+      localStorage.setItem(
+        "haircut_customer_session_v2",
+        JSON.stringify({
+          schemaVersion: 2,
+          salonId: sessionQr.salonId,
+          sessionId: "session-e2e",
+          customerId: "mock-customer",
+          identityBinding,
+          savedAt,
+          expiresAt: savedAt + 12 * 60 * 60 * 1000,
+          qr: {
+            qrType: sessionQr.qrType,
+            salonId: sessionQr.salonId,
+            branchId: sessionQr.branchId,
+            mirrorId: "",
+          },
+        }),
+      );
+      localStorage.setItem("haircut_mock_points", "7");
     },
-    {
-      qr,
-      sessionId: "session-e2e",
-      zaloUserId: "zalo-e2e",
-      sessionStatus: "waiting",
-      customer: {
-        customerId: "customer-e2e",
-        name: "Khách kiểm thử",
-        phoneLast4: "6789",
-        points: 7,
-        allowPhoto: false,
-      },
-    },
+    { identityBinding: previewIdentityBinding, sessionQr: qr },
   );
 });
 
 test("khách chuyển qua điểm, lịch sử, vòng quay và quà", async ({ page }) => {
   await page.goto(`/?${new URLSearchParams(qr)}`);
 
-  await expect(page.getByRole("heading", { name: "Khách kiểm thử" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Khách xem trước" })).toBeVisible();
   await page.getByRole("button", { name: "Lịch sử" }).last().click();
   await expect(page.getByRole("heading", { name: "Lịch sử cắt tóc" })).toBeVisible();
 
