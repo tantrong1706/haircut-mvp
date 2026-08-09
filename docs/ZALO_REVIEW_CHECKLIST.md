@@ -45,10 +45,12 @@ URL dự kiến:
 - [x] Link chung không QR không crash và không hiện owner/staff trong runtime Zalo.
 - [x] Link chung giải thích rằng khách cần QR salon/chi nhánh.
 - [x] QR salon hỗ trợ chọn chi nhánh; QR chi nhánh mở đúng chi nhánh theo code/test hiện có.
+- [x] Reviewer flow chỉ chấp nhận QR salon/chi nhánh có chữ ký và phiên bản; không dùng QR gương cũ.
 - [ ] Tạo QR salon testing còn hiệu lực.
 - [ ] Tạo QR chi nhánh testing còn hiệu lực.
 - [ ] Tạo deeplink testing còn hiệu lực.
 - [ ] Không đưa `qrToken` vào Git, ảnh công khai, log, Analytics hoặc Sentry.
+- [ ] QR/deeplink reviewer không chứa `mirrorId` hoặc `qrToken` thô.
 - [ ] Đính kèm QR/deeplink thật trong hồ sơ reviewer.
 - [ ] Ghi rõ tên salon demo, chi nhánh demo và kết quả cần thấy.
 - [ ] Chuẩn bị dữ liệu demo không chứa thông tin khách thật.

@@ -46,7 +46,8 @@ QR testing: [QR_REVIEW_HỢP_LỆ]
 ```
 
 Không thay placeholder bằng link tự đoán. QR/deeplink phải được tạo từ bản Testing và kiểm tra bằng
-tài khoản Zalo thường ngay trước khi gửi.
+tài khoản Zalo thường ngay trước khi gửi. Chỉ dùng QR salon hoặc QR chi nhánh có chữ ký và phiên bản
+do hệ thống quản lý QR tạo; không dùng QR gương cũ, tham số `mirrorId` hoặc `qrToken` thô.
 
 **Các bước kiểm thử**
 
