@@ -10,11 +10,7 @@
     "hideAndroidBottomNavigationBar": false,
     "hideIOSSafeAreaBottom": false
   },
-  "listCSS": [
-    "./assets/index.Dmi5cRad.css"
-  ],
-  "listSyncJS": [
-    "./assets/index.BlXGZZYG.module.js"
-  ],
+  "listCSS": ["./assets/index.-OoxIUXa.css"],
+  "listSyncJS": ["./assets/index.njS1jma2.module.js"],
   "listAsyncJS": []
 }

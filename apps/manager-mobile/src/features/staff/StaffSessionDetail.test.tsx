@@ -7,6 +7,7 @@ import { StaffSessionDetail } from "./StaffSessionDetail";
 const service = vi.hoisted(() => ({
   claimServiceSession: vi.fn(),
   submitPointRequest: vi.fn(),
+  recoverHaircutPhotoUploads: vi.fn(),
 }));
 
 vi.mock("../../services/managerApi", async (importOriginal) => {
@@ -15,6 +16,7 @@ vi.mock("../../services/managerApi", async (importOriginal) => {
     ...actual,
     claimServiceSession: service.claimServiceSession,
     submitPointRequest: service.submitPointRequest,
+    recoverHaircutPhotoUploads: service.recoverHaircutPhotoUploads,
   };
 });
 
@@ -36,6 +38,10 @@ const user: AppUser = {
   branchId: "branch-1",
   branchIds: ["branch-1"],
 };
+
+beforeEach(() => {
+  service.recoverHaircutPhotoUploads.mockResolvedValue([]);
+});
 
 function session(status: StaffSession["status"]): StaffSession {
   return {
@@ -139,6 +145,7 @@ describe("luồng phục vụ của Staff", () => {
       session: serving,
       note: "Fade thấp",
       photoUrls: [],
+      photoPaths: [],
       pointsRequested: 1,
     });
 

@@ -1405,6 +1405,23 @@ describe("callable transactions", () => {
       points: 3,
       createdAt: Timestamp.now(),
     });
+    await db
+      .collection("photo_upload_operations")
+      .doc("op-customer-deletion")
+      .set({
+        operationId: "op-customer-deletion",
+        requestId: "request-customer-deletion",
+        salonId,
+        branchId: "branch-deletion",
+        customerId,
+        sessionId: "session-customer-deletion",
+        staffUid: "staff-customer-deletion",
+        storagePath:
+          `salons/${salonId}/customers/${customerId}/sessions/session-customer-deletion/` +
+          "op-customer-deletion.jpg",
+        status: "finalized",
+        createdAt: Timestamp.now(),
+      });
 
     for (let start = 0; start < recordCount; start += 400) {
       const batch = db.batch();
@@ -1454,6 +1471,9 @@ describe("callable transactions", () => {
     });
     expect((await db.collection("customers").doc(customerId).get()).exists).toBe(false);
     expect((await db.collection("salons").doc(salonId).get()).data()?.customerCount).toBe(0);
+    expect(
+      (await db.collection("photo_upload_operations").doc("op-customer-deletion").get()).exists,
+    ).toBe(false);
     expect(
       (
         await db

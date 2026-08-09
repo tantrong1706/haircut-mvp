@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ClipboardPenLine,
   Clock3,
@@ -27,6 +27,7 @@ import {
   MAX_HAIRCUT_PHOTOS,
   UploadedHaircutPhoto,
   deleteHaircutPhoto,
+  recoverHaircutPhotoUploads,
   uploadHaircutPhoto,
 } from "../services/customerPhotos";
 import { trackEvent, withMonitoringTrace } from "../services/monitoring";
@@ -58,6 +59,9 @@ export function StaffPage({ currentUser }: Props) {
     {},
   );
   const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoProgress, setPhotoProgress] = useState(0);
+  const photoAbortRef = useRef<AbortController | null>(null);
+  const recoveredPhotoSessionsRef = useRef(new Set<string>());
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -91,6 +95,8 @@ export function StaffPage({ currentUser }: Props) {
     branchFilter === "all"
       ? "Tất cả chi nhánh"
       : branches.find((branch) => branch.id === branchFilter)?.name || "Chi nhánh được phân công";
+
+  useEffect(() => () => photoAbortRef.current?.abort(), []);
 
   useEffect(() => {
     if (!salonId) {
@@ -177,6 +183,32 @@ export function StaffPage({ currentUser }: Props) {
     setNote("");
   }, [selectedId]);
 
+  useEffect(() => {
+    const session = selectedSession;
+    if (
+      !session ||
+      !canEditService ||
+      !customerAllowsPhoto ||
+      selectedPhotos.length > 0 ||
+      recoveredPhotoSessionsRef.current.has(session.id)
+    ) {
+      return undefined;
+    }
+    recoveredPhotoSessionsRef.current.add(session.id);
+    let active = true;
+    recoverHaircutPhotoUploads({ salonId, sessionId: session.id })
+      .then((photos) => {
+        if (!active || photos.length === 0) return;
+        setPhotosBySession((current) => ({ ...current, [session.id]: photos }));
+      })
+      .catch(() => {
+        recoveredPhotoSessionsRef.current.delete(session.id);
+      });
+    return () => {
+      active = false;
+    };
+  }, [canEditService, customerAllowsPhoto, salonId, selectedPhotos.length, selectedSession]);
+
   async function handleSubmit() {
     if (!selectedSession || !canEditService) {
       return;
@@ -199,7 +231,8 @@ export function StaffPage({ currentUser }: Props) {
             salonId,
             session: selectedSession,
             note,
-            photoUrls: selectedPhotos.map((photo) => photo.url),
+            photoUrls: [],
+            photoPaths: selectedPhotos.map((photo) => photo.path),
             pointsRequested: pointPerVisit,
           }),
         {
@@ -247,6 +280,9 @@ export function StaffPage({ currentUser }: Props) {
     }
 
     setPhotoBusy(true);
+    setPhotoProgress(0);
+    const abortController = new AbortController();
+    photoAbortRef.current = abortController;
     setMessage("");
     setError("");
     let uploadedCount = 0;
@@ -262,6 +298,9 @@ export function StaffPage({ currentUser }: Props) {
               customerId: session.customerId,
               sessionId: session.id,
               file,
+              signal: abortController.signal,
+              onProgress: (progress) =>
+                setPhotoProgress(Math.round((uploadedCount * 100 + progress) / files.length)),
             }),
           {
             salon_id: salonId,
@@ -283,9 +322,15 @@ export function StaffPage({ currentUser }: Props) {
       });
       setMessage(`Đã thêm ${uploadedCount} ảnh kiểu tóc.`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Không tải được ảnh kiểu tóc");
+      if (err instanceof DOMException && err.name === "AbortError") {
+        setMessage("Đã hủy tải ảnh.");
+      } else {
+        setError(err instanceof Error ? err.message : "Không tải được ảnh kiểu tóc");
+      }
     } finally {
+      photoAbortRef.current = null;
       setPhotoBusy(false);
+      setPhotoProgress(0);
     }
   }
 
@@ -300,7 +345,7 @@ export function StaffPage({ currentUser }: Props) {
     setError("");
 
     try {
-      await deleteHaircutPhoto(photo.path);
+      await deleteHaircutPhoto(photo.path, salonId);
       setPhotosBySession((current) => ({
         ...current,
         [sessionId]: (current[sessionId] ?? []).filter((item) => item.id !== photo.id),
@@ -526,6 +571,8 @@ export function StaffPage({ currentUser }: Props) {
               photos={selectedPhotos}
               consentGranted={customerAllowsPhoto}
               busy={photoBusy}
+              progress={photoProgress}
+              onCancelUpload={() => photoAbortRef.current?.abort()}
               disabled={!canEditService}
               disabledReason={
                 hasRevokedPhotoConsent

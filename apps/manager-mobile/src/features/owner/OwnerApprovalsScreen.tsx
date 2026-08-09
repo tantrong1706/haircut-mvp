@@ -1,5 +1,5 @@
 import { CalendarClock, CheckCircle2, ClipboardCheck, RefreshCcw, XCircle } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { type ConfirmDialogRequest } from "../../components/ConfirmDialog";
 import { EmptyState, InlineFeedback } from "../../components/Feedback";
 import { PhotoCapture, type ManagerPhoto } from "../../components/PhotoCapture";
@@ -25,6 +25,24 @@ const REJECTION_PRESETS = [
   "Thiếu thông tin lượt cắt",
   "Yêu cầu bị gửi nhầm",
 ] as const;
+
+function legacyPhotoUrlsFor(request: PointRequest): string[] {
+  if (request.legacyPhotoUrls) return request.legacyPhotoUrls;
+  const pathCount = request.photoPaths?.length ?? 0;
+  return request.photoUrls.slice(0, Math.max(0, request.photoUrls.length - pathCount));
+}
+
+function photoItemsFor(request: PointRequest): ManagerPhoto[] {
+  const legacyUrls = legacyPhotoUrlsFor(request);
+  const pathUrls = request.photoUrls.slice(legacyUrls.length);
+  return [
+    ...legacyUrls.map((url) => ({ id: url, url })),
+    ...(request.photoPaths ?? []).flatMap((path, index) => {
+      const url = pathUrls[index];
+      return url ? [{ id: path, url }] : [];
+    }),
+  ];
+}
 
 export function OwnerApprovalsScreen({
   salonId,
@@ -52,6 +70,8 @@ export function OwnerApprovalsScreen({
   const [expandedId, setExpandedId] = useState(requests[0]?.id || "");
   const [busyId, setBusyId] = useState("");
   const [photoBusyId, setPhotoBusyId] = useState("");
+  const [photoProgress, setPhotoProgress] = useState(0);
+  const photoAbortRef = useRef<AbortController | null>(null);
   const [rejectingId, setRejectingId] = useState("");
   const [rejectionReason, setRejectionReason] = useState("");
   const [rejectionError, setRejectionError] = useState("");
@@ -60,6 +80,8 @@ export function OwnerApprovalsScreen({
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [history, setHistory] = useState<ManagerPointRequestHistoryItem[]>([]);
+
+  useEffect(() => () => photoAbortRef.current?.abort(), []);
 
   async function loadHistory() {
     setHistoryOpen(true);
@@ -155,9 +177,12 @@ export function OwnerApprovalsScreen({
       return;
     }
     setPhotoBusyId(request.id);
+    setPhotoProgress(0);
     setMessage("");
     setError("");
     const uploaded: Array<{ path: string; url: string }> = [];
+    const abortController = new AbortController();
+    photoAbortRef.current = abortController;
     try {
       for (const file of files) {
         uploaded.push(
@@ -167,20 +192,35 @@ export function OwnerApprovalsScreen({
             customerId: request.customerId,
             sessionId: request.sessionId,
             file,
+            signal: abortController.signal,
+            onProgress: setPhotoProgress,
           }),
         );
       }
+      const legacyPhotoUrls = legacyPhotoUrlsFor(request);
+      const photoPaths = [...(request.photoPaths ?? []), ...uploaded.map((photo) => photo.path)];
       const photoUrls = [...request.photoUrls, ...uploaded.map((photo) => photo.url)];
-      await updatePendingPointRequestPhotos({ salonId, requestId: request.id, photoUrls });
+      await updatePendingPointRequestPhotos({
+        salonId,
+        requestId: request.id,
+        photoUrls: legacyPhotoUrls,
+        photoPaths,
+      });
       onRequestsChange(
-        requests.map((item) => (item.id === request.id ? { ...item, photoUrls } : item)),
+        requests.map((item) =>
+          item.id === request.id
+            ? { ...item, photoUrls, legacyPhotoUrls, photoPaths }
+            : item,
+        ),
       );
       setMessage(`Đã lưu ${uploaded.length} ảnh cho ${request.customer?.name || "khách"}.`);
     } catch (caught) {
-      await Promise.allSettled(uploaded.map((photo) => deleteHaircutPhoto(photo.path)));
+      await Promise.allSettled(uploaded.map((photo) => deleteHaircutPhoto(photo.path, salonId)));
       setError(caught instanceof Error ? caught.message : "Không lưu được ảnh.");
     } finally {
+      if (photoAbortRef.current === abortController) photoAbortRef.current = null;
       setPhotoBusyId("");
+      setPhotoProgress(0);
     }
   }
 
@@ -189,14 +229,30 @@ export function OwnerApprovalsScreen({
     setPhotoBusyId(request.id);
     setError("");
     setMessage("");
+    const isStoredPath = (request.photoPaths ?? []).includes(photo.id);
+    const legacyPhotoUrls = isStoredPath
+      ? legacyPhotoUrlsFor(request)
+      : legacyPhotoUrlsFor(request).filter((url) => url !== photo.id);
+    const photoPaths = isStoredPath
+      ? (request.photoPaths ?? []).filter((path) => path !== photo.id)
+      : (request.photoPaths ?? []);
     const photoUrls = request.photoUrls.filter((url) => url !== photo.url);
     try {
-      await updatePendingPointRequestPhotos({ salonId, requestId: request.id, photoUrls });
+      await updatePendingPointRequestPhotos({
+        salonId,
+        requestId: request.id,
+        photoUrls: legacyPhotoUrls,
+        photoPaths,
+      });
       onRequestsChange(
-        requests.map((item) => (item.id === request.id ? { ...item, photoUrls } : item)),
+        requests.map((item) =>
+          item.id === request.id
+            ? { ...item, photoUrls, legacyPhotoUrls, photoPaths }
+            : item,
+        ),
       );
       try {
-        await deleteHaircutPhoto(photo.url);
+        await deleteHaircutPhoto(photo.id, isStoredPath ? salonId : undefined);
       } catch {
         trackEvent("owner_haircut_photo_cleanup_deferred", { salon_id: salonId });
       }
@@ -332,7 +388,7 @@ export function OwnerApprovalsScreen({
                     </div>
                     <PhotoCapture
                       title="Ảnh sau cắt"
-                      photos={request.photoUrls.map((url) => ({ id: url, url }))}
+                      photos={photoItemsFor(request)}
                       consentGranted={request.customer?.allowPhoto === true}
                       busy={photoBusyId === request.id}
                       disabled={!photoUploadEnabled || Boolean(busyId) || Boolean(photoBusyId)}
@@ -342,6 +398,8 @@ export function OwnerApprovalsScreen({
                           : "Tính năng tải ảnh đang tạm ngừng."
                       }
                       maxPhotos={MAX_HAIRCUT_PHOTOS}
+                      progress={photoBusyId === request.id ? photoProgress : undefined}
+                      onCancelUpload={() => photoAbortRef.current?.abort()}
                       onFilesSelected={(files) => addPhotos(request, files)}
                       onRemove={(photo) => removePhoto(request, photo)}
                     />

@@ -7,6 +7,7 @@ import {
   initializeTestEnvironment,
 } from "@firebase/rules-unit-testing";
 import {
+  Timestamp,
   collection,
   doc,
   getDoc,
@@ -348,6 +349,106 @@ describe("Firestore production rules", () => {
       }),
     );
     await assertSucceeds(deleteObject(allowed));
+  });
+
+  it("chỉ cho upload ảnh mới khi có operation hợp lệ và chặn xóa trực tiếp", async () => {
+    const operationId = `op-${"a".repeat(40)}`;
+    const requestId = "photo-request-rules";
+    const fakeMimeOperationId = `op-${"c".repeat(40)}`;
+    const expiredOperationId = `op-${"d".repeat(40)}`;
+    const path =
+      `salons/${salonA}/customers/customer-photo/sessions/session-photo/` + `${operationId}.jpg`;
+    const fakeMimePath = path.replace(operationId, fakeMimeOperationId);
+    const expiredPath = path.replace(operationId, expiredOperationId);
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const operations = [
+        { operationId, storagePath: path, expiresAt: Date.now() + 60_000 },
+        {
+          operationId: fakeMimeOperationId,
+          storagePath: fakeMimePath,
+          expiresAt: Date.now() + 60_000,
+        },
+        {
+          operationId: expiredOperationId,
+          storagePath: expiredPath,
+          expiresAt: Date.now() - 60_000,
+        },
+      ];
+      await Promise.all(
+        operations.map((operation) =>
+          setDoc(doc(context.firestore(), "photo_upload_operations", operation.operationId), {
+            ...operation,
+            requestId,
+            salonId: salonA,
+            branchId: branchA,
+            customerId: "customer-photo",
+            sessionId: "session-photo",
+            staffUid: "staff-a",
+            status: "pending",
+            expectedMaxBytes: 3 * 1024 * 1024,
+            expiresAt: Timestamp.fromMillis(operation.expiresAt),
+          }),
+        ),
+      );
+    });
+
+    const staffContext = testEnv.authenticatedContext("staff-a");
+    const otherStaffContext = testEnv.authenticatedContext("staff-other-a");
+    const ownerContext = testEnv.authenticatedContext("owner-a");
+    const validMetadata = {
+      contentType: "image/jpeg",
+      customMetadata: {
+        salonId: salonA,
+        branchId: branchA,
+        customerId: "customer-photo",
+        sessionId: "session-photo",
+        uploaderUid: "staff-a",
+        operationId,
+        requestId,
+      },
+    };
+
+    await assertFails(
+      getDoc(doc(staffContext.firestore(), "photo_upload_operations", operationId)),
+    );
+    await assertSucceeds(
+      uploadBytes(ref(staffContext.storage(), path), new Uint8Array([1, 2, 3]), validMetadata),
+    );
+    await assertFails(
+      uploadBytes(
+        ref(otherStaffContext.storage(), path.replace(operationId, `op-${"b".repeat(40)}`)),
+        new Uint8Array([1]),
+        {
+          ...validMetadata,
+          customMetadata: {
+            ...validMetadata.customMetadata,
+            uploaderUid: "staff-other-a",
+            operationId: `op-${"b".repeat(40)}`,
+          },
+        },
+      ),
+    );
+    await assertFails(
+      uploadBytes(ref(staffContext.storage(), fakeMimePath), new Uint8Array([1]), {
+        ...validMetadata,
+        contentType: "image/png",
+        customMetadata: {
+          ...validMetadata.customMetadata,
+          operationId: fakeMimeOperationId,
+        },
+      }),
+    );
+    await assertFails(
+      uploadBytes(ref(staffContext.storage(), expiredPath), new Uint8Array([1]), {
+        ...validMetadata,
+        customMetadata: {
+          ...validMetadata.customMetadata,
+          operationId: expiredOperationId,
+        },
+      }),
+    );
+    await assertFails(deleteObject(ref(staffContext.storage(), path)));
+    await assertFails(deleteObject(ref(ownerContext.storage(), path)));
   });
 
   it("cho owner bổ sung ảnh ở lượt chờ duyệt nhưng vẫn bắt buộc khách đồng ý", async () => {

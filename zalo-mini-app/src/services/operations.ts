@@ -17,13 +17,20 @@ import {
   where,
 } from "firebase/firestore";
 import { sendPasswordResetEmail } from "firebase/auth";
+import { getDownloadURL, ref } from "firebase/storage";
 import {
   DEFAULT_SYSTEM_FEATURES,
   normalizeSystemFeatures,
   type SystemFeatures,
 } from "@haircut/contracts";
 import { callFunctionOrFallback, callWriteFunctionOrFallback } from "./functionWrites";
-import { callFunction, getFirebaseAuth, getFirebaseDb, isFirebaseConfigured } from "./firebase";
+import {
+  callFunction,
+  getFirebaseAuth,
+  getFirebaseDb,
+  getFirebaseStorage,
+  isFirebaseConfigured,
+} from "./firebase";
 import { LuckyWheelConfig, defaultLuckyWheelConfig } from "./types";
 import { normalizeLuckyWheelConfig } from "./wheel";
 
@@ -76,6 +83,8 @@ export type PointRequest = {
   staffName: string;
   note: string;
   photoUrls: string[];
+  legacyPhotoUrls?: string[];
+  photoPaths?: string[];
   pointsAdded: number;
   status: "pending" | "approved" | "rejected";
   createdAtMs: number | null;
@@ -961,14 +970,11 @@ export async function getSalonCustomerDetails(input: {
   const result = await callFunction<
     { salonId: string; customerId: string; branchId?: string },
     { customer: CustomerLookupResult }
-  >(
-    "getSalonCustomerDetails",
-    {
-      salonId: input.salonId,
-      branchId: input.branchId,
-      customerId: input.customerId,
-    },
-  );
+  >("getSalonCustomerDetails", {
+    salonId: input.salonId,
+    branchId: input.branchId,
+    customerId: input.customerId,
+  });
   return result.customer;
 }
 
@@ -1016,6 +1022,7 @@ export async function submitPointRequest(input: {
   session: StaffSession;
   note: string;
   photoUrls?: string[];
+  photoPaths?: string[];
   pointsRequested?: number;
 }) {
   const pointsRequested =
@@ -1030,6 +1037,7 @@ export async function submitPointRequest(input: {
       sessionId: input.session.id,
       note: input.note,
       photoUrls: input.photoUrls ?? [],
+      photoPaths: input.photoPaths ?? [],
       pointsRequested,
     },
     () => submitPointRequestDirect({ ...input, pointsRequested }),
@@ -1040,7 +1048,8 @@ export async function updatePendingPointRequestPhotos(input: {
   salonId: string;
   requestId: string;
   photoUrls: string[];
-}): Promise<{ photoUrls: string[] }> {
+  photoPaths?: string[];
+}): Promise<{ photoUrls: string[]; photoPaths: string[] }> {
   return callFunction("updatePendingPointRequestPhotos", input);
 }
 
@@ -1200,6 +1209,7 @@ async function submitPointRequestDirect(input: {
   session: StaffSession;
   note: string;
   photoUrls?: string[];
+  photoPaths?: string[];
   pointsRequested: number;
 }) {
   const db = getFirebaseDb();
@@ -1259,7 +1269,10 @@ async function submitPointRequestDirect(input: {
     if (!customerSnap.exists() || customerSnap.data().salonId !== input.salonId) {
       throw new Error("Hồ sơ khách không thuộc salon này");
     }
-    if ((input.photoUrls?.length ?? 0) > 0 && customerSnap.data().allowPhoto !== true) {
+    if (
+      ((input.photoUrls?.length ?? 0) > 0 || (input.photoPaths?.length ?? 0) > 0) &&
+      customerSnap.data().allowPhoto !== true
+    ) {
       throw new Error("Khách chưa đồng ý lưu ảnh kiểu tóc");
     }
 
@@ -1273,6 +1286,7 @@ async function submitPointRequestDirect(input: {
       staffName: signedStaff.name,
       note: input.note,
       photoUrls: input.photoUrls ?? [],
+      photoPaths: input.photoPaths ?? [],
       pointsRequested,
       pointsAdded: pointsRequested,
       status: "pending",
@@ -1995,6 +2009,11 @@ function mapPointRequest(docSnap: QueryDocumentSnapshot<DocumentData>): PointReq
     typeof data.customerSummary === "object" && data.customerSummary !== null
       ? data.customerSummary
       : null;
+  const legacyPhotoUrls = trustedPointRequestPhotoUrls(data.photoUrls, {
+    salonId,
+    customerId,
+    sessionId,
+  });
 
   return {
     id: docSnap.id,
@@ -2005,7 +2024,9 @@ function mapPointRequest(docSnap: QueryDocumentSnapshot<DocumentData>): PointReq
     customerId,
     staffName: String(data.staffName || ""),
     note: String(data.note || ""),
-    photoUrls: trustedPointRequestPhotoUrls(data.photoUrls, { salonId, customerId, sessionId }),
+    photoUrls: legacyPhotoUrls,
+    legacyPhotoUrls,
+    photoPaths: trustedPointRequestPhotoPaths(data.photoPaths, { salonId, customerId, sessionId }),
     pointsAdded: Number(data.pointsAdded ?? data.pointsRequested ?? 1),
     status: normalizeRequestStatus(data.status),
     createdAtMs: toMillis(data.createdAt),
@@ -2067,14 +2088,52 @@ async function attachCustomersToRequests(requests: PointRequest[]) {
   const pairs = await Promise.all(
     requests.map(async (request) => {
       const customer = await getCustomer(request.customerId, request.salonId);
+      const photoUrls = await resolvePointRequestPhotos(
+        request.photoUrls,
+        request.photoPaths ?? [],
+      );
       return {
         ...request,
+        photoUrls,
         customer: customer ?? request.customer,
       };
     }),
   );
 
   return pairs;
+}
+
+function trustedPointRequestPhotoPaths(
+  value: unknown,
+  input: { salonId: string; customerId: string; sessionId: string },
+) {
+  if (!Array.isArray(value)) return [];
+  const prefix = `salons/${input.salonId}/customers/${input.customerId}/sessions/${input.sessionId}/`;
+  return value
+    .slice(0, 3)
+    .filter(
+      (path): path is string =>
+        typeof path === "string" &&
+        path.startsWith(prefix) &&
+        /^op-[a-f0-9]{40}\.jpg$/.test(path.slice(prefix.length)),
+    );
+}
+
+async function resolvePointRequestPhotos(legacyUrls: string[], photoPaths: string[]) {
+  const storage = getFirebaseStorage();
+  if (!storage || photoPaths.length === 0) return legacyUrls;
+  const resolved = await Promise.all(
+    photoPaths.map(async (path) => {
+      try {
+        return await getDownloadURL(ref(storage, path));
+      } catch {
+        return null;
+      }
+    }),
+  );
+  return [
+    ...new Set([...legacyUrls, ...resolved.filter((url): url is string => Boolean(url))]),
+  ].slice(0, 3);
 }
 
 async function getCustomer(

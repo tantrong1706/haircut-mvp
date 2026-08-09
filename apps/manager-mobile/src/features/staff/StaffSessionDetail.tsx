@@ -1,5 +1,5 @@
 import { ClipboardPenLine, Send, UserRoundCheck, XCircle } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ConfirmDialog, type ConfirmDialogRequest } from "../../components/ConfirmDialog";
 import { InlineFeedback } from "../../components/Feedback";
 import { PhotoCapture } from "../../components/PhotoCapture";
@@ -9,6 +9,7 @@ import {
   cancelServiceSession,
   claimServiceSession,
   deleteHaircutPhoto,
+  recoverHaircutPhotoUploads,
   submitPointRequest,
   uploadHaircutPhoto,
   type AppUser,
@@ -52,10 +53,33 @@ export function StaffSessionDetail({
   const [error, setError] = useState("");
   const [confirm, setConfirm] = useState<ConfirmDialogRequest | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const [photoProgress, setPhotoProgress] = useState(0);
+  const photoAbortRef = useRef<AbortController | null>(null);
+  const recoveredSessionRef = useRef("");
   const assignedToMe = session.assignedStaffId === user.uid;
   const canEdit = session.status === "serving" && assignedToMe;
   const consent = session.customer?.allowPhoto === true;
   const revokedWithPhotos = photos.length > 0 && !consent;
+
+  useEffect(() => () => photoAbortRef.current?.abort(), []);
+
+  useEffect(() => {
+    if (!canEdit || !consent || photos.length > 0 || recoveredSessionRef.current === session.id) {
+      return undefined;
+    }
+    recoveredSessionRef.current = session.id;
+    let active = true;
+    recoverHaircutPhotoUploads({ salonId: user.salonId, sessionId: session.id })
+      .then((recovered) => {
+        if (active && recovered.length > 0) onPhotosChange(recovered);
+      })
+      .catch(() => {
+        recoveredSessionRef.current = "";
+      });
+    return () => {
+      active = false;
+    };
+  }, [canEdit, consent, onPhotosChange, photos.length, session.id, user.salonId]);
 
   async function claim() {
     setBusy("claim");
@@ -122,7 +146,8 @@ export function StaffSessionDetail({
             salonId: user.salonId,
             session,
             note,
-            photoUrls: photos.map((photo) => photo.url),
+            photoUrls: [],
+            photoPaths: photos.map((photo) => photo.path),
             pointsRequested: pointPerVisit,
           }),
         { salon_id: user.salonId, branch_id: session.branchId },
@@ -148,9 +173,12 @@ export function StaffSessionDetail({
     setBusy("photo");
     setError("");
     setMessage("");
+    setPhotoProgress(0);
+    const abortController = new AbortController();
+    photoAbortRef.current = abortController;
     const next = [...photos];
     try {
-      for (const file of files) {
+      for (const [index, file] of files.entries()) {
         next.push(
           await uploadHaircutPhoto({
             salonId: user.salonId,
@@ -158,14 +186,23 @@ export function StaffSessionDetail({
             customerId: session.customerId,
             sessionId: session.id,
             file,
+            signal: abortController.signal,
+            onProgress: (progress) =>
+              setPhotoProgress(Math.round((index * 100 + progress) / files.length)),
           }),
         );
       }
       onPhotosChange(next);
       setMessage(`Đã thêm ${files.length} ảnh kiểu tóc.`);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Không tải được ảnh.");
+      if (caught instanceof DOMException && caught.name === "AbortError") {
+        setMessage("Đã hủy tải ảnh.");
+      } else {
+        setError(caught instanceof Error ? caught.message : "Không tải được ảnh.");
+      }
     } finally {
+      photoAbortRef.current = null;
+      setPhotoProgress(0);
       setBusy("");
     }
   }
@@ -175,7 +212,7 @@ export function StaffSessionDetail({
     setBusy("photo");
     setError("");
     try {
-      await deleteHaircutPhoto(photo.path);
+      await deleteHaircutPhoto(photo.path, user.salonId);
       onPhotosChange(photos.filter((item) => item.id !== photo.id));
       setMessage("Đã xóa ảnh.");
     } catch (caught) {
@@ -262,6 +299,8 @@ export function StaffSessionDetail({
             photos={photos}
             consentGranted={consent}
             busy={busy === "photo"}
+            progress={photoProgress}
+            onCancelUpload={() => photoAbortRef.current?.abort()}
             disabled={!photoUploadEnabled || !canEdit}
             disabledReason={
               !photoUploadEnabled

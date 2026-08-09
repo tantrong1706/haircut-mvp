@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { StaffSession } from "../services/operations";
 import { StaffPage } from "./StaffPage";
 
@@ -9,11 +9,25 @@ const mocks = vi.hoisted(() => ({
   cancelServiceSession: vi.fn(),
   deleteHaircutPhoto: vi.fn(),
   uploadHaircutPhoto: vi.fn(),
+  recoverHaircutPhotoUploads: vi.fn(),
   submitPointRequest: vi.fn(),
   listenActiveSessions: vi.fn(),
   getBranchQrSettings: vi.fn(),
   getSalonProfile: vi.fn(),
 }));
+
+beforeAll(() => {
+  Object.defineProperty(URL, "createObjectURL", {
+    configurable: true,
+    writable: true,
+    value: vi.fn(() => "blob:staff-photo-preview"),
+  });
+  Object.defineProperty(URL, "revokeObjectURL", {
+    configurable: true,
+    writable: true,
+    value: vi.fn(),
+  });
+});
 
 vi.mock("../services/operations", () => ({
   claimServiceSession: mocks.claimServiceSession,
@@ -29,6 +43,7 @@ vi.mock("../services/customerPhotos", () => ({
   MAX_HAIRCUT_PHOTOS: 3,
   deleteHaircutPhoto: mocks.deleteHaircutPhoto,
   uploadHaircutPhoto: mocks.uploadHaircutPhoto,
+  recoverHaircutPhotoUploads: mocks.recoverHaircutPhotoUploads,
 }));
 
 vi.mock("../services/monitoring", () => ({
@@ -107,9 +122,10 @@ describe("StaffPage", () => {
     mocks.cancelServiceSession.mockResolvedValue({ ok: true, status: "cancelled" });
     mocks.uploadHaircutPhoto.mockResolvedValue({
       id: "photo-a",
-      path: "salons/salon-a/customers/customer-a/haircuts/session-a/photo-123456789abc.jpg",
+      path: "salons/salon-a/customers/customer-a/sessions/session-a/" + `op-${"a".repeat(40)}.jpg`,
       url: "https://firebasestorage.googleapis.com/photo-a.jpg",
     });
+    mocks.recoverHaircutPhotoUploads.mockResolvedValue([]);
     mocks.deleteHaircutPhoto.mockResolvedValue(undefined);
     mocks.submitPointRequest.mockResolvedValue({ requestId: "session-a" });
   });
@@ -180,6 +196,7 @@ describe("StaffPage", () => {
       type: "image/jpeg",
     });
     await user.upload(await screen.findByLabelText("Chụp ảnh kiểu tóc"), photo);
+    await user.click(screen.getByRole("button", { name: "Tải 1 ảnh" }));
 
     await waitFor(() => expect(mocks.uploadHaircutPhoto).toHaveBeenCalledOnce());
     expect(await screen.findByAltText("Ảnh kiểu tóc 1")).toBeInTheDocument();
@@ -190,7 +207,10 @@ describe("StaffPage", () => {
     await waitFor(() =>
       expect(mocks.submitPointRequest).toHaveBeenCalledWith(
         expect.objectContaining({
-          photoUrls: ["https://firebasestorage.googleapis.com/photo-a.jpg"],
+          photoUrls: [],
+          photoPaths: [
+            "salons/salon-a/customers/customer-a/sessions/session-a/" + `op-${"a".repeat(40)}.jpg`,
+          ],
         }),
       ),
     );

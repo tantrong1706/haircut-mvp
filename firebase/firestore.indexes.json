@@ -1,6 +1,52 @@
 {
   "indexes": [
     {
+      "collectionGroup": "photo_upload_operations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "expiresAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "photo_upload_operations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "attachmentStatus", "order": "ASCENDING" },
+        { "fieldPath": "orphanExpiresAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "photo_upload_operations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "salonId", "order": "ASCENDING" },
+        { "fieldPath": "customerId", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "photo_upload_operations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "salonId", "order": "ASCENDING" },
+        { "fieldPath": "sessionId", "order": "ASCENDING" },
+        { "fieldPath": "staffUid", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "photo_upload_operations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "salonId", "order": "ASCENDING" },
+        { "fieldPath": "sessionId", "order": "ASCENDING" },
+        { "fieldPath": "staffUid", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "attachmentStatus", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "audit_events",
       "queryScope": "COLLECTION",
       "fields": [

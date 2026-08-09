@@ -145,6 +145,42 @@ service firebase.storage {
         && request.resource.metadata.uploaderUid == request.auth.uid;
     }
 
+    function photoOperationExists(operationId) {
+      return firestore.exists(
+        /databases/(default)/documents/photo_upload_operations/$(operationId)
+      );
+    }
+
+    function photoOperation(operationId) {
+      return firestore.get(
+        /databases/(default)/documents/photo_upload_operations/$(operationId)
+      );
+    }
+
+    function isAllowedOperationPhoto(salonId, customerId, sessionId, operationId) {
+      return photoOperationExists(operationId)
+        && photoOperation(operationId).data.status in ["pending", "uploading"]
+        && photoOperation(operationId).data.salonId == salonId
+        && photoOperation(operationId).data.customerId == customerId
+        && photoOperation(operationId).data.sessionId == sessionId
+        && photoOperation(operationId).data.staffUid == request.auth.uid
+        && photoOperation(operationId).data.storagePath
+          == "salons/" + salonId + "/customers/" + customerId
+            + "/sessions/" + sessionId + "/" + operationId + ".jpg"
+        && photoOperation(operationId).data.expiresAt > request.time
+        && request.resource != null
+        && request.resource.size > 0
+        && request.resource.size <= photoOperation(operationId).data.expectedMaxBytes
+        && request.resource.contentType == "image/jpeg"
+        && request.resource.metadata.salonId == salonId
+        && request.resource.metadata.branchId == photoOperation(operationId).data.branchId
+        && request.resource.metadata.customerId == customerId
+        && request.resource.metadata.sessionId == sessionId
+        && request.resource.metadata.uploaderUid == request.auth.uid
+        && request.resource.metadata.operationId == operationId
+        && request.resource.metadata.requestId == photoOperation(operationId).data.requestId;
+    }
+
     function isAllowedAvatarUpload() {
       return request.resource != null
         && request.resource.size <= 3 * 1024 * 1024
@@ -174,6 +210,25 @@ service firebase.storage {
           isAssignedServingMember(salonId, customerId, sessionId)
           && resource.metadata.uploaderUid == request.auth.uid
         );
+    }
+
+    match /salons/{salonId}/customers/{customerId}/sessions/{sessionId}/{fileName} {
+      allow read: if customerAllowsPhoto(salonId, customerId)
+        && (
+          isOwner(salonId)
+          || isAssignedSessionMember(salonId, customerId, sessionId)
+        );
+      allow create: if fileName.matches('op-[a-f0-9]{40}\\.jpg')
+        && photoUploadEnabled(salonId)
+        && customerAllowsPhoto(salonId, customerId)
+        && isAllowedOperationPhoto(
+          salonId,
+          customerId,
+          sessionId,
+          request.resource.metadata.operationId
+        );
+      allow update: if false;
+      allow delete: if false;
     }
 
     match /salons/{salonId}/owner_avatars/{ownerUid}/{fileName} {

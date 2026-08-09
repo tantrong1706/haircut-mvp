@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
   AlertTriangle,
@@ -89,6 +89,24 @@ type Props = {
   currentUser: AppUser;
 };
 
+function legacyPhotoUrlsFor(request: PointRequest): string[] {
+  if (request.legacyPhotoUrls) return request.legacyPhotoUrls;
+  const pathCount = request.photoPaths?.length ?? 0;
+  return request.photoUrls.slice(0, Math.max(0, request.photoUrls.length - pathCount));
+}
+
+function photoItemsFor(request: PointRequest): HaircutPhotoItem[] {
+  const legacyUrls = legacyPhotoUrlsFor(request);
+  const pathUrls = request.photoUrls.slice(legacyUrls.length);
+  return [
+    ...legacyUrls.map((url) => ({ id: url, url })),
+    ...(request.photoPaths ?? []).flatMap((path, index) => {
+      const url = pathUrls[index];
+      return url ? [{ id: path, url }] : [];
+    }),
+  ];
+}
+
 export function OwnerPage({ currentUser }: Props) {
   const salonId = useMemo(() => {
     return currentUser.salonId.trim();
@@ -112,7 +130,11 @@ export function OwnerPage({ currentUser }: Props) {
   const [wheelConfig, setWheelConfig] = useState<LuckyWheelConfig>(defaultLuckyWheelConfig);
   const [busyId, setBusyId] = useState("");
   const [photoBusyId, setPhotoBusyId] = useState("");
+  const [photoProgress, setPhotoProgress] = useState(0);
+  const photoAbortRef = useRef<AbortController | null>(null);
   const [loadingOverview, setLoadingOverview] = useState(true);
+
+  useEffect(() => () => photoAbortRef.current?.abort(), []);
   const [savingSalonProfile, setSavingSalonProfile] = useState(false);
   const [savingWheel, setSavingWheel] = useState(false);
   const [ownerAvatarUrl, setOwnerAvatarUrl] = useState(currentUser.avatarUrl || "");
@@ -344,9 +366,12 @@ export function OwnerPage({ currentUser }: Props) {
     }
 
     setPhotoBusyId(request.id);
+    setPhotoProgress(0);
     setMessage("");
     setError("");
     const uploadedPhotos: Array<{ path: string; url: string }> = [];
+    const abortController = new AbortController();
+    photoAbortRef.current = abortController;
 
     try {
       for (const file of files) {
@@ -359,29 +384,48 @@ export function OwnerPage({ currentUser }: Props) {
               customerId: request.customerId,
               sessionId: request.sessionId,
               file,
+              signal: abortController.signal,
+              onProgress: setPhotoProgress,
             }),
           { salon_id: salonId, file_size: file.size, file_type: file.type },
         );
         uploadedPhotos.push(uploaded);
       }
 
+      const nextLegacyPhotoUrls = legacyPhotoUrlsFor(request);
+      const nextPhotoPaths = [
+        ...(request.photoPaths ?? []),
+        ...uploadedPhotos.map((photo) => photo.path),
+      ];
       const nextPhotoUrls = [...request.photoUrls, ...uploadedPhotos.map((photo) => photo.url)];
       await updatePendingPointRequestPhotos({
         salonId,
         requestId: request.id,
-        photoUrls: nextPhotoUrls,
+        photoUrls: nextLegacyPhotoUrls,
+        photoPaths: nextPhotoPaths,
       });
       setRequests((current) =>
         current.map((item) =>
-          item.id === request.id ? { ...item, photoUrls: nextPhotoUrls } : item,
+          item.id === request.id
+            ? {
+                ...item,
+                photoUrls: nextPhotoUrls,
+                legacyPhotoUrls: nextLegacyPhotoUrls,
+                photoPaths: nextPhotoPaths,
+              }
+            : item,
         ),
       );
       setMessage(`Đã lưu ${uploadedPhotos.length} ảnh cho ${request.customer?.name || "khách"}.`);
     } catch (err) {
-      await Promise.allSettled(uploadedPhotos.map((photo) => deleteHaircutPhoto(photo.path)));
+      await Promise.allSettled(
+        uploadedPhotos.map((photo) => deleteHaircutPhoto(photo.path, salonId)),
+      );
       setError(err instanceof Error ? err.message : "Không lưu được ảnh kiểu tóc");
     } finally {
+      if (photoAbortRef.current === abortController) photoAbortRef.current = null;
       setPhotoBusyId("");
+      setPhotoProgress(0);
     }
   }
 
@@ -393,21 +437,36 @@ export function OwnerPage({ currentUser }: Props) {
     setPhotoBusyId(request.id);
     setMessage("");
     setError("");
+    const isStoredPath = (request.photoPaths ?? []).includes(photo.id);
+    const nextLegacyPhotoUrls = isStoredPath
+      ? legacyPhotoUrlsFor(request)
+      : legacyPhotoUrlsFor(request).filter((url) => url !== photo.id);
+    const nextPhotoPaths = isStoredPath
+      ? (request.photoPaths ?? []).filter((path) => path !== photo.id)
+      : (request.photoPaths ?? []);
     const nextPhotoUrls = request.photoUrls.filter((photoUrl) => photoUrl !== photo.url);
 
     try {
       await updatePendingPointRequestPhotos({
         salonId,
         requestId: request.id,
-        photoUrls: nextPhotoUrls,
+        photoUrls: nextLegacyPhotoUrls,
+        photoPaths: nextPhotoPaths,
       });
       setRequests((current) =>
         current.map((item) =>
-          item.id === request.id ? { ...item, photoUrls: nextPhotoUrls } : item,
+          item.id === request.id
+            ? {
+                ...item,
+                photoUrls: nextPhotoUrls,
+                legacyPhotoUrls: nextLegacyPhotoUrls,
+                photoPaths: nextPhotoPaths,
+              }
+            : item,
         ),
       );
       try {
-        await deleteHaircutPhoto(photo.url);
+        await deleteHaircutPhoto(photo.id, isStoredPath ? salonId : undefined);
       } catch {
         trackEvent("owner_haircut_photo_cleanup_deferred", { salon_id: salonId });
       }
@@ -692,10 +751,12 @@ export function OwnerPage({ currentUser }: Props) {
           requests={requests}
           busyId={busyId}
           photoBusyId={photoBusyId}
+          photoProgress={photoProgress}
           onApprove={approve}
           onReject={reject}
           onAddPhotos={addOwnerPhotos}
           onRemovePhoto={removeOwnerPhoto}
+          onCancelPhotoUpload={() => photoAbortRef.current?.abort()}
         />
       ) : activeTab === "branches" ? (
         <BranchesPanel
@@ -1278,18 +1339,22 @@ function ApprovalsPanel({
   requests,
   busyId,
   photoBusyId,
+  photoProgress,
   onApprove,
   onReject,
   onAddPhotos,
   onRemovePhoto,
+  onCancelPhotoUpload,
 }: {
   requests: PointRequest[];
   busyId: string;
   photoBusyId: string;
+  photoProgress: number;
   onApprove: (request: PointRequest) => void;
   onReject: (request: PointRequest) => void;
   onAddPhotos: (request: PointRequest, files: File[]) => void | Promise<void>;
   onRemovePhoto: (request: PointRequest, photo: HaircutPhotoItem) => void | Promise<void>;
+  onCancelPhotoUpload: () => void;
 }) {
   return (
     <div className="ops-list">
@@ -1309,7 +1374,7 @@ function ApprovalsPanel({
             <p>{request.note || "Không có ghi chú"}</p>
             <HaircutPhotoCapture
               title="Ảnh khách sau cắt"
-              photos={request.photoUrls.map((photoUrl) => ({ id: photoUrl, url: photoUrl }))}
+              photos={photoItemsFor(request)}
               consentGranted={request.customer?.allowPhoto === true}
               busy={photoBusyId === request.id}
               disabled={busyId === request.id || Boolean(photoBusyId)}
@@ -1317,6 +1382,8 @@ function ApprovalsPanel({
               captureLabel={`Chụp ảnh kiểu tóc cho ${request.customer?.name || "khách hàng"}`}
               galleryLabel={`Chọn ảnh kiểu tóc cho ${request.customer?.name || "khách hàng"}`}
               maxPhotos={MAX_HAIRCUT_PHOTOS}
+              progress={photoBusyId === request.id ? photoProgress : undefined}
+              onCancelUpload={onCancelPhotoUpload}
               onFilesSelected={(files) => onAddPhotos(request, files)}
               onRemove={(photo) => onRemovePhoto(request, photo)}
             />
@@ -2326,9 +2393,7 @@ function CustomerSearchPanel({
                   onClick={() => void loadCustomerDetails(customer.id)}
                 >
                   <UserRound size={18} aria-hidden="true" />
-                  {detailsCustomerId === customer.id
-                    ? "Đang tải hồ sơ..."
-                    : "Xem hồ sơ chi tiết"}
+                  {detailsCustomerId === customer.id ? "Đang tải hồ sơ..." : "Xem hồ sơ chi tiết"}
                 </button>
               )}
 
