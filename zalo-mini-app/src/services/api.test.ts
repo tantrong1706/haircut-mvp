@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  buildRegisterInput,
   customerSessionRefreshDelay,
   resolveCustomerQr,
   restoreSavedCustomerSession,
@@ -122,6 +123,29 @@ describe("resolveCustomerQr ở chế độ xem trước", () => {
     expect(result.selectionRequired).toBe(false);
     expect(result.branchName).toBe("Chi nhánh Trung tâm");
     expect(result.branchAddress).toContain("Nguyễn Huệ");
+  });
+});
+
+describe("buildRegisterInput", () => {
+  it("không gửi các trường tùy chọn undefined qua Firebase callable", () => {
+    const input = buildRegisterInput(
+      {
+        qrType: "salon",
+        salonId: "salon-a",
+        branchId: "branch-a",
+        mirrorId: "",
+        qrToken: "signed-qr-token",
+      },
+      {
+        accessToken: "zalo-access-token",
+        name: "Khach A",
+      },
+      true,
+    );
+
+    expect(input).not.toHaveProperty("zaloUserId");
+    expect(input).not.toHaveProperty("phoneToken");
+    expect(input).not.toHaveProperty("phone");
   });
 });
 

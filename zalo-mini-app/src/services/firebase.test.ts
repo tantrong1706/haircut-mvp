@@ -36,6 +36,19 @@ describe("friendlyFirebaseFunctionError", () => {
     ).toBe("Khách chưa đủ điểm để quay");
   });
 
+  it("hiển thị lỗi QR thiếu trường an toàn thay vì che bằng thông báo chung", () => {
+    expect(
+      friendlyFirebaseFunctionError(
+        {
+          code: "functions/invalid-argument",
+          message: "Thiếu trường bắt buộc: qrToken",
+          details: { errorCode: "INVALID_REQUEST", field: "qrToken" },
+        },
+        "registerCustomerFromZalo",
+      ),
+    ).toBe("Mã QR không còn đầy đủ. Vui lòng quét lại mã QR của salon.");
+  });
+
   it("giữ thông báo phân quyền đã được duyệt đúng callable", () => {
     expect(
       friendlyFirebaseFunctionError(

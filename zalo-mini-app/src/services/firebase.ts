@@ -183,6 +183,18 @@ export function friendlyFirebaseFunctionError(error: unknown, callableName = "")
   if (code === "unauthenticated") {
     return message || "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.";
   }
+  if (businessCode === "INVALID_REQUEST" && callableName === "registerCustomerFromZalo") {
+    const field = readErrorDetail(error, "field");
+    if (field === "salonId" || field === "qrToken") {
+      return "Mã QR không còn đầy đủ. Vui lòng quét lại mã QR của salon.";
+    }
+    if (field === "zaloAccessToken") {
+      return "Không xác minh được phiên Zalo. Vui lòng đóng Mini App, mở lại và thử lại.";
+    }
+    if (field === "allowPhoto") {
+      return "Lựa chọn lưu ảnh chưa hợp lệ. Vui lòng thử lại.";
+    }
+  }
   if (businessCode && BUSINESS_ERROR_MESSAGES[businessCode]) {
     return BUSINESS_ERROR_MESSAGES[businessCode];
   }
@@ -313,6 +325,11 @@ function readErrorField(error: unknown, field: "code" | "message") {
 }
 
 function readBusinessErrorCode(error: unknown) {
+  const value = readErrorDetail(error, "errorCode");
+  return value.toUpperCase();
+}
+
+function readErrorDetail(error: unknown, field: string) {
   if (typeof error !== "object" || error === null) return "";
   const record = error as Record<string, unknown>;
   const directDetails = record.details;
@@ -324,8 +341,8 @@ function readBusinessErrorCode(error: unknown) {
         ? (customData as Record<string, unknown>).details
         : null;
   if (typeof details !== "object" || details === null) return "";
-  const value = (details as Record<string, unknown>).errorCode;
-  return typeof value === "string" ? value.toUpperCase() : "";
+  const value = (details as Record<string, unknown>)[field];
+  return typeof value === "string" ? value : "";
 }
 
 function normalizeRawErrorMessage(message: string) {

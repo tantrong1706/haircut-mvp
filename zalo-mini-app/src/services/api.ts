@@ -1010,15 +1010,18 @@ export function buildRegisterInput(
   phone?: string,
   phoneToken?: string,
 ): RegisterInput {
-  return {
+  const input: RegisterInput = {
     ...qr,
     zaloAccessToken: identity.accessToken,
-    zaloUserId: identity.zaloUserId,
-    phoneToken,
     name: identity.name,
-    phone,
     allowPhoto,
   };
+
+  if (identity.zaloUserId) input.zaloUserId = identity.zaloUserId;
+  if (phoneToken) input.phoneToken = phoneToken;
+  if (phone) input.phone = phone;
+
+  return input;
 }
 
 function mockRegisterCustomer(input: RegisterInput): AppSession {
