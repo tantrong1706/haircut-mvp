@@ -94,6 +94,41 @@ Production phải bind service HMAC bằng secret manager/runtime secret phù h�
 
 Theo dõi requestId, outcome, duration và error code. Cảnh báo trên `AUTH_INVALID`, `REPLAY_DETECTED`, `RATE_LIMITED`, tỷ lệ `ZALO_UNAVAILABLE` và health failure. Không thu thập token, proof, chữ ký, tên khách, số điện thoại hoặc dữ liệu salon.
 
+## Runbook ngày mua VPS
+
+Thực hiện đúng thứ tự dưới đây và dừng ngay nếu một bước kiểm tra thất bại. Không gửi mật khẩu `root`, private key, HMAC secret, Zalo token hoặc Firebase credential cho AI, vào Git, log, ticket hay ảnh chụp màn hình.
+
+1. Nhận thông tin VPS Ubuntu 22.04 từ nhà cung cấp.
+2. Giữ mật khẩu `root` ngoài AI và ngoài mọi tài liệu dự án.
+3. SSH vào VPS từ máy quản trị tin cậy.
+4. Kiểm tra outbound IPv4 thực tế của VPS.
+5. Xác minh geolocation của outbound IPv4 thuộc Việt Nam.
+6. Cập nhật gói bảo mật Ubuntu và khởi động lại nếu hệ thống yêu cầu.
+7. Tạo tài khoản quản trị có quyền `sudo`, không dùng `root` cho vận hành thường ngày.
+8. Cài SSH public key cho tài khoản quản trị.
+9. Mở phiên SSH thứ hai để xác minh đăng nhập bằng key trước khi siết cấu hình SSH.
+10. Tạo system user `zalo-gateway` không có interactive shell.
+11. Cấu hình firewall: giữ SSH đang dùng, mở 80/443, không public cổng gateway nội bộ.
+12. Cài Node.js 22 và xác minh phiên bản.
+13. Cài Caddy, thay `GATEWAY_FQDN`, chạy `caddy validate`, nhưng chưa coi HTTPS là đạt trước khi DNS hoạt động.
+14. Upload source/artifact đã kiểm tra và chạy bootstrap/deploy gateway theo release layout.
+15. Sinh HMAC service secret bằng CSPRNG trực tiếp trên hạ tầng tin cậy; không gửi hoặc ghi giá trị vào tài liệu.
+16. Tạo `/etc/zalo-gateway/gateway.env` với owner/group/mode quy định và điền cấu hình runtime trực tiếp trên VPS.
+17. Khởi động `zalo-gateway.service`, xác minh tiến trình chạy bằng user `zalo-gateway`.
+18. Gọi `GET /health` qua loopback và yêu cầu HTTP 200.
+19. Trỏ DNS, xác minh chứng chỉ HTTPS công khai và bảo đảm cổng 3000 không truy cập được từ Internet.
+20. Gửi signed request tới gateway với mock Zalo upstream và xác minh mock identity.
+21. Chuyển sang `graph.zalo.me` thật, gọi kiểm tra từ outbound IPv4 Việt Nam và quan sát response đã được làm sạch.
+22. Chỉ khi Zalo trả payload có `id` hợp lệ mới bắt đầu kết nối Firebase Functions với gateway.
+23. Cấu hình Firebase gateway mode, bind HMAC runtime secret và kiểm tra fail-closed; không bật fallback direct ngoài kế hoạch rollback đã duyệt.
+24. Kiểm thử end-to-end trên iPhone thật.
+25. Kiểm thử end-to-end trên Android thật.
+26. Xác minh App Check production trên cả hai nền tảng thật.
+27. Tạo và kiểm thử Zalo Testing Version cuối cùng.
+28. Tạo QR salon/chi nhánh cuối cùng từ đúng Testing Version và kiểm tra toàn bộ luồng.
+29. Chụp bộ screenshot xét duyệt từ thiết bị thật, không để lộ secret/token/dữ liệu khách.
+30. Hoàn thiện hồ sơ và gửi Zalo xét duyệt; chưa Publish cho đến khi kết quả review và production gates đều đạt.
+
 ## Gates còn bắt buộc
 
 - Mua VPS và xác minh IP thuộc Việt Nam.
