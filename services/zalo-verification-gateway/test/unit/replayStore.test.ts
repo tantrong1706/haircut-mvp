@@ -11,7 +11,8 @@ function createStore() {
   return new SqliteReplayStore(join(directory, "replay.db"));
 }
 afterEach(() => {
-  for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
+  for (const directory of directories.splice(0))
+    rmSync(directory, { recursive: true, force: true });
 });
 
 describe("SqliteReplayStore", () => {
@@ -29,8 +30,11 @@ describe("SqliteReplayStore", () => {
   });
   it("keeps duplicate claims race-safe", async () => {
     const store = createStore();
-    const results = await Promise.all(Array.from({ length: 20 }, async () =>
-      store.claim("key-a", "00112233445566778899aabbccddeeff", 2_000, 1_000)));
+    const results = await Promise.all(
+      Array.from({ length: 20 }, async () =>
+        store.claim("key-a", "00112233445566778899aabbccddeeff", 2_000, 1_000),
+      ),
+    );
     expect(results.filter(Boolean)).toHaveLength(1);
     store.close();
   });

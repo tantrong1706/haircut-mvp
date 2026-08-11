@@ -14,7 +14,7 @@
     "format": "prettier src test --ignore-path .prettierignore --write",
     "format:check": "prettier src test --ignore-path .prettierignore --check",
     "test": "vitest",
-    "test:unit": "vitest run test/contracts.test.ts test/security.test.ts test/businessRules.test.ts test/customerSearch.test.ts test/customerPhotos.test.ts test/photoUploadOperations.test.ts test/salonBranding.test.ts test/salonDeletionJob.test.ts test/tenantMigration.test.ts test/zaloClient.test.ts test/zaloPhone.test.ts test/zaloContract.test.ts test/zaloPrivacyWebhook.test.ts",
+    "test:unit": "vitest run test/contracts.test.ts test/security.test.ts test/businessRules.test.ts test/customerSearch.test.ts test/customerPhotos.test.ts test/photoUploadOperations.test.ts test/salonBranding.test.ts test/salonDeletionJob.test.ts test/tenantMigration.test.ts test/zaloClient.test.ts test/zaloGatewayVerifier.test.ts test/zaloPhone.test.ts test/zaloContract.test.ts test/zaloPrivacyWebhook.test.ts",
     "test:rules": "cd .. && npx --yes firebase-tools@15.22.3 emulators:exec --project demo-haircut --only firestore,storage \"npm --prefix functions run test:rules:emulator\"",
     "test:rules:emulator": "vitest run --hookTimeout=30000 --testTimeout=20000 test/firestore.rules.test.ts",
     "test:integration": "cd .. && npx --yes firebase-tools@15.22.3 emulators:exec --project demo-haircut --only firestore,storage \"npm --prefix functions run test:integration:emulator\"",

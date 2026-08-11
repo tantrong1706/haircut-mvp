@@ -18,20 +18,26 @@ const fixture = JSON.parse(
 describe("gateway signature contract", () => {
   it("matches the shared deterministic fixture", () => {
     expect(sha256Hex(Buffer.from(fixture.body))).toBe(fixture.bodySha256);
-    expect(buildCanonicalRequest({
-      method: fixture.method,
-      path: fixture.path,
-      timestamp: fixture.timestamp,
-      nonce: fixture.nonce,
-      requestId: fixture.requestId,
-      bodySha256: fixture.bodySha256,
-    })).toBe(fixture.canonical);
+    expect(
+      buildCanonicalRequest({
+        method: fixture.method,
+        path: fixture.path,
+        timestamp: fixture.timestamp,
+        nonce: fixture.nonce,
+        requestId: fixture.requestId,
+        bodySha256: fixture.bodySha256,
+      }),
+    ).toBe(fixture.canonical);
     expect(signCanonicalRequest(fixture.canonical, fixture.hmacKeyHex)).toBe(fixture.signature);
-    expect(verifyCanonicalSignature(fixture.canonical, fixture.signature, fixture.hmacKeyHex)).toBe(true);
+    expect(verifyCanonicalSignature(fixture.canonical, fixture.signature, fixture.hmacKeyHex)).toBe(
+      true,
+    );
   });
 
   it("rejects malformed and wrong-length signatures without throwing", () => {
     expect(verifyCanonicalSignature(fixture.canonical, "abcd", fixture.hmacKeyHex)).toBe(false);
-    expect(verifyCanonicalSignature(fixture.canonical, "z".repeat(64), fixture.hmacKeyHex)).toBe(false);
+    expect(verifyCanonicalSignature(fixture.canonical, "z".repeat(64), fixture.hmacKeyHex)).toBe(
+      false,
+    );
   });
 });

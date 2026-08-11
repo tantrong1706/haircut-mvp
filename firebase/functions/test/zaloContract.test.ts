@@ -13,7 +13,7 @@ function callableBody(name: string) {
 
 describe("hợp đồng xác minh Zalo", () => {
   it("xác minh token bằng App Secret ở backend", () => {
-    const start = functionsSource.indexOf("async function verifyZaloAccessToken");
+    const start = functionsSource.indexOf("async function verifyZaloAccessTokenDirect");
     const end = functionsSource.indexOf("\nfunction last4", start);
     const verificationBody = functionsSource.slice(start, end);
 
@@ -28,7 +28,7 @@ describe("hợp đồng xác minh Zalo", () => {
   });
 
   it("chuẩn hóa lỗi xác minh và gắn requestId mà không lộ credential", () => {
-    const start = functionsSource.indexOf("async function verifyZaloAccessToken");
+    const start = functionsSource.indexOf("async function verifyZaloAccessTokenDirect");
     const end = functionsSource.indexOf("\nfunction last4", start);
     const verificationBody = functionsSource.slice(start, end);
     const registerBody = callableBody("registerCustomerFromZalo");
