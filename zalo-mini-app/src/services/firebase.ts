@@ -181,6 +181,12 @@ export function friendlyFirebaseFunctionError(error: unknown, callableName = "")
   const businessCode = readBusinessErrorCode(error);
 
   if (code === "unauthenticated") {
+    if (
+      businessCode === "ZALO_VERIFICATION_FAILED" ||
+      isZaloInfrastructureVerificationMessage(message)
+    ) {
+      return "Không thể xác minh tài khoản Zalo lúc này. Vui lòng thử lại sau.";
+    }
     return message || "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.";
   }
   if (businessCode === "INVALID_REQUEST" && callableName === "registerCustomerFromZalo") {
@@ -327,6 +333,15 @@ function readErrorField(error: unknown, field: "code" | "message") {
 function readBusinessErrorCode(error: unknown) {
   const value = readErrorDetail(error, "errorCode");
   return value.toUpperCase();
+}
+
+function isZaloInfrastructureVerificationMessage(message: string) {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("personal information is limited") &&
+    normalized.includes("ip address") &&
+    normalized.includes("not inside vietnam")
+  );
 }
 
 function readErrorDetail(error: unknown, field: string) {

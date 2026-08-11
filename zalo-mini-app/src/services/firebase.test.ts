@@ -21,6 +21,31 @@ describe("friendlyFirebaseFunctionError", () => {
     ).toBe("Zalo access token không hợp lệ");
   });
 
+  it("không để lỗi chính sách IP Zalo lộ thông tin hạ tầng ra UI", () => {
+    const message = friendlyFirebaseFunctionError({
+      code: "functions/unauthenticated",
+      message:
+        "Personal information is limited due to IP address not inside Vietnam: 203.0.113.10",
+    });
+
+    expect(message).toBe("Không thể xác minh tài khoản Zalo lúc này. Vui lòng thử lại sau.");
+    expect(message).not.toContain("203.0.113.10");
+    expect(message).not.toContain("IP address");
+  });
+
+  it("hiển thị lỗi trung tính cho mã ZALO_VERIFICATION_FAILED", () => {
+    expect(
+      friendlyFirebaseFunctionError({
+        code: "functions/unauthenticated",
+        message: "Chi tiết upstream không được hiển thị",
+        details: {
+          errorCode: "ZALO_VERIFICATION_FAILED",
+          requestId: "zalo_safe_request_id",
+        },
+      }),
+    ).toBe("Không thể xác minh tài khoản Zalo lúc này. Vui lòng thử lại sau.");
+  });
+
   it("dùng thông báo hết phiên khi backend không gửi chi tiết", () => {
     expect(friendlyFirebaseFunctionError({ code: "functions/unauthenticated" })).toContain(
       "đăng nhập lại",
