@@ -1,0 +1,30 @@
+{
+  "name": "@haircut/zalo-verification-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": "22" },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src test scripts --max-warnings=0",
+    "format": "prettier src test scripts *.json *.mjs --write",
+    "format:check": "prettier src test scripts *.json *.mjs --check",
+    "test": "vitest run",
+    "test:unit": "vitest run test/unit",
+    "test:integration": "vitest run test/integration",
+    "test:e2e": "vitest run test/e2e",
+    "check": "npm run typecheck && npm run lint && npm run format:check && npm run test && npm run build",
+    "benchmark": "npm run build && node dist/scripts/benchmark.js"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.2",
+    "@types/node": "22.19.11",
+    "eslint": "9.39.2",
+    "globals": "16.5.0",
+    "prettier": "3.8.1",
+    "typescript": "5.7.2",
+    "typescript-eslint": "8.56.1",
+    "vitest": "4.1.10"
+  }
+}
