@@ -15,15 +15,19 @@ let baseUrl: string;
 let fetchImpl: ReturnType<typeof vi.fn<GatewayFetch>>;
 
 beforeEach(async () => {
+  const fixedNow = Date.now();
   directory = mkdtempSync(join(tmpdir(), "haircut-gateway-app-"));
-  fetchImpl = vi.fn<GatewayFetch>().mockResolvedValue(
-    new Response(JSON.stringify({ id: "123456789" }), { status: 200 }),
-  );
+  fetchImpl = vi
+    .fn<GatewayFetch>()
+    .mockImplementation(
+      async () => new Response(JSON.stringify({ id: "123456789" }), { status: 200 }),
+    );
   application = createGatewayApplication({
     keys: new Map([["test-v1", keyHex]]),
     replayStore: new SqliteReplayStore(join(directory, "replay.db")),
     fetchImpl,
     logger: createSafeLogger(() => undefined),
+    now: () => fixedNow,
   });
   baseUrl = await listen(application);
 });
@@ -33,9 +37,13 @@ afterEach(async () => {
 });
 
 function validBody(requestId = "req_test_12345678") {
-  return Buffer.from(JSON.stringify({
-    accessToken: "access-token", appsecretProof: "a".repeat(64), requestId,
-  }));
+  return Buffer.from(
+    JSON.stringify({
+      accessToken: "access-token",
+      appsecretProof: "a".repeat(64),
+      requestId,
+    }),
+  );
 }
 async function verify(body: Buffer, headers = signedHeaders(body)) {
   return fetch(`${baseUrl}/v1/zalo/verify`, { method: "POST", headers, body });
@@ -45,22 +53,55 @@ describe("gateway HTTP security", () => {
   it("serves health without calling Zalo", async () => {
     const response = await fetch(`${baseUrl}/health`);
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ ok: true });
+    await expect(response.json()).resolves.toEqual({
+      status: "ok",
+      version: "development",
+      uptime: 0,
+    });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+  it("rejects a non-JSON content type before authentication", async () => {
+    const body = validBody();
+    const response = await fetch(`${baseUrl}/v1/zalo/verify`, {
+      method: "POST",
+      headers: { ...signedHeaders(body), "content-type": "text/plain" },
+      body,
+    });
+    expect(response.status).toBe(415);
+    await expect(response.json()).resolves.toMatchObject({ ok: false, code: "BAD_REQUEST" });
     expect(fetchImpl).not.toHaveBeenCalled();
   });
   it("verifies a valid signed request", async () => {
     const response = await verify(validBody());
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
-      ok: true, zaloUserId: "123456789", requestId: "req_test_12345678",
+      ok: true,
+      zaloUserId: "123456789",
+      requestId: "req_test_12345678",
     });
   });
   it.each([
     ["unknown key", (body: Buffer) => signedHeaders(body, { keyId: "unknown" }), "AUTH_INVALID"],
-    ["wrong signature", (body: Buffer) => ({ ...signedHeaders(body), "x-signature": "ff".repeat(32) }), "AUTH_INVALID"],
-    ["short signature", (body: Buffer) => ({ ...signedHeaders(body), "x-signature": "abcd" }), "AUTH_INVALID"],
-    ["expired request", (body: Buffer) => signedHeaders(body, { timestamp: String(Date.now() - 61_000) }), "REQUEST_EXPIRED"],
-    ["malformed timestamp", (body: Buffer) => signedHeaders(body, { timestamp: "999999999999999999999" }), "REQUEST_EXPIRED"],
+    [
+      "wrong signature",
+      (body: Buffer) => ({ ...signedHeaders(body), "x-signature": "ff".repeat(32) }),
+      "AUTH_INVALID",
+    ],
+    [
+      "short signature",
+      (body: Buffer) => ({ ...signedHeaders(body), "x-signature": "abcd" }),
+      "AUTH_INVALID",
+    ],
+    [
+      "expired request",
+      (body: Buffer) => signedHeaders(body, { timestamp: String(Date.now() - 61_000) }),
+      "REQUEST_EXPIRED",
+    ],
+    [
+      "malformed timestamp",
+      (body: Buffer) => signedHeaders(body, { timestamp: "999999999999999999999" }),
+      "REQUEST_EXPIRED",
+    ],
     ["method mismatch", (body: Buffer) => signedHeaders(body, { method: "GET" }), "AUTH_INVALID"],
     ["path mismatch", (body: Buffer) => signedHeaders(body, { path: "/wrong" }), "AUTH_INVALID"],
   ])("rejects %s", async (_name, createHeaders, code) => {
@@ -86,8 +127,21 @@ describe("gateway HTTP security", () => {
   });
   it.each([
     [Buffer.from("{"), "BAD_REQUEST"],
-    [Buffer.from(JSON.stringify({ accessToken: "a", requestId: "req_test_12345678" })), "BAD_REQUEST"],
-    [Buffer.from(JSON.stringify({ accessToken: "a", appsecretProof: "a".repeat(64), requestId: "req_test_12345678", url: "https://evil.test" })), "BAD_REQUEST"],
+    [
+      Buffer.from(JSON.stringify({ accessToken: "a", requestId: "req_test_12345678" })),
+      "BAD_REQUEST",
+    ],
+    [
+      Buffer.from(
+        JSON.stringify({
+          accessToken: "a",
+          appsecretProof: "a".repeat(64),
+          requestId: "req_test_12345678",
+          url: "https://evil.test",
+        }),
+      ),
+      "BAD_REQUEST",
+    ],
   ])("rejects malformed or unsafe JSON", async (body, code) => {
     const response = await verify(body);
     await expect(response.json()).resolves.toMatchObject({ ok: false, code });

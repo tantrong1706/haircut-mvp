@@ -78,6 +78,10 @@ import {
   fetchZaloJson,
   type ZaloRequestCategory,
 } from "./zaloClient";
+import {
+  ZaloGatewayVerificationError,
+  createZaloIdentityVerifier,
+} from "./zaloIdentityVerifier";
 import { decodeZaloPhoneNumber } from "./zaloPhone";
 import {
   createZaloPrivacyWebhookHandler,
@@ -1045,7 +1049,7 @@ function createZaloVerificationRequestId() {
   return `zalo_${randomBytes(12).toString("hex")}`;
 }
 
-async function verifyZaloAccessToken(
+async function verifyZaloAccessTokenDirect(
   accessTokenInput: unknown,
   context: ZaloVerificationContext = {},
 ): Promise<ZaloProfile> {
@@ -1186,6 +1190,60 @@ async function verifyZaloAccessToken(
   });
 
   return profile;
+}
+
+async function verifyZaloAccessToken(
+  accessTokenInput: unknown,
+  context: ZaloVerificationContext = {},
+): Promise<ZaloProfile> {
+  const accessToken = requireString(accessTokenInput, "zaloAccessToken");
+  const requestId = context.requestId || createZaloVerificationRequestId();
+  const appSecret =
+    zaloAppSecret.value() || process.env.ZALO_APP_SECRET || process.env.ZALO_SECRET_KEY || "";
+  if (!appSecret || appSecret.includes("your-")) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Thiếu ZALO_APP_SECRET để xác minh danh tính Zalo ở server",
+    );
+  }
+  const mode = String(process.env.ZALO_VERIFIER_MODE || "direct").trim().toLowerCase();
+  let verifier;
+  try {
+    verifier = createZaloIdentityVerifier({
+      mode,
+      gatewayUrl: process.env.ZALO_GATEWAY_URL,
+      gatewayKeyId: process.env.ZALO_GATEWAY_KEY_ID,
+      gatewayHmacSecret: process.env.ZALO_GATEWAY_HMAC_SECRET,
+      zaloAppSecret: appSecret,
+      directVerify: ({ accessToken: directToken }) =>
+        verifyZaloAccessTokenDirect(directToken, { ...context, requestId }),
+    });
+  } catch {
+    throw new HttpsError(
+      "failed-precondition",
+      "Máy chủ chưa được cấu hình đầy đủ để xác minh danh tính Zalo",
+      { errorCode: "ZALO_VERIFIER_CONFIGURATION_INVALID", requestId },
+    );
+  }
+  try {
+    return await verifier.verify({ accessToken, requestId });
+  } catch (error) {
+    if (error instanceof HttpsError) throw error;
+    const gatewayCode =
+      error instanceof ZaloGatewayVerificationError ? error.code : "ZALO_UNAVAILABLE";
+    console.warn("zalo_gateway_verification_failed", {
+      event: "zalo_gateway_verification_failed",
+      requestId,
+      function: context.functionName || "zaloCustomerCallable",
+      errorCode: gatewayCode,
+      timestamp: new Date().toISOString(),
+    });
+    throw new HttpsError("unauthenticated", ZALO_VERIFICATION_USER_MESSAGE, {
+      errorCode: "ZALO_VERIFICATION_FAILED",
+      requestId,
+      category: gatewayCode,
+    });
+  }
 }
 
 function last4(phone?: string): string | undefined {
