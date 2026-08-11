@@ -26,7 +26,7 @@
     "prepare:zalo-review": "node tools/prepare-zalo-review.mjs",
     "capture:zalo-review": "node tools/run-zalo-review-capture.mjs",
     "login:zmp:qr": "node tools/zmp-qr-login.mjs",
-    "deploy:zmp:test": "npm run build:zmp && zmp deploy -p -e -t -o www -m \"HAIRCUT production test\"",
+    "deploy:zmp:test": "npm run build:zmp && zmp deploy -p -e -t -o www -m \"CH Haircut Salon production test\"",
     "preview": "vite preview --host 0.0.0.0",
     "check": "npm run lint && npm run format:check && npm run test:run && npm run build:zmp && npm run check:zalo-review"
   },

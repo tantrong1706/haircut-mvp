@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import { AppErrorBoundary } from "./components/AppErrorBoundary";
+import { MINI_APP_NAME } from "./config/branding";
 import { initMonitoring } from "./services/monitoring";
 import { registerServiceWorker } from "./services/pwa";
 import "./styles/global.css";
@@ -16,7 +17,7 @@ initMonitoring();
 const rootElement = document.getElementById("root") ?? document.getElementById("app");
 
 if (!rootElement) {
-  throw new Error("Không tìm thấy phần tử gốc để khởi động HAIRCUT.");
+  throw new Error(`Không tìm thấy phần tử gốc để khởi động ${MINI_APP_NAME}.`);
 }
 
 ReactDOM.createRoot(rootElement).render(

@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import QRCode from "qrcode";
 import { BrandLogo } from "../components/BrandLogo";
+import { MINI_APP_NAME } from "../config/branding";
 import { AccountDeletionPanel } from "../components/AccountDeletionPanel";
 import { HaircutPhotoCapture, type HaircutPhotoItem } from "../components/HaircutPhotoCapture";
 import { RedeemRewardPanel } from "../components/RedeemRewardPanel";
@@ -1745,7 +1746,7 @@ function ManagedQrCard({
       <html lang="vi">
         <head>
           <meta charset="utf-8" />
-          <title>${escapeHtml(title)} - HAIRCUT QR</title>
+          <title>${escapeHtml(title)} - ${escapeHtml(MINI_APP_NAME)} QR</title>
           <style>
             body { font-family: Arial, sans-serif; margin: 28px; color: #0b1712; text-align: center; }
             h1 { margin: 0 0 8px; font-size: 28px; }
@@ -1755,7 +1756,7 @@ function ManagedQrCard({
         </head>
         <body>
           <h1>${escapeHtml(title)}</h1>
-          <p>Quét QR để check-in HAIRCUT</p>
+          <p>Quét QR để check-in ${escapeHtml(MINI_APP_NAME)}</p>
           <img src="${qrImageUrl}" alt="" />
           <script>window.onload = () => window.print();</script>
         </body>

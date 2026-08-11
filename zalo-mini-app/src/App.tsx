@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { Gift, History, House, Sparkles, type LucideIcon } from "lucide-react";
 import { InstallAppPrompt } from "./components/InstallAppPrompt";
+import { MINI_APP_NAME } from "./config/branding";
 import { trackEvent } from "./services/monitoring";
 import { parseQrContext } from "./services/qr";
 import { isZaloMiniAppRuntime } from "./services/runtime";
@@ -86,7 +87,7 @@ function SessionRestorePanel({
     return (
       <section className="panel loading-panel" aria-live="polite">
         <strong>Đang xác minh phiên khách...</strong>
-        <p>HAIRCUT đang kiểm tra tài khoản Zalo hiện tại trước khi hiển thị dữ liệu.</p>
+        <p>{MINI_APP_NAME} đang kiểm tra tài khoản Zalo hiện tại trước khi hiển thị dữ liệu.</p>
       </section>
     );
   }

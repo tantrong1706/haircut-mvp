@@ -1,10 +1,10 @@
-# Checklist xét duyệt Zalo Mini App - HAIRCUT
+# Checklist xét duyệt Zalo Mini App - CH Haircut Salon
 
 Không tải Version 8 hoặc gửi xét duyệt khi còn mục bắt buộc `[ ]`.
 
 ## 1. Metadata
 
-- [x] Tên Mini App: `HAIRCUT`.
+- [x] Tên Mini App: `CH Haircut Salon`.
 - [x] Mini App ID trong production: `2038116772828167300`.
 - [ ] Logo trên Portal khớp thương hiệu và hiển thị rõ ở kích thước nhỏ.
 - [ ] Danh mục dịch vụ khớp chăm sóc khách hàng cho salon tóc.

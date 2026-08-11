@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Download } from "lucide-react";
+import { MINI_APP_NAME } from "../config/branding";
 import { safeStorageGet, safeStorageSet } from "../services/safeStorage";
 
 type BeforeInstallPromptEvent = Event & {
@@ -47,7 +48,7 @@ export function InstallAppPrompt() {
   return (
     <div className="install-prompt">
       <div>
-        <strong>Thêm HAIRCUT vào màn hình chính</strong>
+        <strong>Thêm {MINI_APP_NAME} vào màn hình chính</strong>
         <span>Mở nhanh như một app trên điện thoại salon.</span>
       </div>
       <button type="button" onClick={install}>

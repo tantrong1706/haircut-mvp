@@ -6,7 +6,7 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const appRoot = resolve(repoRoot, "zalo-mini-app");
 const buildRoot = resolve(appRoot, "www");
 const expectedMiniAppId = "2038116772828167300";
-const expectedMiniAppName = "HAIRCUT";
+const expectedMiniAppName = "CH Haircut Salon";
 const maxAssetBytes = 500 * 1024;
 const failures = [];
 const passed = [];
@@ -89,6 +89,21 @@ check(productionEnv.get("VITE_APP_ENV") === "production", "Môi trường build 
 const appSource = readText(resolve(appRoot, "src", "App.tsx"));
 const scanEntrySource = readText(resolve(appRoot, "src", "pages", "ScanEntryPage.tsx"));
 const zaloSource = readText(resolve(appRoot, "src", "services", "zalo.ts"));
+const currentBrandingText = [
+  resolve(appRoot, "index.html"),
+  resolve(appRoot, "public", "manifest.webmanifest"),
+  resolve(appRoot, "src", "components", "BrandLogo.tsx"),
+  resolve(appRoot, "src", "components", "InstallAppPrompt.tsx"),
+  resolve(appRoot, "src", "pages", "HomePage.tsx"),
+  resolve(appRoot, "src", "pages", "PrivacyPage.tsx"),
+  resolve(appRoot, "src", "pages", "ScanEntryPage.tsx"),
+  resolve(appRoot, "src", "pages", "TermsPage.tsx"),
+  resolve(appRoot, "src", "pages", "WheelPage.tsx"),
+  resolve(appRoot, "src", "services", "zalo.ts"),
+  resolve(repoRoot, "docs", "ZALO_VERSION_8_SUBMISSION.md"),
+]
+  .map(readText)
+  .join("\n");
 check(appSource.includes('"/privacy"'), "Có route Privacy");
 check(appSource.includes('"/terms"'), "Có route Terms");
 check(existsSync(resolve(appRoot, "src", "pages", "PrivacyPage.tsx")), "Có trang Privacy");
@@ -128,16 +143,17 @@ if (sourceConfig && outputConfig) {
   check(
     sourceConfig.app?.title === expectedMiniAppName &&
       sourceConfig.app?.headerTitle === expectedMiniAppName,
-    "Tên Mini App nguồn là HAIRCUT",
+    `Tên Mini App nguồn là ${expectedMiniAppName}`,
   );
   check(
     outputConfig.app?.title === expectedMiniAppName &&
       outputConfig.app?.headerTitle === expectedMiniAppName,
-    "Tên Mini App build là HAIRCUT",
+    `Tên Mini App build là ${expectedMiniAppName}`,
   );
   check(
-    !/CH Hair Studio/iu.test(JSON.stringify(sourceConfig)),
-    "app-config không dùng tên salon làm tên Mini App",
+    !/\bHAIRCUT\b/u.test(JSON.stringify(sourceConfig)) &&
+      !/CH Hair Studio/iu.test(JSON.stringify(sourceConfig)),
+    "app-config không dùng branding cũ hoặc tên salon làm tên Mini App",
   );
   check(
     JSON.stringify(sourceConfig) === JSON.stringify(outputConfig),
@@ -162,6 +178,15 @@ if (sourceConfig && outputConfig) {
   }
 }
 
+check(
+  !/\bHAIRCUT\b/u.test(currentBrandingText),
+  "Runtime và hồ sơ Version 8 không còn branding ứng dụng cũ HAIRCUT",
+);
+check(
+  currentBrandingText.includes(expectedMiniAppName),
+  `Runtime và hồ sơ Version 8 dùng ${expectedMiniAppName}`,
+);
+
 const bundleFiles = listFiles(buildRoot).filter((path) =>
   [".css", ".html", ".js", ".json"].includes(extname(path).toLowerCase()),
 );
@@ -174,13 +199,13 @@ const firstPartyBundleText = bundleFiles
   .join("\n");
 check(
   !/https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?/iu.test(firstPartyBundleText),
-  "Code HAIRCUT không có endpoint localhost",
+  "Code Mini App không có endpoint localhost",
 );
 check(
   !/http:\/\/(?!(?:www\.w3\.org\/2000\/svg|www\.apache\.org\/licenses))/iu.test(
     firstPartyBundleText,
   ),
-  "Code HAIRCUT không có endpoint HTTP không mã hóa",
+  "Code Mini App không có endpoint HTTP không mã hóa",
 );
 check(
   !/(?:-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|ghp_[A-Za-z0-9]{20,}|sk-(?:live|proj)-[A-Za-z0-9_-]{16,})/u.test(

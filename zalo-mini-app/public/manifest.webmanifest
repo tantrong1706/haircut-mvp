@@ -1,6 +1,6 @@
 {
-  "name": "HAIRCUT",
-  "short_name": "HAIRCUT",
+  "name": "CH Haircut Salon",
+  "short_name": "CH Haircut",
   "description": "Quản lý khách hàng, điểm thưởng và mã quà cho salon tóc.",
   "start_url": "/",
   "scope": "/",

@@ -7,16 +7,16 @@ Tài liệu này dùng để điền Portal. Không commit deeplink, QR token, m
 **Tên phiên bản**
 
 ```text
-HAIRCUT - Check-in và tích điểm tại salon
+CH Haircut Salon - Check-in và tích điểm tại salon
 ```
 
 **Nội dung cập nhật**
 
 ```text
-HAIRCUT – Check-in và tích điểm tại salon
+CH Haircut Salon - Check-in và tích điểm tại salon
 
 Nội dung cập nhật:
-- Khách mở HAIRCUT từ QR salon hoặc QR chi nhánh.
+- Khách mở CH Haircut Salon từ QR salon hoặc QR chi nhánh.
 - Xác nhận thông tin Zalo để salon nhận diện đúng khách.
 - Chọn chi nhánh và tạo lượt chờ.
 - Theo dõi trạng thái phục vụ.
@@ -27,7 +27,7 @@ Nội dung cập nhật:
 ## 2. Mô tả ứng dụng
 
 ```text
-HAIRCUT là Zalo Mini App chăm sóc khách hàng tại salon tóc. Khách quét QR chung của salon để chọn
+CH Haircut Salon là Zalo Mini App chăm sóc khách hàng tại salon tóc. Khách quét QR chung của salon để chọn
 chi nhánh hoặc quét QR riêng của chi nhánh để check-in trực tiếp. Sau khi xác nhận tên Zalo, khách
 có thể tạo lượt chờ, theo dõi trạng thái phục vụ, xem điểm, lịch sử cắt tóc, quay thưởng và quản lý
 mã quà. Chủ salon và nhân viên vận hành bằng cổng quản lý web riêng, không nằm trong luồng khách
@@ -78,7 +78,7 @@ do hệ thống quản lý QR tạo; không dùng QR gương cũ, tham số `mir
 **Định danh bằng access token**
 
 ```text
-HAIRCUT dùng Zalo access token để backend xác minh đúng người dùng theo Authentication của Zalo.
+CH Haircut Salon dùng Zalo access token để backend xác minh đúng người dùng theo Authentication của Zalo.
 Token chỉ được gửi đến Firebase Cloud Function qua HTTPS, không hiển thị, không lưu lâu dài và
 không ghi vào log/Analytics/Sentry.
 ```
@@ -86,7 +86,7 @@ không ghi vào log/Analytics/Sentry.
 **Tên và ảnh đại diện Zalo**
 
 ```text
-HAIRCUT xin quyền hồ sơ khi khách bấm nút có giải thích rõ. Tên giúp nhân viên nhận đúng khách.
+CH Haircut Salon xin quyền hồ sơ khi khách bấm nút có giải thích rõ. Tên giúp nhân viên nhận đúng khách.
 Ảnh đại diện chỉ hiển thị tạm trên màn xác nhận, không được lưu trong hồ sơ salon.
 ```
 

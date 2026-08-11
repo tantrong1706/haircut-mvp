@@ -1,5 +1,8 @@
 # Kiểm toán Zalo Mini App Version 7 bị từ chối
 
+> **HISTORICAL:** tài liệu này giữ nguyên tên Mini App tại thời điểm Version 7 để bảo toàn bằng
+> chứng. Tên chính thức hiện hành là **CH Haircut Salon**.
+
 ## 1. Phạm vi và kết luận
 
 - Repository: `tantrong1706/haircut-mvp`

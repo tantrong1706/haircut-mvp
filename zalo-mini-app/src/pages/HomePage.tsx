@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { BrandLogo } from "../components/BrandLogo";
+import { MINI_APP_MARK } from "../config/branding";
 import { getCustomerWheelConfig } from "../services/api";
 import { AppSession, defaultLuckyWheelConfig, TabKey } from "../services/types";
 import { activeWheelSlots } from "../services/wheel";
@@ -119,7 +120,7 @@ export function HomePage({
         >
           <div>
             <Sparkles size={25} />
-            <span>HAIRCUT</span>
+            <span>{MINI_APP_MARK}</span>
           </div>
         </div>
 
