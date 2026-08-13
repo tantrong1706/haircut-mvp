@@ -10,9 +10,10 @@ import {
   isVerifiedOwnerIdentity,
   isServiceSessionExpired,
   legacyBranchPatch,
-  randomUnitIntervalFromBytes,
+  activeWheelSlotCount,
   rewardExpiresAtMs,
   selectWheelSlot,
+  selectWheelSlotByIndex,
   serviceSessionExpiresAtMs,
   wheelRewardOutcome,
 } from "../src/businessRules";
@@ -83,12 +84,16 @@ describe("vòng đời lượt cắt", () => {
 });
 
 describe("thống kê và vòng quay", () => {
-  it("chuyển 48 bit entropy thành giá trị ngẫu nhiên trong khoảng [0, 1)", () => {
-    expect(randomUnitIntervalFromBytes(new Uint8Array(6))).toBe(0);
-    expect(randomUnitIntervalFromBytes(new Uint8Array(6).fill(255))).toBeLessThan(1);
-    expect(() => randomUnitIntervalFromBytes(new Uint8Array(5))).toThrow(
-      "Wheel entropy must contain exactly 6 bytes",
-    );
+  it("chọn đúng ô theo chỉ số nguyên đã sinh an toàn", () => {
+    const slots = [
+      { label: "Đã tắt", active: false, type: "reward" },
+      { label: "Quà A", active: true, type: "reward" },
+      { label: "Quà B", active: true, type: "reward" },
+    ];
+
+    expect(activeWheelSlotCount(slots)).toBe(2);
+    expect(selectWheelSlotByIndex(slots, 1)).toMatchObject({ index: 1, label: "Quà B" });
+    expect(selectWheelSlotByIndex(slots, 2)).toBeNull();
   });
 
   it("đếm khách hoàn tất duy nhất", () => {

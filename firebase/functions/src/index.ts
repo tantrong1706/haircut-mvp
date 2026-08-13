@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes, randomInt } from "node:crypto";
 import {
   ApiErrorCode,
   DeviceTokenSchema,
@@ -38,8 +38,8 @@ import {
   legacyBranchPatch,
   normalizeWheelSlotType,
   rewardExpiresAtMs,
-  randomUnitIntervalFromBytes,
-  selectWheelSlot,
+  activeWheelSlotCount,
+  selectWheelSlotByIndex,
   serviceSessionExpiresAtMs,
   wheelRewardOutcome,
 } from "./businessRules";
@@ -1607,16 +1607,18 @@ async function spinWheelForCustomer(
       throw new HttpsError("failed-precondition", "Khách chưa đủ điểm để quay");
     }
 
-    const selectedSlot = selectWheelSlot(
-      Array.isArray(wheel?.slots)
-        ? wheel.slots.map((slot: LuckyWheelSlot) => ({
-            label: String(slot.label || "").trim(),
-            active: slot.active !== false,
-            type: normalizeWheelSlotType(slot.type, String(slot.label || "")),
-          }))
-        : [],
-      randomUnitIntervalFromBytes(randomBytes(6)),
-    );
+    const wheelSlots = Array.isArray(wheel?.slots)
+      ? wheel.slots.map((slot: LuckyWheelSlot) => ({
+          label: String(slot.label || "").trim(),
+          active: slot.active !== false,
+          type: normalizeWheelSlotType(slot.type, String(slot.label || "")),
+        }))
+      : [];
+    const availableSlotCount = activeWheelSlotCount(wheelSlots);
+    const selectedSlot =
+      availableSlotCount > 0
+        ? selectWheelSlotByIndex(wheelSlots, randomInt(availableSlotCount))
+        : null;
     if (!selectedSlot) {
       throw new HttpsError("failed-precondition", "Vòng quay chưa có ô thưởng đang bật");
     }
