@@ -104,6 +104,18 @@ export function selectWheelSlot(slots: WheelSlotInput[], randomValue: number) {
   return { ...activeSlots[index], index };
 }
 
+export function randomUnitIntervalFromBytes(bytes: Uint8Array) {
+  if (bytes.length !== 6) {
+    throw new Error("Wheel entropy must contain exactly 6 bytes");
+  }
+
+  let value = 0;
+  for (const byte of bytes) {
+    value = value * 256 + byte;
+  }
+  return value / 2 ** 48;
+}
+
 export function wheelRewardOutcome(type: "reward" | "no_prize", generatedCode: string) {
   const isWinning = type === "reward";
   return {

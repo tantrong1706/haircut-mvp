@@ -10,6 +10,7 @@ import {
   isVerifiedOwnerIdentity,
   isServiceSessionExpired,
   legacyBranchPatch,
+  randomUnitIntervalFromBytes,
   rewardExpiresAtMs,
   selectWheelSlot,
   serviceSessionExpiresAtMs,
@@ -82,6 +83,14 @@ describe("vòng đời lượt cắt", () => {
 });
 
 describe("thống kê và vòng quay", () => {
+  it("chuyển 48 bit entropy thành giá trị ngẫu nhiên trong khoảng [0, 1)", () => {
+    expect(randomUnitIntervalFromBytes(new Uint8Array(6))).toBe(0);
+    expect(randomUnitIntervalFromBytes(new Uint8Array(6).fill(255))).toBeLessThan(1);
+    expect(() => randomUnitIntervalFromBytes(new Uint8Array(5))).toThrow(
+      "Wheel entropy must contain exactly 6 bytes",
+    );
+  });
+
   it("đếm khách hoàn tất duy nhất", () => {
     expect(
       countUniqueCustomersSince(

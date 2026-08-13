@@ -58,6 +58,16 @@ describe("hợp đồng xác minh Zalo", () => {
     expect(businessIndex).toBeGreaterThan(verificationIndex);
   });
 
+  it("vòng quay production dùng entropy mật mã phía server", () => {
+    const start = functionsSource.indexOf("async function spinWheelForCustomer");
+    const end = functionsSource.indexOf("\nexport const createSalon", start);
+    const spinBody = functionsSource.slice(start, end);
+
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(spinBody).toContain("randomUnitIntervalFromBytes(randomBytes(6))");
+    expect(spinBody).not.toContain("Math.random()");
+  });
+
   it("giải mã phone token ở backend trước khi lưu khách", () => {
     const body = callableBody("registerCustomerFromZalo");
     const decodeIndex = body.indexOf("decodeZaloPhoneNumber(accessToken, phoneToken, appSecret");

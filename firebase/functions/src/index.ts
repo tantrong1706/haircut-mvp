@@ -38,6 +38,7 @@ import {
   legacyBranchPatch,
   normalizeWheelSlotType,
   rewardExpiresAtMs,
+  randomUnitIntervalFromBytes,
   selectWheelSlot,
   serviceSessionExpiresAtMs,
   wheelRewardOutcome,
@@ -1614,7 +1615,7 @@ async function spinWheelForCustomer(
             type: normalizeWheelSlotType(slot.type, String(slot.label || "")),
           }))
         : [],
-      Math.random(),
+      randomUnitIntervalFromBytes(randomBytes(6)),
     );
     if (!selectedSlot) {
       throw new HttpsError("failed-precondition", "Vòng quay chưa có ô thưởng đang bật");
