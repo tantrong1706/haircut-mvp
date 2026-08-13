@@ -1,0 +1,50 @@
+name: Zalo Verification Gateway
+
+on:
+  push:
+    branches: [feat/zalo-verification-vn-gateway]
+  pull_request:
+    branches: [release/zalo-version-8-readiness]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zalo-gateway-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gateway:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - name: Setup Node 22
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            services/zalo-verification-gateway/package-lock.json
+            firebase/functions/package-lock.json
+      - name: Install gateway dependencies
+        working-directory: services/zalo-verification-gateway
+        run: npm ci
+      - name: Check gateway
+        working-directory: services/zalo-verification-gateway
+        run: npm run check
+      - name: Audit gateway dependencies
+        working-directory: services/zalo-verification-gateway
+        run: npm audit --audit-level=high
+      - name: Install Functions dependencies
+        working-directory: firebase/functions
+        run: npm ci
+      - name: Check Functions gateway client
+        working-directory: firebase/functions
+        run: |
+          npm run typecheck
+          npx vitest run test/zaloGatewayVerifier.test.ts test/zaloClient.test.ts test/zaloContract.test.ts
+      - name: Scan tracked files for secrets
+        run: node scripts/check-secrets.mjs
