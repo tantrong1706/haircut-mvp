@@ -70,6 +70,22 @@ function Test-TrackedRepositorySafety {
   }
 }
 
+function Get-JavaVersion {
+  if (-not (Get-Command java -ErrorAction SilentlyContinue)) {
+    return "NOT FOUND"
+  }
+
+  $previousErrorActionPreference = $ErrorActionPreference
+  try {
+    $ErrorActionPreference = "Continue"
+    return ((java -version 2>&1 | Select-Object -First 1).ToString())
+  } catch {
+    return "ERROR"
+  } finally {
+    $ErrorActionPreference = $previousErrorActionPreference
+  }
+}
+
 $mode = if ($Full) { "full" } else { "quick" }
 Write-Host "== HAIRCUT repository checks ($mode) ==" -ForegroundColor Green
 Write-Host "Root: $root"
@@ -171,7 +187,7 @@ if ($Full) {
     readyForFirebaseDeploy = ($requiredFailures.Count -eq 0)
     nodeVersion = $(if (Get-Command node -ErrorAction SilentlyContinue) { node --version } else { "NOT FOUND" })
     npmVersion = $(if (Get-Command npm -ErrorAction SilentlyContinue) { npm --version } else { "NOT FOUND" })
-    javaVersion = $(if (Get-Command java -ErrorAction SilentlyContinue) { (java -version 2>&1 | Select-Object -First 1) } else { "NOT FOUND" })
+    javaVersion = Get-JavaVersion
     firebaseCliVersion = $(if (Get-Command firebase -ErrorAction SilentlyContinue) { firebase --version } else { "NOT FOUND" })
     summary = $counts
     results = @($results)

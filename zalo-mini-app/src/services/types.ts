@@ -25,6 +25,7 @@ export type AppSession = {
   branchAddress?: string;
   mirrorName?: string;
   zaloUserId: string;
+  identityBinding?: string;
   sessionStatus?: "waiting" | "serving" | "pending_approval" | "completed" | "cancelled";
   assignedStaffName?: string;
   claimedAtMs?: number | null;

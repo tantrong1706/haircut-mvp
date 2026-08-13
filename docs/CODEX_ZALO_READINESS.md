@@ -1,6 +1,6 @@
-# HAIRCUT - Zalo readiness
+# HISTORICAL / ARCHIVED - HAIRCUT Zalo readiness (Version 5)
 
-> **Ảnh chụp trạng thái cũ:** tài liệu này ghi nhận bộ kiểm tra và Zalo Testing Version 5 tại thời
+> **KHÔNG DÙNG CHO VERSION 8.** Đây là ảnh chụp trạng thái cũ, ghi nhận bộ kiểm tra và Zalo Testing Version 5 tại thời
 > điểm trước. Không dùng các dấu `[x]` bên dưới để kết luận Version 8 sẵn sàng. Checklist hiện hành
 > là `docs/ZALO_REVIEW_CHECKLIST.md`.
 

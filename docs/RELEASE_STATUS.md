@@ -31,11 +31,11 @@ khớp đúng SHA.
 
 ## Ba sản phẩm
 
-| Sản phẩm              | Đối tượng         | Trạng thái source                                                                                  | Trạng thái phát hành                                                |
-| --------------------- | ----------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| HAIRCUT Zalo Mini App | Khách hàng        | Luồng QR, check-in, điểm, lịch sử, vòng quay và quà đã có                                          | Đã gửi Zalo xét duyệt; phiên bản thực tế xem trên Zalo Portal       |
-| HAIRCUT Manager       | Owner và staff    | React/Capacitor, Android/iOS, FCM, App Check, camera, biometric, secure storage và deep link đã có | Chưa đưa lên TestFlight/Google Play Internal Testing                |
-| HAIRCUT Admin         | Quản trị hệ thống | Web riêng, chỉ role `system_admin`, tổng quan, salon, feature flags và audit dạng chỉ đọc          | Chưa tạo Firebase Hosting site riêng; thao tác ghi bị khóa mặc định |
+| Sản phẩm         | Đối tượng         | Trạng thái source                                                                                  | Trạng thái phát hành                                                           |
+| ---------------- | ----------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| CH Haircut Salon | Khách hàng        | Luồng QR, check-in, điểm, lịch sử, vòng quay và quà đã có                                          | Zalo Mini App ID `2038116772828167300`; phiên bản thực tế xem trên Zalo Portal |
+| HAIRCUT Manager  | Owner và staff    | React/Capacitor, Android/iOS, FCM, App Check, camera, biometric, secure storage và deep link đã có | Chưa đưa lên TestFlight/Google Play Internal Testing                           |
+| HAIRCUT Admin    | Quản trị hệ thống | Web riêng, chỉ role `system_admin`, tổng quan, salon, feature flags và audit dạng chỉ đọc          | Chưa tạo Firebase Hosting site riêng; thao tác ghi bị khóa mặc định            |
 
 Mini App ID được giữ nguyên: `2038116772828167300`. Bundle ID Manager: `vn.haircut.manager`.
 

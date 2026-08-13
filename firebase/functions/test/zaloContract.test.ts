@@ -27,6 +27,22 @@ describe("hợp đồng xác minh Zalo", () => {
     expect(verificationBody).not.toContain("payload.picture");
   });
 
+  it("chuẩn hóa lỗi xác minh và gắn requestId mà không lộ credential", () => {
+    const start = functionsSource.indexOf("async function verifyZaloAccessToken");
+    const end = functionsSource.indexOf("\nfunction last4", start);
+    const verificationBody = functionsSource.slice(start, end);
+    const registerBody = callableBody("registerCustomerFromZalo");
+
+    expect(verificationBody).toContain("requestId");
+    expect(verificationBody).toContain('event: "zalo_identity_verification_failed"');
+    expect(verificationBody).toContain("ZALO_VERIFICATION_USER_MESSAGE");
+    expect(verificationBody).toContain('errorCode: "ZALO_VERIFICATION_FAILED"');
+    expect(verificationBody).toContain("for (const sensitiveValue of [accessToken, appSecret, appsecretProof])");
+    expect(registerBody).toContain("createZaloVerificationRequestId()");
+    expect(registerBody).toContain('functionName: "registerCustomerFromZalo"');
+    expect(registerBody).not.toContain("request.data?.zaloUserId");
+  });
+
   it.each([
     ["registerCustomerFromZalo", "const qrResolution = await resolveCustomerQrData"],
     ["spinLuckyWheelFromZalo", "return spinWheelForCustomer"],
@@ -35,11 +51,21 @@ describe("hợp đồng xác minh Zalo", () => {
     ["getCustomerRewardsFromZalo", "const rewardsSnap"],
   ])("%s xác minh Zalo trước khi đọc hoặc ghi nghiệp vụ khách", (name, businessMarker) => {
     const body = callableBody(name);
-    const verificationIndex = body.indexOf("verifyZaloAccessToken(request.data?.zaloAccessToken)");
+    const verificationIndex = body.indexOf("await verifyZaloAccessToken(");
     const businessIndex = body.indexOf(businessMarker);
 
     expect(verificationIndex).toBeGreaterThanOrEqual(0);
     expect(businessIndex).toBeGreaterThan(verificationIndex);
+  });
+
+  it("vòng quay production dùng entropy mật mã phía server", () => {
+    const start = functionsSource.indexOf("async function spinWheelForCustomer");
+    const end = functionsSource.indexOf("\nexport const createSalon", start);
+    const spinBody = functionsSource.slice(start, end);
+
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(spinBody).toContain("randomInt(availableSlotCount)");
+    expect(spinBody).not.toContain("Math.random()");
   });
 
   it("giải mã phone token ở backend trước khi lưu khách", () => {

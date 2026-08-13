@@ -86,12 +86,7 @@ export function normalizeWheelSlotType(type: unknown, label: string): "reward" |
 }
 
 export function selectWheelSlot(slots: WheelSlotInput[], randomValue: number) {
-  const activeSlots = slots
-    .map((slot) => ({
-      ...slot,
-      type: normalizeWheelSlotType(slot.type, slot.label),
-    }))
-    .filter((slot) => slot.active && slot.label.trim().length > 0);
+  const activeSlots = activeWheelSlots(slots);
 
   if (activeSlots.length === 0) {
     return null;
@@ -100,8 +95,28 @@ export function selectWheelSlot(slots: WheelSlotInput[], randomValue: number) {
   const normalizedRandom = Number.isFinite(randomValue)
     ? Math.min(Math.max(randomValue, 0), 0.999999999)
     : 0;
-  const index = Math.floor(normalizedRandom * activeSlots.length);
+  return selectWheelSlotByIndex(slots, Math.floor(normalizedRandom * activeSlots.length));
+}
+
+export function activeWheelSlotCount(slots: WheelSlotInput[]) {
+  return activeWheelSlots(slots).length;
+}
+
+export function selectWheelSlotByIndex(slots: WheelSlotInput[], index: number) {
+  const activeSlots = activeWheelSlots(slots);
+  if (!Number.isSafeInteger(index) || index < 0 || index >= activeSlots.length) {
+    return null;
+  }
   return { ...activeSlots[index], index };
+}
+
+function activeWheelSlots(slots: WheelSlotInput[]) {
+  return slots
+    .map((slot) => ({
+      ...slot,
+      type: normalizeWheelSlotType(slot.type, slot.label),
+    }))
+    .filter((slot) => slot.active && slot.label.trim().length > 0);
 }
 
 export function wheelRewardOutcome(type: "reward" | "no_prize", generatedCode: string) {

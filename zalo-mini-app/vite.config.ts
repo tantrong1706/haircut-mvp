@@ -4,6 +4,8 @@ import { defineConfig, loadEnv } from "vite";
 import zaloMiniApp from "zmp-vite-plugin";
 import { z } from "zod";
 
+import { getViteBuildOutDir } from "./src/config/buildOutput";
+
 const productionEnvSchema = z.object({
   VITE_FIREBASE_API_KEY: z.string().min(1),
   VITE_FIREBASE_AUTH_DOMAIN: z.string().min(1),
@@ -29,6 +31,7 @@ export default defineConfig(({ mode }) => {
   }
 
   const hasSentryUpload = Boolean(env.SENTRY_AUTH_TOKEN && env.SENTRY_ORG && env.SENTRY_PROJECT);
+  const outDir = getViteBuildOutDir(mode);
 
   return {
     base: "./",
@@ -43,14 +46,15 @@ export default defineConfig(({ mode }) => {
               project: env.SENTRY_PROJECT,
               telemetry: false,
               sourcemaps: {
-                assets: "./www/assets/**",
-                filesToDeleteAfterUpload: ["./www/**/*.map"],
+                assets: `./${outDir}/assets/**`,
+                filesToDeleteAfterUpload: [`./${outDir}/**/*.map`],
               },
             }),
           ]
         : []),
     ],
     build: {
+      outDir,
       manifest: true,
       sourcemap: hasSentryUpload ? "hidden" : false,
       modulePreload: {

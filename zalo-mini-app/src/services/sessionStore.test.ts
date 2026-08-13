@@ -1,5 +1,10 @@
-import { describe, expect, it } from "vitest";
-import { clearSavedSession, loadSavedSession, saveSession } from "./sessionStore";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  clearSavedSession,
+  loadSavedSessionCandidate,
+  saveSession,
+  SESSION_CACHE_TTL_MS,
+} from "./sessionStore";
 import type { AppSession, QrContext } from "./types";
 
 const qr: QrContext = {
@@ -16,7 +21,7 @@ const session: AppSession = {
   sessionStatus: "waiting",
   customer: {
     customerId: "customer-a",
-    name: "Anh Tân",
+    name: "Anh Tan",
     phoneLast4: "1234",
     points: 3,
     allowPhoto: false,
@@ -24,47 +29,73 @@ const session: AppSession = {
 };
 
 describe("sessionStore", () => {
-  it("khôi phục phiên cùng salon khi khách quét lại và không lưu token", () => {
-    saveSession(session);
+  beforeEach(() => {
+    localStorage.clear();
+    vi.useRealTimers();
+  });
 
-    const restored = loadSavedSession({ ...qr, branchId: "branch-b", qrToken: "token-khac" });
-    expect(restored).toMatchObject({ sessionId: "session-a", customer: session.customer });
-    expect(restored?.qr).toEqual({
-      qrType: "branch",
+  it("chi luu ung vien toi thieu co hash danh tinh va khong luu du lieu rieng", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-09T10:00:00Z"));
+    await saveSession(session);
+
+    const candidate = loadSavedSessionCandidate({ ...qr, branchId: "branch-b" });
+    const raw = localStorage.getItem("haircut_customer_session_v2") || "";
+
+    expect(candidate).toMatchObject({
+      schemaVersion: 2,
       salonId: "salon-a",
-      branchId: "branch-a",
-      mirrorId: "",
+      sessionId: "session-a",
+      customerId: "customer-a",
+      savedAt: Date.now(),
+      expiresAt: Date.now() + SESSION_CACHE_TTL_MS,
     });
-    expect(localStorage.getItem("haircut_app_session_v1")).not.toContain("token-a");
-    expect(loadSavedSession({ ...qr, salonId: "salon-b" })).toBeNull();
+    expect(candidate?.identityBinding).toMatch(/^[a-f0-9]{64}$/);
+    expect(raw).not.toContain("token-a");
+    expect(raw).not.toContain("Anh Tan");
+    expect(raw).not.toContain("1234");
+    expect(raw).not.toContain('"points"');
+    expect(raw).not.toContain("zalo-a");
+    expect(loadSavedSessionCandidate({ ...qr, salonId: "salon-b" })).toBeNull();
   });
 
-  it("xóa session đã lưu", () => {
-    saveSession(session);
+  it("xoa cache cu chua toan bo AppSession", () => {
+    localStorage.setItem("haircut_app_session_v1", JSON.stringify(session));
+
+    expect(loadSavedSessionCandidate(qr)).toBeNull();
+    expect(localStorage.getItem("haircut_app_session_v1")).toBeNull();
+  });
+
+  it("xoa candidate het TTL", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-09T10:00:00Z"));
+    await saveSession(session);
+    vi.setSystemTime(new Date(Date.now() + SESSION_CACHE_TTL_MS + 1));
+
+    expect(loadSavedSessionCandidate(qr)).toBeNull();
+    expect(localStorage.getItem("haircut_customer_session_v2")).toBeNull();
+  });
+
+  it("xoa JSON hong thay vi nem loi", () => {
+    localStorage.setItem("haircut_customer_session_v2", "{hong-json");
+
+    expect(loadSavedSessionCandidate(qr)).toBeNull();
+    expect(localStorage.getItem("haircut_customer_session_v2")).toBeNull();
+  });
+
+  it.each(["completed", "cancelled"] as const)(
+    "khong luu session terminal %s",
+    async (sessionStatus) => {
+      await saveSession(session);
+      await saveSession({ ...session, sessionStatus });
+
+      expect(loadSavedSessionCandidate(qr)).toBeNull();
+    },
+  );
+
+  it("xoa session da luu", async () => {
+    await saveSession(session);
     clearSavedSession();
-    expect(loadSavedSession(qr)).toBeNull();
-  });
-
-  it("không khôi phục phiên demo trên bản production", () => {
-    saveSession({
-      ...session,
-      qr: {
-        qrType: "legacy-mirror",
-        salonId: "demo-salon",
-        branchId: "",
-        mirrorId: "demo-mirror-1",
-        qrToken: "demo-token",
-      },
-    });
-
-    expect(
-      loadSavedSession({
-        salonId: "demo-salon",
-        qrType: "legacy-mirror",
-        branchId: "",
-        mirrorId: "demo-mirror-1",
-        qrToken: "demo-token",
-      }),
-    ).toBeNull();
+    expect(loadSavedSessionCandidate(qr)).toBeNull();
   });
 });

@@ -10,8 +10,10 @@ import {
   isVerifiedOwnerIdentity,
   isServiceSessionExpired,
   legacyBranchPatch,
+  activeWheelSlotCount,
   rewardExpiresAtMs,
   selectWheelSlot,
+  selectWheelSlotByIndex,
   serviceSessionExpiresAtMs,
   wheelRewardOutcome,
 } from "../src/businessRules";
@@ -82,6 +84,18 @@ describe("vòng đời lượt cắt", () => {
 });
 
 describe("thống kê và vòng quay", () => {
+  it("chọn đúng ô theo chỉ số nguyên đã sinh an toàn", () => {
+    const slots = [
+      { label: "Đã tắt", active: false, type: "reward" },
+      { label: "Quà A", active: true, type: "reward" },
+      { label: "Quà B", active: true, type: "reward" },
+    ];
+
+    expect(activeWheelSlotCount(slots)).toBe(2);
+    expect(selectWheelSlotByIndex(slots, 1)).toMatchObject({ index: 1, label: "Quà B" });
+    expect(selectWheelSlotByIndex(slots, 2)).toBeNull();
+  });
+
   it("đếm khách hoàn tất duy nhất", () => {
     expect(
       countUniqueCustomersSince(

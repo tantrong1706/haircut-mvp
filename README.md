@@ -2,6 +2,8 @@
 
 HAIRCUT là nền tảng chăm sóc và giữ chân khách hàng dành cho salon tóc. Hệ thống kết nối trải nghiệm khách trên Zalo Mini App với quy trình vận hành của nhân viên và chủ salon: check-in bằng QR, quản lý hàng chờ, duyệt điểm, lưu lịch sử cắt tóc, quay thưởng và đổi mã quà.
 
+Zalo Mini App dành cho khách được phát hành chính thức với tên **CH Haircut Salon**, Mini App ID `2038116772828167300`. Tên HAIRCUT trong repository tiếp tục chỉ nền tảng kỹ thuật, Manager và Admin; không phải tên Mini App gửi Zalo xét duyệt.
+
 ## Vai trò
 
 - **Khách hàng:** quét QR, xác nhận thông tin Zalo, tạo lượt cắt, theo dõi trạng thái, xem điểm và lịch sử, quay thưởng và quản lý mã quà.

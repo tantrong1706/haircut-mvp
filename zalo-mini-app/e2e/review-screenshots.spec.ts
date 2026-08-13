@@ -25,7 +25,7 @@ test.describe("Bộ ảnh xét duyệt Zalo", () => {
       `${localOrigin}/?${new URLSearchParams({
         qrType: "salon",
         salonId: "salon-preview",
-        qrToken: "token-preview",
+        qrToken: "signed-salon-preview",
       })}`,
     );
     await expect(page.getByRole("combobox", { name: "Chọn chi nhánh" })).toBeVisible();
@@ -36,7 +36,7 @@ test.describe("Bộ ảnh xét duyệt Zalo", () => {
         qrType: "branch",
         salonId: "salon-preview",
         branchId: "demo-branch-main",
-        qrToken: "token-preview",
+        qrToken: "signed-branch-preview",
       })}`,
     );
     await expect(page.getByLabel("Tên hiển thị tại salon")).toHaveValue("Khách xem trước");
@@ -213,15 +213,34 @@ async function customerPage(
   const context = await newContext(browser, mobileViewport);
   const session = customerSession(options.status || "waiting");
   await context.addInitScript(
-    ({ initialSession, rewards, spinIndex }) => {
-      localStorage.setItem("haircut_app_session_v1", JSON.stringify(initialSession));
+    ({ initialSession, identityBinding, rewards, spinIndex }) => {
+      const savedAt = Date.now();
+      localStorage.setItem(
+        "haircut_customer_session_v2",
+        JSON.stringify({
+          schemaVersion: 2,
+          salonId: initialSession.qr.salonId,
+          sessionId: initialSession.sessionId,
+          customerId: "mock-customer",
+          identityBinding,
+          savedAt,
+          expiresAt: savedAt + 12 * 60 * 60 * 1000,
+          qr: initialSession.qr,
+        }),
+      );
       localStorage.setItem("haircut_mock_points", String(initialSession.customer.points));
+      localStorage.setItem("haircut_mock_session_status", initialSession.sessionStatus);
       localStorage.setItem("haircut_mock_rewards", JSON.stringify(rewards || []));
       if (typeof spinIndex === "number") {
         localStorage.setItem("haircut_mock_spin_index", String(spinIndex));
       }
     },
-    { initialSession: session, rewards: options.rewards, spinIndex: options.spinIndex },
+    {
+      initialSession: session,
+      identityBinding: previewIdentityBinding,
+      rewards: options.rewards,
+      spinIndex: options.spinIndex,
+    },
   );
   const page = await context.newPage();
   await page.goto(
@@ -229,10 +248,10 @@ async function customerPage(
       qrType: "branch",
       salonId: "salon-e2e",
       branchId: "demo-branch-main",
-      qrToken: "token-e2e",
+      qrToken: "signed-branch-e2e",
     })}`,
   );
-  await expect(page.getByRole("heading", { name: "Khách kiểm thử" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Khách xem trước" })).toBeVisible();
   return { context, page };
 }
 
@@ -341,3 +360,5 @@ function customerSession(status: CustomerStatus) {
 
 type Credentials = { email: string; password: string };
 type CustomerStatus = "waiting" | "serving" | "completed";
+
+const previewIdentityBinding = "af6043a4c7f067471d233c0e7775b52b302f0acbcb68fe356b7be4a58dc9bbee";
