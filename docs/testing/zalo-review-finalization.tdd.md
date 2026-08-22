@@ -26,6 +26,8 @@ Journeys and acceptance criteria were derived from the project owner's request t
 | Strict submission checker rejects incomplete evidence                                               | Compile-time RED: checker module missing                                              | Submission checker unit: 2 passed                                                                     |
 | Windows release is immutable/checksummed and rollback reads the prior version before activation     | Template test failed for missing scripts, then failed ordering 5653 < 5148            | Deployment template suite: 4 passed; PowerShell parser: 0 errors                                      |
 | Administrator can install a candidate owned by the Codex sandbox without changing global Git config | Live installer failed with dubious ownership and then called Trim on empty Git output | Installer uses a repo-scoped safe.directory, validates Git exit status first, template suite 4 passed |
+| A partially prepared immutable Windows release can be retried safely                                 | Live retry stopped at `Release already exists`                                        | Existing release is reused only after manifest, size and SHA-256 verification; template suite passed  |
+| A missing WinSW registration is recovered without creating duplicate services                        | Live activation returned Windows service error 1060                                   | Installer detects the missing service, installs once, starts it and requires local health 200          |
 
 ## Final validation
 
@@ -36,7 +38,7 @@ Journeys and acceptance criteria were derived from the project owner's request t
 | Root gates                 | node --test test/release-gates.test.mjs test/zalo-submission-readiness.test.mjs | 6 PASS                                                                                                     |
 | Mini App unit              | npm run test:run on integrated source before review-tool-only changes           | 29 files, 127 tests PASS                                                                                   |
 | Mini App coverage          | npm run test:coverage                                                           | Lines 71.24%, branches 79.5%, functions 76.31%; repository thresholds PASS                                 |
-| Mini App E2E               | npm run test:e2e                                                                | 15 PASS across desktop/mobile Chromium and mobile WebKit; 9 screenshot-capture tests intentionally skipped |
+| Mini App E2E               | npm run test:e2e                                                                | 15 PASS across desktop/mobile Chromium and mobile WebKit; 3 screenshot-capture tests intentionally skipped |
 | ZMP build                  | npm run build:zmp then validate:zmp                                             | Build PASS; manifest/assets complete                                                                       |
 | Static Zalo check          | npm run check:zalo-review                                                       | 34/34 static checks PASS                                                                                   |
 | Secret scan                | node scripts/check-secrets.mjs --include-working-tree                           | 506 files PASS; no credential contents printed                                                             |
@@ -47,7 +49,7 @@ Journeys and acceptance criteria were derived from the project owner's request t
 
 - The Mini App's configured coverage scope passes repository thresholds but remains below the generic 80% TDD target for firebase.ts. No Mini App production logic changed in this finalization; changes there are review capture tooling and package scripts.
 - Gateway production dependencies audit clean: critical 0, high 0, moderate 0.
-- Functions production dependencies: critical 0, high 0, moderate 9.
+- Functions production dependencies: critical 0, high 0, moderate 8.
 - Mini App production audit reports one transitive high finding through ZMP SDK build tooling. No dependency was upgraded because the owner explicitly prohibited dependency upgrades and Dependabot changes.
 - The strict submission command intentionally remains blocked until real Zalo, HTTPS enforcement, hardened live runtime, Firebase canary/deployed SHA, final Testing Version, Android/iPhone checks, screenshots, and placeholders are completed.
 
