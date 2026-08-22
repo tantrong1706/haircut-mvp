@@ -25,6 +25,16 @@ function Invoke-Native([string]$FilePath, [string[]]$Arguments) {
   }
 }
 
+function Invoke-GitText([string]$RepositoryRoot, [string[]]$Arguments) {
+  $output = @(
+    & git -c ("safe.directory=" + $RepositoryRoot) -C $RepositoryRoot @Arguments 2>&1
+  )
+  if ($LASTEXITCODE -ne 0) {
+    throw "Git command failed"
+  }
+  return ($output -join [Environment]::NewLine).Trim()
+}
+
 function Set-DirectoryAcl([string]$Path, [string]$ServiceAccess) {
   Invoke-Native icacls.exe @(
     $Path,
@@ -62,13 +72,14 @@ function Wait-LocalHealth([int]$TimeoutSeconds = 30) {
 
 $source = (Resolve-Path -LiteralPath $SourceRoot).Path
 $config = (Resolve-Path -LiteralPath $ConfigSource).Path
+$repoRoot = [IO.Path]::GetFullPath((Join-Path $source "..\.."))
 if (-not (Test-Path -LiteralPath (Join-Path $source "dist\src\server.js"))) {
   throw "Build the gateway before installing a release"
 }
-if (@(git -C $source status --porcelain).Count -ne 0) {
+if (Invoke-GitText $repoRoot @("status", "--porcelain")) {
   throw "Gateway source worktree must be clean"
 }
-$headSha = (git -C $source rev-parse HEAD).Trim()
+$headSha = Invoke-GitText $repoRoot @("rev-parse", "HEAD")
 if ($headSha -notmatch "^[a-f0-9]{40}$") { throw "Invalid source SHA" }
 if (-not $Version) { $Version = $headSha }
 if ($Version -ne $headSha) { throw "Version must equal the clean Git HEAD" }

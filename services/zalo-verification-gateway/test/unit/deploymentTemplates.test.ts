@@ -42,10 +42,13 @@ describe("deployment templates", () => {
     expect(installer).toContain("ProgramData\\CHHaircut\\zalo-gateway");
     expect(installer).toContain('Join-Path $InstallationRoot "releases"');
     expect(installer).toContain("Get-FileHash");
-    expect(installer).toMatch(/git -C \$source status --porcelain/u);
+    expect(installer).toContain('Invoke-GitText $repoRoot @("status", "--porcelain")');
     expect(installer).toContain("icacls.exe");
     expect(installer).toContain("NT SERVICE\\CHHaircutZaloGateway");
     expect(installer).not.toContain("Authenticated Users");
+    expect(installer).toContain("safe.directory=");
+    expect(installer).toContain("function Invoke-GitText");
+    expect(installer).not.toMatch(/\(git -C \$source rev-parse HEAD\)\.Trim/u);
     expect(runner).toContain("current.txt");
     expect(runner).toContain("manifest.json");
     expect(runner).toContain("Get-FileHash");
