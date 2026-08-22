@@ -270,7 +270,11 @@ if ($PSCmdlet.ShouldProcess($releaseRoot, "Install immutable gateway release")) 
   $currentTemp = Join-Path $InstallationRoot "current.txt.new"
   Set-Content -LiteralPath $currentTemp -Value $Version -Encoding ASCII
   Set-FileAcl $currentTemp "R"
-  Move-Item -LiteralPath $currentTemp -Destination $currentPath -Force
+  if (Test-Path -LiteralPath $currentPath -PathType Leaf) {
+    [IO.File]::Replace($currentTemp, $currentPath, $null, $true)
+  } else {
+    Move-Item -LiteralPath $currentTemp -Destination $currentPath
+  }
 }
 
 if (-not $Activate) {
