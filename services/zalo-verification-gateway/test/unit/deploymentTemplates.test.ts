@@ -54,6 +54,9 @@ describe("deployment templates", () => {
       "Copy-Item -LiteralPath $runnerSource -Destination $serviceRunnerPath",
     );
     expect(installer).toContain("$previousRunner");
+    expect(installer).toContain("function Resolve-ServiceSid");
+    expect(installer).toContain("IdentityNotMappedException");
+    expect(installer).toContain("if ($serviceSid)");
     expect(installer).not.toContain('Invoke-Native $wrapper @("uninstall")');
     expect(installer).not.toContain("Set-Content -LiteralPath $xmlPath");
     expect(runner).toContain("current.txt");

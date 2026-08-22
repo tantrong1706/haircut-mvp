@@ -15,7 +15,6 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 $serviceName = "CHHaircutZaloGateway"
-$serviceSid = "NT SERVICE\CHHaircutZaloGateway"
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $runnerSource = Join-Path $scriptRoot "run-secure-gateway.ps1"
 
@@ -36,26 +35,39 @@ function Invoke-GitText([string]$RepositoryRoot, [string[]]$Arguments) {
   return ($output -join [Environment]::NewLine).Trim()
 }
 
+function Resolve-ServiceSid([string]$AccountName) {
+  try {
+    $account = [Security.Principal.NTAccount]::new($AccountName)
+    return $account.Translate([Security.Principal.SecurityIdentifier]).Value
+  } catch [Security.Principal.IdentityNotMappedException] {
+    return ""
+  }
+}
+
+$serviceSid = Resolve-ServiceSid "NT SERVICE\CHHaircutZaloGateway"
+
 function Set-DirectoryAcl([string]$Path, [string]$ServiceAccess) {
-  Invoke-Native icacls.exe @(
+  $arguments = @(
     $Path,
     "/inheritance:r",
     "/grant:r",
     "SYSTEM:(OI)(CI)(F)",
-    "BUILTIN\Administrators:(OI)(CI)(F)",
-    ("{0}:(OI)(CI)({1})" -f $serviceSid, $ServiceAccess)
+    "BUILTIN\Administrators:(OI)(CI)(F)"
   )
+  if ($serviceSid) { $arguments += ("*{0}:(OI)(CI)({1})" -f $serviceSid, $ServiceAccess) }
+  Invoke-Native icacls.exe $arguments
 }
 
 function Set-FileAcl([string]$Path, [string]$ServiceAccess) {
-  Invoke-Native icacls.exe @(
+  $arguments = @(
     $Path,
     "/inheritance:r",
     "/grant:r",
     "SYSTEM:(F)",
-    "BUILTIN\Administrators:(F)",
-    ("{0}:({1})" -f $serviceSid, $ServiceAccess)
+    "BUILTIN\Administrators:(F)"
   )
+  if ($serviceSid) { $arguments += ("*{0}:({1})" -f $serviceSid, $ServiceAccess) }
+  Invoke-Native icacls.exe $arguments
 }
 
 function Wait-LocalHealth([int]$TimeoutSeconds = 30) {
