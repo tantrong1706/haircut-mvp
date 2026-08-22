@@ -57,6 +57,8 @@ describe("deployment templates", () => {
     expect(runner).toContain("$ReplayDbPathOverride");
     expect(runner).toContain("startup.status.log");
     expect(runner).toContain('Write-StartupStage "START_NODE"');
+    expect(runner).toContain("[IO.Path]::GetFileName($Path)");
+    expect(runner).not.toContain('Filter "$(Split-Path $Path -Leaf).*\\.log"');
     expect(installer.indexOf("$previousVersion =")).toBeLessThan(
       installer.indexOf("Move-Item -LiteralPath $currentTemp -Destination $currentPath"),
     );

@@ -34,7 +34,8 @@ function Rotate-Log([string]$Path, [long]$MaximumBytes = 10MB, [int]$Keep = 5) {
     $archive = "$Path.$([DateTime]::UtcNow.ToString('yyyyMMddHHmmss')).log"
     Move-Item -LiteralPath $Path -Destination $archive
   }
-  $archives = @(Get-ChildItem -LiteralPath (Split-Path $Path) -Filter "$(Split-Path $Path -Leaf).*\.log" |
+  $archivePattern = [IO.Path]::GetFileName($Path) + ".*.log"
+  $archives = @(Get-ChildItem -LiteralPath (Split-Path $Path) -File -Filter $archivePattern |
       Sort-Object LastWriteTimeUtc -Descending)
   foreach ($stale in $archives | Select-Object -Skip $Keep) {
     Remove-Item -LiteralPath $stale.FullName -Force
@@ -111,10 +112,15 @@ Write-StartupStage "NODE_READY"
 
 $stdoutPath = Join-Path $logRoot "gateway.stdout.log"
 $stderrPath = Join-Path $logRoot "gateway.stderr.log"
+Write-StartupStage "LOG_PATHS_READY"
+Write-StartupStage "ROTATE_STDOUT"
 Rotate-Log $stdoutPath
+Write-StartupStage "ROTATE_STDERR"
 Rotate-Log $stderrPath
+Write-StartupStage "LOGS_READY"
 
 Set-Location -LiteralPath (Join-Path $releaseRoot "app")
+Write-StartupStage "WORKDIR_READY"
 Write-StartupStage "START_NODE"
 & $nodePath $serverPath 1>> $stdoutPath 2>> $stderrPath
 $nodeExitCode = $LASTEXITCODE
