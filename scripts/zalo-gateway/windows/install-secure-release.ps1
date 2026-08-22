@@ -257,11 +257,16 @@ if (-not $serviceXml -or $serviceXml -notlike "*$serviceRunnerPath*") {
   throw "WinSW is not configured for the expected service runner"
 }
 $previousRunner = Get-Content -LiteralPath $serviceRunnerPath -Raw
+$serviceWasInstalled = $null -ne (Get-Service -Name $serviceName -ErrorAction SilentlyContinue)
 
 try {
   Copy-Item -LiteralPath $runnerSource -Destination $serviceRunnerPath -Force
   Set-FileAcl $serviceRunnerPath "RX"
-  Invoke-Native $wrapper @("stop")
+  if (-not $serviceWasInstalled) {
+    Invoke-Native $wrapper @("install")
+  } else {
+    Invoke-Native $wrapper @("stop")
+  }
   Invoke-Native $wrapper @("start")
   Wait-LocalHealth
 } catch {

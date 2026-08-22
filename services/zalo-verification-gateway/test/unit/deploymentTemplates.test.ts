@@ -61,6 +61,9 @@ describe("deployment templates", () => {
     expect(installer).toContain("Assert-InstalledRelease $releaseRoot $Version");
     expect(installer).toContain("REUSE_EXISTING_RELEASE=true");
     expect(installer).not.toContain('throw "Release already exists: $Version"');
+    expect(installer).toContain("Get-Service -Name $serviceName -ErrorAction SilentlyContinue");
+    expect(installer).toContain("if (-not $serviceWasInstalled)");
+    expect(installer).toContain('Invoke-Native $wrapper @("install")');
     expect(installer).not.toContain('Invoke-Native $wrapper @("uninstall")');
     expect(installer).not.toContain("Set-Content -LiteralPath $xmlPath");
     expect(runner).toContain("current.txt");
