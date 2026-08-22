@@ -79,12 +79,16 @@ describe("deployment templates", () => {
     expect(runner).toContain('Write-StartupStage "START_NODE"');
     expect(runner).toContain("[IO.Path]::GetFileName($Path)");
     expect(runner).not.toContain('Filter "$(Split-Path $Path -Leaf).*\\.log"');
-    expect(installer).toContain("[IO.File]::Replace($currentTemp, $currentPath, $null, $true)");
+    expect(installer).toContain(
+      "[IO.File]::Replace($currentTemp, $currentPath, $currentBackup, $true)",
+    );
+    expect(installer).toContain("$currentBackup = Join-Path $InstallationRoot");
+    expect(installer).toContain("Remove-Item -LiteralPath $currentBackup -Force");
     expect(installer).not.toContain(
       "Move-Item -LiteralPath $currentTemp -Destination $currentPath -Force",
     );
     expect(installer.indexOf("$previousVersion =")).toBeLessThan(
-      installer.indexOf("[IO.File]::Replace($currentTemp, $currentPath, $null, $true)"),
+      installer.indexOf("[IO.File]::Replace($currentTemp, $currentPath, $currentBackup, $true)"),
     );
     expect(installer.indexOf('Invoke-Native $wrapper @("stop")')).toBeLessThan(
       installer.indexOf("Copy-ReplayDatabase $configuredReplayDbPath $secureReplayDbPath"),

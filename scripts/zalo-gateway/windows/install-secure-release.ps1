@@ -257,6 +257,7 @@ if ($reuseExistingRelease) {
 Set-DirectoryAcl $configRoot "RX"
 Set-DirectoryAcl $dataRoot "M"
 Set-DirectoryAcl $logRoot "M"
+$currentBackup = ""
 
 if ($PSCmdlet.ShouldProcess($releaseRoot, "Install immutable gateway release")) {
   if (-not $reuseExistingRelease) {
@@ -271,13 +272,18 @@ if ($PSCmdlet.ShouldProcess($releaseRoot, "Install immutable gateway release")) 
   Set-Content -LiteralPath $currentTemp -Value $Version -Encoding ASCII
   Set-FileAcl $currentTemp "R"
   if (Test-Path -LiteralPath $currentPath -PathType Leaf) {
-    [IO.File]::Replace($currentTemp, $currentPath, $null, $true)
+    $currentBackup = Join-Path $InstallationRoot (
+      "current.txt.rollback." + [Guid]::NewGuid().ToString("N")
+    )
+    [IO.File]::Replace($currentTemp, $currentPath, $currentBackup, $true)
+    Set-FileAcl $currentBackup "R"
   } else {
     Move-Item -LiteralPath $currentTemp -Destination $currentPath
   }
 }
 
 if (-not $Activate) {
+  if ($currentBackup) { Remove-Item -LiteralPath $currentBackup -Force }
   Write-Output "SECURE_GATEWAY_RELEASE_PREPARED=true"
   Write-Output "SECURE_GATEWAY_ACTIVATED=false"
   exit 0
@@ -315,9 +321,16 @@ try {
   if ($previousVersion -match "^[a-f0-9]{40}$") {
     Set-Content -LiteralPath $currentPath -Value $previousVersion -Encoding ASCII
   }
+  if ($currentBackup -and (Test-Path -LiteralPath $currentBackup)) {
+    Remove-Item -LiteralPath $currentBackup -Force
+  }
   & $wrapper stop | Out-Null
   & $wrapper start | Out-Null
   throw
+}
+
+if ($currentBackup -and (Test-Path -LiteralPath $currentBackup)) {
+  Remove-Item -LiteralPath $currentBackup -Force
 }
 
 Write-Output "SECURE_GATEWAY_RELEASE_PREPARED=true"
