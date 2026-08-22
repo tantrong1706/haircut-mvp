@@ -49,6 +49,13 @@ describe("deployment templates", () => {
     expect(installer).toContain("safe.directory=");
     expect(installer).toContain("function Invoke-GitText");
     expect(installer).not.toMatch(/\(git -C \$source rev-parse HEAD\)\.Trim/u);
+    expect(installer).toContain("$ServiceRunnerPath");
+    expect(installer).toContain(
+      "Copy-Item -LiteralPath $runnerSource -Destination $serviceRunnerPath",
+    );
+    expect(installer).toContain("$previousRunner");
+    expect(installer).not.toContain('Invoke-Native $wrapper @("uninstall")');
+    expect(installer).not.toContain("Set-Content -LiteralPath $xmlPath");
     expect(runner).toContain("current.txt");
     expect(runner).toContain("manifest.json");
     expect(runner).toContain("Get-FileHash");

@@ -7,6 +7,7 @@ param(
   [string]$NodeExecutable = (Get-Command node.exe -ErrorAction Stop).Source,
   [string]$InstallationRoot = "$env:ProgramData\CHHaircut\zalo-gateway",
   [string]$ServiceRoot = "$env:ProgramData\CHHaircut\gateway-service",
+  [string]$ServiceRunnerPath = "",
   [string]$Version = "",
   [switch]$Activate
 )
@@ -160,42 +161,30 @@ if (-not $Activate) {
 $wrapper = Join-Path $ServiceRoot "$serviceName.exe"
 $xmlPath = Join-Path $ServiceRoot "$serviceName.xml"
 if (-not (Test-Path -LiteralPath $wrapper)) { throw "WinSW wrapper was not found" }
-$previousXml = if (Test-Path -LiteralPath $xmlPath) { Get-Content -LiteralPath $xmlPath -Raw } else { "" }
-
-$xml = @"
-<service>
-  <id>$serviceName</id>
-  <name>CH Haircut Zalo Gateway</name>
-  <description>CH Haircut Salon Vietnam verification gateway</description>
-  <executable>C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe</executable>
-  <arguments>-NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;$runnerTarget&quot;</arguments>
-  <workingdirectory>$InstallationRoot</workingdirectory>
-  <startmode>Automatic</startmode>
-  <delayedAutoStart>true</delayedAutoStart>
-  <onfailure action="restart" delay="10 sec" />
-  <onfailure action="restart" delay="30 sec" />
-  <resetfailure>1 hour</resetfailure>
-  <stoptimeout>20 sec</stoptimeout>
-  <log mode="none" />
-</service>
-"@
+if (-not $ServiceRunnerPath) { throw "ServiceRunnerPath is required for activation" }
+$serviceRunnerPath = (Resolve-Path -LiteralPath $ServiceRunnerPath).Path
+if ((Split-Path $serviceRunnerPath -Leaf) -ne "run-gateway.ps1") {
+  throw "Unexpected service runner filename"
+}
+$serviceXml = if (Test-Path -LiteralPath $xmlPath) { Get-Content -LiteralPath $xmlPath -Raw } else { "" }
+if (-not $serviceXml -or $serviceXml -notlike "*$serviceRunnerPath*") {
+  throw "WinSW is not configured for the expected service runner"
+}
+$previousRunner = Get-Content -LiteralPath $serviceRunnerPath -Raw
 
 try {
-  Set-Content -LiteralPath $xmlPath -Value $xml -Encoding UTF8
-  Set-FileAcl $xmlPath "R"
+  Copy-Item -LiteralPath $runnerSource -Destination $serviceRunnerPath -Force
+  Set-FileAcl $serviceRunnerPath "RX"
   Invoke-Native $wrapper @("stop")
-  Invoke-Native $wrapper @("uninstall")
-  Invoke-Native $wrapper @("install")
   Invoke-Native $wrapper @("start")
   Wait-LocalHealth
 } catch {
-  if ($previousXml) { Set-Content -LiteralPath $xmlPath -Value $previousXml -Encoding UTF8 }
+  Set-Content -LiteralPath $serviceRunnerPath -Value $previousRunner -Encoding UTF8
+  Set-FileAcl $serviceRunnerPath "RX"
   if ($previousVersion -match "^[a-f0-9]{40}$") {
     Set-Content -LiteralPath $currentPath -Value $previousVersion -Encoding ASCII
   }
   & $wrapper stop | Out-Null
-  & $wrapper uninstall | Out-Null
-  & $wrapper install | Out-Null
   & $wrapper start | Out-Null
   throw
 }
