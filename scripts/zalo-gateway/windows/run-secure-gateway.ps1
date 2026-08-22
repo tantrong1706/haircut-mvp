@@ -2,11 +2,23 @@
 [CmdletBinding()]
 param(
   [string]$InstallationRoot = "$env:ProgramData\CHHaircut\zalo-gateway",
-  [string]$ConfigPath = "$env:ProgramData\CHHaircut\zalo-gateway\config\gateway.env"
+  [string]$ConfigPath = "$env:ProgramData\CHHaircut\zalo-gateway\config\gateway.env",
+  [int]$PortOverride = 0,
+  [string]$ReplayDbPathOverride = ""
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+$logRoot = Join-Path $InstallationRoot "logs"
+New-Item -ItemType Directory -Path $logRoot -Force | Out-Null
+$startupStatusPath = Join-Path $logRoot "startup.status.log"
+
+function Write-StartupStage([string]$Stage) {
+  if ($Stage -notmatch "^[A-Z0-9_]{2,40}$") { throw "Invalid startup stage" }
+  Set-Content -LiteralPath $startupStatusPath -Value ("STAGE=" + $Stage) -Encoding ASCII
+}
+
+Write-StartupStage "BOOT"
 
 function Assert-ChildPath([string]$Candidate, [string]$Parent) {
   $resolvedParent = [IO.Path]::GetFullPath($Parent).TrimEnd("\") + "\"
@@ -34,6 +46,7 @@ $version = (Get-Content -LiteralPath $currentPath -Raw).Trim()
 if ($version -notmatch "^[a-f0-9]{40}$") {
   throw "Invalid active gateway version"
 }
+Write-StartupStage "CURRENT_READY"
 
 $releasesRoot = Join-Path $InstallationRoot "releases"
 $releaseRoot = Assert-ChildPath (Join-Path $releasesRoot $version) $releasesRoot
@@ -52,6 +65,7 @@ foreach ($entry in @($manifest.files)) {
     throw "Release checksum mismatch"
   }
 }
+Write-StartupStage "MANIFEST_READY"
 
 foreach ($rawLine in Get-Content -LiteralPath $ConfigPath) {
   $line = $rawLine.Trim()
@@ -66,6 +80,19 @@ foreach ($rawLine in Get-Content -LiteralPath $ConfigPath) {
     [EnvironmentVariableTarget]::Process
   )
 }
+Write-StartupStage "CONFIG_READY"
+
+if ($PortOverride -ne 0) {
+  if ($PortOverride -lt 1 -or $PortOverride -gt 65535) { throw "Invalid port override" }
+  $env:PORT = [string]$PortOverride
+}
+if ($ReplayDbPathOverride) {
+  $dataRoot = Join-Path $InstallationRoot "data"
+  $safeReplayPath = Assert-ChildPath $ReplayDbPathOverride $dataRoot
+  New-Item -ItemType Directory -Path (Split-Path $safeReplayPath) -Force | Out-Null
+  $env:REPLAY_DB_PATH = $safeReplayPath
+}
+Write-StartupStage "OVERRIDES_READY"
 
 $env:HTTP_PROXY = $null
 $env:HTTPS_PROXY = $null
@@ -80,14 +107,16 @@ $serverPath = Join-Path $releaseRoot "app\dist\src\server.js"
 if ((& $nodePath --version).Trim() -notmatch "^v22\.") {
   throw "Gateway release must use Node.js 22"
 }
+Write-StartupStage "NODE_READY"
 
-$logRoot = Join-Path $InstallationRoot "logs"
-New-Item -ItemType Directory -Path $logRoot -Force | Out-Null
 $stdoutPath = Join-Path $logRoot "gateway.stdout.log"
 $stderrPath = Join-Path $logRoot "gateway.stderr.log"
 Rotate-Log $stdoutPath
 Rotate-Log $stderrPath
 
 Set-Location -LiteralPath (Join-Path $releaseRoot "app")
+Write-StartupStage "START_NODE"
 & $nodePath $serverPath 1>> $stdoutPath 2>> $stderrPath
-exit $LASTEXITCODE
+$nodeExitCode = $LASTEXITCODE
+Write-StartupStage "NODE_EXIT"
+exit $nodeExitCode

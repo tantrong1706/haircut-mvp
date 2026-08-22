@@ -53,6 +53,10 @@ describe("deployment templates", () => {
     expect(runner).toContain("manifest.json");
     expect(runner).toContain("Get-FileHash");
     expect(runner).toContain("dist\\src\\server.js");
+    expect(runner).toContain("$PortOverride");
+    expect(runner).toContain("$ReplayDbPathOverride");
+    expect(runner).toContain("startup.status.log");
+    expect(runner).toContain('Write-StartupStage "START_NODE"');
     expect(installer.indexOf("$previousVersion =")).toBeLessThan(
       installer.indexOf("Move-Item -LiteralPath $currentTemp -Destination $currentPath"),
     );
