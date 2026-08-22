@@ -87,8 +87,10 @@ if ($PortOverride -ne 0) {
   if ($PortOverride -lt 1 -or $PortOverride -gt 65535) { throw "Invalid port override" }
   $env:PORT = [string]$PortOverride
 }
+$dataRoot = Join-Path $InstallationRoot "data"
+New-Item -ItemType Directory -Path $dataRoot -Force | Out-Null
+$env:REPLAY_DB_PATH = Join-Path $InstallationRoot "data\replay.db"
 if ($ReplayDbPathOverride) {
-  $dataRoot = Join-Path $InstallationRoot "data"
   $safeReplayPath = Assert-ChildPath $ReplayDbPathOverride $dataRoot
   New-Item -ItemType Directory -Path (Split-Path $safeReplayPath) -Force | Out-Null
   $env:REPLAY_DB_PATH = $safeReplayPath

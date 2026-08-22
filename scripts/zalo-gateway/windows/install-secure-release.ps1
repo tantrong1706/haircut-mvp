@@ -70,6 +70,39 @@ function Set-FileAcl([string]$Path, [string]$ServiceAccess) {
   Invoke-Native icacls.exe $arguments
 }
 
+function Get-GatewayEnvironmentValue([string]$Path, [string]$VariableName) {
+  foreach ($rawLine in Get-Content -LiteralPath $Path) {
+    $line = $rawLine.Trim()
+    if (-not $line -or $line.StartsWith("#")) { continue }
+    $separator = $line.IndexOf("=")
+    if ($separator -le 0) { throw "Invalid gateway environment file" }
+    if ($line.Substring(0, $separator).Trim() -eq $VariableName) {
+      return $line.Substring($separator + 1).Trim()
+    }
+  }
+  return ""
+}
+
+function Copy-ReplayDatabase([string]$SourcePath, [string]$DestinationPath) {
+  if (-not $SourcePath) { return }
+  $resolvedSource = [IO.Path]::GetFullPath($SourcePath)
+  $resolvedDestination = [IO.Path]::GetFullPath($DestinationPath)
+  if ($resolvedSource -eq $resolvedDestination -or
+      (Test-Path -LiteralPath $resolvedDestination -PathType Leaf)) {
+    return
+  }
+  if (-not (Test-Path -LiteralPath $resolvedSource -PathType Leaf)) { return }
+
+  foreach ($suffix in @("", "-wal", "-shm")) {
+    $sourceFile = $resolvedSource + $suffix
+    if (Test-Path -LiteralPath $sourceFile -PathType Leaf) {
+      $destinationFile = $resolvedDestination + $suffix
+      Copy-Item -LiteralPath $sourceFile -Destination $destinationFile
+      Set-FileAcl $destinationFile "M"
+    }
+  }
+}
+
 function Assert-InstalledRelease([string]$ReleaseRoot, [string]$ExpectedVersion) {
   $manifestPath = Join-Path $ReleaseRoot "manifest.json"
   if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
@@ -179,6 +212,8 @@ $logRoot = Join-Path $InstallationRoot "logs"
 $runnerTarget = Join-Path $InstallationRoot "run-secure-gateway.ps1"
 $currentPath = Join-Path $InstallationRoot "current.txt"
 $secureConfigPath = Join-Path $configRoot "gateway.env"
+$configuredReplayDbPath = Get-GatewayEnvironmentValue $config "REPLAY_DB_PATH"
+$secureReplayDbPath = Join-Path $dataRoot "replay.db"
 $previousVersion = if (Test-Path -LiteralPath $currentPath) {
   (Get-Content -LiteralPath $currentPath -Raw).Trim()
 } else {
@@ -267,6 +302,7 @@ try {
   } else {
     Invoke-Native $wrapper @("stop")
   }
+  Copy-ReplayDatabase $configuredReplayDbPath $secureReplayDbPath
   Invoke-Native $wrapper @("start")
   Wait-LocalHealth
 } catch {

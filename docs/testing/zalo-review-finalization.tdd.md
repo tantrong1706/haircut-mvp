@@ -28,6 +28,7 @@ Journeys and acceptance criteria were derived from the project owner's request t
 | Administrator can install a candidate owned by the Codex sandbox without changing global Git config | Live installer failed with dubious ownership and then called Trim on empty Git output | Installer uses a repo-scoped safe.directory, validates Git exit status first, template suite 4 passed |
 | A partially prepared immutable Windows release can be retried safely                                 | Live retry stopped at `Release already exists`                                        | Existing release is reused only after manifest, size and SHA-256 verification; template suite passed  |
 | A missing WinSW registration is recovered without creating duplicate services                        | Live activation returned Windows service error 1060                                   | Installer detects the missing service, installs once, starts it and requires local health 200          |
+| Windows replay state is stored under the restricted ProgramData runtime                               | Final admin audit found the live replay DB outside ProgramData                         | Runner forces the secured path; installer copies DB/WAL/SHM only while the service is stopped          |
 
 ## Final validation
 

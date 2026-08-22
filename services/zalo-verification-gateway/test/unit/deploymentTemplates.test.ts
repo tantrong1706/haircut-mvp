@@ -64,6 +64,8 @@ describe("deployment templates", () => {
     expect(installer).toContain("Get-Service -Name $serviceName -ErrorAction SilentlyContinue");
     expect(installer).toContain("if (-not $serviceWasInstalled)");
     expect(installer).toContain('Invoke-Native $wrapper @("install")');
+    expect(installer).toContain("function Copy-ReplayDatabase");
+    expect(installer).toContain("Copy-ReplayDatabase $configuredReplayDbPath $secureReplayDbPath");
     expect(installer).not.toContain('Invoke-Native $wrapper @("uninstall")');
     expect(installer).not.toContain("Set-Content -LiteralPath $xmlPath");
     expect(runner).toContain("current.txt");
@@ -72,6 +74,7 @@ describe("deployment templates", () => {
     expect(runner).toContain("dist\\src\\server.js");
     expect(runner).toContain("$PortOverride");
     expect(runner).toContain("$ReplayDbPathOverride");
+    expect(runner).toContain('$env:REPLAY_DB_PATH = Join-Path $InstallationRoot "data\\replay.db"');
     expect(runner).toContain("startup.status.log");
     expect(runner).toContain('Write-StartupStage "START_NODE"');
     expect(runner).toContain("[IO.Path]::GetFileName($Path)");
@@ -79,5 +82,11 @@ describe("deployment templates", () => {
     expect(installer.indexOf("$previousVersion =")).toBeLessThan(
       installer.indexOf("Move-Item -LiteralPath $currentTemp -Destination $currentPath"),
     );
+    expect(installer.indexOf('Invoke-Native $wrapper @("stop")')).toBeLessThan(
+      installer.indexOf("Copy-ReplayDatabase $configuredReplayDbPath $secureReplayDbPath"),
+    );
+    expect(
+      installer.indexOf("Copy-ReplayDatabase $configuredReplayDbPath $secureReplayDbPath"),
+    ).toBeLessThan(installer.indexOf('Invoke-Native $wrapper @("start")'));
   });
 });
