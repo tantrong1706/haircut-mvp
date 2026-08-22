@@ -70,6 +70,76 @@ function Set-FileAcl([string]$Path, [string]$ServiceAccess) {
   Invoke-Native icacls.exe $arguments
 }
 
+function Assert-InstalledRelease([string]$ReleaseRoot, [string]$ExpectedVersion) {
+  $manifestPath = Join-Path $ReleaseRoot "manifest.json"
+  if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+    throw "Existing release manifest is missing"
+  }
+
+  try {
+    $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+  } catch {
+    throw "Existing release manifest is invalid"
+  }
+
+  $propertyNames = @($manifest.PSObject.Properties.Name)
+  if (-not ($propertyNames -contains "schemaVersion") -or $manifest.schemaVersion -ne 1) {
+    throw "Existing release manifest schema is invalid"
+  }
+  if (-not ($propertyNames -contains "version") -or $manifest.version -ne $ExpectedVersion) {
+    throw "Existing release version does not match"
+  }
+  if (-not ($propertyNames -contains "files") -or @($manifest.files).Count -eq 0) {
+    throw "Existing release manifest file list is empty"
+  }
+
+  $rootPrefix = [IO.Path]::GetFullPath($ReleaseRoot).TrimEnd("\", "/") + [IO.Path]::DirectorySeparatorChar
+  $listedPaths = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+  foreach ($file in @($manifest.files)) {
+    $fileProperties = @($file.PSObject.Properties.Name)
+    if (-not ($fileProperties -contains "path") -or
+        -not ($fileProperties -contains "size") -or
+        -not ($fileProperties -contains "sha256")) {
+      throw "Existing release manifest contains an invalid file entry"
+    }
+
+    $relativePath = [string]$file.path
+    if ($relativePath -notmatch "^[A-Za-z0-9._/-]+$" -or
+        $relativePath.StartsWith("/") -or
+        $relativePath -match "(^|/)\.\.($|/)") {
+      throw "Existing release manifest contains an unsafe path"
+    }
+    if (-not $listedPaths.Add($relativePath)) {
+      throw "Existing release manifest contains a duplicate path"
+    }
+
+    $candidatePath = [IO.Path]::GetFullPath((Join-Path $ReleaseRoot $relativePath.Replace("/", "\")))
+    if (-not $candidatePath.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+      throw "Existing release manifest path escapes the release root"
+    }
+    if (-not (Test-Path -LiteralPath $candidatePath -PathType Leaf)) {
+      throw "Existing release file is missing"
+    }
+
+    $candidate = Get-Item -LiteralPath $candidatePath
+    if ($candidate.Length -ne [long]$file.size) {
+      throw "Existing release file size does not match"
+    }
+    $actualHash = (Get-FileHash -LiteralPath $candidatePath -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($actualHash -ne ([string]$file.sha256).ToLowerInvariant()) {
+      throw "Existing release file checksum does not match"
+    }
+  }
+
+  $installedFiles = @(
+    Get-ChildItem -LiteralPath $ReleaseRoot -Recurse -File |
+      Where-Object { $_.FullName -ne $manifestPath }
+  )
+  if ($installedFiles.Count -ne $listedPaths.Count) {
+    throw "Existing release contains unmanifested files"
+  }
+}
+
 function Wait-LocalHealth([int]$TimeoutSeconds = 30) {
   $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
   do {
@@ -115,44 +185,48 @@ $previousVersion = if (Test-Path -LiteralPath $currentPath) {
   ""
 }
 
-if (Test-Path -LiteralPath $releaseRoot) {
-  throw "Release already exists: $Version"
+New-Item -ItemType Directory -Path $releasesRoot, $configRoot, $dataRoot, $logRoot -Force | Out-Null
+$reuseExistingRelease = Test-Path -LiteralPath $releaseRoot
+if ($reuseExistingRelease) {
+  Assert-InstalledRelease $releaseRoot $Version
+  Write-Output "REUSE_EXISTING_RELEASE=true"
+} else {
+  $staging = Join-Path $stagingRoot ([Guid]::NewGuid().ToString("N"))
+  New-Item -ItemType Directory -Path (Join-Path $staging "app") -Force | Out-Null
+  Copy-Item -LiteralPath (Join-Path $source "dist") -Destination (Join-Path $staging "app") -Recurse
+  Copy-Item -LiteralPath (Join-Path $source "package.json") -Destination (Join-Path $staging "app")
+  Copy-Item -LiteralPath (Join-Path $source "package-lock.json") -Destination (Join-Path $staging "app")
+  New-Item -ItemType Directory -Path (Join-Path $staging "bin") -Force | Out-Null
+  Copy-Item -LiteralPath $NodeExecutable -Destination (Join-Path $staging "bin\node.exe")
+
+  $files = @(
+    Get-ChildItem -LiteralPath $staging -Recurse -File |
+      Sort-Object FullName |
+      ForEach-Object {
+        [ordered]@{
+          path = $_.FullName.Substring($staging.Length + 1).Replace("\", "/")
+          size = $_.Length
+          sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+        }
+      }
+  )
+  [ordered]@{
+    schemaVersion = 1
+    version = $Version
+    createdAtUtc = [DateTime]::UtcNow.ToString("o")
+    files = $files
+  } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $staging "manifest.json") -Encoding UTF8
+  Set-DirectoryAcl $staging "RX"
 }
 
-$staging = Join-Path $stagingRoot ([Guid]::NewGuid().ToString("N"))
-New-Item -ItemType Directory -Path (Join-Path $staging "app") -Force | Out-Null
-Copy-Item -LiteralPath (Join-Path $source "dist") -Destination (Join-Path $staging "app") -Recurse
-Copy-Item -LiteralPath (Join-Path $source "package.json") -Destination (Join-Path $staging "app")
-Copy-Item -LiteralPath (Join-Path $source "package-lock.json") -Destination (Join-Path $staging "app")
-New-Item -ItemType Directory -Path (Join-Path $staging "bin") -Force | Out-Null
-Copy-Item -LiteralPath $NodeExecutable -Destination (Join-Path $staging "bin\node.exe")
-
-$files = @(
-  Get-ChildItem -LiteralPath $staging -Recurse -File |
-    Sort-Object FullName |
-    ForEach-Object {
-      [ordered]@{
-        path = $_.FullName.Substring($staging.Length + 1).Replace("\", "/")
-        size = $_.Length
-        sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-      }
-    }
-)
-[ordered]@{
-  schemaVersion = 1
-  version = $Version
-  createdAtUtc = [DateTime]::UtcNow.ToString("o")
-  files = $files
-} | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $staging "manifest.json") -Encoding UTF8
-
-New-Item -ItemType Directory -Path $releasesRoot, $configRoot, $dataRoot, $logRoot -Force | Out-Null
-Set-DirectoryAcl $staging "RX"
 Set-DirectoryAcl $configRoot "RX"
 Set-DirectoryAcl $dataRoot "M"
 Set-DirectoryAcl $logRoot "M"
 
 if ($PSCmdlet.ShouldProcess($releaseRoot, "Install immutable gateway release")) {
-  Move-Item -LiteralPath $staging -Destination $releaseRoot
+  if (-not $reuseExistingRelease) {
+    Move-Item -LiteralPath $staging -Destination $releaseRoot
+  }
   Copy-Item -LiteralPath $runnerSource -Destination $runnerTarget -Force
   Copy-Item -LiteralPath $config -Destination $secureConfigPath -Force
   Set-FileAcl $runnerTarget "RX"

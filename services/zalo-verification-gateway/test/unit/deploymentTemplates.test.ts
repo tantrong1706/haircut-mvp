@@ -57,6 +57,10 @@ describe("deployment templates", () => {
     expect(installer).toContain("function Resolve-ServiceSid");
     expect(installer).toContain("IdentityNotMappedException");
     expect(installer).toContain("if ($serviceSid)");
+    expect(installer).toContain("function Assert-InstalledRelease");
+    expect(installer).toContain("Assert-InstalledRelease $releaseRoot $Version");
+    expect(installer).toContain("REUSE_EXISTING_RELEASE=true");
+    expect(installer).not.toContain('throw "Release already exists: $Version"');
     expect(installer).not.toContain('Invoke-Native $wrapper @("uninstall")');
     expect(installer).not.toContain("Set-Content -LiteralPath $xmlPath");
     expect(runner).toContain("current.txt");
