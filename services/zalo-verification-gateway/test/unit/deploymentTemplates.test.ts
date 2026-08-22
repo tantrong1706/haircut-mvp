@@ -66,6 +66,7 @@ describe("deployment templates", () => {
     expect(installer).toContain('Invoke-Native $wrapper @("install")');
     expect(installer).toContain("function Copy-ReplayDatabase");
     expect(installer).toContain("Copy-ReplayDatabase $configuredReplayDbPath $secureReplayDbPath");
+    expect(installer).toContain("function Wait-LocalHealth([int]$TimeoutSeconds = 120)");
     expect(installer).not.toContain('Invoke-Native $wrapper @("uninstall")');
     expect(installer).not.toContain("Set-Content -LiteralPath $xmlPath");
     expect(runner).toContain("current.txt");

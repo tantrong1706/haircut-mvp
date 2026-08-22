@@ -173,7 +173,7 @@ function Assert-InstalledRelease([string]$ReleaseRoot, [string]$ExpectedVersion)
   }
 }
 
-function Wait-LocalHealth([int]$TimeoutSeconds = 30) {
+function Wait-LocalHealth([int]$TimeoutSeconds = 120) {
   $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
   do {
     try {
