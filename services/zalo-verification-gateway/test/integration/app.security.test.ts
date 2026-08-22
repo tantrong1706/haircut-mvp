@@ -53,6 +53,9 @@ describe("gateway HTTP security", () => {
   it("serves health without calling Zalo", async () => {
     const response = await fetch(`${baseUrl}/health`);
     expect(response.status).toBe(200);
+    expect(response.headers.get("strict-transport-security")).toBe(
+      "max-age=31536000; includeSubDomains",
+    );
     await expect(response.json()).resolves.toEqual({
       status: "ok",
       version: "development",
@@ -157,6 +160,24 @@ describe("gateway HTTP security", () => {
     const response = await verify(body);
     expect(response.status).toBe(413);
     await expect(response.json()).resolves.toMatchObject({ ok: false, code: "BAD_REQUEST" });
+  });
+  it("rate-limits unauthenticated requests before signature parsing", async () => {
+    for (let index = 0; index < 60; index += 1) {
+      const response = await fetch(`${baseUrl}/v1/zalo/verify`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      });
+      expect(response.status).toBe(401);
+    }
+    const limited = await fetch(`${baseUrl}/v1/zalo/verify`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    expect(limited.status).toBe(429);
+    await expect(limited.json()).resolves.toMatchObject({ code: "RATE_LIMITED" });
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
   it("enforces burst 50 per key", async () => {
     for (let index = 0; index < 50; index += 1) {

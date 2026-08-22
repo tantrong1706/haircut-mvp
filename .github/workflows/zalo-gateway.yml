@@ -4,7 +4,7 @@ on:
   push:
     branches: [feat/zalo-verification-vn-gateway]
   pull_request:
-    branches: [release/zalo-version-8-readiness]
+    branches: [release/zalo-version-8-readiness, main]
   workflow_dispatch:
 
 permissions:

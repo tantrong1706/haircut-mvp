@@ -23,6 +23,7 @@
     "validate:zmp": "node scripts/sync-zmp-config.mjs --check",
     "build:zmp": "npm run build && npm run validate:zmp",
     "check:zalo-review": "node ../scripts/check-zalo-review-readiness.mjs",
+    "check:zalo-submission": "node ../scripts/check-zalo-submission-readiness.mjs",
     "prepare:zalo-review": "node tools/prepare-zalo-review.mjs",
     "capture:zalo-review": "node tools/run-zalo-review-capture.mjs",
     "login:zmp:qr": "node tools/zmp-qr-login.mjs",

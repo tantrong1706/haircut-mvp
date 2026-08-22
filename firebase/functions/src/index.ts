@@ -130,6 +130,7 @@ const functionOptions = {
   enforceAppCheck: process.env.ENFORCE_APP_CHECK === "true",
 };
 const zaloAppSecret = defineSecret("ZALO_APP_SECRET");
+const zaloGatewayHmacSecret = defineSecret("ZALO_GATEWAY_HMAC_SECRET");
 const zaloOpenApiKey = defineSecret("ZALO_OPEN_API_KEY");
 const qrSigningSecret = defineSecret("QR_SIGNING_SECRET");
 const qrFunctionOptions = {
@@ -138,14 +139,14 @@ const qrFunctionOptions = {
 };
 const zaloFunctionOptions = {
   ...functionOptions,
-  secrets: [zaloAppSecret],
+  secrets: [zaloAppSecret, zaloGatewayHmacSecret],
   timeoutSeconds: 30,
   concurrency: 40,
   maxInstances: 30,
 };
 const zaloQrFunctionOptions = {
   ...zaloFunctionOptions,
-  secrets: [zaloAppSecret, qrSigningSecret],
+  secrets: [zaloAppSecret, zaloGatewayHmacSecret, qrSigningSecret],
 };
 const SESSION_POINT_REQUEST_WINDOW_MS = 12 * 60 * 60 * 1000;
 const OPEN_SESSION_STATUSES = ["waiting", "serving", "pending_approval"] as const;
@@ -1207,7 +1208,7 @@ async function verifyZaloAccessToken(
       "Thiếu ZALO_APP_SECRET để xác minh danh tính Zalo ở server",
     );
   }
-  const mode = String(process.env.ZALO_VERIFIER_MODE || "direct").trim().toLowerCase();
+  const mode = String(process.env.ZALO_VERIFIER_MODE || "").trim().toLowerCase();
   let verifier;
   try {
     verifier = createZaloIdentityVerifier({

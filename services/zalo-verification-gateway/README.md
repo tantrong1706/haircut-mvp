@@ -1,6 +1,6 @@
 # Zalo Verification Gateway
 
-Gateway xác minh danh tính Zalo chạy trên một VPS có IP Việt Nam. Service chỉ xác minh token với Zalo, không chứa dữ liệu salon, khách, hàng chờ, điểm, ảnh hay quà.
+Gateway xác minh danh tính Zalo chạy trên máy có outbound IP Việt Nam (laptop Windows qua Cloudflare Tunnel hoặc VPS). Service chỉ xác minh token với Zalo, không chứa dữ liệu salon, khách, hàng chờ, điểm, ảnh hay quà.
 
 ## Local
 
@@ -13,6 +13,18 @@ npm run benchmark
 ```
 
 Tạo file môi trường từ `.env.example` và thay khóa mẫu bằng khóa ngẫu nhiên tối thiểu 32 byte. Không commit file môi trường thật.
+
+## Windows laptop
+
+Không chạy service SYSTEM trực tiếp từ `dist` trong worktree phát triển. Sau khi integration branch sạch, build bằng Node.js 22 rồi dùng:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File ..\..\scripts\zalo-gateway\windows\install-secure-release.ps1 `
+  -SourceRoot $PWD `
+  -ConfigSource C:\path\restricted\gateway.env
+```
+
+Lệnh trên tạo release versioned, checksum và ACL chặt dưới `C:\ProgramData\CHHaircut\zalo-gateway`. Chỉ thêm `-Activate` sau khi đã kiểm tra manifest và sẵn sàng restart riêng service Gateway; installer tự rollback cấu hình WinSW nếu health local không lên. Cloudflared vẫn là service độc lập và Gateway tiếp tục bind `127.0.0.1:3000`.
 
 ## API
 

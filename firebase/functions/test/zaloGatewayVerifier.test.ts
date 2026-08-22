@@ -9,6 +9,8 @@ const fixture = JSON.parse(
     "utf8",
   ),
 ) as Record<string, string>;
+const functionsSource = readFileSync(resolve(import.meta.dirname, "../src/index.ts"), "utf8");
+const envExample = readFileSync(resolve(import.meta.dirname, "../.env.example"), "utf8");
 
 describe("VietnamGatewayVerifier", () => {
   it("produces the shared deterministic signature fixture", async () => {
@@ -57,6 +59,15 @@ describe("VietnamGatewayVerifier", () => {
         directVerify: vi.fn(),
       }),
     ).toThrow(/gateway configuration/i);
+  });
+  it("binds the gateway HMAC through Firebase Secret Manager", () => {
+    expect(functionsSource).toContain('defineSecret("ZALO_GATEWAY_HMAC_SECRET")');
+    expect(functionsSource).toMatch(/secrets:\s*\[zaloAppSecret,\s*zaloGatewayHmacSecret\]/u);
+    expect(envExample).toContain("ZALO_GATEWAY_HMAC_SECRET=managed-by-secret-manager");
+  });
+  it("fails closed when verifier mode is omitted", () => {
+    expect(functionsSource).not.toContain('process.env.ZALO_VERIFIER_MODE || "direct"');
+    expect(functionsSource).toContain('process.env.ZALO_VERIFIER_MODE || ""');
   });
   it("does not silently fallback to direct mode after gateway failure", async () => {
     const directVerify = vi.fn();

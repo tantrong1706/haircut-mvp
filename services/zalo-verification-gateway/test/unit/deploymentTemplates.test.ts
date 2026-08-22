@@ -35,4 +35,23 @@ describe("deployment templates", () => {
     const addresses = files.match(/\b(?:\d{1,3}\.){3}\d{1,3}\b/gu) ?? [];
     expect(addresses.every((address) => address === "127.0.0.1")).toBe(true);
   });
+
+  it("installs an immutable checksummed Windows release outside the development repo", () => {
+    const installer = read("scripts/zalo-gateway/windows/install-secure-release.ps1");
+    const runner = read("scripts/zalo-gateway/windows/run-secure-gateway.ps1");
+    expect(installer).toContain("ProgramData\\CHHaircut\\zalo-gateway");
+    expect(installer).toContain('Join-Path $InstallationRoot "releases"');
+    expect(installer).toContain("Get-FileHash");
+    expect(installer).toMatch(/git -C \$source status --porcelain/u);
+    expect(installer).toContain("icacls.exe");
+    expect(installer).toContain("NT SERVICE\\CHHaircutZaloGateway");
+    expect(installer).not.toContain("Authenticated Users");
+    expect(runner).toContain("current.txt");
+    expect(runner).toContain("manifest.json");
+    expect(runner).toContain("Get-FileHash");
+    expect(runner).toContain("dist\\src\\server.js");
+    expect(installer.indexOf("$previousVersion =")).toBeLessThan(
+      installer.indexOf("Move-Item -LiteralPath $currentTemp -Destination $currentPath"),
+    );
+  });
 });

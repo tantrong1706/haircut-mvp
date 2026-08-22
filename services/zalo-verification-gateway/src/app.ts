@@ -1,4 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { isIP } from "node:net";
 import { GatewayError, toGatewayError, type GatewayErrorCode } from "./errors.js";
 import { createSafeLogger, type SafeLogger } from "./observability/safeLogger.js";
 import type { ReplayStore } from "./replay/replayStore.js";
@@ -41,6 +42,7 @@ export function createGatewayApplication(options: GatewayApplicationOptions): Ga
   const logger = options.logger ?? createSafeLogger();
   const now = options.now ?? Date.now;
   const requestMaxBytes = Math.min(options.requestMaxBytes ?? 8_192, 8_192);
+  const preAuthRateLimiter = new TokenBucketRateLimiter({ refillPerSecond: 10, capacity: 60 });
   const rateLimiter = new TokenBucketRateLimiter({ refillPerSecond: 20, capacity: 50 });
   const concurrency = new ConcurrencyGuard(options.maxConcurrency ?? 100);
   const appStartedAt = now();
@@ -79,6 +81,9 @@ export function createGatewayApplication(options: GatewayApplicationOptions): Ga
     let requestId = safeRequestId(request.headers["x-request-id"]);
     let entered = false;
     try {
+      if (!preAuthRateLimiter.tryAcquire(clientRateLimitKey(request), now())) {
+        throw new GatewayError("RATE_LIMITED", 429);
+      }
       const rawBody = await readRawBody(request, requestMaxBytes);
       const authentication = authenticateRequest(request, rawBody, options.keys, now());
       requestId = authentication.requestId;
@@ -142,6 +147,23 @@ export function createGatewayApplication(options: GatewayApplicationOptions): Ga
       options.replayStore.close();
     },
   };
+}
+
+function clientRateLimitKey(request: IncomingMessage) {
+  const remoteAddress = normalizeAddress(request.socket.remoteAddress);
+  const cloudflareAddress = request.headers["cf-connecting-ip"];
+  if (
+    (remoteAddress === "127.0.0.1" || remoteAddress === "::1") &&
+    typeof cloudflareAddress === "string" &&
+    isIP(cloudflareAddress) !== 0
+  ) {
+    return `cf:${cloudflareAddress}`;
+  }
+  return `peer:${remoteAddress || "unknown"}`;
+}
+
+function normalizeAddress(value: string | undefined) {
+  return value?.startsWith("::ffff:") ? value.slice(7) : value;
 }
 
 function isJsonContentType(value: string | string[] | undefined) {
@@ -244,6 +266,7 @@ function applySecurityHeaders(response: ServerResponse) {
   response.setHeader("X-Content-Type-Options", "nosniff");
   response.setHeader("X-Frame-Options", "DENY");
   response.setHeader("Referrer-Policy", "no-referrer");
+  response.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
 }
 function sendFailure(
   response: ServerResponse,
