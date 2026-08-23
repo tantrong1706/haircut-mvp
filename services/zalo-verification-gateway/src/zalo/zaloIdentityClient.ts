@@ -1,4 +1,5 @@
 import { GatewayError } from "../errors.js";
+import type { SafeLogger } from "../observability/safeLogger.js";
 
 const PRODUCTION_UPSTREAM = "https://graph.zalo.me/v2.0/me";
 const USER_ID_PATTERN = /^\d{1,64}$/u;
@@ -11,6 +12,16 @@ type ZaloClientOptions = {
   random?: () => number;
   upstreamUrl?: string;
   allowInsecureTestUpstream?: boolean;
+  logger?: SafeLogger;
+};
+
+type UpstreamDiagnosticInput = {
+  status: number;
+  record: Record<string, unknown> | null;
+  fallbackMessage: string;
+  accessToken: string;
+  appsecretProof: string;
+  requestId: string;
 };
 
 export class ZaloIdentityClient {
@@ -19,12 +30,14 @@ export class ZaloIdentityClient {
   private readonly retryDelayMs: number;
   private readonly random: () => number;
   private readonly upstream: URL;
+  private readonly logger?: SafeLogger;
 
   constructor(options: ZaloClientOptions = {}) {
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.timeoutMs = options.timeoutMs ?? 5_000;
     this.retryDelayMs = options.retryDelayMs ?? 200;
     this.random = options.random ?? Math.random;
+    this.logger = options.logger;
     this.upstream = validateUpstream(
       options.upstreamUrl ?? PRODUCTION_UPSTREAM,
       options.allowInsecureTestUpstream,
@@ -61,6 +74,9 @@ export class ZaloIdentityClient {
         },
         signal: controller.signal,
       });
+      if (!response.ok) {
+        await this.logRejectedResponse(response, input);
+      }
       if (response.status === 401 || response.status === 403) {
         throw new GatewayError("ZALO_INVALID_TOKEN", 401);
       }
@@ -81,6 +97,14 @@ export class ZaloIdentityClient {
         throw new GatewayError("ZALO_INVALID_RESPONSE", 502);
       }
       const record = payload as Record<string, unknown>;
+      if (hasNonZeroUpstreamError(record)) {
+        this.logUpstreamRejected({
+          status: response.status,
+          record,
+          fallbackMessage: text,
+          ...input,
+        });
+      }
       if (Number(record.error ?? 0) !== 0) throw new GatewayError("ZALO_INVALID_TOKEN", 401);
       if (typeof record.id !== "string" || !USER_ID_PATTERN.test(record.id)) {
         throw new GatewayError("ZALO_INVALID_RESPONSE", 502);
@@ -95,6 +119,43 @@ export class ZaloIdentityClient {
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  private async logRejectedResponse(
+    response: Response,
+    input: { accessToken: string; appsecretProof: string; requestId: string },
+  ) {
+    if (!this.logger) return;
+    let text = "";
+    let record: Record<string, unknown> | null = null;
+    try {
+      text = await readDiagnosticResponseBody(response.clone(), 8_192);
+      record = parseDiagnosticPayload(text);
+    } catch {
+      text = "";
+    }
+    this.logUpstreamRejected({
+      status: response.status,
+      record,
+      fallbackMessage: text,
+      ...input,
+    });
+  }
+
+  private logUpstreamRejected(input: UpstreamDiagnosticInput) {
+    if (!this.logger) return;
+    const zaloErrorCode = diagnosticErrorCode(input.record, input.status);
+    const rawMessage = diagnosticMessage(input.record, input.fallbackMessage);
+    const zaloMessage = sanitizeDiagnosticMessage(rawMessage, [
+      input.accessToken,
+      input.appsecretProof,
+    ]);
+    this.logger.warn("zalo_upstream_rejected", {
+      requestId: input.requestId,
+      httpStatus: input.status,
+      zaloErrorCode,
+      zaloMessage,
+    });
   }
 }
 
@@ -120,6 +181,77 @@ async function readLimitedResponseBody(response: Response, maximumBytes: number)
     if (size > maximumBytes) await reader.cancel().catch(() => undefined);
     reader.releaseLock();
   }
+}
+
+async function readDiagnosticResponseBody(response: Response, maximumBytes: number) {
+  if (!response.body) return "";
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder("utf-8");
+  let size = 0;
+  let text = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const remaining = maximumBytes - size;
+      if (remaining <= 0) {
+        await reader.cancel().catch(() => undefined);
+        break;
+      }
+      const chunk = value.byteLength > remaining ? value.subarray(0, remaining) : value;
+      size += chunk.byteLength;
+      text += decoder.decode(chunk, { stream: true });
+      if (value.byteLength > remaining) {
+        await reader.cancel().catch(() => undefined);
+        break;
+      }
+    }
+    return text + decoder.decode();
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+function parseDiagnosticPayload(text: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function hasNonZeroUpstreamError(record: Record<string, unknown>) {
+  for (const value of [record.error, record.error_code]) {
+    if (value === undefined || value === null || value === "") continue;
+    const numeric = Number(value);
+    if ((Number.isFinite(numeric) && numeric !== 0) || (!Number.isFinite(numeric) && String(value))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function diagnosticErrorCode(record: Record<string, unknown> | null, status: number) {
+  const value = record?.error ?? record?.error_code;
+  return typeof value === "string" || typeof value === "number" ? String(value) : `http-${status}`;
+}
+
+function diagnosticMessage(record: Record<string, unknown> | null, fallback: string) {
+  const value = record?.message ?? record?.error_message;
+  return typeof value === "string" || typeof value === "number" ? String(value) : fallback;
+}
+
+function sanitizeDiagnosticMessage(value: string, secrets: string[]) {
+  let message = String(value || "Zalo upstream rejected request");
+  for (const secret of secrets) {
+    if (secret) message = message.split(secret).join("[redacted]");
+  }
+  message = message.replace(/[\u0000-\u001f\u007f-\u009f]/gu, " ");
+  message = message.replace(/\s+/gu, " ").trim();
+  return (message || "Zalo upstream rejected request").slice(0, 300);
 }
 
 function validateUpstream(value: string, allowInsecureTestUpstream = false) {
