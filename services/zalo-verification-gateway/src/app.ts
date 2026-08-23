@@ -50,6 +50,7 @@ export function createGatewayApplication(options: GatewayApplicationOptions): Ga
     allowInsecureTestUpstream: options.allowInsecureTestUpstream,
     timeoutMs: options.upstreamTimeoutMs,
     retryDelayMs: options.upstreamRetryDelayMs,
+    logger,
   });
 
   const server = createServer(async (request, response) => {
