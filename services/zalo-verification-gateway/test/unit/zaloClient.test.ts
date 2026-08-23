@@ -60,7 +60,7 @@ describe("ZaloIdentityClient", () => {
       response(
         {
           error: -201,
-          message: `Denied ${accessToken}\r\nproof=${appsecretProof}`,
+          message: `Denied ${accessToken}\r\nproof=${appsecretProof} ${"x".repeat(400)}`,
         },
         401,
       ),
@@ -82,8 +82,9 @@ describe("ZaloIdentityClient", () => {
       httpStatus: 401,
       zaloErrorCode: "-201",
     });
-    expect(diagnostic.zaloMessage).toBe("Denied [redacted] proof=[redacted]");
-    expect(diagnostic.zaloMessage.length).toBeLessThanOrEqual(300);
+    expect(diagnostic.zaloMessage).toMatch(/^Denied \[redacted\] proof=\[redacted\] x+/u);
+    expect(diagnostic.zaloMessage).not.toMatch(/[\r\n\u0000-\u001f\u007f-\u009f]/u);
+    expect(diagnostic.zaloMessage.length).toBe(300);
     expect(JSON.stringify(diagnostic)).not.toContain(accessToken);
     expect(JSON.stringify(diagnostic)).not.toContain(appsecretProof);
   });
