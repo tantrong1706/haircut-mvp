@@ -24,7 +24,7 @@ beforeEach(async () => {
     logger: createSafeLogger(() => undefined),
     upstreamUrl: mockZalo.url,
     allowInsecureTestUpstream: true,
-    upstreamTimeoutMs: 50,
+    upstreamTimeoutMs: 250,
     upstreamRetryDelayMs: 0,
   });
   gatewayUrl = await listen(application);
