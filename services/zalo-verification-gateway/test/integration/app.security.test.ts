@@ -80,6 +80,21 @@ describe("gateway HTTP security", () => {
       requestId: "req_test_12345678",
     });
   });
+  it("keeps the public error contract generic when Zalo rejects the token", async () => {
+    fetchImpl.mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: -201, message: "Sensitive upstream detail" }), {
+        status: 401,
+      }),
+    );
+    const body = validBody("req_zalo_rejected");
+    const response = await verify(body, signedHeaders(body, { requestId: "req_zalo_rejected" }));
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      code: "ZALO_INVALID_TOKEN",
+      requestId: "req_zalo_rejected",
+    });
+  });
   it.each([
     ["unknown key", (body: Buffer) => signedHeaders(body, { keyId: "unknown" }), "AUTH_INVALID"],
     [
