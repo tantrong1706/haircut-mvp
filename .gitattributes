@@ -1,3 +1,6 @@
 *.sh text eol=lf
 *.service text eol=lf
 Caddyfile text eol=lf
+services/zalo-verification-gateway/**/*.ts text eol=lf
+services/zalo-verification-gateway/*.json text eol=lf
+services/zalo-verification-gateway/*.mjs text eol=lf
