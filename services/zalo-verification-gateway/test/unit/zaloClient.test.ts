@@ -83,7 +83,12 @@ describe("ZaloIdentityClient", () => {
       zaloErrorCode: "-201",
     });
     expect(diagnostic.zaloMessage).toMatch(/^Denied \[redacted\] proof=\[redacted\] x+/u);
-    expect(diagnostic.zaloMessage).not.toMatch(/[\r\n\u0000-\u001f\u007f-\u009f]/u);
+    expect(
+      [...diagnostic.zaloMessage].every((character) => {
+        const code = character.codePointAt(0) ?? 0;
+        return code > 0x1f && (code < 0x7f || code > 0x9f);
+      }),
+    ).toBe(true);
     expect(diagnostic.zaloMessage.length).toBe(300);
     expect(JSON.stringify(diagnostic)).not.toContain(accessToken);
     expect(JSON.stringify(diagnostic)).not.toContain(appsecretProof);

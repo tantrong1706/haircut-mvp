@@ -227,7 +227,10 @@ function hasNonZeroUpstreamError(record: Record<string, unknown>) {
   for (const value of [record.error, record.error_code]) {
     if (value === undefined || value === null || value === "") continue;
     const numeric = Number(value);
-    if ((Number.isFinite(numeric) && numeric !== 0) || (!Number.isFinite(numeric) && String(value))) {
+    if (
+      (Number.isFinite(numeric) && numeric !== 0) ||
+      (!Number.isFinite(numeric) && String(value))
+    ) {
       return true;
     }
   }
@@ -249,7 +252,12 @@ function sanitizeDiagnosticMessage(value: string, secrets: string[]) {
   for (const secret of secrets) {
     if (secret) message = message.split(secret).join("[redacted]");
   }
-  message = message.replace(/[\u0000-\u001f\u007f-\u009f]/gu, " ");
+  message = [...message]
+    .map((character) => {
+      const code = character.codePointAt(0) ?? 0;
+      return code <= 0x1f || (code >= 0x7f && code <= 0x9f) ? " " : character;
+    })
+    .join("");
   message = message.replace(/\s+/gu, " ").trim();
   return (message || "Zalo upstream rejected request").slice(0, 300);
 }
