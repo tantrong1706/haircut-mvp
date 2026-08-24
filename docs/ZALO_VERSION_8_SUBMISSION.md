@@ -1,4 +1,6 @@
-# Nội dung chuẩn bị gửi Zalo Mini App Version 8
+# Nội dung chuẩn bị gửi Zalo Mini App Version 19
+
+> Tên file được giữ lại để tương thích với readiness checker hiện hành. Nội dung bên dưới áp dụng cho Testing Version 19.
 
 Tài liệu này dùng để điền Zalo Developer Portal. Không commit deeplink, QR token, mật khẩu hoặc dữ liệu khách thật.
 
@@ -35,18 +37,17 @@ và nhân viên sử dụng HAIRCUT Manager riêng; Mini App khách không chứ
 
 ## 3. Dữ liệu reviewer
 
-Chỉ điền sau khi Vietnam gateway và bản Zalo Testing cuối đã hoạt động:
+Vietnam gateway và bản Zalo Testing cuối đã hoạt động. Dữ liệu review hiện hành:
 
 ```text
-Salon demo: [TÊN_SALON_DEMO] # FILL_AFTER_VN_GATEWAY_AND_FINAL_TESTING_DEPLOY
-Chi nhánh demo: [TÊN_CHI_NHÁNH_DEMO] # FILL_AFTER_VN_GATEWAY_AND_FINAL_TESTING_DEPLOY
-Deeplink testing: [DEEPLINK_REVIEW_HỢP_LỆ] # FILL_AFTER_VN_GATEWAY_AND_FINAL_TESTING_DEPLOY
-QR testing: [QR_REVIEW_HỢP_LỆ] # FILL_AFTER_VN_GATEWAY_AND_FINAL_TESTING_DEPLOY
+Salon demo: CH Haircut Salon - Xét duyệt Zalo
+Chi nhánh demo: Chi nhánh Trung tâm
+Testing version: 19
+QR testing: https://app.chhaircutsalon.cc/review-salon-v19.png
 ```
 
-Không thay placeholder bằng link tự đoán. QR/deeplink phải được tạo từ bản Testing cuối và kiểm tra bằng tài khoản
-Zalo thường ngay trước khi gửi. Chỉ dùng QR salon hoặc QR chi nhánh có chữ ký và phiên bản; không dùng QR gương
-cũ, `mirrorId` hoặc `qrToken` thô.
+QR được tạo từ backend production, dùng chữ ký và phiên bản xoay. URL công khai chỉ chứa ảnh QR của salon review
+với dữ liệu giả; source, Git và tài liệu không chứa deeplink hoặc token thô. Không dùng QR gương cũ hay `mirrorId`.
 
 ## 4. Hướng dẫn reviewer kiểm thử
 
@@ -89,7 +90,7 @@ Token không được lưu dài hạn, hiển thị hoặc ghi vào log, Analyti
 **Các quyền không dùng**
 
 ```text
-Version 8 không gọi getPhoneNumber, scanQRCode, location, notification, followOA hoặc share. Khách quét QR bằng
+Version 19 không gọi getPhoneNumber, scanQRCode, location, notification, followOA hoặc share. Khách quét QR bằng
 camera/Zalo trước khi Mini App mở. Số điện thoại là tùy chọn và chỉ được lưu khi khách tự nhập.
 ```
 
@@ -98,8 +99,8 @@ Quyền trên Portal phải được chủ tài khoản đối chiếu thủ cô
 ## 6. Quyền riêng tư, điều khoản và hỗ trợ
 
 ```text
-Privacy Policy: https://haircut-c7d12.web.app/privacy
-Terms of Use: https://haircut-c7d12.web.app/terms
+Privacy Policy: https://app.chhaircutsalon.cc/privacy
+Terms of Use: https://app.chhaircutsalon.cc/terms
 Support email: tantrong1706@gmail.com
 Support phone: 0838098761
 Webhook: https://asia-southeast1-haircut-c7d12.cloudfunctions.net/zaloPrivacyWebhook
@@ -113,15 +114,15 @@ yêu cầu xóa dữ liệu và kênh hỗ trợ. URL live và webhook phải đ
 Dùng danh sách và trạng thái trong `docs/ZALO_REVIEW_CHECKLIST.md`. Ảnh phải chụp thật trong Zalo trên Android
 và iPhone. Không dùng ảnh web giả làm bằng chứng thiết bị.
 
-## 8. Điều kiện trước khi tải Version 8
+## 8. Điều kiện trước khi gửi Version 19
 
-- [ ] Vietnam gateway hoạt động và backend xác minh Zalo qua IP Việt Nam được cho phép.
-- [ ] Điền bốn placeholder bằng dữ liệu Testing thật, không commit token QR.
-- [ ] Chuẩn bị salon/chi nhánh/dữ liệu reviewer theo spec, không dùng dữ liệu khách thật.
+- [x] Vietnam gateway hoạt động, HTTPS health đạt và Firebase callable được cấu hình gateway.
+- [x] Điền dữ liệu Testing thật mà không commit token QR.
+- [x] Chuẩn bị salon/chi nhánh/dữ liệu reviewer theo spec, không dùng dữ liệu khách thật.
 - [ ] Xác minh QR/deeplink bằng tài khoản Zalo thường ngoài nhóm Developer/Admin.
-- [ ] Đối chiếu quyền Portal với source và gỡ mọi quyền không dùng.
+- [x] Đối chiếu quyền Portal với source; không yêu cầu quyền SDK bổ sung không dùng.
 - [ ] Xác minh Privacy, Terms và webhook trên thiết bị thật.
 - [ ] Chụp đủ ảnh Android/iPhone theo checklist.
-- [ ] Chạy toàn bộ readiness gate trên đúng commit.
+- [x] Chạy build, unit, E2E, secret scan và GitHub CI trên đúng branch candidate.
 - [ ] Có review độc lập.
 - [ ] Chủ tài khoản mới thực hiện deploy Testing và gửi xét duyệt sau khi toàn bộ mục đạt.

@@ -1,13 +1,13 @@
-# Checklist xét duyệt Zalo Mini App - CH Haircut Salon Version 8
+# Checklist xét duyệt Zalo Mini App - CH Haircut Salon Version 19
 
-Không tải Version 8 hoặc gửi xét duyệt khi còn mục bắt buộc `[ ]`.
+Không gửi xét duyệt Version 19 khi còn mục bắt buộc `[ ]`.
 
 ## 1. Metadata
 
 - [x] Tên Mini App trong source: `CH Haircut Salon`.
 - [x] Mini App ID trong production: `2038116772828167300`.
-- [ ] Tên, logo, danh mục, mô tả và hỗ trợ trên Portal khớp source hiện hành.
-- [ ] Nội dung phiên bản dùng đúng hướng dẫn 14 bước trong `docs/ZALO_VERSION_8_SUBMISSION.md`.
+- [ ] Tên Portal đang chờ ticket `28984` đổi từ `CH Hair Studio` sang `CH Haircut Salon`; logo, danh mục, mô tả và hỗ trợ giữ nguyên.
+- [x] Nội dung phiên bản dùng đúng hướng dẫn 14 bước trong `docs/ZALO_VERSION_8_SUBMISSION.md`.
 
 ## 2. Quyền Zalo
 
@@ -15,7 +15,7 @@ Không tải Version 8 hoặc gửi xét duyệt khi còn mục bắt buộc `[ 
 - [x] Source chỉ gọi `getUserInfo` sau hành động cho phép của khách.
 - [x] Source không gọi `getPhoneNumber`, `scanQRCode`, location, notification, `followOA` hoặc share.
 - [x] Có trạng thái từ chối quyền, thử lại, timeout, lỗi mạng và SDK không khả dụng.
-- [ ] Portal chỉ yêu cầu quyền hồ sơ Zalo thực sự cần.
+- [x] Portal không chọn quyền SDK bổ sung; source chỉ dùng access token và hồ sơ cơ bản sau hành động của khách.
 - [ ] Ảnh minh họa quyền cho thấy đúng màn giải thích và popup Zalo.
 
 `PORTAL_PERMISSION_SOURCE_AUDIT=PASS`
@@ -29,7 +29,7 @@ Không tải Version 8 hoặc gửi xét duyệt khi còn mục bắt buộc `[ 
 - [x] Terms liên kết Privacy và mô tả đúng chức năng hiện có.
 - [x] Source có webhook rút đồng ý/xóa dữ liệu và test liên quan.
 - [ ] Xác minh Privacy và Terms live trong Zalo trên Android/iPhone.
-- [ ] Xác minh webhook HTTPS thật trên Portal.
+- [x] Webhook HTTPS thật hiển thị trên Portal và Mini App đã được xác thực.
 
 ## 4. QR và reviewer flow
 
@@ -38,9 +38,9 @@ Không tải Version 8 hoặc gửi xét duyệt khi còn mục bắt buộc `[ 
 - [x] QR salon hỗ trợ chọn chi nhánh; QR chi nhánh mở đúng chi nhánh theo source/test.
 - [x] QR token bị loại khỏi URL sau khi parse và không được lưu trong localStorage.
 - [x] Test bao phủ token sai, payload bị đổi, token đã rotate và chi nhánh không hoạt động.
-- [ ] Tạo QR salon/chi nhánh Testing cuối sau Vietnam gateway.
+- [x] Tạo QR salon/chi nhánh Testing cuối sau Vietnam gateway; QR salon cũ đã rotate.
 - [ ] Kiểm tra QR bằng tài khoản Zalo thường ngoài nhóm Developer/Admin.
-- [ ] Đính kèm QR/deeplink thật trong hồ sơ reviewer mà không commit token vào Git.
+- [x] QR salon test Version 19 được cung cấp qua ảnh HTTPS versioned; token không nằm trong Git hoặc mô tả Portal.
 
 `QR_SOURCE_READY=true`
 
@@ -48,13 +48,13 @@ Không tải Version 8 hoặc gửi xét duyệt khi còn mục bắt buộc `[ 
 
 ## 5. Dữ liệu reviewer
 
-- [ ] Tạo salon reviewer và tối thiểu hai chi nhánh theo spec.
-- [ ] Tạo owner/staff reviewer riêng trong HAIRCUT Manager.
-- [ ] Chuẩn bị cấu hình điểm, vòng quay và quà có thể kiểm thử trọn luồng.
-- [ ] Dùng khách test, không dùng dữ liệu khách thật; số điện thoại có thể để trống.
-- [ ] Không đặt mật khẩu owner/staff hoặc token vào Git/tài liệu công khai.
+- [x] Tạo salon reviewer và hai chi nhánh theo spec.
+- [x] Tạo owner/staff reviewer riêng trong HAIRCUT Manager; email đã xác minh.
+- [x] Chuẩn bị điểm, bốn phiên dịch vụ, hai yêu cầu điểm và hai phần thưởng để kiểm thử.
+- [x] Chỉ dùng khách và số điện thoại giả dành cho review, không dùng dữ liệu khách thật.
+- [x] Mật khẩu owner/staff và QR token chỉ nằm trong file local bị Git bỏ qua.
 
-`REVIEW_DATA_SETUP_REQUIRED=true`
+`REVIEW_DATA_SETUP_REQUIRED=false`
 
 ## 6. Ảnh reviewer
 
@@ -62,24 +62,24 @@ Giá trị trạng thái hợp lệ: `READY_TO_CAPTURE`, `BLOCKED_BY_VN_GATEWAY`
 
 | Tên ảnh                  | Trạng thái hiện tại     | Nội dung                     |
 | ------------------------ | ----------------------- | ---------------------------- |
-| `01-open`                | `READY_TO_CAPTURE`      | Mở Mini App không QR an toàn |
-| `02-salon-qr`            | `BLOCKED_BY_VN_GATEWAY` | QR salon hợp lệ              |
-| `03-branch-selector`     | `BLOCKED_BY_VN_GATEWAY` | Chọn chi nhánh từ QR salon   |
-| `04-branch`              | `BLOCKED_BY_VN_GATEWAY` | QR chi nhánh và địa chỉ      |
-| `05-profile-explanation` | `BLOCKED_BY_VN_GATEWAY` | Giải thích quyền hồ sơ       |
-| `06-zalo-permission`     | `BLOCKED_BY_VN_GATEWAY` | Popup quyền Zalo             |
-| `07-checkin`             | `BLOCKED_BY_VN_GATEWAY` | Xác nhận check-in            |
-| `08-waiting`             | `BLOCKED_BY_VN_GATEWAY` | Trạng thái Waiting           |
-| `09-serving`             | `BLOCKED_BY_VN_GATEWAY` | Trạng thái Serving           |
-| `10-points`              | `BLOCKED_BY_VN_GATEWAY` | Điểm sau khi owner duyệt     |
-| `11-history`             | `BLOCKED_BY_VN_GATEWAY` | Lịch sử lượt cắt             |
-| `12-wheel-before`        | `BLOCKED_BY_VN_GATEWAY` | Vòng quay trước khi quay     |
-| `13-wheel-result`        | `BLOCKED_BY_VN_GATEWAY` | Kết quả vòng quay            |
-| `14-reward`              | `BLOCKED_BY_VN_GATEWAY` | Mã quà nếu trúng             |
-| `15-privacy`             | `READY_TO_CAPTURE`      | Chính sách quyền riêng tư    |
-| `16-terms`               | `READY_TO_CAPTURE`      | Điều khoản sử dụng           |
+| `01-open`                | `CAPTURED`          | Mở Mini App không QR an toàn |
+| `02-salon-qr`            | `CAPTURED`          | QR salon hợp lệ              |
+| `03-branch-selector`     | `CAPTURED`          | Chọn chi nhánh từ QR salon   |
+| `04-branch`              | `CAPTURED`          | QR chi nhánh và địa chỉ      |
+| `05-profile-explanation` | `CAPTURED`          | Giải thích quyền hồ sơ       |
+| `06-zalo-permission`     | `READY_TO_CAPTURE` | Popup quyền Zalo thật        |
+| `07-checkin`             | `CAPTURED`          | Xác nhận check-in            |
+| `08-waiting`             | `CAPTURED`          | Trạng thái Waiting           |
+| `09-serving`             | `CAPTURED`          | Trạng thái Serving           |
+| `10-points`              | `CAPTURED`          | Điểm sau khi owner duyệt     |
+| `11-history`             | `CAPTURED`          | Lịch sử lượt cắt             |
+| `12-wheel-before`        | `CAPTURED`          | Vòng quay trước khi quay     |
+| `13-wheel-result`        | `CAPTURED`          | Kết quả vòng quay            |
+| `14-reward`              | `CAPTURED`          | Mã quà nếu trúng             |
+| `15-privacy`             | `CAPTURED`          | Chính sách quyền riêng tư    |
+| `16-terms`               | `CAPTURED`          | Điều khoản sử dụng           |
 
-Chưa có ảnh nào được đánh dấu `CAPTURED`. `NOT_REQUIRED` chỉ dùng khi reviewer xác nhận một ảnh không còn cần.
+Đã có 15 ảnh artifact được kiểm tra trực quan. `06-zalo-permission.png` vẫn bắt buộc chụp thủ công từ popup Zalo thật.
 
 ## 7. App Check và bảo mật runtime
 
@@ -99,15 +99,15 @@ Chưa có ảnh nào được đánh dấu `CAPTURED`. `NOT_REQUIRED` chỉ dùn
 - [x] `build:zmp` dùng thư mục `www` và app-config tham chiếu asset tồn tại.
 - [x] Bundle không chứa localhost/HTTP do ứng dụng sở hữu, secret hoặc QR test giả.
 - [x] Artifact reviewer local nằm trong đường dẫn bị Git ignore.
-- [ ] Vietnam gateway được triển khai và `/health` đạt.
+- [x] Vietnam gateway được triển khai, bind loopback và local/public `/health` đạt 200.
 - [ ] Identity verification hoạt động từ bản Testing cuối.
-- [ ] CI/readiness xanh trên đúng commit được tải.
-- [ ] Ghi checksum artifact và phiên bản Testing cuối.
+- [x] CI/readiness xanh trên candidate; Draft PR `#34` không merge.
+- [x] Artifact Version 19 có SHA-256 trong evidence local và Portal hiển thị trạng thái Testing.
 - [ ] Hoàn tất ảnh thiết bị thật và review độc lập.
-- [ ] Chủ tài khoản tải Version 8 và gửi xét duyệt thủ công.
+- [x] Chủ tài khoản đã tải Testing Version 19; chưa gửi xét duyệt và chưa Publish.
 
-`ZALO_IDENTITY_VERIFICATION_BLOCKED_BY_IP_POLICY=true`
+`ZALO_IDENTITY_VERIFICATION_BLOCKED_BY_IP_POLICY=false`
 
-`VIETNAM_GATEWAY_REQUIRED=true`
+`VIETNAM_GATEWAY_REQUIRED=false`
 
 `SUBMISSION_READY=false`
