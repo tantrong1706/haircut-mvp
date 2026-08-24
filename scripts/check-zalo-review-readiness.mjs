@@ -148,12 +148,21 @@ const reviewerPlaceholders = [
   "[DEEPLINK_REVIEW_HỢP_LỆ]",
   "[QR_REVIEW_HỢP_LỆ]",
 ];
+const reviewerDataDeferred = reviewerPlaceholders.every((placeholder) => {
+  const line = submissionText.split(/\r?\n/u).find((value) => value.includes(placeholder));
+  return line?.includes("FILL_AFTER_VN_GATEWAY_AND_FINAL_TESTING_DEPLOY") === true;
+});
+const reviewerDataCompleted =
+  reviewerPlaceholders.every((placeholder) => !submissionText.includes(placeholder)) &&
+  submissionText.includes("Salon demo: CH Haircut Salon - Xét duyệt Zalo") &&
+  submissionText.includes("Testing version: 19") &&
+  submissionText.includes(
+    "QR testing: https://app.chhaircutsalon.cc/review-salon-v19.png",
+  ) &&
+  !/\b(?:qrToken|mirrorId)=/u.test(submissionText);
 check(
-  reviewerPlaceholders.every((placeholder) => {
-    const line = submissionText.split(/\r?\n/u).find((value) => value.includes(placeholder));
-    return line?.includes("FILL_AFTER_VN_GATEWAY_AND_FINAL_TESTING_DEPLOY") === true;
-  }),
-  "Placeholder reviewer được đánh dấu chờ gateway và Testing cuối",
+  reviewerDataDeferred || reviewerDataCompleted,
+  "Dữ liệu reviewer được deferred an toàn hoặc hoàn tất",
 );
 const screenshotNames = [
   "01-open",
