@@ -68,6 +68,18 @@ describe("hợp đồng xác minh Zalo", () => {
     expect(spinBody).not.toContain("Math.random()");
   });
 
+  it("lịch sử khách chỉ query đúng customer được suy ra từ token Zalo", () => {
+    const body = callableBody("getCustomerHistoryFromZalo");
+    const derivedCustomerIndex = body.indexOf("customerIdFor(salonId, zaloProfile.zaloUserId)");
+    const salonFilterIndex = body.indexOf('.where("salonId", "==", salonId)');
+    const customerFilterIndex = body.indexOf('.where("customerId", "==", customerId)');
+
+    expect(derivedCustomerIndex).toBeGreaterThanOrEqual(0);
+    expect(salonFilterIndex).toBeGreaterThan(derivedCustomerIndex);
+    expect(customerFilterIndex).toBeGreaterThan(salonFilterIndex);
+    expect(body).not.toContain("request.data?.customerId");
+  });
+
   it("giải mã phone token ở backend trước khi lưu khách", () => {
     const body = callableBody("registerCustomerFromZalo");
     const decodeIndex = body.indexOf("decodeZaloPhoneNumber(accessToken, phoneToken, appSecret");

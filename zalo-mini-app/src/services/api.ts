@@ -64,7 +64,12 @@ type CustomerHistoryFunctionResult = {
   records: Array<{
     id: string;
     createdAtMs: number | null;
+    salonName?: string;
+    branchId?: string;
+    branchName?: string;
     staffName: string;
+    serviceName?: string;
+    rewardName?: string;
     note: string;
     photoUrls: string[];
     pointsAdded: number;
@@ -669,18 +674,14 @@ export async function spinWheel(session: AppSession): Promise<SpinResult> {
   const pendingSpin = getOrCreateIdempotencyKey(
     `spin:${session.qr.salonId}:${session.customer.customerId}`,
   );
-  const result = await callCustomerFunctionOrDirect<
+  const result = await callFunction<
     { salonId: string; zaloAccessToken: string; idempotencyKey: string },
     SpinResult
-  >(
-    "spinLuckyWheelFromZalo",
-    {
-      salonId: session.qr.salonId,
-      zaloAccessToken,
-      idempotencyKey: pendingSpin.key,
-    },
-    () => spinWheelDirect(session),
-  );
+  >("spinLuckyWheelFromZalo", {
+    salonId: session.qr.salonId,
+    zaloAccessToken,
+    idempotencyKey: pendingSpin.key,
+  });
   safeStorageRemove(pendingSpin.storageKey);
   return {
     ...result,
@@ -703,120 +704,40 @@ function getOrCreateIdempotencyKey(scope: string) {
 }
 
 async function spinWheelDirect(session: AppSession): Promise<SpinResult> {
-  if (!isFirebaseConfigured()) {
-    const activeSlots = activeWheelSlots(defaultLuckyWheelConfig);
-    const forcedIndex =
-      import.meta.env.VITE_APP_ENV === "test"
-        ? Number(safeStorageGet("haircut_mock_spin_index"))
-        : Number.NaN;
-    const selectedIndex =
-      Number.isInteger(forcedIndex) && forcedIndex >= 0 && forcedIndex < activeSlots.length
-        ? forcedIndex
-        : Math.min(1, activeSlots.length - 1);
-    const pointsAfter = Math.max(
-      0,
-      session.customer.points - defaultLuckyWheelConfig.requiredPoints,
-    );
-    const selectedSlot = activeSlots[selectedIndex];
-    const isWinning = selectedSlot?.type !== "no_prize";
-    const reward = {
-      rewardId: `reward-${Date.now()}`,
-      rewardName: selectedSlot?.label || "Gội đầu miễn phí",
-      rewardCode: isWinning ? makeRewardCode() : "",
-      pointsAfter,
-      isWinning,
-      selectedIndex,
-    };
+  const activeSlots = activeWheelSlots(defaultLuckyWheelConfig);
+  const forcedIndexValue = safeStorageGet("haircut_mock_spin_index");
+  const forcedIndex =
+    import.meta.env.VITE_APP_ENV === "test" && forcedIndexValue !== null
+      ? Number(forcedIndexValue)
+      : Number.NaN;
+  const selectedIndex =
+    Number.isInteger(forcedIndex) && forcedIndex >= 0 && forcedIndex < activeSlots.length
+      ? forcedIndex
+      : Math.min(1, activeSlots.length - 1);
+  const pointsAfter = Math.max(0, session.customer.points - defaultLuckyWheelConfig.requiredPoints);
+  const selectedSlot = activeSlots[selectedIndex];
+  const isWinning = selectedSlot?.type !== "no_prize";
+  const reward = {
+    rewardId: `reward-${Date.now()}`,
+    rewardName: selectedSlot?.label || "Gội đầu miễn phí",
+    rewardCode: isWinning ? makeRewardCode() : "",
+    pointsAfter,
+    isWinning,
+    selectedIndex,
+  };
 
-    if (isWinning) {
-      saveMockReward({
-        id: reward.rewardId,
-        rewardName: reward.rewardName,
-        rewardCode: reward.rewardCode,
-        status: "unused",
-        createdAt: new Date().toISOString(),
-      });
-    }
-
-    safeStorageSet("haircut_mock_points", String(pointsAfter));
-    return reward;
-  }
-
-  const db = getFirebaseDb();
-
-  if (!db) {
-    throw new Error("Firebase chưa được cấu hình");
-  }
-
-  const customerRef = doc(db, "customers", session.customer.customerId);
-  const wheelRef = doc(db, "lucky_wheel", session.qr.salonId);
-  const rewardRef = doc(collection(db, "reward_history"));
-
-  return runTransaction(db, async (transaction) => {
-    const [customerSnap, wheelSnap] = await Promise.all([
-      transaction.get(customerRef),
-      transaction.get(wheelRef),
-    ]);
-
-    if (!customerSnap.exists()) {
-      throw new Error("Không tìm thấy khách hàng");
-    }
-
-    const customerData = customerSnap.data();
-    const wheelConfig = wheelSnap.exists()
-      ? normalizeLuckyWheelConfig(wheelSnap.data())
-      : defaultLuckyWheelConfig;
-    const activeSlots = activeWheelSlots(wheelConfig);
-    const currentPoints = Number(customerData.points ?? 0);
-
-    if (activeSlots.length === 0) {
-      throw new Error("Vòng quay chưa có phần thưởng đang bật");
-    }
-
-    if (currentPoints < wheelConfig.requiredPoints) {
-      throw new Error(`Khách chưa đủ ${wheelConfig.requiredPoints} điểm để quay`);
-    }
-
-    const selectedIndex = Math.floor(Math.random() * activeSlots.length);
-    const selectedSlot = activeSlots[selectedIndex];
-    const rewardName = selectedSlot.label;
-    const isWinning = selectedSlot.type === "reward";
-    const rewardCode = isWinning ? makeRewardCode() : "";
-    const pointsAfter = wheelConfig.deductPointsAfterSpin
-      ? currentPoints - wheelConfig.requiredPoints
-      : currentPoints;
-
-    if (wheelConfig.deductPointsAfterSpin) {
-      transaction.update(customerRef, {
-        points: pointsAfter,
-        updatedAt: serverTimestamp(),
-      });
-    }
-
-    transaction.set(rewardRef, {
-      salonId: session.qr.salonId,
-      customerId: session.customer.customerId,
-      rewardName,
-      rewardCode: isWinning ? rewardCode : null,
-      isWinning,
-      selectedIndex,
-      status: isWinning ? "unused" : "no_prize",
-      pointsUsed: wheelConfig.deductPointsAfterSpin ? wheelConfig.requiredPoints : 0,
-      expiresAt: isWinning
-        ? new Date(Date.now() + wheelConfig.rewardValidityDays * 24 * 60 * 60 * 1000)
-        : null,
-      createdAt: serverTimestamp(),
+  if (isWinning) {
+    saveMockReward({
+      id: reward.rewardId,
+      rewardName: reward.rewardName,
+      rewardCode: reward.rewardCode,
+      status: "unused",
+      createdAt: new Date().toISOString(),
     });
+  }
 
-    return {
-      rewardId: rewardRef.id,
-      rewardName,
-      rewardCode,
-      pointsAfter,
-      isWinning,
-      selectedIndex,
-    };
-  });
+  safeStorageSet("haircut_mock_points", String(pointsAfter));
+  return reward;
 }
 
 export async function getHaircutHistory(session: AppSession): Promise<HaircutRecord[]> {
@@ -838,7 +759,12 @@ export async function getHaircutHistory(session: AppSession): Promise<HaircutRec
     return result.records.map((record) => ({
       id: record.id,
       createdAt: formatDate(record.createdAtMs),
+      salonName: record.salonName || "",
+      branchId: record.branchId || "",
+      branchName: record.branchName || "",
       staffName: record.staffName || "",
+      serviceName: record.serviceName || "",
+      rewardName: record.rewardName || "",
       note: record.note || "",
       photoUrls: Array.isArray(record.photoUrls) ? record.photoUrls : [],
       pointsAdded: Number(record.pointsAdded ?? 0),
@@ -880,7 +806,11 @@ async function getHaircutHistoryDirect(session: AppSession): Promise<HaircutReco
     firestoreLimit(20),
   );
 
-  const snap = await getDocs(q);
+  const [snap, salonSnap] = await Promise.all([
+    getDocs(q),
+    getDoc(doc(db, "salons", session.qr.salonId)),
+  ]);
+  const salonName = salonSnap.exists() ? String(salonSnap.data().name || "") : "";
 
   return snap.docs
     .map((item) => {
@@ -892,7 +822,12 @@ async function getHaircutHistoryDirect(session: AppSession): Promise<HaircutReco
         record: {
           id: item.id,
           createdAt: formatDate(createdAtMs),
+          salonName,
+          branchId: String(data.branchId || ""),
+          branchName: String(data.branchName || ""),
           staffName: data.staffName || "",
+          serviceName: String(data.serviceName || ""),
+          rewardName: String(data.rewardName || ""),
           note: data.note || "",
           photoUrls: Array.isArray(data.photoUrls) ? data.photoUrls : [],
           pointsAdded: Number(data.pointsAdded ?? 0),

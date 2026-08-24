@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Gift, LockKeyhole, RefreshCcw, Sparkles, Ticket } from "lucide-react";
 import { BrandLogo } from "../components/BrandLogo";
 import { MINI_APP_MARK } from "../config/branding";
@@ -10,7 +10,13 @@ import {
   SpinResult,
   defaultLuckyWheelConfig,
 } from "../services/types";
-import { activeWheelSlots } from "../services/wheel";
+import {
+  WHEEL_ANIMATION_DURATION_MS,
+  type WheelAnimationPlan,
+  activeWheelSlots,
+  createWheelAnimationPlan,
+  targetWheelRotation,
+} from "../services/wheel";
 
 type Props = {
   session: AppSession;
@@ -23,21 +29,47 @@ export function WheelPage({ session, onSessionChange }: Props) {
   const [spinning, setSpinning] = useState(false);
   const [result, setResult] = useState<SpinResult | null>(null);
   const [rotationDeg, setRotationDeg] = useState(0);
+  const [animationPlan, setAnimationPlan] = useState<WheelAnimationPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadVersion, setLoadVersion] = useState(0);
+  const spinLockRef = useRef(false);
+  const animationResolveRef = useRef<(() => void) | null>(null);
+  const animationTimeoutRef = useRef<number | null>(null);
+  const wheelRef = useRef<HTMLDivElement | null>(null);
   const slots = useMemo(() => activeWheelSlots(wheelConfig), [wheelConfig]);
   const missingPoints = Math.max(0, wheelConfig.requiredPoints - session.customer.points);
   const wheelUnavailable =
     session.features?.maintenanceMode === true || session.features?.luckyWheelEnabled === false;
   const canSpin =
     !wheelUnavailable && !loadingConfig && !spinning && missingPoints === 0 && slots.length > 0;
-  const wheelStyle = useMemo(
-    () => ({
+  const wheelStyle = useMemo(() => {
+    const style: CSSProperties & Record<`--wheel-angle-${number}`, string> = {
       background: wheelBackground(slots.length),
       transform: `rotate(${rotationDeg}deg)`,
-    }),
-    [rotationDeg, slots.length],
-  );
+    };
+    animationPlan?.angles.forEach((angle, index) => {
+      style[`--wheel-angle-${index}`] = `${angle}deg`;
+    });
+    return style;
+  }, [animationPlan, rotationDeg, slots.length]);
+
+  const finishWheelAnimation = useCallback(() => {
+    const resolve = animationResolveRef.current;
+    if (!resolve) return;
+    animationResolveRef.current = null;
+    if (animationTimeoutRef.current !== null) {
+      window.clearTimeout(animationTimeoutRef.current);
+      animationTimeoutRef.current = null;
+    }
+    resolve();
+  }, []);
+
+  useEffect(() => {
+    if (!animationPlan || !wheelRef.current) return;
+    const wheel = wheelRef.current;
+    wheel.addEventListener("animationend", finishWheelAnimation);
+    return () => wheel.removeEventListener("animationend", finishWheelAnimation);
+  }, [animationPlan, finishWheelAnimation]);
 
   useEffect(() => {
     setLoadingConfig(true);
@@ -53,6 +85,8 @@ export function WheelPage({ session, onSessionChange }: Props) {
   }, [loadVersion, session.sessionId]);
 
   async function handleSpin() {
+    if (spinLockRef.current) return;
+    spinLockRef.current = true;
     setSpinning(true);
     setResult(null);
     setError(null);
@@ -66,8 +100,8 @@ export function WheelPage({ session, onSessionChange }: Props) {
         salon_id: session.qr.salonId,
       });
       const selectedIndex = selectedIndexFromResult(spinResult, slots);
-      setRotationDeg((current) => nextRotation(current, selectedIndex, slots.length));
-      await wait(1300);
+      const targetRotation = targetWheelRotation(rotationDeg, selectedIndex, slots.length);
+      await playWheelAnimation(createWheelAnimationPlan(rotationDeg, targetRotation));
       setResult({ ...spinResult, selectedIndex });
       onSessionChange({
         ...session,
@@ -85,8 +119,29 @@ export function WheelPage({ session, onSessionChange }: Props) {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Bạn chưa đủ điểm để quay");
     } finally {
+      spinLockRef.current = false;
       setSpinning(false);
     }
+  }
+
+  function playWheelAnimation(plan: WheelAnimationPlan) {
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      setRotationDeg(plan.to);
+      return Promise.resolve();
+    }
+
+    return new Promise<void>((resolve) => {
+      animationResolveRef.current = () => {
+        setRotationDeg(plan.to);
+        setAnimationPlan(null);
+        resolve();
+      };
+      setAnimationPlan(plan);
+      animationTimeoutRef.current = window.setTimeout(
+        finishWheelAnimation,
+        WHEEL_ANIMATION_DURATION_MS + 750,
+      );
+    });
   }
 
   return (
@@ -106,7 +161,13 @@ export function WheelPage({ session, onSessionChange }: Props) {
 
       <div className="wheel-stage">
         <div className="wheel-pointer" aria-hidden="true" />
-        <div className={spinning ? "wheel spinning" : "wheel"} style={wheelStyle}>
+        <div
+          ref={wheelRef}
+          className={`wheel${spinning ? " spinning" : ""}${animationPlan ? " animating" : ""}`}
+          data-testid="lucky-wheel"
+          data-rotation={animationPlan?.to ?? rotationDeg}
+          style={wheelStyle}
+        >
           {slots.map((slot, index) => {
             const angle =
               index * (360 / Math.max(slots.length, 1)) + 360 / Math.max(slots.length, 1) / 2;
@@ -238,22 +299,6 @@ function selectedIndexFromResult(result: SpinResult, slots: Array<{ label: strin
   return foundIndex >= 0 ? foundIndex : 0;
 }
 
-function nextRotation(currentRotation: number, selectedIndex: number, slotCount: number) {
-  if (slotCount <= 0) {
-    return currentRotation;
-  }
-
-  const slice = 360 / slotCount;
-  const selectedCenter = selectedIndex * slice + slice / 2;
-  const target = normalizeDegrees(270 - selectedCenter);
-  const current = normalizeDegrees(currentRotation);
-  return currentRotation + 1080 + normalizeDegrees(target - current);
-}
-
-function normalizeDegrees(value: number) {
-  return ((value % 360) + 360) % 360;
-}
-
 function shortWheelLabel(label: string) {
   const normalized = label.toLowerCase();
   if (normalized.includes("giảm 10")) return "-10%";
@@ -264,8 +309,4 @@ function shortWheelLabel(label: string) {
   if (normalized.includes("hấp")) return "Hấp dầu";
   if (label.length <= 10) return label;
   return `${label.slice(0, 9)}...`;
-}
-
-function wait(ms: number) {
-  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }

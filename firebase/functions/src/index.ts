@@ -5053,7 +5053,7 @@ export const getCustomerHistoryFromZalo = onCall(zaloFunctionOptions, async (req
   const customerId = customerIdFor(salonId, zaloProfile.zaloUserId);
   const limit = boundedQueryLimit(request.data?.limit, 20, 50);
 
-  const [recordsSnap, customerSnap] = await Promise.all([
+  const [recordsSnap, customerSnap, salonSnap] = await Promise.all([
     db
       .collection("haircut_records")
       .where("salonId", "==", salonId)
@@ -5062,6 +5062,7 @@ export const getCustomerHistoryFromZalo = onCall(zaloFunctionOptions, async (req
       .limit(limit)
       .get(),
     db.collection("customers").doc(customerId).get(),
+    db.collection("salons").doc(salonId).get(),
   ]);
   const canViewPhotos =
     customerSnap.exists &&
@@ -5086,6 +5087,8 @@ export const getCustomerHistoryFromZalo = onCall(zaloFunctionOptions, async (req
       staffNames.set(doc.id, name);
     }
   });
+  const salonName =
+    salonSnap.exists && typeof salonSnap.data()?.name === "string" ? salonSnap.data()?.name : "";
 
   return {
     records: await Promise.all(
@@ -5094,7 +5097,14 @@ export const getCustomerHistoryFromZalo = onCall(zaloFunctionOptions, async (req
         return {
           id: doc.id,
           createdAtMs: timestampMillis(data.createdAt),
-          staffName: staffNames.get(data.staffId) ?? "Nhân viên",
+          salonName,
+          branchId: typeof data.branchId === "string" ? data.branchId : "",
+          branchName: typeof data.branchName === "string" ? data.branchName : "",
+          staffName:
+            staffNames.get(data.staffId) ??
+            (typeof data.staffName === "string" ? data.staffName : ""),
+          serviceName: typeof data.serviceName === "string" ? data.serviceName : "",
+          rewardName: typeof data.rewardName === "string" ? data.rewardName : "",
           note: data.note ?? "",
           photoUrls: canViewPhotos
             ? await resolvedHaircutPhotoUrls(data.photoUrls, data.photoPaths, {

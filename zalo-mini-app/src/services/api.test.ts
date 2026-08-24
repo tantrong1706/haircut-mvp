@@ -2,13 +2,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildRegisterInput,
   customerSessionRefreshDelay,
+  getHaircutHistory,
   resolveCustomerQr,
   restoreSavedCustomerSession,
+  spinWheel,
 } from "./api";
-import {
-  createSessionIdentityBinding,
-  type SavedSessionCandidate,
-} from "./sessionStore";
+import { createSessionIdentityBinding, type SavedSessionCandidate } from "./sessionStore";
 
 const mocks = vi.hoisted(() => ({
   callFunction: vi.fn(),
@@ -243,5 +242,110 @@ describe("restoreSavedCustomerSession ở chế độ kiểm thử", () => {
         identityBinding: "b".repeat(64),
       }),
     ).resolves.toEqual({ status: "discarded", reason: "identity_mismatch" });
+  });
+});
+
+describe("getHaircutHistory", () => {
+  it("giữ metadata và ảnh mà callable trả về cho đúng record", async () => {
+    mocks.isFirebaseConfigured.mockReturnValue(true);
+    mocks.callFunction.mockResolvedValue({
+      records: [
+        {
+          id: "record-a",
+          createdAtMs: new Date("2026-07-12T07:30:00.000Z").getTime(),
+          salonName: "CH Haircut Salon",
+          branchId: "branch-a",
+          branchName: "Chi nhánh Quận 1",
+          staffName: "Nam",
+          serviceName: "Cắt tạo kiểu",
+          rewardName: "",
+          note: "Fade thấp",
+          photoUrls: ["https://firebasestorage.googleapis.com/photo-a.jpg"],
+          pointsAdded: 2,
+        },
+      ],
+    });
+
+    const result = await getHaircutHistory({
+      qr: candidate.qr,
+      sessionId: candidate.sessionId,
+      zaloUserId: "zalo-a",
+      customer: {
+        customerId: candidate.customerId,
+        name: "Khách A",
+        points: 3,
+        allowPhoto: true,
+      },
+    });
+
+    expect(result[0]).toMatchObject({
+      id: "record-a",
+      salonName: "CH Haircut Salon",
+      branchId: "branch-a",
+      branchName: "Chi nhánh Quận 1",
+      staffName: "Nam",
+      serviceName: "Cắt tạo kiểu",
+      photoUrls: ["https://firebasestorage.googleapis.com/photo-a.jpg"],
+    });
+    expect(mocks.callFunction).toHaveBeenCalledWith("getCustomerHistoryFromZalo", {
+      salonId: "salon-a",
+      zaloAccessToken: "fresh-zalo-token",
+      limit: 20,
+    });
+  });
+});
+
+describe("spinWheel", () => {
+  it("dùng fixture xác định trong preview khi không có backend", async () => {
+    mocks.isFirebaseConfigured.mockReturnValue(false);
+
+    await expect(
+      spinWheel({
+        qr: candidate.qr,
+        sessionId: candidate.sessionId,
+        zaloUserId: "zalo-a",
+        customer: {
+          customerId: candidate.customerId,
+          name: "Khách A",
+          points: 10,
+          allowPhoto: false,
+        },
+      }),
+    ).resolves.toMatchObject({ selectedIndex: 1 });
+    expect(mocks.callFunction).not.toHaveBeenCalled();
+  });
+
+  it("chỉ dùng kết quả callable backend khi Firebase được cấu hình", async () => {
+    mocks.isFirebaseConfigured.mockReturnValue(true);
+    mocks.callFunction.mockResolvedValue({
+      rewardId: "reward-a",
+      rewardName: "Quà backend",
+      rewardCode: "BACKEND-CODE",
+      pointsAfter: 5,
+      isWinning: true,
+      selectedIndex: 3,
+    });
+
+    const result = await spinWheel({
+      qr: candidate.qr,
+      sessionId: candidate.sessionId,
+      zaloUserId: "zalo-a",
+      customer: {
+        customerId: candidate.customerId,
+        name: "Khách A",
+        points: 10,
+        allowPhoto: false,
+      },
+    });
+
+    expect(result).toMatchObject({ rewardName: "Quà backend", selectedIndex: 3 });
+    expect(mocks.callFunction).toHaveBeenCalledWith(
+      "spinLuckyWheelFromZalo",
+      expect.objectContaining({
+        salonId: "salon-a",
+        zaloAccessToken: "fresh-zalo-token",
+        idempotencyKey: expect.any(String),
+      }),
+    );
   });
 });

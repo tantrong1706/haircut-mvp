@@ -36,7 +36,12 @@ export type AppSession = {
 export type HaircutRecord = {
   id: string;
   createdAt: string;
+  salonName?: string;
+  branchId?: string;
+  branchName?: string;
   staffName: string;
+  serviceName?: string;
+  rewardName?: string;
   note: string;
   photoUrls: string[];
   pointsAdded: number;
