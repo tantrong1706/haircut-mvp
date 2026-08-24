@@ -61,3 +61,15 @@ Journeys and acceptance criteria were derived from the project owner's request t
 - Base source: PR #30 SHA af1cbfd682352a7338e7372041893170edd0e7c8.
 - Gateway commits were cherry-picked in order: 21a9d06, 88454f4, 7de813f, 2f46dcf.
 - No PR was merged, no remote branch was pushed, and no Firebase/Zalo/review/publish action was performed.
+
+## Canonical review metadata — 2026-08-24
+
+Reviewer preparation must present the same public brand and custom-domain routes as the deployed customer app.
+
+| Guarantee | RED evidence | GREEN evidence |
+| --- | --- | --- |
+| Review setup creates a `CH Haircut Salon`-branded test salon and writes owner/staff links under `app.chhaircutsalon.cc` | `node --test test/zalo-review-preparation-config.test.mjs`: 0 pass, 1 fail because the preparation script still contained `HAIRCUT Studio` and the default Firebase Hosting domain | The same command: 1 pass, 0 fail after changing only the three review metadata strings |
+
+- RED checkpoint: `9b50fca` (`test: require canonical Zalo review metadata`).
+- GREEN checkpoint: `a01b69f` (`fix: align Zalo review setup with canonical brand`).
+- No application business logic, Firebase Functions, Zalo App ID, credential, or production secret changed in this cycle.
