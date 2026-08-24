@@ -6,6 +6,11 @@
   bị ignore `zalo-mini-app/.env.production.local`. File mẫu duy nhất được commit
   là `.env.production.example`.
 - Firebase Auth phải bật Email/Password; domain Hosting phải nằm trong Authorized domains và mẫu email đặt lại mật khẩu phải dùng thương hiệu HAIRCUT.
+- Web khách ưu tiên `https://app.chhaircutsalon.cc` sau khi Firebase Hosting báo
+  `Connected`. Hai domain mặc định `haircut-c7d12.web.app` và
+  `haircut-c7d12.firebaseapp.com` phải tiếp tục hoạt động; không redirect hoặc xóa.
+- Checklist custom domain, DNS Cloudflare, Authorized Domains và SSL nằm tại
+  [`CUSTOM_DOMAIN_APP_CLOUDFLARE.md`](CUSTOM_DOMAIN_APP_CLOUDFLARE.md).
 - `ZALO_APP_SECRET` phải nằm trong Firebase Secret Manager.
 - `ZALO_APP_ID` là App ID của ứng dụng Zalo liên kết với OA và được đặt trong `firebase/functions/.env`; đây không phải Mini App ID.
 - `ZALO_MINI_APP_ID` là Mini App ID và được đặt trong `firebase/functions/.env`.

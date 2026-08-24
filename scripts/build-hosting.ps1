@@ -8,9 +8,19 @@ Push-Location $miniAppDir
 npm run build
 Pop-Location
 
-$resolvedPublic = Resolve-Path -LiteralPath $publicDir
-if (-not ($resolvedPublic.Path.StartsWith($root.Path))) {
+$resolvedFirebaseDir = (Resolve-Path -LiteralPath (Join-Path $root "firebase")).Path
+$publicParent = Split-Path -Parent $publicDir
+if ($publicParent -ne $resolvedFirebaseDir -or (Split-Path -Leaf $publicDir) -ne "public") {
   throw "Refusing to clean outside project"
+}
+
+if (-not (Test-Path -LiteralPath $publicDir)) {
+  New-Item -ItemType Directory -Path $publicDir | Out-Null
+}
+
+$resolvedPublic = Resolve-Path -LiteralPath $publicDir
+if ((Split-Path -Parent $resolvedPublic.Path) -ne $resolvedFirebaseDir) {
+  throw "Refusing to clean outside Firebase directory"
 }
 
 Get-ChildItem -LiteralPath $resolvedPublic.Path -Force | Remove-Item -Recurse -Force

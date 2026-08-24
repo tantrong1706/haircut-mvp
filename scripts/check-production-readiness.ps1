@@ -425,13 +425,23 @@ if ($RunBuild) {
 }
 
 if ($CheckLiveUrls) {
-  $urls = @(
+  $defaultHostingUrls = @(
     "https://haircut-c7d12.web.app",
     "https://haircut-c7d12.web.app/staff",
     "https://haircut-c7d12.web.app/owner",
     "https://haircut-c7d12.web.app/privacy",
     "https://haircut-c7d12.web.app/terms"
   )
+  $customHostingUrls = @(
+    "https://app.chhaircutsalon.cc",
+    "https://app.chhaircutsalon.cc/history",
+    "https://app.chhaircutsalon.cc/wheel",
+    "https://app.chhaircutsalon.cc/staff",
+    "https://app.chhaircutsalon.cc/owner",
+    "https://app.chhaircutsalon.cc/privacy",
+    "https://app.chhaircutsalon.cc/terms"
+  )
+  $urls = @($defaultHostingUrls + $customHostingUrls)
 
   foreach ($url in $urls) {
     $statusCode = Test-Url $url

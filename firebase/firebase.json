@@ -15,6 +15,7 @@
     }
   ],
   "hosting": {
+    "site": "haircut-c7d12",
     "public": "public",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "headers": [

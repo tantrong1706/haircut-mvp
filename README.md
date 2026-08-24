@@ -168,13 +168,18 @@ Không đặt App Secret, Open API Key, QR signing secret, access token, mật k
 
 ## URL công khai
 
-- Khách hàng: <https://haircut-c7d12.web.app>
-- Chủ salon: <https://haircut-c7d12.web.app/owner>
-- Nhân viên: <https://haircut-c7d12.web.app/staff>
-- Chính sách quyền riêng tư: <https://haircut-c7d12.web.app/privacy>
-- Điều khoản sử dụng: <https://haircut-c7d12.web.app/terms>
+- Khách hàng (sau khi Firebase báo `Connected`): <https://app.chhaircutsalon.cc>
+- Firebase URL mặc định, luôn được giữ làm fallback: <https://haircut-c7d12.web.app>
+- Chủ salon: <https://app.chhaircutsalon.cc/owner>
+- Nhân viên: <https://app.chhaircutsalon.cc/staff>
+- Chính sách quyền riêng tư: <https://app.chhaircutsalon.cc/privacy>
+- Điều khoản sử dụng: <https://app.chhaircutsalon.cc/terms>
 - Zalo Mini App: <https://zalo.me/s/2038116772828167300>
 - HAIRCUT Admin: URL riêng được điền sau khi tạo Firebase Hosting site và đặt `VITE_ADMIN_URL`.
+
+Custom domain khách dùng chung Firebase Hosting site `haircut-c7d12`; không thay thế
+hai domain mặc định `web.app`/`firebaseapp.com`. Xem checklist DNS, Auth và SSL tại
+[`docs/CUSTOM_DOMAIN_APP_CLOUDFLARE.md`](docs/CUSTOM_DOMAIN_APP_CLOUDFLARE.md).
 
 ## Triển khai
 
