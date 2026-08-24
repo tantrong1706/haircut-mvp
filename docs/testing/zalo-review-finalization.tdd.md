@@ -73,3 +73,15 @@ Reviewer preparation must present the same public brand and custom-domain routes
 - RED checkpoint: `9b50fca` (`test: require canonical Zalo review metadata`).
 - GREEN checkpoint: `a01b69f` (`fix: align Zalo review setup with canonical brand`).
 - No application business logic, Firebase Functions, Zalo App ID, credential, or production secret changed in this cycle.
+
+## Completed reviewer package — 2026-08-24
+
+The static readiness gate previously accepted only the pre-deployment placeholder state. After the real Version 19 review data was prepared, that behavior correctly produced RED and was updated to accept either a safely deferred package or a complete token-free package.
+
+| Guarantee | RED evidence | GREEN evidence |
+| --- | --- | --- |
+| Static readiness accepts completed Version 19 reviewer metadata without weakening placeholder or raw-token checks | `npm run check:zalo-review`: 33 pass, 1 fail at `Placeholder reviewer được đánh dấu chờ gateway và Testing cuối` after the completed review package removed all placeholders | `npm run check:zalo-review`: 34/34 pass; root release/submission/preparation suite: 7/7 pass |
+
+- RED checkpoint: `7370da4` (`docs: finalize Version 19 review package`).
+- GREEN checkpoint: `d4ee932` (`fix: accept completed Zalo reviewer metadata`).
+- Completed metadata is accepted only when the canonical salon name, Testing Version 19 and versioned HTTPS QR image are present and neither `qrToken=` nor `mirrorId=` occurs in the submission document.
