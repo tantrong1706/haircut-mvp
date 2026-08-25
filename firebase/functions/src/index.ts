@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes, randomInt } from "node:crypto";
 import {
   ApiErrorCode,
   DeviceTokenSchema,
@@ -38,7 +38,8 @@ import {
   legacyBranchPatch,
   normalizeWheelSlotType,
   rewardExpiresAtMs,
-  selectWheelSlot,
+  activeWheelSlotCount,
+  selectWheelSlotByIndex,
   serviceSessionExpiresAtMs,
   wheelRewardOutcome,
 } from "./businessRules";
@@ -72,7 +73,16 @@ import {
   selectQrBranch,
   shouldReuseActiveSession,
 } from "./security";
-import { ZaloRequestError, fetchZaloJson } from "./zaloClient";
+import {
+  ZaloRequestError,
+  classifyZaloRequestFailure,
+  fetchZaloJson,
+  type ZaloRequestCategory,
+} from "./zaloClient";
+import {
+  ZaloGatewayVerificationError,
+  createZaloIdentityVerifier,
+} from "./zaloIdentityVerifier";
 import { decodeZaloPhoneNumber } from "./zaloPhone";
 import {
   createZaloPrivacyWebhookHandler,
@@ -120,6 +130,7 @@ const functionOptions = {
   enforceAppCheck: process.env.ENFORCE_APP_CHECK === "true",
 };
 const zaloAppSecret = defineSecret("ZALO_APP_SECRET");
+const zaloGatewayHmacSecret = defineSecret("ZALO_GATEWAY_HMAC_SECRET");
 const zaloOpenApiKey = defineSecret("ZALO_OPEN_API_KEY");
 const qrSigningSecret = defineSecret("QR_SIGNING_SECRET");
 const qrFunctionOptions = {
@@ -128,14 +139,14 @@ const qrFunctionOptions = {
 };
 const zaloFunctionOptions = {
   ...functionOptions,
-  secrets: [zaloAppSecret],
+  secrets: [zaloAppSecret, zaloGatewayHmacSecret],
   timeoutSeconds: 30,
   concurrency: 40,
   maxInstances: 30,
 };
 const zaloQrFunctionOptions = {
   ...zaloFunctionOptions,
-  secrets: [zaloAppSecret, qrSigningSecret],
+  secrets: [zaloAppSecret, zaloGatewayHmacSecret, qrSigningSecret],
 };
 const SESSION_POINT_REQUEST_WINDOW_MS = 12 * 60 * 60 * 1000;
 const OPEN_SESSION_STATUSES = ["waiting", "serving", "pending_approval"] as const;
@@ -1028,8 +1039,25 @@ async function enforceAuthenticatedRateLimit(
   });
 }
 
-async function verifyZaloAccessToken(accessTokenInput: unknown): Promise<ZaloProfile> {
+const ZALO_VERIFICATION_USER_MESSAGE =
+  "Không thể xác minh tài khoản Zalo lúc này. Vui lòng thử lại sau.";
+
+type ZaloVerificationContext = {
+  requestId?: string;
+  functionName?: string;
+};
+
+function createZaloVerificationRequestId() {
+  return `zalo_${randomBytes(12).toString("hex")}`;
+}
+
+async function verifyZaloAccessTokenDirect(
+  accessTokenInput: unknown,
+  context: ZaloVerificationContext = {},
+): Promise<ZaloProfile> {
   const accessToken = requireString(accessTokenInput, "zaloAccessToken");
+  const requestId = context.requestId || createZaloVerificationRequestId();
+  const functionName = context.functionName || "zaloCustomerCallable";
   const accessTokenHash = createHash("sha256").update(accessToken).digest("hex");
   const cachedProfile = zaloProfileCache.get(accessTokenHash);
   if (cachedProfile && cachedProfile.expiresAtMs > Date.now()) {
@@ -1055,6 +1083,7 @@ async function verifyZaloAccessToken(accessTokenInput: unknown): Promise<ZaloPro
   let payload: Record<string, unknown>;
   let responseStatus: number | "network-error" = "network-error";
   let responseErrorCode: string | number = "request-failed";
+  let responseAttempt = 1;
   const safeLogMessage = (value: unknown) => {
     let message = String(value || "Không xác minh được Zalo access token");
     for (const sensitiveValue of [accessToken, appSecret, appsecretProof]) {
@@ -1062,10 +1091,22 @@ async function verifyZaloAccessToken(accessTokenInput: unknown): Promise<ZaloPro
     }
     return message.slice(0, 500);
   };
-  const logVerificationFailure = (errorCode: string | number, message: string) => {
-    console.warn("Không xác minh được danh tính Zalo", {
+  const logVerificationFailure = (
+    errorCode: string | number,
+    message: string,
+    category: ZaloRequestCategory,
+    attempt: number,
+  ) => {
+    console.warn("zalo_identity_verification_failed", {
+      event: "zalo_identity_verification_failed",
+      requestId,
+      function: functionName,
+      region: functionOptions.region,
       status: responseStatus,
       errorCode,
+      category,
+      attempt,
+      timestamp: new Date().toISOString(),
       message: safeLogMessage(message),
     });
   };
@@ -1074,10 +1115,27 @@ async function verifyZaloAccessToken(accessTokenInput: unknown): Promise<ZaloPro
     const result = await fetchZaloJson(endpoint, {
       access_token: accessToken,
       appsecret_proof: appsecretProof,
+    }, {
+      onAttemptFailure: (event) => {
+        console.warn("zalo_identity_verification_attempt_failed", {
+          event: "zalo_identity_verification_attempt_failed",
+          requestId,
+          function: functionName,
+          region: functionOptions.region,
+          status: event.status,
+          errorCode: event.errorCode,
+          category: event.category,
+          attempt: event.attempt,
+          maxAttempts: event.maxAttempts,
+          retryable: event.retryable,
+          timestamp: new Date().toISOString(),
+        });
+      },
     });
     payload = result.payload;
     responseStatus = result.status;
     responseErrorCode = result.errorCode;
+    responseAttempt = result.attempt;
   } catch (error) {
     if (error instanceof ZaloRequestError) {
       responseStatus = error.status;
@@ -1085,22 +1143,40 @@ async function verifyZaloAccessToken(accessTokenInput: unknown): Promise<ZaloPro
     }
     const message =
       error instanceof Error ? error.message : "Không xác minh được Zalo access token";
-    logVerificationFailure(responseErrorCode, message);
-    throw new HttpsError("unauthenticated", message);
+    const category =
+      error instanceof ZaloRequestError
+        ? error.category
+        : classifyZaloRequestFailure(message);
+    const attempt = error instanceof ZaloRequestError ? error.attempt : 1;
+    logVerificationFailure(responseErrorCode, message, category, attempt);
+    throw new HttpsError("unauthenticated", ZALO_VERIFICATION_USER_MESSAGE, {
+      errorCode: "ZALO_VERIFICATION_FAILED",
+      requestId,
+      category,
+    });
   }
 
   const errorCode = Number(payload.error ?? 0);
   if (Number.isFinite(errorCode) && errorCode !== 0) {
     const message = String(payload.message ?? "Zalo access token không hợp lệ");
-    logVerificationFailure(errorCode, message);
-    throw new HttpsError("unauthenticated", message);
+    const category = classifyZaloRequestFailure(message);
+    logVerificationFailure(errorCode, message, category, responseAttempt);
+    throw new HttpsError("unauthenticated", ZALO_VERIFICATION_USER_MESSAGE, {
+      errorCode: "ZALO_VERIFICATION_FAILED",
+      requestId,
+      category,
+    });
   }
 
   const zaloUserId = String(payload.id ?? "").trim();
   if (!zaloUserId) {
     const message = "Zalo không trả về user id hợp lệ";
-    logVerificationFailure("missing-user-id", message);
-    throw new HttpsError("unauthenticated", message);
+    logVerificationFailure("missing-user-id", message, "INVALID_RESPONSE", 1);
+    throw new HttpsError("unauthenticated", ZALO_VERIFICATION_USER_MESSAGE, {
+      errorCode: "ZALO_VERIFICATION_FAILED",
+      requestId,
+      category: "INVALID_RESPONSE",
+    });
   }
 
   const profile = { zaloUserId };
@@ -1116,6 +1192,60 @@ async function verifyZaloAccessToken(accessTokenInput: unknown): Promise<ZaloPro
   });
 
   return profile;
+}
+
+async function verifyZaloAccessToken(
+  accessTokenInput: unknown,
+  context: ZaloVerificationContext = {},
+): Promise<ZaloProfile> {
+  const accessToken = requireString(accessTokenInput, "zaloAccessToken");
+  const requestId = context.requestId || createZaloVerificationRequestId();
+  const appSecret =
+    zaloAppSecret.value() || process.env.ZALO_APP_SECRET || process.env.ZALO_SECRET_KEY || "";
+  if (!appSecret || appSecret.includes("your-")) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Thiếu ZALO_APP_SECRET để xác minh danh tính Zalo ở server",
+    );
+  }
+  const mode = String(process.env.ZALO_VERIFIER_MODE || "").trim().toLowerCase();
+  let verifier;
+  try {
+    verifier = createZaloIdentityVerifier({
+      mode,
+      gatewayUrl: process.env.ZALO_GATEWAY_URL,
+      gatewayKeyId: process.env.ZALO_GATEWAY_KEY_ID,
+      gatewayHmacSecret: process.env.ZALO_GATEWAY_HMAC_SECRET,
+      zaloAppSecret: appSecret,
+      directVerify: ({ accessToken: directToken }) =>
+        verifyZaloAccessTokenDirect(directToken, { ...context, requestId }),
+    });
+  } catch {
+    throw new HttpsError(
+      "failed-precondition",
+      "Máy chủ chưa được cấu hình đầy đủ để xác minh danh tính Zalo",
+      { errorCode: "ZALO_VERIFIER_CONFIGURATION_INVALID", requestId },
+    );
+  }
+  try {
+    return await verifier.verify({ accessToken, requestId });
+  } catch (error) {
+    if (error instanceof HttpsError) throw error;
+    const gatewayCode =
+      error instanceof ZaloGatewayVerificationError ? error.code : "ZALO_UNAVAILABLE";
+    console.warn("zalo_gateway_verification_failed", {
+      event: "zalo_gateway_verification_failed",
+      requestId,
+      function: context.functionName || "zaloCustomerCallable",
+      errorCode: gatewayCode,
+      timestamp: new Date().toISOString(),
+    });
+    throw new HttpsError("unauthenticated", ZALO_VERIFICATION_USER_MESSAGE, {
+      errorCode: "ZALO_VERIFICATION_FAILED",
+      requestId,
+      category: gatewayCode,
+    });
+  }
 }
 
 function last4(phone?: string): string | undefined {
@@ -1536,16 +1666,18 @@ async function spinWheelForCustomer(
       throw new HttpsError("failed-precondition", "Khách chưa đủ điểm để quay");
     }
 
-    const selectedSlot = selectWheelSlot(
-      Array.isArray(wheel?.slots)
-        ? wheel.slots.map((slot: LuckyWheelSlot) => ({
-            label: String(slot.label || "").trim(),
-            active: slot.active !== false,
-            type: normalizeWheelSlotType(slot.type, String(slot.label || "")),
-          }))
-        : [],
-      Math.random(),
-    );
+    const wheelSlots = Array.isArray(wheel?.slots)
+      ? wheel.slots.map((slot: LuckyWheelSlot) => ({
+          label: String(slot.label || "").trim(),
+          active: slot.active !== false,
+          type: normalizeWheelSlotType(slot.type, String(slot.label || "")),
+        }))
+      : [];
+    const availableSlotCount = activeWheelSlotCount(wheelSlots);
+    const selectedSlot =
+      availableSlotCount > 0
+        ? selectWheelSlotByIndex(wheelSlots, randomInt(availableSlotCount))
+        : null;
     if (!selectedSlot) {
       throw new HttpsError("failed-precondition", "Vòng quay chưa có ô thưởng đang bật");
     }
@@ -2630,6 +2762,7 @@ export const resolveCustomerQr = onCall(qrFunctionOptions, async (request) => {
 });
 
 export const registerCustomerFromZalo = onCall(zaloQrFunctionOptions, async (request) => {
+  const verificationRequestId = createZaloVerificationRequestId();
   const salonId = requireString(request.data?.salonId, "salonId");
   await enforcePublicRequestPolicy(
     "registerCustomerFromZalo",
@@ -2643,7 +2776,10 @@ export const registerCustomerFromZalo = onCall(zaloQrFunctionOptions, async (req
     "Salon đang tạm ngừng nhận lượt check-in mới.",
     request.data?.appVersion,
   );
-  const zaloProfile = await verifyZaloAccessToken(request.data?.zaloAccessToken);
+  const zaloProfile = await verifyZaloAccessToken(request.data?.zaloAccessToken, {
+    requestId: verificationRequestId,
+    functionName: "registerCustomerFromZalo",
+  });
   const zaloUserId = zaloProfile.zaloUserId;
   const name =
     optionalLimitedString(request.data?.name, "name", 80) ??
@@ -4874,6 +5010,7 @@ export const getCustomerSessionFromZalo = onCall(zaloFunctionOptions, async (req
     : [];
 
   return {
+    identityBinding: createHash("sha256").update(zaloProfile.zaloUserId).digest("hex"),
     sessionStatus:
       session.status === "serving" && !session.assignedStaffId
         ? "pending_approval"
@@ -4916,7 +5053,7 @@ export const getCustomerHistoryFromZalo = onCall(zaloFunctionOptions, async (req
   const customerId = customerIdFor(salonId, zaloProfile.zaloUserId);
   const limit = boundedQueryLimit(request.data?.limit, 20, 50);
 
-  const [recordsSnap, customerSnap] = await Promise.all([
+  const [recordsSnap, customerSnap, salonSnap] = await Promise.all([
     db
       .collection("haircut_records")
       .where("salonId", "==", salonId)
@@ -4925,6 +5062,7 @@ export const getCustomerHistoryFromZalo = onCall(zaloFunctionOptions, async (req
       .limit(limit)
       .get(),
     db.collection("customers").doc(customerId).get(),
+    db.collection("salons").doc(salonId).get(),
   ]);
   const canViewPhotos =
     customerSnap.exists &&
@@ -4949,6 +5087,8 @@ export const getCustomerHistoryFromZalo = onCall(zaloFunctionOptions, async (req
       staffNames.set(doc.id, name);
     }
   });
+  const salonName =
+    salonSnap.exists && typeof salonSnap.data()?.name === "string" ? salonSnap.data()?.name : "";
 
   return {
     records: await Promise.all(
@@ -4957,7 +5097,14 @@ export const getCustomerHistoryFromZalo = onCall(zaloFunctionOptions, async (req
         return {
           id: doc.id,
           createdAtMs: timestampMillis(data.createdAt),
-          staffName: staffNames.get(data.staffId) ?? "Nhân viên",
+          salonName,
+          branchId: typeof data.branchId === "string" ? data.branchId : "",
+          branchName: typeof data.branchName === "string" ? data.branchName : "",
+          staffName:
+            staffNames.get(data.staffId) ??
+            (typeof data.staffName === "string" ? data.staffName : ""),
+          serviceName: typeof data.serviceName === "string" ? data.serviceName : "",
+          rewardName: typeof data.rewardName === "string" ? data.rewardName : "",
           note: data.note ?? "",
           photoUrls: canViewPhotos
             ? await resolvedHaircutPhotoUrls(data.photoUrls, data.photoPaths, {

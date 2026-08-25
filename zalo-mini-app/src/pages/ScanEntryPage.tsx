@@ -12,6 +12,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { BrandLogo } from "../components/BrandLogo";
+import { MINI_APP_NAME } from "../config/branding";
 import {
   CustomerQrResolution,
   buildRegisterInput,
@@ -173,7 +174,7 @@ export function ScanEntryPage({ onReady, onOpenLegalPage }: Props) {
           setError(
             err instanceof Error
               ? err.message
-              : "Vui lòng mở HAIRCUT trong Zalo để xác nhận danh tính.",
+              : `Vui lòng mở ${MINI_APP_NAME} trong Zalo để xác nhận danh tính.`,
           );
         }
       })
@@ -297,7 +298,7 @@ export function ScanEntryPage({ onReady, onOpenLegalPage }: Props) {
         <header className="entry-hero premium-hero visual-hero">
           <div className="hero-topline">
             <BrandLogo />
-            <span className="soft-chip">HAIRCUT</span>
+            <span className="soft-chip">{MINI_APP_NAME}</span>
           </div>
 
           <p className="eyebrow">Check-in</p>
@@ -313,14 +314,14 @@ export function ScanEntryPage({ onReady, onOpenLegalPage }: Props) {
             <h2>Cần QR của salon</h2>
 
             <p className="muted">
-              QR giúp HAIRCUT xác định đúng salon và chi nhánh. Hãy quét QR do salon cung cấp rồi mở
-              lại ứng dụng.
+              QR giúp {MINI_APP_NAME} xác định đúng salon và chi nhánh. Hãy quét QR do salon cung
+              cấp rồi mở lại ứng dụng.
             </p>
           </div>
         </div>
 
         {isZaloRuntime ? (
-          <nav className="entry-help-links" aria-label="Thông tin HAIRCUT">
+          <nav className="entry-help-links" aria-label={`Thông tin ${MINI_APP_NAME}`}>
             <a
               href="#privacy"
               onClick={(event) => {
@@ -385,7 +386,7 @@ export function ScanEntryPage({ onReady, onOpenLegalPage }: Props) {
         </div>
 
         <p className="eyebrow">Check-in</p>
-        <h1>{qrResolution?.salonName || "HAIRCUT"}</h1>
+        <h1>{qrResolution?.salonName || MINI_APP_NAME}</h1>
 
         <p className="muted">Xác nhận để salon nhận đúng khách và cộng điểm sau khi cắt.</p>
       </header>
@@ -407,7 +408,7 @@ export function ScanEntryPage({ onReady, onOpenLegalPage }: Props) {
 
         <div className="salon-identity-copy">
           <span>Salon phục vụ</span>
-          <h2>{loadingQr ? "Đang xác minh salon..." : qrResolution?.salonName || "HAIRCUT"}</h2>
+          <h2>{loadingQr ? "Đang xác minh salon..." : qrResolution?.salonName || MINI_APP_NAME}</h2>
           <strong>
             {loadingQr
               ? "Đang tải chi nhánh"
@@ -427,8 +428,8 @@ export function ScanEntryPage({ onReady, onOpenLegalPage }: Props) {
 
             <p className="muted">
               {isZaloRuntime
-                ? "Cho phép HAIRCUT đọc tên hiển thị để salon nhận đúng khách."
-                : "HAIRCUT cần mở trong Zalo để xác nhận danh tính trước khi tạo lượt cắt."}
+                ? `Cho phép ${MINI_APP_NAME} đọc tên hiển thị để salon nhận đúng khách.`
+                : `${MINI_APP_NAME} cần mở trong Zalo để xác nhận danh tính trước khi tạo lượt cắt.`}
             </p>
           </div>
 

@@ -28,7 +28,9 @@ import {
   defaultLuckyWheelConfig,
 } from "./types";
 import { activeWheelSlots, normalizeLuckyWheelConfig } from "./wheel";
-import { getZaloAccessToken, ZaloIdentity } from "./zalo";
+import { getZaloAccessToken, getZaloIdentity, ZaloIdentity } from "./zalo";
+import { createSessionIdentityBinding, type SavedSessionCandidate } from "./sessionStore";
+import { safeStorageGet, safeStorageRemove, safeStorageSet } from "./safeStorage";
 export { parseQrContext } from "./qr";
 
 const SESSION_POINT_REQUEST_WINDOW_MS = 12 * 60 * 60 * 1000;
@@ -62,7 +64,12 @@ type CustomerHistoryFunctionResult = {
   records: Array<{
     id: string;
     createdAtMs: number | null;
+    salonName?: string;
+    branchId?: string;
+    branchName?: string;
     staffName: string;
+    serviceName?: string;
+    rewardName?: string;
     note: string;
     photoUrls: string[];
     pointsAdded: number;
@@ -81,6 +88,7 @@ type CustomerRewardsFunctionResult = {
 };
 
 type CustomerSessionFunctionResult = {
+  identityBinding: string;
   sessionStatus: AppSession["sessionStatus"];
   branchId?: string;
   branchName?: string;
@@ -92,6 +100,13 @@ type CustomerSessionFunctionResult = {
   wheelConfig: LuckyWheelConfig;
   features?: SystemFeatures;
 };
+
+export type SavedSessionRestoreResult =
+  | { status: "restored"; session: AppSession }
+  | {
+      status: "discarded";
+      reason: "identity_mismatch" | "session_missing" | "terminal_session";
+    };
 
 export type CustomerQrBranch = {
   id: string;
@@ -264,6 +279,117 @@ export function listenSessionLiveUpdates(
   };
 }
 
+export async function restoreSavedCustomerSession(
+  candidate: SavedSessionCandidate,
+): Promise<SavedSessionRestoreResult> {
+  if (
+    !isFirebaseConfigured() &&
+    (import.meta.env.VITE_ZALO_PREVIEW === "true" || import.meta.env.VITE_APP_ENV === "test")
+  ) {
+    return restorePreviewCustomerSession(candidate);
+  }
+
+  let result: CustomerSessionFunctionResult;
+  try {
+    const zaloAccessToken = await getZaloAccessToken();
+    result = await callFunction<
+      { salonId: string; sessionId: string; zaloAccessToken: string },
+      CustomerSessionFunctionResult
+    >("getCustomerSessionFromZalo", {
+      salonId: candidate.salonId,
+      sessionId: candidate.sessionId,
+      zaloAccessToken,
+    });
+  } catch (error) {
+    if (isDefinitiveMissingSessionError(error)) {
+      return { status: "discarded", reason: "session_missing" };
+    }
+    throw error;
+  }
+
+  if (
+    result.identityBinding !== candidate.identityBinding ||
+    result.customer.customerId !== candidate.customerId
+  ) {
+    return { status: "discarded", reason: "identity_mismatch" };
+  }
+
+  const sessionStatus = normalizeSessionStatus(result.sessionStatus, result.assignedStaffName);
+  if (sessionStatus === "completed" || sessionStatus === "cancelled") {
+    return { status: "discarded", reason: "terminal_session" };
+  }
+
+  return {
+    status: "restored",
+    session: {
+      qr: candidate.qr,
+      sessionId: candidate.sessionId,
+      branchName: result.branchName || "",
+      branchAddress: result.branchAddress || "",
+      mirrorName: result.mirrorName || result.branchName || "",
+      zaloUserId: "",
+      identityBinding: result.identityBinding,
+      sessionStatus,
+      assignedStaffName: result.assignedStaffName || "",
+      claimedAtMs: result.claimedAtMs ?? null,
+      features: result.features ?? { ...DEFAULT_SYSTEM_FEATURES },
+      customer: mapCustomerProfile(
+        result.customer.customerId,
+        result.customer as unknown as Record<string, unknown>,
+        result.customer,
+      ),
+    },
+  };
+}
+
+async function restorePreviewCustomerSession(
+  candidate: SavedSessionCandidate,
+): Promise<SavedSessionRestoreResult> {
+  const identity =
+    import.meta.env.VITE_APP_ENV === "test"
+      ? {
+          accessToken: "preview-access-token",
+          zaloUserId: "preview-zalo-user",
+          name: "Khách xem trước",
+        }
+      : await getZaloIdentity();
+  if (!identity.zaloUserId) {
+    return { status: "discarded", reason: "identity_mismatch" };
+  }
+  const identityBinding = await createSessionIdentityBinding(identity.zaloUserId);
+  if (!identityBinding || identityBinding !== candidate.identityBinding) {
+    return { status: "discarded", reason: "identity_mismatch" };
+  }
+
+  const session = mockRegisterCustomer({
+    ...candidate.qr,
+    zaloAccessToken: identity.accessToken,
+    zaloUserId: identity.zaloUserId,
+    name: identity.name,
+    allowPhoto: false,
+  });
+  if (session.customer.customerId !== candidate.customerId) {
+    return { status: "discarded", reason: "identity_mismatch" };
+  }
+
+  return {
+    status: "restored",
+    session: {
+      ...session,
+      sessionId: candidate.sessionId,
+      identityBinding,
+    },
+  };
+}
+
+function isDefinitiveMissingSessionError(error: unknown) {
+  const message = error instanceof Error ? error.message.toLocaleLowerCase("vi") : "";
+  return (
+    message.includes("không tìm thấy dữ liệu cần xử lý") ||
+    message.includes("lượt cắt không thuộc khách hàng này")
+  );
+}
+
 export function customerSessionRefreshDelay(
   status: AppSession["sessionStatus"],
   retryCount: number,
@@ -301,7 +427,9 @@ async function getCustomerSessionState(
   });
 
   return {
+    identityBinding: result.identityBinding,
     sessionStatus: normalizeSessionStatus(result.sessionStatus, result.assignedStaffName),
+    branchId: result.branchId,
     assignedStaffName: result.assignedStaffName || "",
     claimedAtMs: result.claimedAtMs ?? null,
     branchName: result.branchName || session.branchName || "",
@@ -313,6 +441,7 @@ async function getCustomerSessionState(
       session.customer,
     ),
     wheelConfig: normalizeLuckyWheelConfig(result.wheelConfig),
+    features: result.features,
   };
 }
 
@@ -545,19 +674,15 @@ export async function spinWheel(session: AppSession): Promise<SpinResult> {
   const pendingSpin = getOrCreateIdempotencyKey(
     `spin:${session.qr.salonId}:${session.customer.customerId}`,
   );
-  const result = await callCustomerFunctionOrDirect<
+  const result = await callFunction<
     { salonId: string; zaloAccessToken: string; idempotencyKey: string },
     SpinResult
-  >(
-    "spinLuckyWheelFromZalo",
-    {
-      salonId: session.qr.salonId,
-      zaloAccessToken,
-      idempotencyKey: pendingSpin.key,
-    },
-    () => spinWheelDirect(session),
-  );
-  localStorage.removeItem(pendingSpin.storageKey);
+  >("spinLuckyWheelFromZalo", {
+    salonId: session.qr.salonId,
+    zaloAccessToken,
+    idempotencyKey: pendingSpin.key,
+  });
+  safeStorageRemove(pendingSpin.storageKey);
   return {
     ...result,
     isWinning: result.isWinning ?? Boolean(result.rewardCode),
@@ -566,7 +691,7 @@ export async function spinWheel(session: AppSession): Promise<SpinResult> {
 
 function getOrCreateIdempotencyKey(scope: string) {
   const storageKey = `haircut_pending_operation:${scope}`;
-  const existing = localStorage.getItem(storageKey);
+  const existing = safeStorageGet(storageKey);
   if (existing && /^[A-Za-z0-9_-]{16,128}$/.test(existing)) {
     return { storageKey, key: existing };
   }
@@ -574,125 +699,45 @@ function getOrCreateIdempotencyKey(scope: string) {
     typeof crypto.randomUUID === "function"
       ? crypto.randomUUID()
       : `${Date.now()}_${crypto.getRandomValues(new Uint32Array(4)).join("_")}`;
-  localStorage.setItem(storageKey, key);
+  safeStorageSet(storageKey, key);
   return { storageKey, key };
 }
 
 async function spinWheelDirect(session: AppSession): Promise<SpinResult> {
-  if (!isFirebaseConfigured()) {
-    const activeSlots = activeWheelSlots(defaultLuckyWheelConfig);
-    const forcedIndex =
-      import.meta.env.VITE_APP_ENV === "test"
-        ? Number(localStorage.getItem("haircut_mock_spin_index"))
-        : Number.NaN;
-    const selectedIndex =
-      Number.isInteger(forcedIndex) && forcedIndex >= 0 && forcedIndex < activeSlots.length
-        ? forcedIndex
-        : Math.min(1, activeSlots.length - 1);
-    const pointsAfter = Math.max(
-      0,
-      session.customer.points - defaultLuckyWheelConfig.requiredPoints,
-    );
-    const selectedSlot = activeSlots[selectedIndex];
-    const isWinning = selectedSlot?.type !== "no_prize";
-    const reward = {
-      rewardId: `reward-${Date.now()}`,
-      rewardName: selectedSlot?.label || "Gội đầu miễn phí",
-      rewardCode: isWinning ? makeRewardCode() : "",
-      pointsAfter,
-      isWinning,
-      selectedIndex,
-    };
+  const activeSlots = activeWheelSlots(defaultLuckyWheelConfig);
+  const forcedIndexValue = safeStorageGet("haircut_mock_spin_index");
+  const forcedIndex =
+    import.meta.env.VITE_APP_ENV === "test" && forcedIndexValue !== null
+      ? Number(forcedIndexValue)
+      : Number.NaN;
+  const selectedIndex =
+    Number.isInteger(forcedIndex) && forcedIndex >= 0 && forcedIndex < activeSlots.length
+      ? forcedIndex
+      : Math.min(1, activeSlots.length - 1);
+  const pointsAfter = Math.max(0, session.customer.points - defaultLuckyWheelConfig.requiredPoints);
+  const selectedSlot = activeSlots[selectedIndex];
+  const isWinning = selectedSlot?.type !== "no_prize";
+  const reward = {
+    rewardId: `reward-${Date.now()}`,
+    rewardName: selectedSlot?.label || "Gội đầu miễn phí",
+    rewardCode: isWinning ? makeRewardCode() : "",
+    pointsAfter,
+    isWinning,
+    selectedIndex,
+  };
 
-    if (isWinning) {
-      saveMockReward({
-        id: reward.rewardId,
-        rewardName: reward.rewardName,
-        rewardCode: reward.rewardCode,
-        status: "unused",
-        createdAt: new Date().toISOString(),
-      });
-    }
-
-    localStorage.setItem("haircut_mock_points", String(pointsAfter));
-    return reward;
-  }
-
-  const db = getFirebaseDb();
-
-  if (!db) {
-    throw new Error("Firebase chưa được cấu hình");
-  }
-
-  const customerRef = doc(db, "customers", session.customer.customerId);
-  const wheelRef = doc(db, "lucky_wheel", session.qr.salonId);
-  const rewardRef = doc(collection(db, "reward_history"));
-
-  return runTransaction(db, async (transaction) => {
-    const [customerSnap, wheelSnap] = await Promise.all([
-      transaction.get(customerRef),
-      transaction.get(wheelRef),
-    ]);
-
-    if (!customerSnap.exists()) {
-      throw new Error("Không tìm thấy khách hàng");
-    }
-
-    const customerData = customerSnap.data();
-    const wheelConfig = wheelSnap.exists()
-      ? normalizeLuckyWheelConfig(wheelSnap.data())
-      : defaultLuckyWheelConfig;
-    const activeSlots = activeWheelSlots(wheelConfig);
-    const currentPoints = Number(customerData.points ?? 0);
-
-    if (activeSlots.length === 0) {
-      throw new Error("Vòng quay chưa có phần thưởng đang bật");
-    }
-
-    if (currentPoints < wheelConfig.requiredPoints) {
-      throw new Error(`Khách chưa đủ ${wheelConfig.requiredPoints} điểm để quay`);
-    }
-
-    const selectedIndex = Math.floor(Math.random() * activeSlots.length);
-    const selectedSlot = activeSlots[selectedIndex];
-    const rewardName = selectedSlot.label;
-    const isWinning = selectedSlot.type === "reward";
-    const rewardCode = isWinning ? makeRewardCode() : "";
-    const pointsAfter = wheelConfig.deductPointsAfterSpin
-      ? currentPoints - wheelConfig.requiredPoints
-      : currentPoints;
-
-    if (wheelConfig.deductPointsAfterSpin) {
-      transaction.update(customerRef, {
-        points: pointsAfter,
-        updatedAt: serverTimestamp(),
-      });
-    }
-
-    transaction.set(rewardRef, {
-      salonId: session.qr.salonId,
-      customerId: session.customer.customerId,
-      rewardName,
-      rewardCode: isWinning ? rewardCode : null,
-      isWinning,
-      selectedIndex,
-      status: isWinning ? "unused" : "no_prize",
-      pointsUsed: wheelConfig.deductPointsAfterSpin ? wheelConfig.requiredPoints : 0,
-      expiresAt: isWinning
-        ? new Date(Date.now() + wheelConfig.rewardValidityDays * 24 * 60 * 60 * 1000)
-        : null,
-      createdAt: serverTimestamp(),
+  if (isWinning) {
+    saveMockReward({
+      id: reward.rewardId,
+      rewardName: reward.rewardName,
+      rewardCode: reward.rewardCode,
+      status: "unused",
+      createdAt: new Date().toISOString(),
     });
+  }
 
-    return {
-      rewardId: rewardRef.id,
-      rewardName,
-      rewardCode,
-      pointsAfter,
-      isWinning,
-      selectedIndex,
-    };
-  });
+  safeStorageSet("haircut_mock_points", String(pointsAfter));
+  return reward;
 }
 
 export async function getHaircutHistory(session: AppSession): Promise<HaircutRecord[]> {
@@ -714,7 +759,12 @@ export async function getHaircutHistory(session: AppSession): Promise<HaircutRec
     return result.records.map((record) => ({
       id: record.id,
       createdAt: formatDate(record.createdAtMs),
+      salonName: record.salonName || "",
+      branchId: record.branchId || "",
+      branchName: record.branchName || "",
       staffName: record.staffName || "",
+      serviceName: record.serviceName || "",
+      rewardName: record.rewardName || "",
       note: record.note || "",
       photoUrls: Array.isArray(record.photoUrls) ? record.photoUrls : [],
       pointsAdded: Number(record.pointsAdded ?? 0),
@@ -756,7 +806,11 @@ async function getHaircutHistoryDirect(session: AppSession): Promise<HaircutReco
     firestoreLimit(20),
   );
 
-  const snap = await getDocs(q);
+  const [snap, salonSnap] = await Promise.all([
+    getDocs(q),
+    getDoc(doc(db, "salons", session.qr.salonId)),
+  ]);
+  const salonName = salonSnap.exists() ? String(salonSnap.data().name || "") : "";
 
   return snap.docs
     .map((item) => {
@@ -768,7 +822,12 @@ async function getHaircutHistoryDirect(session: AppSession): Promise<HaircutReco
         record: {
           id: item.id,
           createdAt: formatDate(createdAtMs),
+          salonName,
+          branchId: String(data.branchId || ""),
+          branchName: String(data.branchName || ""),
           staffName: data.staffName || "",
+          serviceName: String(data.serviceName || ""),
+          rewardName: String(data.rewardName || ""),
           note: data.note || "",
           photoUrls: Array.isArray(data.photoUrls) ? data.photoUrls : [],
           pointsAdded: Number(data.pointsAdded ?? 0),
@@ -886,20 +945,29 @@ export function buildRegisterInput(
   phone?: string,
   phoneToken?: string,
 ): RegisterInput {
-  return {
+  const input: RegisterInput = {
     ...qr,
     zaloAccessToken: identity.accessToken,
-    zaloUserId: identity.zaloUserId,
-    phoneToken,
     name: identity.name,
-    phone,
     allowPhoto,
   };
+
+  if (identity.zaloUserId) input.zaloUserId = identity.zaloUserId;
+  if (phoneToken) input.phoneToken = phoneToken;
+  if (phone) input.phone = phone;
+
+  return input;
 }
 
 function mockRegisterCustomer(input: RegisterInput): AppSession {
-  const existing = localStorage.getItem("haircut_mock_points");
+  const existing = safeStorageGet("haircut_mock_points");
   const points = existing ? Number(existing) : 4;
+  const previewStatusValue = safeStorageGet("haircut_mock_session_status");
+  const previewStatus: AppSession["sessionStatus"] =
+    import.meta.env.VITE_APP_ENV === "test" &&
+    (previewStatusValue === "serving" || previewStatusValue === "completed")
+      ? previewStatusValue
+      : "waiting";
 
   return {
     qr: {
@@ -913,7 +981,9 @@ function mockRegisterCustomer(input: RegisterInput): AppSession {
     branchAddress: "",
     mirrorName: input.branchId || input.mirrorId,
     zaloUserId: "mock-local-zalo-user",
-    sessionStatus: "waiting",
+    sessionStatus: previewStatus,
+    assignedStaffName: previewStatus === "waiting" ? "" : "Nhân viên Nam",
+    claimedAtMs: previewStatus === "waiting" ? null : Date.now() - 10 * 60 * 1000,
     features: { ...DEFAULT_SYSTEM_FEATURES },
     customer: {
       customerId: "mock-customer",
@@ -1003,7 +1073,7 @@ function normalizeSearchText(value: string) {
 
 function getMockRewards(): Reward[] {
   try {
-    return JSON.parse(localStorage.getItem("haircut_mock_rewards") || "[]");
+    return JSON.parse(safeStorageGet("haircut_mock_rewards") || "[]");
   } catch {
     return [];
   }
@@ -1011,7 +1081,7 @@ function getMockRewards(): Reward[] {
 
 function saveMockReward(reward: Reward) {
   const rewards = getMockRewards();
-  localStorage.setItem("haircut_mock_rewards", JSON.stringify([reward, ...rewards]));
+  safeStorageSet("haircut_mock_rewards", JSON.stringify([reward, ...rewards]));
 }
 
 function makeRewardCode() {

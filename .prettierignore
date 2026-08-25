@@ -1,6 +1,7 @@
 node_modules
 dist
 www
+www-test
 coverage
 firebase/public
 firebase/functions/lib

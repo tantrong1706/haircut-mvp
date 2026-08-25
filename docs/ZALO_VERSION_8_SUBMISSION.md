@@ -1,141 +1,128 @@
-# Nội dung chuẩn bị gửi Zalo Mini App Version 8
+# Nội dung chuẩn bị gửi Zalo Mini App Version 19
 
-Tài liệu này dùng để điền Portal. Không commit deeplink, QR token, mật khẩu hoặc dữ liệu khách thật.
+> Tên file được giữ lại để tương thích với readiness checker hiện hành. Nội dung bên dưới áp dụng cho Testing Version 19.
+
+Tài liệu này dùng để điền Zalo Developer Portal. Không commit deeplink, QR token, mật khẩu hoặc dữ liệu khách thật.
 
 ## 1. Thông tin phiên bản
 
 **Tên phiên bản**
 
 ```text
-HAIRCUT - Check-in và tích điểm tại salon
+CH Haircut Salon - Check-in và tích điểm tại salon
 ```
 
 **Nội dung cập nhật**
 
 ```text
-HAIRCUT – Check-in và tích điểm tại salon
+CH Haircut Salon - Check-in và tích điểm tại salon
 
-Nội dung cập nhật:
-- Khách mở HAIRCUT từ QR salon hoặc QR chi nhánh.
+- Khách mở Mini App từ QR salon hoặc QR chi nhánh có chữ ký.
 - Xác nhận thông tin Zalo để salon nhận diện đúng khách.
-- Chọn chi nhánh và tạo lượt chờ.
-- Theo dõi trạng thái phục vụ.
-- Xem điểm, lịch sử, vòng quay và mã quà.
-- Hoàn thiện quyền riêng tư, điều khoản và xử lý khi người dùng từ chối quyền.
+- Chọn chi nhánh, vào hàng chờ và theo dõi trạng thái phục vụ.
+- Xem điểm, lịch sử cắt tóc, vòng quay và mã quà.
+- Hoàn thiện quyền riêng tư, điều khoản và xử lý lỗi quyền/mạng rõ ràng.
 ```
 
 ## 2. Mô tả ứng dụng
 
 ```text
-HAIRCUT là Zalo Mini App chăm sóc khách hàng tại salon tóc. Khách quét QR chung của salon để chọn
-chi nhánh hoặc quét QR riêng của chi nhánh để check-in trực tiếp. Sau khi xác nhận tên Zalo, khách
-có thể tạo lượt chờ, theo dõi trạng thái phục vụ, xem điểm, lịch sử cắt tóc, quay thưởng và quản lý
-mã quà. Chủ salon và nhân viên vận hành bằng cổng quản lý web riêng, không nằm trong luồng khách
-trên Zalo Mini App.
+CH Haircut Salon là Zalo Mini App chăm sóc khách hàng tại salon tóc. Khách quét QR chung của salon để chọn chi
+nhánh hoặc quét QR riêng của chi nhánh để check-in trực tiếp. Sau khi xác nhận hồ sơ Zalo, khách có thể tạo lượt
+chờ, theo dõi trạng thái phục vụ, xem điểm, lịch sử cắt tóc, quay thưởng và quản lý mã quà.
+
+Khách không cần tạo tài khoản hoặc mật khẩu riêng. Số điện thoại là thông tin tùy chọn do khách tự nhập. Chủ salon
+và nhân viên sử dụng HAIRCUT Manager riêng; Mini App khách không chứa màn hình đăng nhập owner hoặc staff.
 ```
 
-## 3. Hướng dẫn reviewer
+## 3. Dữ liệu reviewer
 
-Điền giá trị thật trước khi gửi:
+Vietnam gateway và bản Zalo Testing cuối đã hoạt động. Dữ liệu review hiện hành:
 
 ```text
-Salon demo: [TÊN_SALON_DEMO]
-Chi nhánh demo: [TÊN_CHI_NHÁNH_DEMO]
-Deeplink testing: [DEEPLINK_REVIEW_HỢP_LỆ]
-QR testing: [QR_REVIEW_HỢP_LỆ]
+Salon demo: CH Haircut Salon - Xét duyệt Zalo
+Chi nhánh demo: Chi nhánh Trung tâm
+Testing version: 19
+QR testing: https://app.chhaircutsalon.cc/review-salon-v19.png
 ```
 
-Không thay placeholder bằng link tự đoán. QR/deeplink phải được tạo từ bản Testing và kiểm tra bằng
-tài khoản Zalo thường ngay trước khi gửi.
+QR được tạo từ backend production, dùng chữ ký và phiên bản xoay. URL công khai chỉ chứa ảnh QR của salon review
+với dữ liệu giả; source, Git và tài liệu không chứa deeplink hoặc token thô. Không dùng QR gương cũ hay `mirrorId`.
 
-**Các bước kiểm thử**
+## 4. Hướng dẫn reviewer kiểm thử
 
 ```text
-1. Mở deeplink hoặc quét QR demo được cung cấp.
-2. Nếu là QR salon có nhiều chi nhánh, chọn chi nhánh demo. QR chi nhánh sẽ mở trực tiếp đúng nơi.
-3. Kiểm tra tên salon, tên chi nhánh và địa chỉ.
-4. Bấm "Cho phép đọc tên Zalo" nếu Zalo chưa cấp quyền hồ sơ, sau đó xác nhận thông tin.
-5. Bấm "Xác nhận vào hàng chờ".
-6. Xem trạng thái lượt tại trang Điểm.
-7. Sau khi salon demo xử lý lượt, kiểm tra điểm, lịch sử, vòng quay và mã quà.
-8. Có thể mở link chung không QR để kiểm tra màn hướng dẫn an toàn; luồng check-in cần QR hợp lệ để
-   xác định đúng salon.
+1. Mở QR salon hoặc QR chi nhánh được cung cấp.
+2. Xác nhận thông tin Zalo khi Mini App hiển thị màn giải thích quyền.
+3. Chọn chi nhánh nếu mở từ QR salon; QR chi nhánh bỏ qua bước chọn.
+4. Bấm "Xác nhận vào hàng chờ" để check-in.
+5. Kiểm tra trạng thái Waiting trên Mini App khách.
+6. Nhân viên mở HAIRCUT Manager và nhận khách.
+7. Kiểm tra trạng thái Serving trên Mini App khách.
+8. Nhân viên hoàn tất phục vụ và gửi yêu cầu cộng điểm.
+9. Chủ salon mở HAIRCUT Manager và duyệt yêu cầu điểm.
+10. Kiểm tra lượt chuyển sang Completed.
+11. Kiểm tra số điểm của khách đã được cập nhật.
+12. Mở Lịch sử để xem lượt cắt vừa hoàn tất.
+13. Mở Vòng quay và thực hiện quay khi đủ điểm.
+14. Nếu trúng quà, mở Quà để xem mã quà và trạng thái sử dụng.
 ```
 
 **Kết quả mong đợi**
 
+- Khách không cần tài khoản hoặc mật khẩu riêng.
+- Mini App khách không hiển thị owner, staff hoặc admin.
+- Khách vẫn check-in được khi không nhập số điện thoại.
+- Từ chối quyền hồ sơ không làm ứng dụng crash; có giải thích và nút thử lại phù hợp.
+- Mỗi khách chỉ có một lượt đang mở trong cùng salon.
+- Owner/staff đăng nhập và vận hành trên HAIRCUT Manager riêng.
+
+## 5. Giải thích quyền Zalo
+
+**Access token và hồ sơ cơ bản**
+
 ```text
-- Không cần tài khoản hoặc mật khẩu riêng cho khách.
-- Không hiển thị trang owner/staff trong Mini App khách.
-- Khách vẫn dùng được nếu không cung cấp số điện thoại.
-- Từ chối quyền hồ sơ không làm app crash; app giải thích và cho phép thử lại.
-- Mỗi khách chỉ có một lượt mở trong cùng salon.
+CH Haircut Salon dùng getAccessToken để gửi access token mới tới Firebase Cloud Function qua HTTPS. Backend xác
+minh danh tính bằng Zalo API. Mini App chỉ gọi getUserInfo sau khi khách xem giải thích và chủ động bấm cho phép.
+Token không được lưu dài hạn, hiển thị hoặc ghi vào log, Analytics hay Sentry.
 ```
 
-## 4. Giải thích quyền
-
-**Định danh bằng access token**
+**Các quyền không dùng**
 
 ```text
-HAIRCUT dùng Zalo access token để backend xác minh đúng người dùng theo Authentication của Zalo.
-Token chỉ được gửi đến Firebase Cloud Function qua HTTPS, không hiển thị, không lưu lâu dài và
-không ghi vào log/Analytics/Sentry.
+Version 19 không gọi getPhoneNumber, scanQRCode, location, notification, followOA hoặc share. Khách quét QR bằng
+camera/Zalo trước khi Mini App mở. Số điện thoại là tùy chọn và chỉ được lưu khi khách tự nhập.
 ```
 
-**Tên và ảnh đại diện Zalo**
+Quyền trên Portal phải được chủ tài khoản đối chiếu thủ công với source trước khi gửi.
+
+## 6. Quyền riêng tư, điều khoản và hỗ trợ
 
 ```text
-HAIRCUT xin quyền hồ sơ khi khách bấm nút có giải thích rõ. Tên giúp nhân viên nhận đúng khách.
-Ảnh đại diện chỉ hiển thị tạm trên màn xác nhận, không được lưu trong hồ sơ salon.
-```
-
-**Không yêu cầu**
-
-```text
-Phiên bản này không gọi API lấy số điện thoại, quét QR bên trong Mini App, vị trí, notification,
-theo dõi OA hoặc chia sẻ. Khách quét QR bằng camera/Zalo trước khi Mini App được mở. Số điện thoại
-là tùy chọn và chỉ được lưu khi khách tự nhập.
-```
-
-## 5. URL công khai
-
-```text
-Privacy Policy: https://haircut-c7d12.web.app/privacy
-Terms of Use: https://haircut-c7d12.web.app/terms
+Privacy Policy: https://app.chhaircutsalon.cc/privacy
+Terms of Use: https://app.chhaircutsalon.cc/terms
 Support email: tantrong1706@gmail.com
 Support phone: 0838098761
+Webhook: https://asia-southeast1-haircut-c7d12.cloudfunctions.net/zaloPrivacyWebhook
 ```
 
-Webhook cần xác minh trên Portal:
+Source hiện hành mô tả mục đích xử lý dữ liệu, hồ sơ Zalo, số điện thoại tùy chọn, đồng ý lưu ảnh, thời gian lưu,
+yêu cầu xóa dữ liệu và kênh hỗ trợ. URL live và webhook phải được kiểm tra thủ công trước khi gửi.
 
-```text
-https://asia-southeast1-haircut-c7d12.cloudfunctions.net/zaloPrivacyWebhook
-```
+## 7. Ảnh minh họa
 
-## 6. Ảnh đính kèm
+Dùng danh sách và trạng thái trong `docs/ZALO_REVIEW_CHECKLIST.md`. Ảnh phải chụp thật trong Zalo trên Android
+và iPhone. Không dùng ảnh web giả làm bằng chứng thiết bị.
 
-1. Link chung không QR.
-2. QR salon và chọn chi nhánh.
-3. QR chi nhánh với tên/địa chỉ.
-4. Màn giải thích quyền hồ sơ.
-5. Popup quyền Zalo.
-6. Xác nhận vào hàng chờ.
-7. Trạng thái đang chờ và đang phục vụ.
-8. Điểm và lịch sử.
-9. Vòng quay trước/sau khi quay.
-10. Mã quà chưa dùng/đã dùng.
-11. Privacy và Terms.
+## 8. Điều kiện trước khi gửi Version 19
 
-Ảnh phải chụp thật trong Zalo trên Android và iPhone; ảnh web chỉ là tài liệu tham khảo.
-
-## 7. Việc bắt buộc trước khi tải Version 8
-
-- [ ] Điền bốn placeholder bằng dữ liệu testing thật, không commit token QR.
-- [ ] Xác minh QR/deeplink bằng Zalo thường ngoài nhóm Developer/Admin.
-- [ ] Gỡ quyền quét QR và số điện thoại trên Portal nếu đang được yêu cầu.
-- [ ] Xác minh Privacy, Terms và Webhook URL mở/nhận request đúng.
-- [ ] Chụp đủ ảnh Android/iPhone.
-- [ ] Chạy `npm ci` và `npm run check`.
-- [ ] CI xanh trên đúng commit.
+- [x] Vietnam gateway hoạt động, HTTPS health đạt và Firebase callable được cấu hình gateway.
+- [x] Điền dữ liệu Testing thật mà không commit token QR.
+- [x] Chuẩn bị salon/chi nhánh/dữ liệu reviewer theo spec, không dùng dữ liệu khách thật.
+- [ ] Xác minh QR/deeplink bằng tài khoản Zalo thường ngoài nhóm Developer/Admin.
+- [x] Đối chiếu quyền Portal với source; không yêu cầu quyền SDK bổ sung không dùng.
+- [ ] Xác minh Privacy, Terms và webhook trên thiết bị thật.
+- [ ] Chụp đủ ảnh Android/iPhone theo checklist.
+- [x] Chạy build, unit, E2E, secret scan và GitHub CI trên đúng branch candidate.
 - [ ] Có review độc lập.
-- [ ] Chưa deploy hoặc upload từ Codex; chủ tài khoản thực hiện thủ công sau khi checklist đạt.
+- [ ] Chủ tài khoản mới thực hiện deploy Testing và gửi xét duyệt sau khi toàn bộ mục đạt.

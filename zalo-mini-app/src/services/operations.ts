@@ -33,6 +33,7 @@ import {
 } from "./firebase";
 import { LuckyWheelConfig, defaultLuckyWheelConfig } from "./types";
 import { normalizeLuckyWheelConfig } from "./wheel";
+import { safeStorageGet, safeStorageRemove, safeStorageSet } from "./safeStorage";
 
 const SESSION_POINT_REQUEST_WINDOW_MS = 12 * 60 * 60 * 1000;
 
@@ -1534,7 +1535,7 @@ export async function redeemRewardCode(input: {
     },
     () => redeemRewardCodeDirect(input.salonId, rewardCode),
   );
-  localStorage.removeItem(pendingOperation.storageKey);
+  safeStorageRemove(pendingOperation.storageKey);
   const maybeResult = result as Partial<RedeemRewardResult> | undefined;
   return {
     rewardId: maybeResult?.rewardId || "",
@@ -2291,12 +2292,12 @@ function localScopeHash(value: string) {
 
 function getOrCreatePendingOperationKey(scope: string) {
   const storageKey = `haircut_pending_operation:${scope}`;
-  const existing = localStorage.getItem(storageKey);
+  const existing = safeStorageGet(storageKey);
   if (existing && /^[A-Za-z0-9_-]{16,128}$/.test(existing)) {
     return { storageKey, key: existing };
   }
   const key = randomToken();
-  localStorage.setItem(storageKey, key);
+  safeStorageSet(storageKey, key);
   return { storageKey, key };
 }
 

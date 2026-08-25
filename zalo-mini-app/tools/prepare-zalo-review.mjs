@@ -56,7 +56,7 @@ let salonId = ownerProfile?.salonId || "";
 
 if (!salonId) {
   const created = await callFunction("createSalon", {
-    name: "HAIRCUT Studio - Xét duyệt Zalo",
+    name: "CH Haircut Salon - Xét duyệt Zalo",
     ownerName: "Tấn Trọng",
     phone: supportPhone,
   });
@@ -583,20 +583,20 @@ function writeReviewerFile(input) {
     .map((branch) => `- ${branch.name}: ${branch.address || "Chưa có địa chỉ"}`)
     .join("\n");
   const qrLines = input.qrFiles.map((path) => `- \`${path}\``).join("\n");
-  const content = `# Tài khoản thử nghiệm Zalo - HAIRCUT
+  const content = `# Tài khoản thử nghiệm Zalo - CH Haircut Salon
 
 File local này chứa mật khẩu thử nghiệm. Không commit hoặc gửi công khai.
 
 ## Chủ salon
 
-- Trang: https://haircut-c7d12.web.app/owner
+- Trang: https://app.chhaircutsalon.cc/owner
 - Email: ${input.state.owner.email}
 - Mật khẩu: ${input.state.owner.password}
 - Email đã xác minh: Có
 
 ## Nhân viên
 
-- Trang: https://haircut-c7d12.web.app/staff
+- Trang: https://app.chhaircutsalon.cc/staff
 - Email: ${input.state.staff.email}
 - Mật khẩu: ${input.state.staff.password}
 - Chi nhánh được phân công: ${input.staffBranch.name}

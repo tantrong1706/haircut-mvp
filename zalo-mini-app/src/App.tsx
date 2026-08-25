@@ -1,10 +1,16 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { Gift, History, House, Sparkles, type LucideIcon } from "lucide-react";
 import { InstallAppPrompt } from "./components/InstallAppPrompt";
+import { MINI_APP_NAME } from "./config/branding";
 import { trackEvent } from "./services/monitoring";
 import { parseQrContext } from "./services/qr";
 import { isZaloMiniAppRuntime } from "./services/runtime";
-import { clearSavedSession, loadSavedSession, saveSession } from "./services/sessionStore";
+import {
+  clearSavedSession,
+  loadSavedSessionCandidate,
+  saveSession,
+} from "./services/sessionStore";
+import type { SavedSessionCandidate } from "./services/sessionStore";
 import type { AppSession, TabKey } from "./services/types";
 
 const AuthGate = lazy(() =>
@@ -66,6 +72,42 @@ function PageLoading() {
   );
 }
 
+function SessionRestorePanel({
+  status,
+  message,
+  onRetry,
+  onReset,
+}: {
+  status: "verifying" | "error";
+  message: string;
+  onRetry: () => void;
+  onReset: () => void;
+}) {
+  if (status === "verifying") {
+    return (
+      <section className="panel loading-panel" aria-live="polite">
+        <strong>Đang xác minh phiên khách...</strong>
+        <p>{MINI_APP_NAME} đang kiểm tra tài khoản Zalo hiện tại trước khi hiển thị dữ liệu.</p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="panel empty-state" role="alert">
+      <h1>Chưa xác minh được phiên khách</h1>
+      <p>{message || "Kết nối đang chậm. Dữ liệu đã lưu sẽ không được hiển thị khi chưa xác minh."}</p>
+      <div className="inline-actions">
+        <button type="button" onClick={onRetry}>
+          Thử lại
+        </button>
+        <button type="button" className="secondary-button" onClick={onReset}>
+          Quét lại QR
+        </button>
+      </div>
+    </section>
+  );
+}
+
 function AdminPortalRedirect() {
   const adminUrl = String(import.meta.env.VITE_ADMIN_URL || "").trim();
 
@@ -103,9 +145,16 @@ export default function App() {
     "/delete-account",
   ].some((route) => path.startsWith(route));
   const currentQr = useMemo(() => parseQrContext(), []);
-  const [session, setSession] = useState<AppSession | null>(() =>
-    isCustomerRoute ? loadSavedSession(currentQr) : null,
-  );
+  const [savedSessionCandidate, setSavedSessionCandidate] =
+    useState<SavedSessionCandidate | null>(() =>
+      isCustomerRoute ? loadSavedSessionCandidate(currentQr) : null,
+    );
+  const [session, setSession] = useState<AppSession | null>(null);
+  const [restoreAttempt, setRestoreAttempt] = useState(0);
+  const [sessionRestore, setSessionRestore] = useState<{
+    status: "idle" | "verifying" | "error";
+    message: string;
+  }>(() => ({ status: savedSessionCandidate ? "verifying" : "idle", message: "" }));
   const [activeTab, setActiveTab] = useState<TabKey>("home");
   const [legalPage, setLegalPage] = useState<LegalPageKey | null>(() =>
     isZaloRuntime ? legalPageFromHash(window.location.hash) : null,
@@ -165,11 +214,52 @@ export default function App() {
     }
 
     if (session) {
-      saveSession(session);
-    } else {
-      clearSavedSession();
+      void saveSession(session);
     }
   }, [isCustomerRoute, session]);
+
+  useEffect(() => {
+    if (!isCustomerRoute || !savedSessionCandidate) {
+      setSessionRestore({ status: "idle", message: "" });
+      return undefined;
+    }
+
+    let isActive = true;
+    setSessionRestore({ status: "verifying", message: "" });
+
+    void import("./services/api")
+      .then(({ restoreSavedCustomerSession }) =>
+        restoreSavedCustomerSession(savedSessionCandidate),
+      )
+      .then((result) => {
+        if (!isActive) {
+          return;
+        }
+        if (result.status === "discarded") {
+          clearSavedSession();
+          setSavedSessionCandidate(null);
+          setSession(null);
+          return;
+        }
+
+        setSession(result.session);
+        setSavedSessionCandidate(null);
+        setSessionRestore({ status: "idle", message: "" });
+      })
+      .catch((error: unknown) => {
+        if (!isActive) {
+          return;
+        }
+        setSessionRestore({
+          status: "error",
+          message: error instanceof Error ? error.message : "Không thể xác minh phiên khách.",
+        });
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [isCustomerRoute, restoreAttempt, savedSessionCandidate]);
 
   useEffect(() => {
     if (!isCustomerRoute || !session) {
@@ -209,8 +299,25 @@ export default function App() {
       salon_id: session?.qr.salonId || currentQr.salonId,
     });
     setSession(null);
+    setSavedSessionCandidate(null);
+    clearSavedSession();
     setActiveTab("home");
     setSessionSync({ status: "idle", message: "", syncedAtMs: null });
+  }
+
+  function retrySavedSession() {
+    if (!navigator.onLine) {
+      setSessionRestore({ status: "error", message: "Thiết bị đang mất kết nối mạng." });
+      return;
+    }
+    setRestoreAttempt((current) => current + 1);
+  }
+
+  function discardSavedSession() {
+    clearSavedSession();
+    setSavedSessionCandidate(null);
+    setSession(null);
+    setSessionRestore({ status: "idle", message: "" });
   }
 
   function retrySessionSync() {
@@ -372,6 +479,17 @@ export default function App() {
   }
 
   let content = <ScanEntryPage onReady={setSession} onOpenLegalPage={openLegalPage} />;
+
+  if (!session && sessionRestore.status !== "idle") {
+    content = (
+      <SessionRestorePanel
+        status={sessionRestore.status}
+        message={sessionRestore.message}
+        onRetry={retrySavedSession}
+        onReset={discardSavedSession}
+      />
+    );
+  }
 
   if (session && activeTab === "history") {
     content = <HistoryPage session={session} />;

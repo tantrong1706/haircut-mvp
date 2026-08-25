@@ -64,10 +64,7 @@ export function resolveQrContext(search: string, environment: QrEnvironment): Qr
 }
 
 export function hasQrContext(qr = parseQrContext()): boolean {
-  const targetIsValid =
-    qr.qrType === "salon" ||
-    (qr.qrType === "branch" && Boolean(qr.branchId)) ||
-    (qr.qrType === "legacy-mirror" && Boolean(qr.mirrorId));
+  const targetIsValid = qr.qrType === "salon" || (qr.qrType === "branch" && Boolean(qr.branchId));
 
   return Boolean(
     qr.salonId &&

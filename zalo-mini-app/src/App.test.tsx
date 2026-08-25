@@ -5,6 +5,11 @@ import App from "./App";
 
 const mocks = vi.hoisted(() => ({
   isZaloMiniAppRuntime: vi.fn(),
+  loadSavedSessionCandidate: vi.fn(),
+  clearSavedSession: vi.fn(),
+  saveSession: vi.fn(),
+  restoreSavedCustomerSession: vi.fn(),
+  listenSessionLiveUpdates: vi.fn(() => () => undefined),
 }));
 
 vi.mock("./services/runtime", () => ({
@@ -16,9 +21,14 @@ vi.mock("./services/monitoring", () => ({
 }));
 
 vi.mock("./services/sessionStore", () => ({
-  clearSavedSession: vi.fn(),
-  loadSavedSession: vi.fn(() => null),
-  saveSession: vi.fn(),
+  clearSavedSession: mocks.clearSavedSession,
+  loadSavedSessionCandidate: mocks.loadSavedSessionCandidate,
+  saveSession: mocks.saveSession,
+}));
+
+vi.mock("./services/api", () => ({
+  listenSessionLiveUpdates: mocks.listenSessionLiveUpdates,
+  restoreSavedCustomerSession: mocks.restoreSavedCustomerSession,
 }));
 
 vi.mock("./components/InstallAppPrompt", () => ({
@@ -27,12 +37,33 @@ vi.mock("./components/InstallAppPrompt", () => ({
 
 vi.mock("./pages/ScanEntryPage", () => ({
   ScanEntryPage: ({
+    onReady,
     onOpenLegalPage,
   }: {
+    onReady?: (session: unknown) => void;
     onOpenLegalPage?: (page: "privacy" | "terms") => void;
   }) => (
     <div>
       <span>customer-entry</span>
+      <button
+        type="button"
+        onClick={() =>
+          onReady?.({
+            qr: { qrType: "branch", salonId: "salon-a", branchId: "branch-a", mirrorId: "" },
+            sessionId: "session-b",
+            zaloUserId: "zalo-b",
+            sessionStatus: "waiting",
+            customer: {
+              customerId: "customer-b",
+              name: "Khach B",
+              points: 8,
+              allowPhoto: false,
+            },
+          })
+        }
+      >
+        Tao luot cho B
+      </button>
       <button type="button" onClick={() => onOpenLegalPage?.("privacy")}>
         Chính sách quyền riêng tư
       </button>
@@ -43,6 +74,12 @@ vi.mock("./pages/ScanEntryPage", () => ({
   ),
 }));
 
+vi.mock("./pages/HomePage", () => ({
+  HomePage: ({ session }: { session: { customer: { name: string; points: number } } }) => (
+    <div>{`home:${session.customer.name}:points:${session.customer.points}`}</div>
+  ),
+}));
+
 vi.mock("./pages/AuthGate", () => ({
   AuthGate: () => <div>management-auth</div>,
 }));
@@ -50,7 +87,101 @@ vi.mock("./pages/AuthGate", () => ({
 describe("App trong Zalo Mini App", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.loadSavedSessionCandidate.mockReturnValue(null);
+    mocks.restoreSavedCustomerSession.mockReset();
+    mocks.listenSessionLiveUpdates.mockReturnValue(() => undefined);
     window.history.replaceState({}, "", "/owner");
+  });
+
+  it("khong render du lieu cache cu truoc khi backend xac minh danh tinh", async () => {
+    let resolveRestore!: (value: unknown) => void;
+    mocks.isZaloMiniAppRuntime.mockReturnValue(true);
+    mocks.loadSavedSessionCandidate.mockReturnValue({
+      schemaVersion: 2,
+      salonId: "salon-a",
+      sessionId: "session-a",
+      customerId: "customer-a",
+      identityBinding: "a".repeat(64),
+      savedAt: Date.now(),
+      expiresAt: Date.now() + 60_000,
+      qr: { qrType: "branch", salonId: "salon-a", branchId: "branch-a", mirrorId: "" },
+    });
+    mocks.restoreSavedCustomerSession.mockReturnValue(
+      new Promise((resolve) => {
+        resolveRestore = resolve;
+      }),
+    );
+    window.history.replaceState({}, "", "/");
+
+    render(<App />);
+
+    expect(await screen.findByText("Đang xác minh phiên khách...")).toBeVisible();
+    expect(screen.queryByText(/Khach A|points:3/)).not.toBeInTheDocument();
+
+    resolveRestore({
+      status: "restored",
+      session: {
+        qr: { qrType: "branch", salonId: "salon-a", branchId: "branch-a", mirrorId: "" },
+        sessionId: "session-a",
+        zaloUserId: "",
+        identityBinding: "a".repeat(64),
+        sessionStatus: "waiting",
+        customer: { customerId: "customer-a", name: "Khach A", points: 3, allowPhoto: false },
+      },
+    });
+
+    expect(await screen.findByText("home:Khach A:points:3")).toBeVisible();
+  });
+
+  it("xoa cache A khi Zalo hien tai la B va khong de lo du lieu A", async () => {
+    const user = userEvent.setup();
+    mocks.isZaloMiniAppRuntime.mockReturnValue(true);
+    mocks.loadSavedSessionCandidate.mockReturnValue({
+      schemaVersion: 2,
+      salonId: "salon-a",
+      sessionId: "session-a",
+      customerId: "customer-a",
+      identityBinding: "a".repeat(64),
+      savedAt: Date.now(),
+      expiresAt: Date.now() + 60_000,
+      qr: { qrType: "branch", salonId: "salon-a", branchId: "branch-a", mirrorId: "" },
+    });
+    mocks.restoreSavedCustomerSession.mockResolvedValue({
+      status: "discarded",
+      reason: "identity_mismatch",
+    });
+    window.history.replaceState({}, "", "/");
+
+    render(<App />);
+
+    expect(await screen.findByText("customer-entry")).toBeVisible();
+    expect(mocks.clearSavedSession).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(/Khach A|points:3/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Tao luot cho B" }));
+    expect(await screen.findByText("home:Khach B:points:8")).toBeVisible();
+  });
+
+  it("giu candidate nhung khong hien du lieu cu khi backend timeout", async () => {
+    mocks.isZaloMiniAppRuntime.mockReturnValue(true);
+    mocks.loadSavedSessionCandidate.mockReturnValue({
+      schemaVersion: 2,
+      salonId: "salon-a",
+      sessionId: "session-a",
+      customerId: "customer-a",
+      identityBinding: "a".repeat(64),
+      savedAt: Date.now(),
+      expiresAt: Date.now() + 60_000,
+      qr: { qrType: "branch", salonId: "salon-a", branchId: "branch-a", mirrorId: "" },
+    });
+    mocks.restoreSavedCustomerSession.mockRejectedValue(new Error("Ket noi dang cham"));
+    window.history.replaceState({}, "", "/");
+
+    render(<App />);
+
+    expect(await screen.findByText("Chưa xác minh được phiên khách")).toBeVisible();
+    expect(screen.queryByText(/Khach A|points:3/)).not.toBeInTheDocument();
+    expect(mocks.clearSavedSession).not.toHaveBeenCalled();
   });
 
   it("không mở route quản lý trong runtime khách hàng Zalo", async () => {
