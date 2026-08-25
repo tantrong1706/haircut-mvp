@@ -494,7 +494,13 @@ export default function App() {
   if (session && activeTab === "history") {
     content = <HistoryPage session={session} />;
   } else if (session && activeTab === "wheel") {
-    content = <WheelPage session={session} onSessionChange={setSession} />;
+    content = (
+      <WheelPage
+        session={session}
+        onSessionChange={setSession}
+        onOpenRewards={() => changeCustomerTab("rewards")}
+      />
+    );
   } else if (session && activeTab === "rewards") {
     content = <RewardsPage session={session} />;
   } else if (session) {

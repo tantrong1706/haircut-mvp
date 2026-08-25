@@ -1817,6 +1817,10 @@ small {
   color: var(--amber);
 }
 
+.reward-result button {
+  margin-top: 4px;
+}
+
 .bottom-nav {
   position: fixed;
   left: 50%;

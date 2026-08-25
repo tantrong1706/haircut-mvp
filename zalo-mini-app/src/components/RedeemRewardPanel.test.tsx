@@ -59,7 +59,7 @@ describe("RedeemRewardPanel", () => {
     expect(screen.getByRole("dialog", { name: "Xác nhận sử dụng quà?" })).toBeInTheDocument();
     expect(mocks.redeemRewardCode).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole("button", { name: "Xác nhận đã dùng" }));
+    await user.click(screen.getByRole("button", { name: "Xác nhận đã trao quà" }));
     expect(mocks.redeemRewardCode).toHaveBeenCalledTimes(1);
     expect(await screen.findByText(/Đã xác nhận Gội đầu miễn phí/)).toBeInTheDocument();
   });

@@ -51,8 +51,10 @@ export type Reward = {
   id: string;
   rewardName: string;
   rewardCode: string;
-  status: "unused" | "used" | "expired";
+  status: "unused" | "used" | "expired" | "revoked";
+  branchName?: string;
   createdAt: string;
+  usedAt?: string;
   expiresAt?: string;
 };
 

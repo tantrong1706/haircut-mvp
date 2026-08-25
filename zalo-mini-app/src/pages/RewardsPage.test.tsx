@@ -52,6 +52,7 @@ describe("RewardsPage", () => {
         rewardName: "Gội đầu miễn phí",
         rewardCode: "HC-ACTIVE",
         status: "unused",
+        branchName: "Chi nhánh Trung tâm",
         createdAt: "24/08/2026",
         expiresAt: "24/09/2026",
       },
@@ -84,6 +85,7 @@ describe("RewardsPage", () => {
     const activeSection = await screen.findByRole("region", { name: "Quà có thể sử dụng" });
     const historySection = screen.getByRole("region", { name: "Lịch sử quà" });
     expect(within(activeSection).getByText("Gội đầu miễn phí")).toBeInTheDocument();
+    expect(within(activeSection).getByText("Chỉ dùng tại: Chi nhánh Trung tâm")).toBeInTheDocument();
     expect(within(historySection).getByText("Đã dùng")).toBeInTheDocument();
     expect(within(historySection).getByText("Hết hạn")).toBeInTheDocument();
     expect(within(historySection).getByText("Đã hủy")).toBeInTheDocument();

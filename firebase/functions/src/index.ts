@@ -5154,7 +5154,9 @@ export const getCustomerRewardsFromZalo = onCall(zaloFunctionOptions, async (req
           rewardName: data.rewardName ?? "",
           rewardCode: data.rewardCode ?? "",
           status,
+          branchName: String(data.branchName || "Chi nhánh phát hành"),
           createdAtMs: timestampMillis(data.createdAt),
+          usedAtMs: timestampMillis(data.usedAt),
           expiresAtMs: timestampMillis(data.expiresAt),
         },
       ];
