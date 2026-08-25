@@ -85,3 +85,39 @@ The static readiness gate previously accepted only the pre-deployment placeholde
 - RED checkpoint: `7370da4` (`docs: finalize Version 19 review package`).
 - GREEN checkpoint: `d4ee932` (`fix: accept completed Zalo reviewer metadata`).
 - Completed metadata is accepted only when the canonical salon name, Testing Version 19 and versioned HTTPS QR image are present and neither `qrToken=` nor `mirrorId=` occurs in the submission document.
+
+## Wheel and reward redemption UX — 2026-08-25
+
+### User journeys
+
+1. A customer who changes session must never see the previous customer's spin result.
+2. A winning customer can move directly from the spin result to a clear, copyable active reward.
+3. Used, expired and revoked codes are history, never presented as usable.
+4. Staff must verify the customer and reward, then explicitly confirm only after the benefit was delivered.
+5. Reward codes remain branch-scoped; staff cannot inspect or redeem a code from another branch.
+6. Wheel labels remain readable after the wheel stops.
+
+### RED → GREEN evidence
+
+| Guarantee | RED evidence | GREEN evidence |
+| --- | --- | --- |
+| Session changes clear stale spin results and winning results link to My Rewards | Targeted React suite: 5 failed, 5 passed | Targeted React suite: 10/10 passed |
+| Revoked rewards are not treated as unused; active rewards alone expose copy action | `RewardsPage` behavior test failed because sections, revoked status and copy action were missing | `RewardsPage` behavior test passed with active/history regions and one active copy action |
+| Staff confirmation wording and repeated idempotent requests are unambiguous | `RedeemRewardPanel` tests failed on missing customer-used confirmation and repeated-request message | Both redemption component tests passed; manager-side code copy was removed |
+| Branch isolation remains enforced | A proposed salon-wide redemption caused 2 adversarial tests to fail | Proposal was rejected; final integration/adversarial suite passed 52/52 with branch scope intact and branch applicability shown to customers |
+| Wheel labels stop upright | Targeted wheel suite: 2 failed, 4 passed because `--wheel-label-counter` was absent | Targeted wheel suite: 6/6 passed; updated review screenshot visually confirms upright labels |
+
+### Checkpoints
+
+- RED behavior checkpoint: `0d32a64` (`test: reproduce wheel and reward redemption issues`).
+- RED visual checkpoint: `00cafdc` (`test: require readable wheel labels after spin`).
+- GREEN checkpoint: `5be1a2c` (`fix(zalo): clarify wheel and reward redemption`).
+
+### Final validation
+
+- Mini App full check: 30 files, 145/145 tests; lint, format, TypeScript build, ZMP validation and static Zalo readiness 34/34 PASS.
+- Firebase Functions unit: 14 files, 80/80 tests PASS.
+- Firebase emulator integration/adversarial: 4 files, 52/52 tests PASS.
+- Playwright: 18 PASS across desktop Chromium, mobile Chromium and mobile WebKit; 3 capture-only tests skipped by design.
+- Coverage command passed repository thresholds: lines/statements 73.06%, branches 79.16%, functions 78.57%. The generic 80% line target remains a known repository-wide gap in `firebase.ts`; changed reward/wheel behaviors are directly covered by component and E2E tests.
+- No dependency, authentication model, secret, Zalo App ID or production deployment changed in this cycle.
