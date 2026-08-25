@@ -79,6 +79,10 @@ describe("WheelPage", () => {
     const finalRotation = Number(wheel.getAttribute("data-rotation"));
     const selectedCenter = selectedIndex * 60 + 30;
     expect(normalizeDegrees(selectedCenter + finalRotation)).toBeCloseTo(0, 8);
+    expect(wheel.style.getPropertyValue("--wheel-label-counter")).toBe(`${-finalRotation}deg`);
+    expect(document.querySelector(".wheel-label")?.getAttribute("style")).toContain(
+      "rotate(var(--wheel-label-counter))",
+    );
   });
 
   it("khóa double click và disable nút cho tới khi animation kết thúc", async () => {
@@ -128,6 +132,7 @@ describe("WheelPage", () => {
 
     await user.click(await screen.findByRole("button", { name: "Quay ngay" }));
     await finishCurrentSpin();
+    await waitFor(() => expect(document.querySelector(".reward-result")).toBeInTheDocument());
     expect(
       within(document.querySelector(".reward-result")!).getByText(config.slots[1].label),
     ).toBeInTheDocument();

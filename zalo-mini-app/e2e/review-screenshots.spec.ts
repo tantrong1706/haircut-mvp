@@ -83,6 +83,7 @@ test.describe("Bộ ảnh xét duyệt Zalo Version 8", () => {
           rewardName: "Gội đầu miễn phí",
           rewardCode: "HC-REVIEW-CHUADUNG",
           status: "unused",
+          branchName: "Chi nhánh Trung tâm",
           createdAt: "14/07/2026",
           expiresAt: "14/08/2026",
         },
