@@ -120,4 +120,45 @@ describe("WheelPage", () => {
     expect(secondRotation).toBeGreaterThan(firstRotation);
     expect(normalizeDegrees(4 * 60 + 30 + secondRotation)).toBeCloseTo(0, 8);
   });
+
+  it("xóa kết quả lượt cũ khi chuyển sang phiên khách khác", async () => {
+    const user = userEvent.setup();
+    mocks.spinWheel.mockResolvedValue(spinResult(1));
+    const view = render(<WheelPage session={session} onSessionChange={vi.fn()} />);
+
+    await user.click(await screen.findByRole("button", { name: "Quay ngay" }));
+    await finishCurrentSpin();
+    expect(
+      within(document.querySelector(".reward-result")!).getByText(config.slots[1].label),
+    ).toBeInTheDocument();
+
+    view.rerender(
+      <WheelPage
+        session={{
+          ...session,
+          sessionId: "session-b",
+          customer: { ...session.customer, customerId: "customer-b", name: "Khách B" },
+        }}
+        onSessionChange={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(document.querySelector(".reward-result")).not.toBeInTheDocument());
+  });
+
+  it("đưa khách đến danh sách quà sau khi quay trúng", async () => {
+    const user = userEvent.setup();
+    const onOpenRewards = vi.fn();
+    mocks.spinWheel.mockResolvedValue(spinResult(2));
+    const props = { session, onSessionChange: vi.fn(), onOpenRewards } as Parameters<
+      typeof WheelPage
+    >[0] & { onOpenRewards: () => void };
+    render(<WheelPage {...props} />);
+
+    await user.click(await screen.findByRole("button", { name: "Quay ngay" }));
+    await finishCurrentSpin();
+    await user.click(await screen.findByRole("button", { name: "Xem quà của tôi" }));
+
+    expect(onOpenRewards).toHaveBeenCalledTimes(1);
+  });
 });

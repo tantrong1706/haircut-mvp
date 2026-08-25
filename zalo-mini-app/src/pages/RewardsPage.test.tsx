@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppSession } from "../services/types";
@@ -37,5 +37,60 @@ describe("RewardsPage", () => {
 
     expect(await screen.findByText("Chưa có mã quà")).toBeInTheDocument();
     expect(mocks.getRewards).toHaveBeenCalledTimes(2);
+  });
+
+  it("tách quà còn dùng được khỏi lịch sử và chỉ cho sao chép mã còn hiệu lực", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    mocks.getRewards.mockResolvedValue([
+      {
+        id: "reward-active",
+        rewardName: "Gội đầu miễn phí",
+        rewardCode: "HC-ACTIVE",
+        status: "unused",
+        createdAt: "24/08/2026",
+        expiresAt: "24/09/2026",
+      },
+      {
+        id: "reward-used",
+        rewardName: "Giảm 10%",
+        rewardCode: "HC-USED",
+        status: "used",
+        createdAt: "20/08/2026",
+        usedAt: "21/08/2026",
+      },
+      {
+        id: "reward-expired",
+        rewardName: "Hấp dầu",
+        rewardCode: "HC-EXPIRED",
+        status: "expired",
+        createdAt: "01/07/2026",
+      },
+      {
+        id: "reward-revoked",
+        rewardName: "Tặng sáp",
+        rewardCode: "HC-REVOKED",
+        status: "revoked",
+        createdAt: "01/07/2026",
+      },
+    ]);
+
+    render(<RewardsPage session={session} />);
+
+    const activeSection = await screen.findByRole("region", { name: "Quà có thể sử dụng" });
+    const historySection = screen.getByRole("region", { name: "Lịch sử quà" });
+    expect(within(activeSection).getByText("Gội đầu miễn phí")).toBeInTheDocument();
+    expect(within(historySection).getByText("Đã dùng")).toBeInTheDocument();
+    expect(within(historySection).getByText("Hết hạn")).toBeInTheDocument();
+    expect(within(historySection).getByText("Đã hủy")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Sao chép mã quà" })).toHaveLength(1);
+
+    await user.click(screen.getByRole("button", { name: "Sao chép mã quà" }));
+    expect(writeText).toHaveBeenCalledWith("HC-ACTIVE");
+    expect(await screen.findByText("Đã sao chép mã quà.")).toBeInTheDocument();
   });
 });

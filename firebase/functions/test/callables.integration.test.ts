@@ -18,6 +18,7 @@ import {
   getManagerPointRequestHistory,
   getManagerRewardHistory,
   getManagerSessionHistory,
+  lookupRewardCode,
   redeemRewardCode,
   rejectPointRequest,
   requestSalonDeletion,
@@ -969,6 +970,65 @@ describe("callable transactions", () => {
     expect(
       (await db.collection("audit_events").where("salonId", "==", salonId).get()).size,
     ).toBeGreaterThanOrEqual(2);
+  });
+
+  it("cho dùng quà ở chi nhánh khác cùng salon và ghi nhận chi nhánh sử dụng", async () => {
+    const salonId = "salon-reward-any-branch";
+    const originBranchId = "branch-reward-origin";
+    const usedBranchId = "branch-reward-used";
+    const customerId = "customer-reward-any-branch";
+    await seedOwner("owner-reward-any-branch", salonId);
+    await Promise.all([
+      seedBranch(salonId, originBranchId),
+      seedBranch(salonId, usedBranchId),
+    ]);
+    await db.collection("users").doc("staff-reward-any-branch").set({
+      salonId,
+      role: "staff",
+      name: "Nhân viên chi nhánh dùng quà",
+      isActive: true,
+      canRedeemRewards: true,
+      branchIds: [usedBranchId],
+    });
+    await db.collection("customers").doc(customerId).set({
+      salonId,
+      name: "Khách dùng quà khác chi nhánh",
+      points: 0,
+    });
+    await db.collection("reward_history").doc("reward-any-branch").set({
+      salonId,
+      branchId: originBranchId,
+      branchName: "Chi nhánh nhận quà",
+      customerId,
+      rewardCode: "HC-ANY-BRANCH",
+      rewardName: "Gội đầu miễn phí",
+      status: "unused",
+      expiresAt: Timestamp.fromMillis(Date.now() + 60_000),
+      createdAt: Timestamp.now(),
+    });
+
+    const lookup = await lookupRewardCode.run(
+      requestFor("staff-reward-any-branch", {
+        salonId,
+        branchId: usedBranchId,
+        rewardCode: "HC-ANY-BRANCH",
+      }),
+    );
+    expect(lookup).toMatchObject({ found: true, status: "unused" });
+
+    await redeemRewardCode.run(
+      requestFor("staff-reward-any-branch", {
+        salonId,
+        branchId: usedBranchId,
+        rewardCode: "HC-ANY-BRANCH",
+        idempotencyKey: "redeem-any-branch-key-0001",
+      }),
+    );
+    expect((await db.collection("reward_history").doc("reward-any-branch").get()).data()).toMatchObject({
+      branchId: originBranchId,
+      status: "used",
+      usedBranchId,
+    });
   });
 
   it("chặn tenant giả, document thiếu salonId, tài khoản và salon bị khóa", async () => {
