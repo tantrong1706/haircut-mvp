@@ -239,6 +239,56 @@ describe("callable transactions", () => {
     expect(
       (await db.collection("haircut_records").where("pointRequestId", "==", sessionId).get()).size,
     ).toBe(1);
+
+    const dateKey = new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const counterId = createHash("sha256")
+      .update(`${salonId}:staff-direct-points:${dateKey}`)
+      .digest("hex");
+    await db.collection("staff_daily_point_awards").doc(counterId).set({
+      salonId,
+      staffId: "staff-direct-points",
+      dateKey,
+      awards: 100,
+      pointsAwarded: 200,
+    });
+    await db.collection("customers").doc("customer-direct-limit").set({
+      salonId,
+      name: "Khách vượt hạn mức",
+      points: 0,
+      allowPhoto: false,
+    });
+    await db.collection("chair_sessions").doc("session-direct-limit").set({
+      salonId,
+      branchId,
+      branchName: "Chi nhánh trực tiếp",
+      customerId: "customer-direct-limit",
+      customerSummary: { name: "Khách vượt hạn mức", points: 0, allowPhoto: false },
+      status: "serving",
+      isOpen: true,
+      assignedStaffId: "staff-direct-points",
+      assignedStaffName: "Nhân viên tin cậy",
+      createdAt: now,
+      expiresAt: Timestamp.fromMillis(now.toMillis() + 60 * 60 * 1000),
+    });
+
+    const limited = await submitPointRequest.run(
+      requestFor("staff-direct-points", {
+        salonId,
+        sessionId: "session-direct-limit",
+        note: "",
+      }),
+    );
+    expect(limited).toMatchObject({
+      status: "pending_approval",
+      approvalMode: "owner_approval",
+      pointsAdded: 2,
+    });
+    expect(
+      (await db.collection("customers").doc("customer-direct-limit").get()).data()?.points,
+    ).toBe(0);
+    expect(
+      (await db.collection("chair_sessions").doc("session-direct-limit").get()).data()?.status,
+    ).toBe("pending_approval");
   });
 
   it("bắt buộc lý do hợp lệ khi owner từ chối yêu cầu điểm", async () => {
