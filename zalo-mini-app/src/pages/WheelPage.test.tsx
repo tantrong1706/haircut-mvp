@@ -160,6 +160,13 @@ describe("WheelPage", () => {
     >[0] & { onOpenRewards: () => void };
     render(<WheelPage {...props} />);
 
+    const rewardNavigation = screen.getByRole("navigation", { name: "Quà và vòng quay" });
+    expect(within(rewardNavigation).getByRole("button", { name: "Vòng quay" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(within(rewardNavigation).getByRole("button", { name: "Mã quà" })).toBeEnabled();
+
     await user.click(await screen.findByRole("button", { name: "Quay ngay" }));
     await finishCurrentSpin();
     await user.click(await screen.findByRole("button", { name: "Xem quà của tôi" }));

@@ -41,6 +41,7 @@ describe("RewardsPage", () => {
 
   it("tách quà còn dùng được khỏi lịch sử và chỉ cho sao chép mã còn hiệu lực", async () => {
     const user = userEvent.setup();
+    const onOpenWheel = vi.fn();
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
@@ -80,7 +81,18 @@ describe("RewardsPage", () => {
       },
     ]);
 
-    render(<RewardsPage session={session} />);
+    const props = { session, onOpenWheel } as Parameters<typeof RewardsPage>[0] & {
+      onOpenWheel: () => void;
+    };
+    render(<RewardsPage {...props} />);
+
+    const rewardNavigation = screen.getByRole("navigation", { name: "Quà và vòng quay" });
+    expect(within(rewardNavigation).getByRole("button", { name: "Mã quà" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    await user.click(within(rewardNavigation).getByRole("button", { name: "Vòng quay" }));
+    expect(onOpenWheel).toHaveBeenCalledTimes(1);
 
     const activeSection = await screen.findByRole("region", { name: "Quà có thể sử dụng" });
     const historySection = screen.getByRole("region", { name: "Lịch sử quà" });
