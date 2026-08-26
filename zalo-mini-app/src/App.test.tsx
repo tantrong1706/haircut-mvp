@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
@@ -160,6 +160,10 @@ describe("App trong Zalo Mini App", () => {
 
     await user.click(screen.getByRole("button", { name: "Tao luot cho B" }));
     expect(await screen.findByText("home:Khach B:points:8")).toBeVisible();
+    const navigation = screen.getByRole("navigation", { name: "Điều hướng" });
+    expect(within(navigation).getAllByRole("button")).toHaveLength(3);
+    expect(within(navigation).getByRole("button", { name: "Quà và quay" })).toBeVisible();
+    expect(within(navigation).queryByRole("button", { name: "Vòng quay" })).toBeNull();
   });
 
   it("giu candidate nhung khong hien du lieu cu khi backend timeout", async () => {

@@ -131,8 +131,16 @@ describe("callable transactions", () => {
     const repeatedSubmit = await submitPointRequest.run(
       requestFor("staff-flow", { salonId, sessionId, note: "Fade thấp", photoUrls: [] }),
     );
-    expect(firstSubmit).toMatchObject({ requestId: sessionId, alreadySubmitted: false });
-    expect(repeatedSubmit).toMatchObject({ requestId: sessionId, alreadySubmitted: true });
+    expect(firstSubmit).toMatchObject({
+      requestId: sessionId,
+      alreadySubmitted: false,
+      status: "pending_approval",
+    });
+    expect(repeatedSubmit).toMatchObject({
+      requestId: sessionId,
+      alreadySubmitted: true,
+      status: "pending_approval",
+    });
 
     const firstApproval = await approvePointRequest.run(
       requestFor("owner-flow", { salonId, requestId: sessionId }),
@@ -154,6 +162,83 @@ describe("callable transactions", () => {
       (await db.collection("haircut_records").where("customerId", "==", customerId).get()).size,
     ).toBe(1);
     expect((await db.collection("customers").doc(customerId).get()).data()?.points).toBe(1);
+  });
+
+  it("nhân viên tin cậy hoàn tất và cộng điểm ngay đúng một lần", async () => {
+    const salonId = "salon-direct-points";
+    const branchId = "branch-direct-points";
+    const customerId = "customer-direct-points";
+    const sessionId = "session-direct-points";
+    const now = Timestamp.now();
+    await seedOwner("owner-direct-points", salonId, { pointPerVisit: 2, customerCount: 1 });
+    await seedBranch(salonId, branchId);
+    await db.collection("users").doc("staff-direct-points").set({
+      salonId,
+      role: "staff",
+      name: "Nhân viên tin cậy",
+      isActive: true,
+      canAwardPointsDirectly: true,
+      branchIds: [branchId],
+    });
+    await db.collection("customers").doc(customerId).set({
+      salonId,
+      name: "Khách cộng trực tiếp",
+      points: 3,
+      allowPhoto: false,
+    });
+    await db.collection("chair_sessions").doc(sessionId).set({
+      salonId,
+      branchId,
+      branchName: "Chi nhánh trực tiếp",
+      customerId,
+      customerSummary: {
+        name: "Khách cộng trực tiếp",
+        phoneLast4: "1234",
+        points: 3,
+        allowPhoto: false,
+      },
+      status: "serving",
+      isOpen: true,
+      assignedStaffId: "staff-direct-points",
+      assignedStaffName: "Nhân viên tin cậy",
+      createdAt: now,
+      expiresAt: Timestamp.fromMillis(now.toMillis() + 60 * 60 * 1000),
+    });
+
+    const first = await submitPointRequest.run(
+      requestFor("staff-direct-points", { salonId, sessionId, note: "" }),
+    );
+    const repeated = await submitPointRequest.run(
+      requestFor("staff-direct-points", { salonId, sessionId, note: "" }),
+    );
+
+    expect(first).toMatchObject({
+      requestId: sessionId,
+      alreadySubmitted: false,
+      status: "approved",
+      pointsAdded: 2,
+      pointsAfter: 5,
+    });
+    expect(repeated).toMatchObject({
+      requestId: sessionId,
+      alreadySubmitted: true,
+      status: "approved",
+      pointsAfter: 5,
+    });
+    expect((await db.collection("customers").doc(customerId).get()).data()?.points).toBe(5);
+    expect((await db.collection("chair_sessions").doc(sessionId).get()).data()?.status).toBe(
+      "completed",
+    );
+    expect((await db.collection("point_requests").doc(sessionId).get()).data()).toMatchObject({
+      status: "approved",
+      approvalMode: "staff_direct",
+      approvedBy: "staff-direct-points",
+      pointsBefore: 3,
+      pointsAfter: 5,
+    });
+    expect(
+      (await db.collection("haircut_records").where("pointRequestId", "==", sessionId).get()).size,
+    ).toBe(1);
   });
 
   it("bắt buộc lý do hợp lệ khi owner từ chối yêu cầu điểm", async () => {
