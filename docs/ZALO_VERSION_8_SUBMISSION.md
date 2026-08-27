@@ -1,6 +1,6 @@
-# Nội dung chuẩn bị gửi Zalo Mini App Version 20
+# Nội dung chuẩn bị gửi Zalo Mini App Version 21
 
-> Tên file được giữ lại để tương thích với readiness checker hiện hành. Nội dung bên dưới áp dụng cho Testing Version 20.
+> Tên file được giữ lại để tương thích với readiness checker hiện hành. Nội dung bên dưới áp dụng cho Testing Version 21.
 
 Tài liệu này dùng để điền Zalo Developer Portal. Không commit deeplink, QR token, mật khẩu hoặc dữ liệu khách thật.
 
@@ -42,8 +42,8 @@ Vietnam gateway và bản Zalo Testing cuối đã hoạt động. Dữ liệu r
 ```text
 Salon demo: CH Haircut Salon - Xét duyệt Zalo
 Chi nhánh demo: Chi nhánh Trung tâm
-Testing version: 20
-QR testing: https://app.chhaircutsalon.cc/review-salon-v20.png
+Testing version: 21
+QR testing: https://app.chhaircutsalon.cc/review-salon-v21.png
 ```
 
 QR được tạo từ backend production, dùng chữ ký và phiên bản xoay. URL công khai chỉ chứa ảnh QR của salon review
@@ -90,7 +90,7 @@ Token không được lưu dài hạn, hiển thị hoặc ghi vào log, Analyti
 **Các quyền không dùng**
 
 ```text
-Version 20 không gọi getPhoneNumber, scanQRCode, location, notification, followOA hoặc share. Khách quét QR bằng
+Version 21 không gọi getPhoneNumber, scanQRCode, location, notification, followOA hoặc share. Khách quét QR bằng
 camera/Zalo trước khi Mini App mở. Số điện thoại là tùy chọn và chỉ được lưu khi khách tự nhập.
 ```
 
@@ -114,7 +114,7 @@ yêu cầu xóa dữ liệu và kênh hỗ trợ. URL live và webhook phải đ
 Dùng danh sách và trạng thái trong `docs/ZALO_REVIEW_CHECKLIST.md`. Ảnh phải chụp thật trong Zalo trên Android
 và iPhone. Không dùng ảnh web giả làm bằng chứng thiết bị.
 
-## 8. Điều kiện trước khi gửi Version 20
+## 8. Điều kiện trước khi gửi Version 21
 
 - [x] Vietnam gateway hoạt động, HTTPS health đạt và Firebase callable được cấu hình gateway.
 - [x] Điền dữ liệu Testing thật mà không commit token QR.
