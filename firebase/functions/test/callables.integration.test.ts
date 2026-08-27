@@ -307,16 +307,19 @@ describe("callable transactions", () => {
     const branchId = "branch-direct-permission";
     await seedOwner("owner-direct-permission", salonId);
     await seedBranch(salonId, branchId);
-    await db.collection("users").doc("staff-direct-permission").set({
-      salonId,
-      role: "staff",
-      name: "Nhân viên chờ cấp quyền",
-      email: "staff-direct@example.com",
-      isActive: true,
-      canAwardPointsDirectly: false,
-      branchId,
-      branchIds: [branchId],
-    });
+    await db
+      .collection("users")
+      .doc("staff-direct-permission")
+      .set({
+        salonId,
+        role: "staff",
+        name: "Nhân viên chờ cấp quyền",
+        email: "staff-direct@example.com",
+        isActive: true,
+        canAwardPointsDirectly: false,
+        branchId,
+        branchIds: [branchId],
+      });
 
     await updateStaffProfile.run(
       requestFor("owner-direct-permission", {
