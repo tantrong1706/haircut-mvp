@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import QRCode from "qrcode";
+import { zmpLoginUrl } from "./zmp-url.mjs";
 
 const envPath = resolve(".env");
 const qrPath = resolve("qr-zmp-login-dev.png");
@@ -14,7 +15,7 @@ if (!appId) {
 const loginRequest = await apiGet(
   `https://zmp-api.developers.zalo.me/admin/request-login?appId=${encodeURIComponent(appId)}`,
 );
-const loginUrl = addTestingContext(String(loginRequest?.data?.loginUrl || ""));
+const loginUrl = zmpLoginUrl(loginRequest?.data?.loginUrl);
 const loginKey = String(loginRequest?.data?.zmpsk || "");
 
 if (Number(loginRequest?.err) < 0 || !loginUrl || !loginKey) {
@@ -78,21 +79,6 @@ function decodeJwtPayload(value) {
     return JSON.parse(Buffer.from(value.split(".")[1], "base64url").toString("utf8"));
   } catch {
     throw new Error("ZMP trả về phiên đăng nhập không hợp lệ.");
-  }
-}
-
-function addTestingContext(value) {
-  if (!value) {
-    return value;
-  }
-  try {
-    const url = new URL(value);
-    url.searchParams.set("env", "TESTING");
-    url.searchParams.set("version", "19");
-    return url.toString();
-  } catch {
-    const separator = value.includes("?") ? "&" : "?";
-    return `${value}${separator}env=TESTING&version=19`;
   }
 }
 

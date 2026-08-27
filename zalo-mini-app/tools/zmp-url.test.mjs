@@ -17,8 +17,7 @@ test("chỉ QR salon nhận context Testing Version 19", () => {
 });
 
 test("QR salon ghi đè context cũ thay vì thêm trùng", () => {
-  const input =
-    "https://zalo.me/s/2038116772828167300/?env=PRODUCTION&version=18&qrToken=signed";
+  const input = "https://zalo.me/s/2038116772828167300/?env=PRODUCTION&version=18&qrToken=signed";
   const result = new URL(salonTestingUrl(input));
 
   assert.deepEqual(result.searchParams.getAll("env"), ["TESTING"]);

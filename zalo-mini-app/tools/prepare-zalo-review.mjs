@@ -8,6 +8,7 @@ import { getAuth, signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { doc, getDoc, getFirestore } from "firebase/firestore";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import QRCode from "qrcode";
+import { salonTestingUrl } from "./zmp-url.mjs";
 
 const toolDir = dirname(fileURLToPath(import.meta.url));
 const appDir = resolve(toolDir, "..");
@@ -170,7 +171,7 @@ await seedReviewBusinessData({
 const qrFiles = [];
 if (branchResult.salonQrUrl) {
   const salonQrPath = resolve(appDir, "qr-salon-review-dev.png");
-  await writeQr(salonQrPath, branchResult.salonQrUrl);
+  await writeQr(salonQrPath, salonTestingUrl(branchResult.salonQrUrl));
   qrFiles.push(salonQrPath);
 }
 
