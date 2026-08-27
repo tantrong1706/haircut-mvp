@@ -121,3 +121,45 @@ The static readiness gate previously accepted only the pre-deployment placeholde
 - Playwright: 18 PASS across desktop Chromium, mobile Chromium and mobile WebKit; 3 capture-only tests skipped by design.
 - Coverage command passed repository thresholds: lines/statements 73.06%, branches 79.16%, functions 78.57%. The generic 80% line target remains a known repository-wide gap in `firebase.ts`; changed reward/wheel behaviors are directly covered by component and E2E tests.
 - No dependency, authentication model, secret, Zalo App ID or production deployment changed in this cycle.
+
+## Trusted staff direct points — 2026-08-27
+
+### User journeys
+
+1. A trusted staff member finishes a service and credits the salon-configured points in one action.
+2. An ordinary staff member, a custom/invalid point request or a trusted staff member over the daily limit falls back to owner approval.
+3. Repeated submissions for one service never add points twice.
+4. Only the owner can grant or revoke direct-point permission; staff cannot self-elevate.
+5. Customers see three primary navigation items, with Wheel and Reward Codes grouped under one clear area.
+
+### RED → GREEN evidence
+
+| Guarantee | RED evidence | GREEN evidence |
+| --- | --- | --- |
+| Direct-award decision requires trusted role, exact server points and remaining daily quota | Functions unit: 1 failed, 80 passed because `directPointAwardDecision` did not exist | Functions unit: 81/81 passed |
+| Trusted staff completes, credits points and remains idempotent | Integration: 2 failed, 51 passed because submit always returned a pending request | Integration/adversarial: 54/54 passed; repeated submit kept one record and one point increment |
+| Daily limit safely falls back to owner approval | Integration seeds 100 direct awards and expects `pending_approval` | Integration passed with customer points unchanged and session pending owner approval |
+| Staff cannot grant itself direct-point permission | Owner/staff permission integration was added | Owner update/list passed; staff update rejected with `permission-denied` |
+| Staff UI supports one-click completion without mandatory notes | React target: 4 failed, 7 passed on missing direct/pending labels and old required-note behavior | React target: 11/11 passed; full Mini App: 146/146 passed |
+| Customer navigation has three primary items with Wheel/Reward subnavigation | Navigation target: 2 failed, 6 passed because subnavigation was absent | Page target passed; full Playwright 18/18 across desktop Chromium, mobile Chromium and mobile WebKit |
+
+### Security controls
+
+- Server ignores client-supplied point totals and uses `salons.pointPerVisit`.
+- Auto approval requires the assigned user, correct active branch, a fresh `serving` session and owner-granted `canAwardPointsDirectly`.
+- Staff is limited to 100 direct completions per Vietnam calendar day; the counter is server-only under Firestore Rules.
+- Customer, point request, haircut record, session completion, daily counter and audit events are committed atomically.
+- The session ID remains the idempotency key, so concurrent/repeated submissions cannot double-credit.
+- Missing permission or exhausted quota uses the existing owner approval path instead of weakening authorization.
+
+### Checkpoints and validation
+
+- RED flow checkpoints: `32f9f57`, `445c987` (`test: define trusted staff point flow`).
+- RED navigation checkpoint: `599fc6d` (`test: define compact rewards navigation`).
+- GREEN checkpoint: `6c833b6` (`feat(points): streamline trusted staff completion`).
+- Firebase Rules: 20/20 PASS.
+- Firebase integration/adversarial: 54/54 PASS.
+- Mini App full check: 30 files, 146/146 tests; lint, format, TypeScript build, ZMP validation and static Zalo readiness 34/34 PASS.
+- Playwright: 18 PASS; 3 capture-only cases skipped by design. Review capture job PASS and mobile screenshots were visually inspected.
+- Coverage passed repository thresholds: lines/statements 73.06%, branches 79.16%, functions 78.57%. The existing generic 80% line gap remains isolated mainly in `firebase.ts`; all changed decision, page and transaction paths have direct unit/component/integration coverage.
+- No production Firebase, Hosting or Zalo Testing deployment occurred in this cycle.
