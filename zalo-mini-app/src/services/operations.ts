@@ -33,6 +33,7 @@ import {
 } from "./firebase";
 import { LuckyWheelConfig, defaultLuckyWheelConfig } from "./types";
 import { normalizeLuckyWheelConfig } from "./wheel";
+import { safeStorageGet, safeStorageRemove, safeStorageSet } from "./safeStorage";
 
 const SESSION_POINT_REQUEST_WINDOW_MS = 12 * 60 * 60 * 1000;
 
@@ -165,6 +166,15 @@ export type RedeemRewardResult = {
   alreadyRedeemed?: boolean;
 };
 
+export type SubmitPointRequestResult = {
+  requestId: string;
+  alreadySubmitted: boolean;
+  status: "approved" | "pending_approval";
+  approvalMode?: "staff_direct" | "owner_direct" | "owner_approval";
+  pointsAdded: number;
+  pointsAfter?: number;
+};
+
 export type SalonMirror = {
   id: string;
   salonId: string;
@@ -199,6 +209,7 @@ export type StaffProfile = {
   role: "staff";
   isActive: boolean;
   canRedeemRewards: boolean;
+  canAwardPointsDirectly: boolean;
   branchId: string;
   branchIds: string[];
   inviteStatus: "pending" | "accepted";
@@ -858,6 +869,7 @@ export async function createStaffProfile(input: {
   name: string;
   phone?: string;
   canRedeemRewards: boolean;
+  canAwardPointsDirectly: boolean;
   branchIds: string[];
 }): Promise<{ uid: string; email: string; inviteEmailSent: boolean }> {
   const email = input.email.trim().toLowerCase();
@@ -882,6 +894,7 @@ export async function createStaffProfile(input: {
       name: string;
       phone?: string;
       canRedeemRewards: boolean;
+      canAwardPointsDirectly: boolean;
       branchIds: string[];
     },
     { uid: string; email: string }
@@ -891,6 +904,7 @@ export async function createStaffProfile(input: {
     name,
     phone: input.phone?.trim() || undefined,
     canRedeemRewards: input.canRedeemRewards,
+    canAwardPointsDirectly: input.canAwardPointsDirectly,
     branchIds: input.branchIds,
   });
 
@@ -926,6 +940,7 @@ export async function updateStaffProfile(input: {
   phone?: string;
   isActive?: boolean;
   canRedeemRewards?: boolean;
+  canAwardPointsDirectly?: boolean;
   branchIds?: string[];
 }) {
   return callWriteFunctionOrFallback("updateStaffProfile", input, () =>
@@ -1024,13 +1039,23 @@ export async function submitPointRequest(input: {
   photoUrls?: string[];
   photoPaths?: string[];
   pointsRequested?: number;
-}) {
+}): Promise<SubmitPointRequestResult> {
   const pointsRequested =
     input.pointsRequested && input.pointsRequested > 0
       ? Math.floor(input.pointsRequested)
       : await getSalonPointPerVisit(input.salonId);
 
-  return callWriteFunctionOrFallback(
+  return callWriteFunctionOrFallback<
+    {
+      salonId: string;
+      sessionId: string;
+      note: string;
+      photoUrls: string[];
+      photoPaths: string[];
+      pointsRequested: number;
+    },
+    SubmitPointRequestResult
+  >(
     "submitPointRequest",
     {
       salonId: input.salonId,
@@ -1211,11 +1236,17 @@ async function submitPointRequestDirect(input: {
   photoUrls?: string[];
   photoPaths?: string[];
   pointsRequested: number;
-}) {
+}): Promise<SubmitPointRequestResult> {
   const db = getFirebaseDb();
 
   if (!isFirebaseConfigured() || !db) {
-    return;
+    return {
+      requestId: input.session.id,
+      alreadySubmitted: false,
+      status: "pending_approval",
+      approvalMode: "owner_approval",
+      pointsAdded: input.pointsRequested,
+    };
   }
 
   const signedStaff = await getSignedStaffForDirectWrite();
@@ -1303,6 +1334,14 @@ async function submitPointRequestDirect(input: {
       { merge: true },
     );
   });
+
+  return {
+    requestId: input.session.id,
+    alreadySubmitted: false,
+    status: "pending_approval",
+    approvalMode: "owner_approval",
+    pointsAdded: pointsRequested,
+  };
 }
 
 async function getSalonPointPerVisit(salonId: string) {
@@ -1336,6 +1375,7 @@ async function getSignedStaffForDirectWrite() {
     uid,
     name: name || "Nhân viên",
     role: data.role === "owner" ? "owner" : "staff",
+    canAwardPointsDirectly: Boolean(data.canAwardPointsDirectly),
     branchIds,
   };
 }
@@ -1534,7 +1574,7 @@ export async function redeemRewardCode(input: {
     },
     () => redeemRewardCodeDirect(input.salonId, rewardCode),
   );
-  localStorage.removeItem(pendingOperation.storageKey);
+  safeStorageRemove(pendingOperation.storageKey);
   const maybeResult = result as Partial<RedeemRewardResult> | undefined;
   return {
     rewardId: maybeResult?.rewardId || "",
@@ -1722,6 +1762,7 @@ async function getStaffProfilesDirect(salonId: string): Promise<{ staff: StaffPr
           role: "staff",
           isActive: true,
           canRedeemRewards: true,
+          canAwardPointsDirectly: true,
           branchId: "demo-branch-main",
           branchIds: ["demo-branch-main"],
           inviteStatus: "accepted",
@@ -1744,6 +1785,7 @@ async function updateStaffProfileDirect(input: {
   phone?: string;
   isActive?: boolean;
   canRedeemRewards?: boolean;
+  canAwardPointsDirectly?: boolean;
   branchIds?: string[];
 }) {
   const db = getFirebaseDb();
@@ -1774,6 +1816,9 @@ async function updateStaffProfileDirect(input: {
   }
   if (typeof input.canRedeemRewards === "boolean") {
     payload.canRedeemRewards = input.canRedeemRewards;
+  }
+  if (typeof input.canAwardPointsDirectly === "boolean") {
+    payload.canAwardPointsDirectly = input.canAwardPointsDirectly;
   }
   if (input.branchIds?.length) {
     payload.branchId = input.branchIds[0];
@@ -1962,6 +2007,7 @@ function mapStaffProfile(docSnap: QueryDocumentSnapshot<DocumentData>): StaffPro
     role: "staff",
     isActive: Boolean(data.isActive),
     canRedeemRewards: Boolean(data.canRedeemRewards),
+    canAwardPointsDirectly: Boolean(data.canAwardPointsDirectly),
     branchId: String(data.branchId || ""),
     branchIds: Array.isArray(data.branchIds)
       ? data.branchIds.filter((value): value is string => typeof value === "string")
@@ -2291,12 +2337,12 @@ function localScopeHash(value: string) {
 
 function getOrCreatePendingOperationKey(scope: string) {
   const storageKey = `haircut_pending_operation:${scope}`;
-  const existing = localStorage.getItem(storageKey);
+  const existing = safeStorageGet(storageKey);
   if (existing && /^[A-Za-z0-9_-]{16,128}$/.test(existing)) {
     return { storageKey, key: existing };
   }
   const key = randomToken();
-  localStorage.setItem(storageKey, key);
+  safeStorageSet(storageKey, key);
   return { storageKey, key };
 }
 

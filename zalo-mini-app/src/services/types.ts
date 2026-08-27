@@ -25,6 +25,7 @@ export type AppSession = {
   branchAddress?: string;
   mirrorName?: string;
   zaloUserId: string;
+  identityBinding?: string;
   sessionStatus?: "waiting" | "serving" | "pending_approval" | "completed" | "cancelled";
   assignedStaffName?: string;
   claimedAtMs?: number | null;
@@ -35,7 +36,12 @@ export type AppSession = {
 export type HaircutRecord = {
   id: string;
   createdAt: string;
+  salonName?: string;
+  branchId?: string;
+  branchName?: string;
   staffName: string;
+  serviceName?: string;
+  rewardName?: string;
   note: string;
   photoUrls: string[];
   pointsAdded: number;
@@ -45,8 +51,10 @@ export type Reward = {
   id: string;
   rewardName: string;
   rewardCode: string;
-  status: "unused" | "used" | "expired";
+  status: "unused" | "used" | "expired" | "revoked";
+  branchName?: string;
   createdAt: string;
+  usedAt?: string;
   expiresAt?: string;
 };
 

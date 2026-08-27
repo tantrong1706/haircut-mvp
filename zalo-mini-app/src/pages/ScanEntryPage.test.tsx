@@ -148,7 +148,7 @@ describe("ScanEntryPage", () => {
 
     expect(screen.getByRole("heading", { name: "Quét QR tại salon" })).toBeInTheDocument();
     expect(
-      screen.getByText(/QR giúp HAIRCUT xác định đúng salon và chi nhánh/i),
+      screen.getByText(/QR giúp CH Haircut Salon xác định đúng salon và chi nhánh/i),
     ).toBeInTheDocument();
     expect(screen.queryByText("Trang chủ salon")).not.toBeInTheDocument();
     expect(screen.queryByText("Trang nhân viên")).not.toBeInTheDocument();
@@ -187,7 +187,7 @@ describe("ScanEntryPage", () => {
     render(<ScanEntryPage onReady={vi.fn()} />);
 
     expect(await screen.findByText("Chưa nhận được thông tin Zalo")).toBeInTheDocument();
-    expect(screen.getByText(/Cho phép HAIRCUT đọc tên hiển thị/i)).toBeInTheDocument();
+    expect(screen.getByText(/Cho phép CH Haircut Salon đọc tên hiển thị/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Mở trong Zalo" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Cho phép đọc tên Zalo" }));

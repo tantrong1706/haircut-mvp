@@ -39,9 +39,39 @@
   font-weight: 750;
 }
 
+.rewards-page .rewards-content,
+.rewards-page .reward-section,
 .rewards-page .list {
   display: grid;
   gap: 12px;
+}
+
+.rewards-page .reward-section-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 2px 4px;
+}
+
+.rewards-page .reward-section-heading > svg {
+  flex: 0 0 auto;
+  color: #d69b2d;
+}
+
+.rewards-page .reward-section-heading h2,
+.rewards-page .reward-section-heading p {
+  margin: 0;
+}
+
+.rewards-page .reward-section-heading h2 {
+  font-size: 19px;
+}
+
+.rewards-page .reward-section-heading p {
+  margin-top: 3px;
+  color: rgba(21, 25, 23, 0.65);
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .rewards-page .list-item {
@@ -69,6 +99,52 @@
   color: #151917;
   font-size: 15px;
   font-weight: 950;
+}
+
+.rewards-page .reward-card-content {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.rewards-page .reward-card-content p,
+.rewards-page .reward-card-content small {
+  margin: 0;
+}
+
+.rewards-page .reward-code {
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: 0.03em;
+}
+
+.rewards-page .masked-code {
+  color: rgba(21, 25, 23, 0.58);
+}
+
+.rewards-page .usage-note {
+  color: #0e5c44;
+}
+
+.rewards-page .reward-copy-button {
+  width: fit-content;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 5px;
+  padding: 0 12px;
+  border: 1px solid rgba(14, 92, 68, 0.2);
+  border-radius: 12px;
+  background: #eef7f3;
+  color: #0e5c44;
+  font-weight: 900;
+}
+
+.rewards-page .past-reward {
+  opacity: 0.86;
+  box-shadow: none;
 }
 
 .rewards-page .list-item span,

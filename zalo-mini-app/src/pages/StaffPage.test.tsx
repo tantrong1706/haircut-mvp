@@ -127,7 +127,11 @@ describe("StaffPage", () => {
     });
     mocks.recoverHaircutPhotoUploads.mockResolvedValue([]);
     mocks.deleteHaircutPhoto.mockResolvedValue(undefined);
-    mocks.submitPointRequest.mockResolvedValue({ requestId: "session-a" });
+    mocks.submitPointRequest.mockResolvedValue({
+      requestId: "session-a",
+      status: "pending_approval",
+      pointsAdded: 2,
+    });
   });
 
   it("bắt buộc nhận khách trước khi ghi chú và gửi điểm", async () => {
@@ -142,6 +146,7 @@ describe("StaffPage", () => {
           role: "staff",
           isActive: true,
           canRedeemRewards: false,
+          canAwardPointsDirectly: false,
           branchId: "branch-a",
           branchIds: ["branch-a"],
         }}
@@ -156,7 +161,7 @@ describe("StaffPage", () => {
     expect(note).toBeEnabled();
 
     await user.type(note, "Giữ form cũ");
-    await user.click(screen.getByRole("button", { name: /Gửi cộng 2 điểm/i }));
+    await user.click(screen.getByRole("button", { name: /Hoàn tất và gửi duyệt 2 điểm/i }));
 
     await waitFor(() => expect(mocks.submitPointRequest).toHaveBeenCalledOnce());
     expect(screen.getByText("Đang chờ chủ duyệt")).toBeInTheDocument();
@@ -186,6 +191,7 @@ describe("StaffPage", () => {
           role: "staff",
           isActive: true,
           canRedeemRewards: false,
+          canAwardPointsDirectly: false,
           branchId: "branch-a",
           branchIds: ["branch-a"],
         }}
@@ -202,7 +208,7 @@ describe("StaffPage", () => {
     expect(await screen.findByAltText("Ảnh kiểu tóc 1")).toBeInTheDocument();
 
     await user.type(screen.getByPlaceholderText(/Fade thấp/i), "Fade thấp, giữ mái");
-    await user.click(screen.getByRole("button", { name: /Gửi cộng 2 điểm/i }));
+    await user.click(screen.getByRole("button", { name: /Hoàn tất và gửi duyệt 2 điểm/i }));
 
     await waitFor(() =>
       expect(mocks.submitPointRequest).toHaveBeenCalledWith(
@@ -214,5 +220,47 @@ describe("StaffPage", () => {
         }),
       ),
     );
+  });
+
+  it("nhân viên tin cậy hoàn tất và cộng điểm ngay không cần ghi chú", async () => {
+    sessionsForTest = [
+      {
+        ...waitingSession,
+        status: "serving",
+        assignedStaffId: "staff-a",
+        assignedStaffName: "Nam",
+      },
+    ];
+    mocks.submitPointRequest.mockResolvedValue({
+      requestId: "session-a",
+      status: "approved",
+      pointsAdded: 2,
+      pointsAfter: 6,
+    });
+    const user = userEvent.setup();
+    render(
+      <StaffPage
+        currentUser={{
+          uid: "staff-a",
+          salonId: "salon-a",
+          name: "Nam",
+          avatarUrl: "",
+          role: "staff",
+          isActive: true,
+          canRedeemRewards: false,
+          canAwardPointsDirectly: true,
+          branchId: "branch-a",
+          branchIds: ["branch-a"],
+        }}
+      />,
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: /Hoàn tất và cộng ngay 2 điểm/i }),
+    );
+
+    await waitFor(() => expect(mocks.submitPointRequest).toHaveBeenCalledOnce());
+    expect(screen.getByText("Đã hoàn tất và cộng 2 điểm cho khách.")).toBeInTheDocument();
+    expect(screen.getByText("Chưa có khách")).toBeInTheDocument();
   });
 });

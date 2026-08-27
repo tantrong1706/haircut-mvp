@@ -52,6 +52,7 @@ Input:
   "name": "Thợ Nam",
   "phone": "0900000001",
   "canRedeemRewards": true,
+  "canAwardPointsDirectly": true,
   "branchIds": ["..."]
 }
 ```
@@ -60,7 +61,9 @@ Chỉ chủ salon được gọi. Server tạo tài khoản Firebase Auth cho nh
 
 ## updateStaffProfile / listStaffProfiles
 
-Owner quản lý tên, số nội bộ, trạng thái kích hoạt, chi nhánh phân công và quyền đổi mã quà.
+Owner quản lý tên, số nội bộ, trạng thái kích hoạt, chi nhánh phân công, quyền đổi mã quà và quyền
+`canAwardPointsDirectly`. Quyền cộng trực tiếp chỉ áp dụng cho điểm chuẩn của salon, đúng lượt nhân viên
+đang phục vụ và dưới hạn mức 100 lượt/ngày; trường hợp khác tự chuyển owner duyệt.
 
 ## updateOwnerAvatar
 
@@ -153,9 +156,13 @@ Input:
 }
 ```
 
-Owner hoặc staff được gọi. Server luôn cố định cộng 1 điểm, không tin số điểm do client tự gửi.
+Owner hoặc staff được gọi. Server luôn lấy `pointPerVisit` từ salon, không tin số điểm do client tự gửi.
 Server lấy `branchId` từ phiên đã xác minh; client không được tự chọn chi nhánh cho yêu cầu điểm.
 Document request dùng `sessionId` làm ID/khóa xác định. Gửi lại cùng staff/session trả `alreadySubmitted=true`.
+Owner hoặc staff có `canAwardPointsDirectly=true` được hoàn tất và cộng điểm ngay trong một transaction;
+output có `status=approved`, `approvalMode` và `pointsAfter`. Staff thường hoặc staff đã đạt 100 lượt trực
+tiếp trong ngày nhận `status=pending_approval` để owner duyệt. Cả hai nhánh đều chống cộng trùng theo
+`sessionId` và ghi audit.
 
 ## approvePointRequest / rejectPointRequest
 

@@ -23,11 +23,13 @@ import {
   Trash2,
   UserPlus,
   UserRound,
+  UserRoundCheck,
   UsersRound,
   XCircle,
 } from "lucide-react";
 import QRCode from "qrcode";
 import { BrandLogo } from "../components/BrandLogo";
+import { MINI_APP_NAME } from "../config/branding";
 import { AccountDeletionPanel } from "../components/AccountDeletionPanel";
 import { HaircutPhotoCapture, type HaircutPhotoItem } from "../components/HaircutPhotoCapture";
 import { RedeemRewardPanel } from "../components/RedeemRewardPanel";
@@ -1745,7 +1747,7 @@ function ManagedQrCard({
       <html lang="vi">
         <head>
           <meta charset="utf-8" />
-          <title>${escapeHtml(title)} - HAIRCUT QR</title>
+          <title>${escapeHtml(title)} - ${escapeHtml(MINI_APP_NAME)} QR</title>
           <style>
             body { font-family: Arial, sans-serif; margin: 28px; color: #0b1712; text-align: center; }
             h1 { margin: 0 0 8px; font-size: 28px; }
@@ -1755,7 +1757,7 @@ function ManagedQrCard({
         </head>
         <body>
           <h1>${escapeHtml(title)}</h1>
-          <p>Quét QR để check-in HAIRCUT</p>
+          <p>Quét QR để check-in ${escapeHtml(MINI_APP_NAME)}</p>
           <img src="${qrImageUrl}" alt="" />
           <script>window.onload = () => window.print();</script>
         </body>
@@ -1902,6 +1904,7 @@ function StaffManagementPanel({
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [canRedeemRewards, setCanRedeemRewards] = useState(false);
+  const [canAwardPointsDirectly, setCanAwardPointsDirectly] = useState(false);
   const [branches, setBranches] = useState<SalonBranch[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState("");
   const [loading, setLoading] = useState(true);
@@ -1945,6 +1948,7 @@ function StaffManagementPanel({
         name,
         phone,
         canRedeemRewards,
+        canAwardPointsDirectly,
         branchIds: [selectedBranchId],
       });
       const createdUid = createdStaff.uid;
@@ -1958,6 +1962,7 @@ function StaffManagementPanel({
           role: "staff",
           isActive: true,
           canRedeemRewards,
+          canAwardPointsDirectly,
           branchId: selectedBranchId,
           branchIds: [selectedBranchId],
           inviteStatus: "pending",
@@ -1972,6 +1977,7 @@ function StaffManagementPanel({
       setName("");
       setPhone("");
       setCanRedeemRewards(false);
+      setCanAwardPointsDirectly(false);
       onMessage(
         createdStaff.inviteEmailSent
           ? "Đã gửi email mời. Nhân viên tự đặt mật khẩu trong hộp thư của họ."
@@ -2015,6 +2021,7 @@ function StaffManagementPanel({
         phone: payload.phone,
         isActive: payload.isActive,
         canRedeemRewards: payload.canRedeemRewards,
+        canAwardPointsDirectly: payload.canAwardPointsDirectly,
         branchIds: payload.branchIds,
       });
       setStaff((current) =>
@@ -2074,6 +2081,14 @@ function StaffManagementPanel({
             onChange={(event) => setCanRedeemRewards(event.target.checked)}
           />
           <span>Cho đổi mã quà</span>
+        </label>
+        <label className="toggle-row inline-toggle">
+          <input
+            type="checkbox"
+            checked={canAwardPointsDirectly}
+            onChange={(event) => setCanAwardPointsDirectly(event.target.checked)}
+          />
+          <span>Cho hoàn tất và cộng điểm trực tiếp</span>
         </label>
         <button
           className="primary-button"
@@ -2199,6 +2214,16 @@ function StaffCard({
         >
           <TicketCheck size={18} aria-hidden="true" />
           {staff.canRedeemRewards ? "Tắt đổi quà" : "Cho đổi quà"}
+        </button>
+        <button
+          className="secondary-button"
+          disabled={busy}
+          onClick={() =>
+            onSave(staff, { canAwardPointsDirectly: !staff.canAwardPointsDirectly })
+          }
+        >
+          <UserRoundCheck size={18} aria-hidden="true" />
+          {staff.canAwardPointsDirectly ? "Yêu cầu chủ duyệt điểm" : "Cho cộng điểm trực tiếp"}
         </button>
       </div>
     </article>

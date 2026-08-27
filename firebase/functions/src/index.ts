@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes, randomInt } from "node:crypto";
 import {
   ApiErrorCode,
   DeviceTokenSchema,
@@ -32,13 +32,15 @@ import {
   canRestoreReward,
   countUniqueCustomersSince,
   deletionJobOutcome,
+  directPointAwardDecision,
   effectiveRewardStatus,
   isServiceSessionExpired,
   isVerifiedOwnerIdentity,
   legacyBranchPatch,
   normalizeWheelSlotType,
   rewardExpiresAtMs,
-  selectWheelSlot,
+  activeWheelSlotCount,
+  selectWheelSlotByIndex,
   serviceSessionExpiresAtMs,
   wheelRewardOutcome,
 } from "./businessRules";
@@ -72,7 +74,16 @@ import {
   selectQrBranch,
   shouldReuseActiveSession,
 } from "./security";
-import { ZaloRequestError, fetchZaloJson } from "./zaloClient";
+import {
+  ZaloRequestError,
+  classifyZaloRequestFailure,
+  fetchZaloJson,
+  type ZaloRequestCategory,
+} from "./zaloClient";
+import {
+  ZaloGatewayVerificationError,
+  createZaloIdentityVerifier,
+} from "./zaloIdentityVerifier";
 import { decodeZaloPhoneNumber } from "./zaloPhone";
 import {
   createZaloPrivacyWebhookHandler,
@@ -120,6 +131,7 @@ const functionOptions = {
   enforceAppCheck: process.env.ENFORCE_APP_CHECK === "true",
 };
 const zaloAppSecret = defineSecret("ZALO_APP_SECRET");
+const zaloGatewayHmacSecret = defineSecret("ZALO_GATEWAY_HMAC_SECRET");
 const zaloOpenApiKey = defineSecret("ZALO_OPEN_API_KEY");
 const qrSigningSecret = defineSecret("QR_SIGNING_SECRET");
 const qrFunctionOptions = {
@@ -128,14 +140,14 @@ const qrFunctionOptions = {
 };
 const zaloFunctionOptions = {
   ...functionOptions,
-  secrets: [zaloAppSecret],
+  secrets: [zaloAppSecret, zaloGatewayHmacSecret],
   timeoutSeconds: 30,
   concurrency: 40,
   maxInstances: 30,
 };
 const zaloQrFunctionOptions = {
   ...zaloFunctionOptions,
-  secrets: [zaloAppSecret, qrSigningSecret],
+  secrets: [zaloAppSecret, zaloGatewayHmacSecret, qrSigningSecret],
 };
 const SESSION_POINT_REQUEST_WINDOW_MS = 12 * 60 * 60 * 1000;
 const OPEN_SESSION_STATUSES = ["waiting", "serving", "pending_approval"] as const;
@@ -143,6 +155,7 @@ const SESSION_EXPIRY_BATCH_SIZE = 100;
 const ZALO_PROFILE_CACHE_TTL_MS = 60_000;
 const ZALO_PROFILE_CACHE_MAX_SIZE = 500;
 const REWARD_RESTORE_WINDOW_MS = 15 * 60 * 1000;
+const DIRECT_POINT_AWARD_DAILY_LIMIT = 100;
 const PUBLIC_RATE_LIMITS = {
   resolveCustomerQr: { windowMs: 60_000, tokenLimit: 30, ipLimit: 180 },
   registerCustomerFromZalo: { windowMs: 60_000, tokenLimit: 6, ipLimit: 60 },
@@ -1028,8 +1041,25 @@ async function enforceAuthenticatedRateLimit(
   });
 }
 
-async function verifyZaloAccessToken(accessTokenInput: unknown): Promise<ZaloProfile> {
+const ZALO_VERIFICATION_USER_MESSAGE =
+  "Không thể xác minh tài khoản Zalo lúc này. Vui lòng thử lại sau.";
+
+type ZaloVerificationContext = {
+  requestId?: string;
+  functionName?: string;
+};
+
+function createZaloVerificationRequestId() {
+  return `zalo_${randomBytes(12).toString("hex")}`;
+}
+
+async function verifyZaloAccessTokenDirect(
+  accessTokenInput: unknown,
+  context: ZaloVerificationContext = {},
+): Promise<ZaloProfile> {
   const accessToken = requireString(accessTokenInput, "zaloAccessToken");
+  const requestId = context.requestId || createZaloVerificationRequestId();
+  const functionName = context.functionName || "zaloCustomerCallable";
   const accessTokenHash = createHash("sha256").update(accessToken).digest("hex");
   const cachedProfile = zaloProfileCache.get(accessTokenHash);
   if (cachedProfile && cachedProfile.expiresAtMs > Date.now()) {
@@ -1055,6 +1085,7 @@ async function verifyZaloAccessToken(accessTokenInput: unknown): Promise<ZaloPro
   let payload: Record<string, unknown>;
   let responseStatus: number | "network-error" = "network-error";
   let responseErrorCode: string | number = "request-failed";
+  let responseAttempt = 1;
   const safeLogMessage = (value: unknown) => {
     let message = String(value || "Không xác minh được Zalo access token");
     for (const sensitiveValue of [accessToken, appSecret, appsecretProof]) {
@@ -1062,10 +1093,22 @@ async function verifyZaloAccessToken(accessTokenInput: unknown): Promise<ZaloPro
     }
     return message.slice(0, 500);
   };
-  const logVerificationFailure = (errorCode: string | number, message: string) => {
-    console.warn("Không xác minh được danh tính Zalo", {
+  const logVerificationFailure = (
+    errorCode: string | number,
+    message: string,
+    category: ZaloRequestCategory,
+    attempt: number,
+  ) => {
+    console.warn("zalo_identity_verification_failed", {
+      event: "zalo_identity_verification_failed",
+      requestId,
+      function: functionName,
+      region: functionOptions.region,
       status: responseStatus,
       errorCode,
+      category,
+      attempt,
+      timestamp: new Date().toISOString(),
       message: safeLogMessage(message),
     });
   };
@@ -1074,10 +1117,27 @@ async function verifyZaloAccessToken(accessTokenInput: unknown): Promise<ZaloPro
     const result = await fetchZaloJson(endpoint, {
       access_token: accessToken,
       appsecret_proof: appsecretProof,
+    }, {
+      onAttemptFailure: (event) => {
+        console.warn("zalo_identity_verification_attempt_failed", {
+          event: "zalo_identity_verification_attempt_failed",
+          requestId,
+          function: functionName,
+          region: functionOptions.region,
+          status: event.status,
+          errorCode: event.errorCode,
+          category: event.category,
+          attempt: event.attempt,
+          maxAttempts: event.maxAttempts,
+          retryable: event.retryable,
+          timestamp: new Date().toISOString(),
+        });
+      },
     });
     payload = result.payload;
     responseStatus = result.status;
     responseErrorCode = result.errorCode;
+    responseAttempt = result.attempt;
   } catch (error) {
     if (error instanceof ZaloRequestError) {
       responseStatus = error.status;
@@ -1085,22 +1145,40 @@ async function verifyZaloAccessToken(accessTokenInput: unknown): Promise<ZaloPro
     }
     const message =
       error instanceof Error ? error.message : "Không xác minh được Zalo access token";
-    logVerificationFailure(responseErrorCode, message);
-    throw new HttpsError("unauthenticated", message);
+    const category =
+      error instanceof ZaloRequestError
+        ? error.category
+        : classifyZaloRequestFailure(message);
+    const attempt = error instanceof ZaloRequestError ? error.attempt : 1;
+    logVerificationFailure(responseErrorCode, message, category, attempt);
+    throw new HttpsError("unauthenticated", ZALO_VERIFICATION_USER_MESSAGE, {
+      errorCode: "ZALO_VERIFICATION_FAILED",
+      requestId,
+      category,
+    });
   }
 
   const errorCode = Number(payload.error ?? 0);
   if (Number.isFinite(errorCode) && errorCode !== 0) {
     const message = String(payload.message ?? "Zalo access token không hợp lệ");
-    logVerificationFailure(errorCode, message);
-    throw new HttpsError("unauthenticated", message);
+    const category = classifyZaloRequestFailure(message);
+    logVerificationFailure(errorCode, message, category, responseAttempt);
+    throw new HttpsError("unauthenticated", ZALO_VERIFICATION_USER_MESSAGE, {
+      errorCode: "ZALO_VERIFICATION_FAILED",
+      requestId,
+      category,
+    });
   }
 
   const zaloUserId = String(payload.id ?? "").trim();
   if (!zaloUserId) {
     const message = "Zalo không trả về user id hợp lệ";
-    logVerificationFailure("missing-user-id", message);
-    throw new HttpsError("unauthenticated", message);
+    logVerificationFailure("missing-user-id", message, "INVALID_RESPONSE", 1);
+    throw new HttpsError("unauthenticated", ZALO_VERIFICATION_USER_MESSAGE, {
+      errorCode: "ZALO_VERIFICATION_FAILED",
+      requestId,
+      category: "INVALID_RESPONSE",
+    });
   }
 
   const profile = { zaloUserId };
@@ -1116,6 +1194,60 @@ async function verifyZaloAccessToken(accessTokenInput: unknown): Promise<ZaloPro
   });
 
   return profile;
+}
+
+async function verifyZaloAccessToken(
+  accessTokenInput: unknown,
+  context: ZaloVerificationContext = {},
+): Promise<ZaloProfile> {
+  const accessToken = requireString(accessTokenInput, "zaloAccessToken");
+  const requestId = context.requestId || createZaloVerificationRequestId();
+  const appSecret =
+    zaloAppSecret.value() || process.env.ZALO_APP_SECRET || process.env.ZALO_SECRET_KEY || "";
+  if (!appSecret || appSecret.includes("your-")) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Thiếu ZALO_APP_SECRET để xác minh danh tính Zalo ở server",
+    );
+  }
+  const mode = String(process.env.ZALO_VERIFIER_MODE || "").trim().toLowerCase();
+  let verifier;
+  try {
+    verifier = createZaloIdentityVerifier({
+      mode,
+      gatewayUrl: process.env.ZALO_GATEWAY_URL,
+      gatewayKeyId: process.env.ZALO_GATEWAY_KEY_ID,
+      gatewayHmacSecret: process.env.ZALO_GATEWAY_HMAC_SECRET,
+      zaloAppSecret: appSecret,
+      directVerify: ({ accessToken: directToken }) =>
+        verifyZaloAccessTokenDirect(directToken, { ...context, requestId }),
+    });
+  } catch {
+    throw new HttpsError(
+      "failed-precondition",
+      "Máy chủ chưa được cấu hình đầy đủ để xác minh danh tính Zalo",
+      { errorCode: "ZALO_VERIFIER_CONFIGURATION_INVALID", requestId },
+    );
+  }
+  try {
+    return await verifier.verify({ accessToken, requestId });
+  } catch (error) {
+    if (error instanceof HttpsError) throw error;
+    const gatewayCode =
+      error instanceof ZaloGatewayVerificationError ? error.code : "ZALO_UNAVAILABLE";
+    console.warn("zalo_gateway_verification_failed", {
+      event: "zalo_gateway_verification_failed",
+      requestId,
+      function: context.functionName || "zaloCustomerCallable",
+      errorCode: gatewayCode,
+      timestamp: new Date().toISOString(),
+    });
+    throw new HttpsError("unauthenticated", ZALO_VERIFICATION_USER_MESSAGE, {
+      errorCode: "ZALO_VERIFICATION_FAILED",
+      requestId,
+      category: gatewayCode,
+    });
+  }
 }
 
 function last4(phone?: string): string | undefined {
@@ -1471,6 +1603,10 @@ function startOfTodayBangkokMs(): number {
   return startUtcMs - offsetMs;
 }
 
+function bangkokDateKey(timestampMs: number): string {
+  return new Date(timestampMs + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
 async function spinWheelForCustomer(
   salonId: string,
   customerId: string,
@@ -1536,16 +1672,18 @@ async function spinWheelForCustomer(
       throw new HttpsError("failed-precondition", "Khách chưa đủ điểm để quay");
     }
 
-    const selectedSlot = selectWheelSlot(
-      Array.isArray(wheel?.slots)
-        ? wheel.slots.map((slot: LuckyWheelSlot) => ({
-            label: String(slot.label || "").trim(),
-            active: slot.active !== false,
-            type: normalizeWheelSlotType(slot.type, String(slot.label || "")),
-          }))
-        : [],
-      Math.random(),
-    );
+    const wheelSlots = Array.isArray(wheel?.slots)
+      ? wheel.slots.map((slot: LuckyWheelSlot) => ({
+          label: String(slot.label || "").trim(),
+          active: slot.active !== false,
+          type: normalizeWheelSlotType(slot.type, String(slot.label || "")),
+        }))
+      : [];
+    const availableSlotCount = activeWheelSlotCount(wheelSlots);
+    const selectedSlot =
+      availableSlotCount > 0
+        ? selectWheelSlotByIndex(wheelSlots, randomInt(availableSlotCount))
+        : null;
     if (!selectedSlot) {
       throw new HttpsError("failed-precondition", "Vòng quay chưa có ô thưởng đang bật");
     }
@@ -1671,6 +1809,7 @@ export const createSalon = onCall(qrFunctionOptions, async (request) => {
         role: "owner",
         isActive: true,
         canRedeemRewards: true,
+        canAwardPointsDirectly: true,
         branchIds: [],
         createdAt: now,
         updatedAt: now,
@@ -1726,6 +1865,7 @@ export const createStaffProfile = onCall(functionOptions, async (request) => {
   const name = limitedString(request.data?.name, "name", 80);
   const phone = optionalLimitedString(request.data?.phone, "phone", 30);
   const canRedeemRewards = Boolean(request.data?.canRedeemRewards);
+  const canAwardPointsDirectly = Boolean(request.data?.canAwardPointsDirectly);
   const branchIds = await resolveStaffBranchIds(salonId, request.data?.branchIds);
   const now = Timestamp.now();
   let staffUid = "";
@@ -1749,6 +1889,7 @@ export const createStaffProfile = onCall(functionOptions, async (request) => {
       role: "staff",
       isActive: true,
       canRedeemRewards,
+      canAwardPointsDirectly,
       branchId: branchIds[0],
       branchIds,
       inviteStatus: "pending",
@@ -1765,7 +1906,7 @@ export const createStaffProfile = onCall(functionOptions, async (request) => {
         action: "staff.created",
         targetType: "user",
         targetId: staffUid,
-        after: { isActive: true, canRedeemRewards, branchIds },
+        after: { isActive: true, canRedeemRewards, canAwardPointsDirectly, branchIds },
         createdAt: now,
       }),
     );
@@ -2274,6 +2415,10 @@ export const updateStaffProfile = onCall(functionOptions, async (request) => {
   const isActive = typeof request.data?.isActive === "boolean" ? request.data.isActive : undefined;
   const canRedeemRewards =
     typeof request.data?.canRedeemRewards === "boolean" ? request.data.canRedeemRewards : undefined;
+  const canAwardPointsDirectly =
+    typeof request.data?.canAwardPointsDirectly === "boolean"
+      ? request.data.canAwardPointsDirectly
+      : undefined;
   const branchIds =
     request.data?.branchIds === undefined
       ? undefined
@@ -2305,6 +2450,9 @@ export const updateStaffProfile = onCall(functionOptions, async (request) => {
   if (canRedeemRewards !== undefined) {
     payload.canRedeemRewards = canRedeemRewards;
   }
+  if (canAwardPointsDirectly !== undefined) {
+    payload.canAwardPointsDirectly = canAwardPointsDirectly;
+  }
   if (branchIds) {
     payload.branchId = branchIds[0];
     payload.branchIds = branchIds;
@@ -2330,11 +2478,14 @@ export const updateStaffProfile = onCall(functionOptions, async (request) => {
       before: {
         isActive: staffSnap.data()?.isActive ?? null,
         canRedeemRewards: staffSnap.data()?.canRedeemRewards ?? null,
+        canAwardPointsDirectly: staffSnap.data()?.canAwardPointsDirectly ?? null,
         branchIds: staffSnap.data()?.branchIds ?? [],
       },
       after: {
         isActive: isActive ?? staffSnap.data()?.isActive ?? null,
         canRedeemRewards: canRedeemRewards ?? staffSnap.data()?.canRedeemRewards ?? null,
+        canAwardPointsDirectly:
+          canAwardPointsDirectly ?? staffSnap.data()?.canAwardPointsDirectly ?? null,
         branchIds: branchIds ?? staffSnap.data()?.branchIds ?? [],
       },
     }),
@@ -2557,6 +2708,7 @@ export const listStaffProfiles = onCall(functionOptions, async (request) => {
         role: "staff",
         isActive: Boolean(data.isActive),
         canRedeemRewards: Boolean(data.canRedeemRewards),
+        canAwardPointsDirectly: Boolean(data.canAwardPointsDirectly),
         branchId: String(data.branchId || ""),
         branchIds: Array.isArray(data.branchIds)
           ? data.branchIds.filter((value): value is string => typeof value === "string")
@@ -2630,6 +2782,7 @@ export const resolveCustomerQr = onCall(qrFunctionOptions, async (request) => {
 });
 
 export const registerCustomerFromZalo = onCall(zaloQrFunctionOptions, async (request) => {
+  const verificationRequestId = createZaloVerificationRequestId();
   const salonId = requireString(request.data?.salonId, "salonId");
   await enforcePublicRequestPolicy(
     "registerCustomerFromZalo",
@@ -2643,7 +2796,10 @@ export const registerCustomerFromZalo = onCall(zaloQrFunctionOptions, async (req
     "Salon đang tạm ngừng nhận lượt check-in mới.",
     request.data?.appVersion,
   );
-  const zaloProfile = await verifyZaloAccessToken(request.data?.zaloAccessToken);
+  const zaloProfile = await verifyZaloAccessToken(request.data?.zaloAccessToken, {
+    requestId: verificationRequestId,
+    functionName: "registerCustomerFromZalo",
+  });
   const zaloUserId = zaloProfile.zaloUserId;
   const name =
     optionalLimitedString(request.data?.name, "name", 80) ??
@@ -3393,7 +3549,8 @@ export const submitPointRequest = onCall(functionOptions, async (request) => {
   );
   const staffName = user.name || "Nhân viên";
   const salonSnap = await db.collection("salons").doc(salonId).get();
-  const pointsRequested = Math.max(1, Math.floor(Number(salonSnap.data()?.pointPerVisit ?? 1)));
+  const pointPerVisit = Math.max(1, Math.floor(Number(salonSnap.data()?.pointPerVisit ?? 1)));
+  const pointsRequested = pointPerVisit;
   const photoUrls = safePhotoUrls(request.data?.photoUrls);
   const photoPaths = safePhotoPaths(request.data?.photoPaths);
   const now = Timestamp.now();
@@ -3407,7 +3564,17 @@ export const submitPointRequest = onCall(functionOptions, async (request) => {
       submittedRequest?.sessionId === sessionId &&
       submittedRequest?.staffId === uid
     ) {
-      return { requestId: requestRef.id, alreadySubmitted: true };
+      return {
+        requestId: requestRef.id,
+        alreadySubmitted: true,
+        status: submittedRequest?.status === "approved" ? "approved" : "pending_approval",
+        approvalMode: submittedRequest?.approvalMode ?? "owner_approval",
+        pointsAdded: Number(submittedRequest?.pointsAdded ?? pointsRequested),
+        pointsAfter:
+          submittedRequest?.status === "approved"
+            ? Number(submittedRequest?.pointsAfter ?? 0)
+            : undefined,
+      };
     }
     throw apiError(
       "already-exists",
@@ -3416,6 +3583,13 @@ export const submitPointRequest = onCall(functionOptions, async (request) => {
     );
   }
   let alreadySubmitted = false;
+  let resultStatus: "approved" | "pending_approval" = "pending_approval";
+  let approvalMode: "staff_direct" | "owner_direct" | "owner_approval" = "owner_approval";
+  let resultPointsAfter: number | undefined;
+  const directAwardDateKey = bangkokDateKey(now.toMillis());
+  const directAwardCounterRef = db
+    .collection("staff_daily_point_awards")
+    .doc(createHash("sha256").update(`${salonId}:${uid}:${directAwardDateKey}`).digest("hex"));
 
   if (photoUrls.length > 0 || photoPaths.length > 0) {
     await assertFeatureEnabled(
@@ -3467,9 +3641,10 @@ export const submitPointRequest = onCall(functionOptions, async (request) => {
   }
 
   await db.runTransaction(async (tx) => {
-    const [sessionSnap, existingRequestSnap] = await Promise.all([
+    const [sessionSnap, existingRequestSnap, directAwardCounterSnap] = await Promise.all([
       tx.get(sessionRef),
       tx.get(requestRef),
+      tx.get(directAwardCounterRef),
     ]);
     const operationSnaps: FirebaseFirestore.DocumentSnapshot[] = [];
     for (const photoPath of photoPaths) {
@@ -3488,6 +3663,12 @@ export const submitPointRequest = onCall(functionOptions, async (request) => {
         existingRequest?.staffId === uid
       ) {
         alreadySubmitted = true;
+        resultStatus = existingRequest?.status === "approved" ? "approved" : "pending_approval";
+        approvalMode = existingRequest?.approvalMode ?? "owner_approval";
+        resultPointsAfter =
+          existingRequest?.status === "approved"
+            ? Number(existingRequest?.pointsAfter ?? 0)
+            : undefined;
         return;
       }
       throw apiError(
@@ -3564,6 +3745,41 @@ export const submitPointRequest = onCall(functionOptions, async (request) => {
       }
     }
 
+    const directAwardsToday = Math.max(0, Number(directAwardCounterSnap.data()?.awards ?? 0));
+    const decision = directPointAwardDecision({
+      role: user.role,
+      canAwardPointsDirectly: user.canAwardPointsDirectly === true,
+      pointsRequested,
+      pointPerVisit,
+      directAwardsToday,
+      dailyAwardLimit: DIRECT_POINT_AWARD_DAILY_LIMIT,
+    });
+    const autoApprove = decision === "auto_approve";
+    approvalMode = autoApprove
+      ? user.role === "owner"
+        ? "owner_direct"
+        : "staff_direct"
+      : "owner_approval";
+    resultStatus = autoApprove ? "approved" : "pending_approval";
+    const pointsBefore = Math.max(0, Number(customer.points ?? 0));
+    const pointsAfter = pointsBefore + pointsRequested;
+    resultPointsAfter = autoApprove ? pointsAfter : undefined;
+    const canKeepPhotos = customer.allowPhoto === true;
+    const recordPhotoUrls = canKeepPhotos
+      ? trustedStoredHaircutPhotoUrls(photoUrls, {
+          salonId,
+          customerId: String(session.customerId || ""),
+          sessionId,
+        })
+      : [];
+    const recordPhotoPaths = canKeepPhotos
+      ? trustedStoredHaircutPhotoPaths(photoPaths, {
+          salonId,
+          customerId: String(session.customerId || ""),
+          sessionId,
+        })
+      : [];
+
     tx.set(requestRef, {
       salonId,
       branchId,
@@ -3573,8 +3789,8 @@ export const submitPointRequest = onCall(functionOptions, async (request) => {
       staffId: uid,
       staffName,
       note,
-      photoUrls,
-      photoPaths,
+      photoUrls: autoApprove ? recordPhotoUrls : photoUrls,
+      photoPaths: autoApprove ? recordPhotoPaths : photoPaths,
       pointsRequested,
       pointsAdded: pointsRequested,
       customerSummary: {
@@ -3583,41 +3799,116 @@ export const submitPointRequest = onCall(functionOptions, async (request) => {
         points: Math.max(0, Number(customer.points ?? 0)),
         allowPhoto: Boolean(customer.allowPhoto),
       },
-      status: "pending",
+      status: autoApprove ? "approved" : "pending",
+      approvalMode,
       idempotencyKey: sessionId,
-      processedAt: null,
-      processedBy: null,
+      approvedBy: autoApprove ? uid : null,
+      approvedAt: autoApprove ? now : null,
+      processedAt: autoApprove ? now : null,
+      processedBy: autoApprove ? uid : null,
+      pointsBefore: autoApprove ? pointsBefore : null,
+      pointsAfter: autoApprove ? pointsAfter : null,
       createdAt: now,
       updatedAt: now,
     });
 
-    tx.set(
-      sessionRef,
-      {
-        status: "pending_approval",
+    if (autoApprove) {
+      const recordId = createHash("sha256").update(`haircut-record:${sessionId}`).digest("hex");
+      tx.update(customerRef, {
+        points: pointsAfter,
+        lastVisitAt: now,
         updatedAt: now,
-      },
-      { merge: true },
-    );
-    tx.set(
-      activeSessionRefFor(salonId, String(session.customerId || "")),
-      {
+      });
+      tx.set(db.collection("haircut_records").doc(recordId), {
         salonId,
         branchId,
         branchName: session.branchName ?? "",
-        branchAddress: session.branchAddress ?? "",
         customerId: session.customerId,
-        sessionId,
-        qrType: session.qrType ?? null,
-        legacyMirrorId: session.legacyMirrorId ?? null,
-        status: "pending_approval",
-        assignedStaffId: uid,
-        assignedStaffName: staffName,
-        createdAt: session.createdAt ?? now,
-        updatedAt: now,
-      },
-      { merge: true },
-    );
+        staffId: uid,
+        staffName,
+        pointRequestId: sessionId,
+        note,
+        photoUrls: recordPhotoUrls,
+        photoPaths: recordPhotoPaths,
+        pointsAdded: pointsRequested,
+        approvedBy: uid,
+        approvalMode,
+        createdAt: now,
+      });
+      tx.set(
+        sessionRef,
+        { status: "completed", isOpen: false, completedAt: now, updatedAt: now },
+        { merge: true },
+      );
+      tx.delete(activeSessionRefFor(salonId, String(session.customerId || "")));
+      if (user.role === "staff") {
+        tx.set(
+          directAwardCounterRef,
+          {
+            salonId,
+            staffId: uid,
+            dateKey: directAwardDateKey,
+            awards: directAwardsToday + 1,
+            pointsAwarded:
+              Math.max(0, Number(directAwardCounterSnap.data()?.pointsAwarded ?? 0)) +
+              pointsRequested,
+            updatedAt: now,
+          },
+          { merge: true },
+        );
+      }
+      tx.set(
+        db.collection("audit_events").doc(),
+        auditEventData({
+          salonId,
+          branchId,
+          actorId: uid,
+          actorRole: user.role,
+          action: "point_request.auto_approved",
+          targetType: "point_request",
+          targetId: sessionId,
+          before: { status: "serving", points: pointsBefore },
+          after: { status: "approved", points: pointsAfter, pointsAdded: pointsRequested },
+          createdAt: now,
+        }),
+      );
+      tx.set(
+        db.collection("audit_events").doc(),
+        auditEventData({
+          salonId,
+          branchId,
+          actorId: uid,
+          actorRole: user.role,
+          action: "session.completed",
+          targetType: "chair_session",
+          targetId: sessionId,
+          before: { status: "serving" },
+          after: { status: "completed", approvalMode },
+          createdAt: now,
+        }),
+      );
+    } else {
+      tx.set(sessionRef, { status: "pending_approval", updatedAt: now }, { merge: true });
+      tx.set(
+        activeSessionRefFor(salonId, String(session.customerId || "")),
+        {
+          salonId,
+          branchId,
+          branchName: session.branchName ?? "",
+          branchAddress: session.branchAddress ?? "",
+          customerId: session.customerId,
+          sessionId,
+          qrType: session.qrType ?? null,
+          legacyMirrorId: session.legacyMirrorId ?? null,
+          status: "pending_approval",
+          assignedStaffId: uid,
+          assignedStaffName: staffName,
+          createdAt: session.createdAt ?? now,
+          updatedAt: now,
+        },
+        { merge: true },
+      );
+    }
     for (const operationSnap of operationSnaps) {
       tx.set(
         operationSnap.ref,
@@ -3633,7 +3924,14 @@ export const submitPointRequest = onCall(functionOptions, async (request) => {
     }
   });
 
-  return { requestId: requestRef.id, alreadySubmitted };
+  return {
+    requestId: requestRef.id,
+    alreadySubmitted,
+    status: resultStatus,
+    approvalMode,
+    pointsAdded: pointsRequested,
+    pointsAfter: resultPointsAfter,
+  };
 });
 
 export const updatePendingPointRequestPhotos = onCall(functionOptions, async (request) => {
@@ -4874,6 +5172,7 @@ export const getCustomerSessionFromZalo = onCall(zaloFunctionOptions, async (req
     : [];
 
   return {
+    identityBinding: createHash("sha256").update(zaloProfile.zaloUserId).digest("hex"),
     sessionStatus:
       session.status === "serving" && !session.assignedStaffId
         ? "pending_approval"
@@ -4916,7 +5215,7 @@ export const getCustomerHistoryFromZalo = onCall(zaloFunctionOptions, async (req
   const customerId = customerIdFor(salonId, zaloProfile.zaloUserId);
   const limit = boundedQueryLimit(request.data?.limit, 20, 50);
 
-  const [recordsSnap, customerSnap] = await Promise.all([
+  const [recordsSnap, customerSnap, salonSnap] = await Promise.all([
     db
       .collection("haircut_records")
       .where("salonId", "==", salonId)
@@ -4925,6 +5224,7 @@ export const getCustomerHistoryFromZalo = onCall(zaloFunctionOptions, async (req
       .limit(limit)
       .get(),
     db.collection("customers").doc(customerId).get(),
+    db.collection("salons").doc(salonId).get(),
   ]);
   const canViewPhotos =
     customerSnap.exists &&
@@ -4949,6 +5249,8 @@ export const getCustomerHistoryFromZalo = onCall(zaloFunctionOptions, async (req
       staffNames.set(doc.id, name);
     }
   });
+  const salonName =
+    salonSnap.exists && typeof salonSnap.data()?.name === "string" ? salonSnap.data()?.name : "";
 
   return {
     records: await Promise.all(
@@ -4957,7 +5259,14 @@ export const getCustomerHistoryFromZalo = onCall(zaloFunctionOptions, async (req
         return {
           id: doc.id,
           createdAtMs: timestampMillis(data.createdAt),
-          staffName: staffNames.get(data.staffId) ?? "Nhân viên",
+          salonName,
+          branchId: typeof data.branchId === "string" ? data.branchId : "",
+          branchName: typeof data.branchName === "string" ? data.branchName : "",
+          staffName:
+            staffNames.get(data.staffId) ??
+            (typeof data.staffName === "string" ? data.staffName : ""),
+          serviceName: typeof data.serviceName === "string" ? data.serviceName : "",
+          rewardName: typeof data.rewardName === "string" ? data.rewardName : "",
           note: data.note ?? "",
           photoUrls: canViewPhotos
             ? await resolvedHaircutPhotoUrls(data.photoUrls, data.photoPaths, {
@@ -5007,7 +5316,9 @@ export const getCustomerRewardsFromZalo = onCall(zaloFunctionOptions, async (req
           rewardName: data.rewardName ?? "",
           rewardCode: data.rewardCode ?? "",
           status,
+          branchName: String(data.branchName || "Chi nhánh phát hành"),
           createdAtMs: timestampMillis(data.createdAt),
+          usedAtMs: timestampMillis(data.usedAt),
           expiresAtMs: timestampMillis(data.expiresAt),
         },
       ];
@@ -7263,6 +7574,7 @@ async function deleteSalonFirestoreData(salonId: string) {
     "mirrors",
     "point_requests",
     "reward_history",
+    "staff_daily_point_awards",
     "support_requests",
     "users",
   ];

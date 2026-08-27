@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { BrandLogo } from "../components/BrandLogo";
+import { MINI_APP_MARK } from "../config/branding";
 import { getCustomerWheelConfig } from "../services/api";
 import { AppSession, defaultLuckyWheelConfig, TabKey } from "../services/types";
 import { activeWheelSlots } from "../services/wheel";
@@ -119,7 +120,7 @@ export function HomePage({
         >
           <div>
             <Sparkles size={25} />
-            <span>HAIRCUT</span>
+            <span>{MINI_APP_MARK}</span>
           </div>
         </div>
 
@@ -246,7 +247,7 @@ function shortStatusText(status: AppSession["sessionStatus"], assignedStaffName?
 
 function staffStepTitle(status: AppSession["sessionStatus"]) {
   if (status === "completed") {
-    return "Đã ghi chú";
+    return "Đã hoàn tất";
   }
   if (status === "cancelled") {
     return "Đã xử lý";
@@ -272,7 +273,10 @@ function staffStepText(status: AppSession["sessionStatus"], assignedStaffName?: 
       ? `${assignedStaffName} đang phụ trách.`
       : "Đã có nhân viên phụ trách.";
   }
-  return "Đã gửi sang chủ.";
+  if (status === "pending_approval") {
+    return "Đã gửi chủ salon duyệt điểm.";
+  }
+  return "Dịch vụ đã hoàn tất.";
 }
 
 function ownerStepTitle(status: AppSession["sessionStatus"]) {
@@ -282,7 +286,10 @@ function ownerStepTitle(status: AppSession["sessionStatus"]) {
   if (status === "cancelled") {
     return "Không cộng điểm";
   }
-  return "Chờ chủ salon";
+  if (status === "pending_approval") {
+    return "Chờ chủ duyệt";
+  }
+  return "Cập nhật điểm";
 }
 
 function ownerStepText(status: AppSession["sessionStatus"]) {
@@ -292,7 +299,10 @@ function ownerStepText(status: AppSession["sessionStatus"]) {
   if (status === "cancelled") {
     return "Hỏi salon nếu cần.";
   }
-  return "Duyệt sau khi cắt.";
+  if (status === "pending_approval") {
+    return "Chủ salon đang kiểm tra.";
+  }
+  return "Điểm cập nhật khi dịch vụ hoàn tất.";
 }
 
 function branchLabel(session: AppSession) {

@@ -2,6 +2,8 @@
 
 HAIRCUT là nền tảng chăm sóc và giữ chân khách hàng dành cho salon tóc. Hệ thống kết nối trải nghiệm khách trên Zalo Mini App với quy trình vận hành của nhân viên và chủ salon: check-in bằng QR, quản lý hàng chờ, duyệt điểm, lưu lịch sử cắt tóc, quay thưởng và đổi mã quà.
 
+Zalo Mini App dành cho khách được phát hành chính thức với tên **CH Haircut Salon**, Mini App ID `2038116772828167300`. Tên HAIRCUT trong repository tiếp tục chỉ nền tảng kỹ thuật, Manager và Admin; không phải tên Mini App gửi Zalo xét duyệt.
+
 ## Vai trò
 
 - **Khách hàng:** quét QR, xác nhận thông tin Zalo, tạo lượt cắt, theo dõi trạng thái, xem điểm và lịch sử, quay thưởng và quản lý mã quà.
@@ -166,13 +168,18 @@ Không đặt App Secret, Open API Key, QR signing secret, access token, mật k
 
 ## URL công khai
 
-- Khách hàng: <https://haircut-c7d12.web.app>
-- Chủ salon: <https://haircut-c7d12.web.app/owner>
-- Nhân viên: <https://haircut-c7d12.web.app/staff>
-- Chính sách quyền riêng tư: <https://haircut-c7d12.web.app/privacy>
-- Điều khoản sử dụng: <https://haircut-c7d12.web.app/terms>
+- Khách hàng (sau khi Firebase báo `Connected`): <https://app.chhaircutsalon.cc>
+- Firebase URL mặc định, luôn được giữ làm fallback: <https://haircut-c7d12.web.app>
+- Chủ salon: <https://app.chhaircutsalon.cc/owner>
+- Nhân viên: <https://app.chhaircutsalon.cc/staff>
+- Chính sách quyền riêng tư: <https://app.chhaircutsalon.cc/privacy>
+- Điều khoản sử dụng: <https://app.chhaircutsalon.cc/terms>
 - Zalo Mini App: <https://zalo.me/s/2038116772828167300>
 - HAIRCUT Admin: URL riêng được điền sau khi tạo Firebase Hosting site và đặt `VITE_ADMIN_URL`.
+
+Custom domain khách dùng chung Firebase Hosting site `haircut-c7d12`; không thay thế
+hai domain mặc định `web.app`/`firebaseapp.com`. Xem checklist DNS, Auth và SSL tại
+[`docs/CUSTOM_DOMAIN_APP_CLOUDFLARE.md`](docs/CUSTOM_DOMAIN_APP_CLOUDFLARE.md).
 
 ## Triển khai
 
