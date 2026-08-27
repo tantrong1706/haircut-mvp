@@ -2,7 +2,7 @@ export function zmpLoginUrl(value) {
   return String(value || "");
 }
 
-export function salonTestingUrl(value, version = "19") {
+export function salonTestingUrl(value, version = "20") {
   const input = String(value || "");
   if (!input) {
     return input;
