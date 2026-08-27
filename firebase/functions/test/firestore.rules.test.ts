@@ -299,6 +299,7 @@ describe("Firestore production rules", () => {
       ["active_service_sessions", "active-a"],
       ["audit_events", "audit-a"],
       ["device_tokens", "token-a"],
+      ["staff_daily_point_awards", "staff-a-2026-08-26"],
       ["support_requests", "support-a"],
     ] as const;
 

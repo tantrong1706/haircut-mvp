@@ -2,12 +2,14 @@ import { useEffect, useMemo, useState } from "react";
 import { BadgeCheck, Copy, Gift, History, RefreshCcw, Ticket } from "lucide-react";
 import { getRewards } from "../services/api";
 import { AppSession, Reward } from "../services/types";
+import { RewardNavigation } from "../components/RewardNavigation";
 
 type Props = {
   session: AppSession;
+  onOpenWheel?: () => void;
 };
 
-export function RewardsPage({ session }: Props) {
+export function RewardsPage({ session, onOpenWheel }: Props) {
   const [rewards, setRewards] = useState<Reward[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -62,6 +64,7 @@ export function RewardsPage({ session }: Props) {
 
   return (
     <section className="page rewards-page">
+      <RewardNavigation active="rewards" onOpenWheel={onOpenWheel} />
       <header className="page-header">
         <p className="eyebrow">Ưu đãi</p>
         <h1>Quà của tôi</h1>

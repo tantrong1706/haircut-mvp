@@ -59,9 +59,9 @@ với dữ liệu giả; source, Git và tài liệu không chứa deeplink ho�
 5. Kiểm tra trạng thái Waiting trên Mini App khách.
 6. Nhân viên mở HAIRCUT Manager và nhận khách.
 7. Kiểm tra trạng thái Serving trên Mini App khách.
-8. Nhân viên hoàn tất phục vụ và gửi yêu cầu cộng điểm.
-9. Chủ salon mở HAIRCUT Manager và duyệt yêu cầu điểm.
-10. Kiểm tra lượt chuyển sang Completed.
+8. Nhân viên tin cậy bấm "Hoàn tất & cộng điểm"; ghi chú là tùy chọn.
+9. Nếu tài khoản không có quyền trực tiếp hoặc đạt hạn mức ngày, owner duyệt yêu cầu fallback.
+10. Kiểm tra lượt chuyển sang Completed và không cộng trùng khi bấm/gửi lại.
 11. Kiểm tra số điểm của khách đã được cập nhật.
 12. Mở Lịch sử để xem lượt cắt vừa hoàn tất.
 13. Mở Vòng quay và thực hiện quay khi đủ điểm.

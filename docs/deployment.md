@@ -112,10 +112,10 @@ Build bằng `npm run build` trong `apps/admin-web`. Trước deploy phải tạ
 - Webhook từ chối request sai chữ ký, chấp nhận `user.revoke.consent` hợp lệ và trả cùng kết quả an toàn khi Zalo gửi lại.
 - Owner tạo/sửa/khóa chi nhánh, xoay QR và lọc dashboard mà không cần F5.
 - QR salon cho chọn chi nhánh; QR chi nhánh mở thẳng đúng tên và địa chỉ; QR Gương 1 cũ vẫn hoạt động trong giai đoạn chuyển đổi.
-- Staff gửi một yêu cầu điểm duy nhất cho một phiên.
+- Staff tin cậy hoàn tất và cộng điểm trực tiếp đúng một lần; staff thường tự chuyển owner duyệt.
 - Staff phải nhận khách trước; tài khoản khác không thể gửi điểm cho lượt đã có người phụ trách.
 - Lời mời nhân viên mở được trang Firebase đặt mật khẩu và nhân viên đăng nhập thành công sau khi đặt.
-- Owner duyệt; khách thấy điểm/trạng thái cập nhật.
+- Khách thấy điểm/trạng thái cập nhật ngay sau auto-approve hoặc sau khi owner duyệt fallback.
 - Khi tắt mạng rồi bật lại, trang khách giữ phiên và tự đồng bộ hoặc cho bấm Thử lại.
 - Tìm khách tải được trang tiếp theo, dashboard tự đổi số liệu mà không cần F5.
 - QR sai token và tài khoản salon khác đều bị từ chối.

@@ -18,6 +18,7 @@ import {
   getManagerPointRequestHistory,
   getManagerRewardHistory,
   getManagerSessionHistory,
+  listStaffProfiles,
   redeemRewardCode,
   rejectPointRequest,
   requestSalonDeletion,
@@ -26,6 +27,7 @@ import {
   spinLuckyWheel,
   submitPointRequest,
   updatePendingPointRequestPhotos,
+  updateStaffProfile,
   updateSystemAdminUserStatus,
   updateSystemAdminSalonStatus,
   updateSystemFeatureFlags,
@@ -172,38 +174,44 @@ describe("callable transactions", () => {
     const now = Timestamp.now();
     await seedOwner("owner-direct-points", salonId, { pointPerVisit: 2, customerCount: 1 });
     await seedBranch(salonId, branchId);
-    await db.collection("users").doc("staff-direct-points").set({
-      salonId,
-      role: "staff",
-      name: "Nhân viên tin cậy",
-      isActive: true,
-      canAwardPointsDirectly: true,
-      branchIds: [branchId],
-    });
+    await db
+      .collection("users")
+      .doc("staff-direct-points")
+      .set({
+        salonId,
+        role: "staff",
+        name: "Nhân viên tin cậy",
+        isActive: true,
+        canAwardPointsDirectly: true,
+        branchIds: [branchId],
+      });
     await db.collection("customers").doc(customerId).set({
       salonId,
       name: "Khách cộng trực tiếp",
       points: 3,
       allowPhoto: false,
     });
-    await db.collection("chair_sessions").doc(sessionId).set({
-      salonId,
-      branchId,
-      branchName: "Chi nhánh trực tiếp",
-      customerId,
-      customerSummary: {
-        name: "Khách cộng trực tiếp",
-        phoneLast4: "1234",
-        points: 3,
-        allowPhoto: false,
-      },
-      status: "serving",
-      isOpen: true,
-      assignedStaffId: "staff-direct-points",
-      assignedStaffName: "Nhân viên tin cậy",
-      createdAt: now,
-      expiresAt: Timestamp.fromMillis(now.toMillis() + 60 * 60 * 1000),
-    });
+    await db
+      .collection("chair_sessions")
+      .doc(sessionId)
+      .set({
+        salonId,
+        branchId,
+        branchName: "Chi nhánh trực tiếp",
+        customerId,
+        customerSummary: {
+          name: "Khách cộng trực tiếp",
+          phoneLast4: "1234",
+          points: 3,
+          allowPhoto: false,
+        },
+        status: "serving",
+        isOpen: true,
+        assignedStaffId: "staff-direct-points",
+        assignedStaffName: "Nhân viên tin cậy",
+        createdAt: now,
+        expiresAt: Timestamp.fromMillis(now.toMillis() + 60 * 60 * 1000),
+      });
 
     const first = await submitPointRequest.run(
       requestFor("staff-direct-points", { salonId, sessionId, note: "" }),
@@ -257,19 +265,22 @@ describe("callable transactions", () => {
       points: 0,
       allowPhoto: false,
     });
-    await db.collection("chair_sessions").doc("session-direct-limit").set({
-      salonId,
-      branchId,
-      branchName: "Chi nhánh trực tiếp",
-      customerId: "customer-direct-limit",
-      customerSummary: { name: "Khách vượt hạn mức", points: 0, allowPhoto: false },
-      status: "serving",
-      isOpen: true,
-      assignedStaffId: "staff-direct-points",
-      assignedStaffName: "Nhân viên tin cậy",
-      createdAt: now,
-      expiresAt: Timestamp.fromMillis(now.toMillis() + 60 * 60 * 1000),
-    });
+    await db
+      .collection("chair_sessions")
+      .doc("session-direct-limit")
+      .set({
+        salonId,
+        branchId,
+        branchName: "Chi nhánh trực tiếp",
+        customerId: "customer-direct-limit",
+        customerSummary: { name: "Khách vượt hạn mức", points: 0, allowPhoto: false },
+        status: "serving",
+        isOpen: true,
+        assignedStaffId: "staff-direct-points",
+        assignedStaffName: "Nhân viên tin cậy",
+        createdAt: now,
+        expiresAt: Timestamp.fromMillis(now.toMillis() + 60 * 60 * 1000),
+      });
 
     const limited = await submitPointRequest.run(
       requestFor("staff-direct-points", {
@@ -289,6 +300,44 @@ describe("callable transactions", () => {
     expect(
       (await db.collection("chair_sessions").doc("session-direct-limit").get()).data()?.status,
     ).toBe("pending_approval");
+  });
+
+  it("chỉ owner cấp và đọc lại quyền cộng điểm trực tiếp của nhân viên", async () => {
+    const salonId = "salon-direct-permission";
+    const branchId = "branch-direct-permission";
+    await seedOwner("owner-direct-permission", salonId);
+    await seedBranch(salonId, branchId);
+    await db.collection("users").doc("staff-direct-permission").set({
+      salonId,
+      role: "staff",
+      name: "Nhân viên chờ cấp quyền",
+      email: "staff-direct@example.com",
+      isActive: true,
+      canAwardPointsDirectly: false,
+      branchId,
+      branchIds: [branchId],
+    });
+
+    await updateStaffProfile.run(
+      requestFor("owner-direct-permission", {
+        salonId,
+        uid: "staff-direct-permission",
+        canAwardPointsDirectly: true,
+      }),
+    );
+    const staff = await listStaffProfiles.run(requestFor("owner-direct-permission", { salonId }));
+    expect(staff.staff).toContainEqual(
+      expect.objectContaining({ uid: "staff-direct-permission", canAwardPointsDirectly: true }),
+    );
+    await expect(
+      updateStaffProfile.run(
+        requestFor("staff-direct-permission", {
+          salonId,
+          uid: "staff-direct-permission",
+          canAwardPointsDirectly: false,
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "permission-denied" });
   });
 
   it("bắt buộc lý do hợp lệ khi owner từ chối yêu cầu điểm", async () => {

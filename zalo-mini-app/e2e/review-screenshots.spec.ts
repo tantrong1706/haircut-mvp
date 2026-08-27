@@ -69,7 +69,7 @@ test.describe("Bộ ảnh xét duyệt Zalo Version 8", () => {
     await history.context.close();
 
     const wheel = await customerPage(browser);
-    await wheel.page.getByRole("button", { name: "Vòng quay" }).last().click();
+    await wheel.page.getByRole("button", { name: /Quay ngay|Xem vòng quay/ }).click();
     await expect(wheel.page.getByRole("heading", { name: "Vòng quay may mắn" })).toBeVisible();
     await capture(wheel.page, "12-wheel-before.png");
     await wheel.context.close();
@@ -89,7 +89,7 @@ test.describe("Bộ ảnh xét duyệt Zalo Version 8", () => {
         },
       ],
     });
-    await rewards.page.getByRole("button", { name: "Quà" }).last().click();
+    await rewards.page.getByRole("button", { name: "Quà và quay" }).click();
     await expect(rewards.page.getByRole("heading", { name: "Quà của tôi" })).toBeVisible();
     await capture(rewards.page, "14-reward.png");
     await rewards.context.close();
@@ -179,7 +179,7 @@ async function captureCustomerState(browser: Browser, status: CustomerStatus, fi
 
 async function captureSpinResult(browser: Browser, spinIndex: number, fileName: string) {
   const customer = await customerPage(browser, { spinIndex });
-  await customer.page.getByRole("button", { name: "Vòng quay" }).last().click();
+  await customer.page.getByRole("button", { name: /Quay ngay|Xem vòng quay/ }).click();
   await customer.page.getByRole("button", { name: "Quay ngay" }).click();
   await expect(customer.page.locator(".reward-result")).toBeVisible({ timeout: 10_000 });
   await customer.page.locator(".reward-result").scrollIntoViewIfNeeded();

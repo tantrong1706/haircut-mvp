@@ -1,6 +1,7 @@
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Gift, LockKeyhole, RefreshCcw, Sparkles, Ticket } from "lucide-react";
 import { BrandLogo } from "../components/BrandLogo";
+import { RewardNavigation } from "../components/RewardNavigation";
 import { MINI_APP_MARK } from "../config/branding";
 import { getCustomerWheelConfig, spinWheel } from "../services/api";
 import { trackEvent, withMonitoringTrace } from "../services/monitoring";
@@ -166,6 +167,7 @@ export function WheelPage({ session, onSessionChange, onOpenRewards }: Props) {
 
   return (
     <section className="page">
+      <RewardNavigation active="wheel" onOpenRewards={onOpenRewards} />
       <header className="page-header premium-hero visual-hero wheel-hero">
         <div className="hero-topline">
           <BrandLogo />

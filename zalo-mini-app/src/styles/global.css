@@ -1829,7 +1829,7 @@ small {
   width: min(calc(100% - 24px), 540px);
   min-height: 64px;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 4px;
   padding: 6px;
   border: 1px solid var(--line);
@@ -1838,6 +1838,33 @@ small {
   box-shadow: 0 14px 34px rgba(21, 25, 23, 0.18);
   backdrop-filter: blur(18px);
   z-index: 10;
+}
+
+.reward-subnav {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 10px 24px rgba(21, 25, 23, 0.08);
+}
+
+.reward-subnav button {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 12px;
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.reward-subnav button.active {
+  background: linear-gradient(135deg, rgba(14, 92, 68, 0.12), rgba(246, 199, 108, 0.2));
+  color: var(--green-strong);
 }
 
 @media (prefers-reduced-motion: reduce) {
