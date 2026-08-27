@@ -60,14 +60,14 @@ Không gửi xét duyệt Version 21 khi còn mục bắt buộc `[ ]`.
 
 Giá trị trạng thái hợp lệ: `READY_TO_CAPTURE`, `BLOCKED_BY_VN_GATEWAY`, `NOT_REQUIRED`, `CAPTURED`.
 
-| Tên ảnh                  | Trạng thái hiện tại     | Nội dung                     |
-| ------------------------ | ----------------------- | ---------------------------- |
+| Tên ảnh                  | Trạng thái hiện tại | Nội dung                     |
+| ------------------------ | ------------------- | ---------------------------- |
 | `01-open`                | `CAPTURED`          | Mở Mini App không QR an toàn |
 | `02-salon-qr`            | `CAPTURED`          | QR salon hợp lệ              |
 | `03-branch-selector`     | `CAPTURED`          | Chọn chi nhánh từ QR salon   |
 | `04-branch`              | `CAPTURED`          | QR chi nhánh và địa chỉ      |
 | `05-profile-explanation` | `CAPTURED`          | Giải thích quyền hồ sơ       |
-| `06-zalo-permission`     | `READY_TO_CAPTURE` | Popup quyền Zalo thật        |
+| `06-zalo-permission`     | `READY_TO_CAPTURE`  | Popup quyền Zalo thật        |
 | `07-checkin`             | `CAPTURED`          | Xác nhận check-in            |
 | `08-waiting`             | `CAPTURED`          | Trạng thái Waiting           |
 | `09-serving`             | `CAPTURED`          | Trạng thái Serving           |
@@ -102,9 +102,9 @@ Giá trị trạng thái hợp lệ: `READY_TO_CAPTURE`, `BLOCKED_BY_VN_GATEWAY`
 - [x] Vietnam gateway được triển khai, bind loopback và local/public `/health` đạt 200.
 - [ ] Identity verification hoạt động từ bản Testing cuối.
 - [x] CI/readiness xanh trên candidate; Draft PR `#34` không merge.
-- [ ] Artifact Version 21 có SHA-256 trong evidence local và Portal hiển thị trạng thái Testing.
+- [x] Artifact Version 21 có SHA-256 trong evidence local và Portal hiển thị trạng thái Testing.
 - [ ] Hoàn tất ảnh thiết bị thật và review độc lập.
-- [ ] Chủ tài khoản đã tải Testing Version 21; chưa gửi xét duyệt và chưa Publish.
+- [x] Chủ tài khoản đã tải Testing Version 21; chưa gửi xét duyệt và chưa Publish.
 
 `ZALO_IDENTITY_VERIFICATION_BLOCKED_BY_IP_POLICY=false`
 
