@@ -91,6 +91,8 @@ export function StaffPage({ currentUser }: Props) {
           : "Chỉ người đang phụ trách lượt cắt mới được chụp ảnh."
     : "";
   const canRedeemRewards = currentUser.role === "owner" || currentUser.canRedeemRewards === true;
+  const canAwardPointsDirectly =
+    currentUser.role === "owner" || currentUser.canAwardPointsDirectly === true;
   const currentBranchName =
     branchFilter === "all"
       ? "Tất cả chi nhánh"
@@ -224,7 +226,7 @@ export function StaffPage({ currentUser }: Props) {
     });
 
     try {
-      await withMonitoringTrace(
+      const result = await withMonitoringTrace(
         "staff_point_request",
         () =>
           submitPointRequest({
@@ -249,13 +251,21 @@ export function StaffPage({ currentUser }: Props) {
       trackEvent("staff_point_request_submitted", {
         salon_id: salonId,
         points_requested: pointPerVisit,
+        approval_mode: result.approvalMode || "owner_approval",
       });
-      setSessions((current) =>
-        current.map((session) =>
-          session.id === selectedSession.id ? { ...session, status: "pending_approval" } : session,
-        ),
-      );
-      setMessage(`Đã gửi yêu cầu cộng ${pointPerVisit} điểm.`);
+      if (result.status === "approved") {
+        setSessions((current) => current.filter((session) => session.id !== selectedSession.id));
+        setMessage(`Đã hoàn tất và cộng ${result.pointsAdded} điểm cho khách.`);
+      } else {
+        setSessions((current) =>
+          current.map((session) =>
+            session.id === selectedSession.id
+              ? { ...session, status: "pending_approval" }
+              : session,
+          ),
+        );
+        setMessage(`Đã hoàn tất. Chủ salon sẽ duyệt ${result.pointsAdded} điểm.`);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không gửi được yêu cầu");
     } finally {
@@ -482,6 +492,11 @@ export function StaffPage({ currentUser }: Props) {
           value={pendingApprovalCount}
         />
         <Metric icon={<ClipboardPenLine size={20} />} label="Điểm/lượt" value={pointPerVisit} />
+        <Metric
+          icon={<UserRoundCheck size={20} />}
+          label="Cộng điểm"
+          value={canAwardPointsDirectly ? "Trực tiếp" : "Chờ duyệt"}
+        />
         {canRedeemRewards ? (
           <Metric icon={<TicketCheck size={20} />} label="Đổi quà" value="Bật" />
         ) : null}
@@ -587,7 +602,7 @@ export function StaffPage({ currentUser }: Props) {
             <label className="field">
               <span>
                 <ClipboardPenLine size={18} aria-hidden="true" />
-                Ghi chú kiểu tóc
+                Ghi chú kiểu tóc (không bắt buộc)
               </span>
               <div className="quick-note-row" aria-label="Ghi chú nhanh">
                 {quickNotes.map((quickNote) => (
@@ -638,8 +653,7 @@ export function StaffPage({ currentUser }: Props) {
                     loading ||
                     photoBusy ||
                     hasRevokedPhotoConsent ||
-                    !canEditService ||
-                    note.trim().length === 0
+                    !canEditService
                   }
                   onClick={handleSubmit}
                 >
@@ -652,7 +666,9 @@ export function StaffPage({ currentUser }: Props) {
                   ) : (
                     <>
                       <Send size={20} aria-hidden="true" />
-                      Gửi cộng {pointPerVisit} điểm
+                      {canAwardPointsDirectly
+                        ? `Hoàn tất và cộng ngay ${pointPerVisit} điểm`
+                        : `Hoàn tất và gửi duyệt ${pointPerVisit} điểm`}
                     </>
                   )}
                 </button>

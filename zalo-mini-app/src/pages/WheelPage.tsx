@@ -1,6 +1,7 @@
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Gift, LockKeyhole, RefreshCcw, Sparkles, Ticket } from "lucide-react";
 import { BrandLogo } from "../components/BrandLogo";
+import { RewardNavigation } from "../components/RewardNavigation";
 import { MINI_APP_MARK } from "../config/branding";
 import { getCustomerWheelConfig, spinWheel } from "../services/api";
 import { trackEvent, withMonitoringTrace } from "../services/monitoring";
@@ -21,9 +22,10 @@ import {
 type Props = {
   session: AppSession;
   onSessionChange: (session: AppSession) => void;
+  onOpenRewards?: () => void;
 };
 
-export function WheelPage({ session, onSessionChange }: Props) {
+export function WheelPage({ session, onSessionChange, onOpenRewards }: Props) {
   const [wheelConfig, setWheelConfig] = useState<LuckyWheelConfig>(defaultLuckyWheelConfig);
   const [loadingConfig, setLoadingConfig] = useState(true);
   const [spinning, setSpinning] = useState(false);
@@ -36,6 +38,8 @@ export function WheelPage({ session, onSessionChange }: Props) {
   const animationResolveRef = useRef<(() => void) | null>(null);
   const animationTimeoutRef = useRef<number | null>(null);
   const wheelRef = useRef<HTMLDivElement | null>(null);
+  const sessionKey = `${session.qr.salonId}:${session.customer.customerId}:${session.sessionId}`;
+  const activeSessionKeyRef = useRef(sessionKey);
   const slots = useMemo(() => activeWheelSlots(wheelConfig), [wheelConfig]);
   const missingPoints = Math.max(0, wheelConfig.requiredPoints - session.customer.points);
   const wheelUnavailable =
@@ -43,9 +47,12 @@ export function WheelPage({ session, onSessionChange }: Props) {
   const canSpin =
     !wheelUnavailable && !loadingConfig && !spinning && missingPoints === 0 && slots.length > 0;
   const wheelStyle = useMemo(() => {
-    const style: CSSProperties & Record<`--wheel-angle-${number}`, string> = {
+    const visualRotation = animationPlan?.to ?? rotationDeg;
+    const style: CSSProperties &
+      Record<`--wheel-angle-${number}`, string> & { "--wheel-label-counter": string } = {
       background: wheelBackground(slots.length),
       transform: `rotate(${rotationDeg}deg)`,
+      "--wheel-label-counter": `${-visualRotation}deg`,
     };
     animationPlan?.angles.forEach((angle, index) => {
       style[`--wheel-angle-${index}`] = `${angle}deg`;
@@ -72,6 +79,17 @@ export function WheelPage({ session, onSessionChange }: Props) {
   }, [animationPlan, finishWheelAnimation]);
 
   useEffect(() => {
+    activeSessionKeyRef.current = sessionKey;
+    finishWheelAnimation();
+    spinLockRef.current = false;
+    setSpinning(false);
+    setResult(null);
+    setRotationDeg(0);
+    setAnimationPlan(null);
+    setError(null);
+  }, [finishWheelAnimation, sessionKey]);
+
+  useEffect(() => {
     setLoadingConfig(true);
     getCustomerWheelConfig(session)
       .then((config) => {
@@ -82,7 +100,7 @@ export function WheelPage({ session, onSessionChange }: Props) {
         setError(err instanceof Error ? err.message : "Không tải được cấu hình vòng quay"),
       )
       .finally(() => setLoadingConfig(false));
-  }, [loadVersion, session.sessionId]);
+  }, [loadVersion, sessionKey]);
 
   async function handleSpin() {
     if (spinLockRef.current) return;
@@ -90,6 +108,7 @@ export function WheelPage({ session, onSessionChange }: Props) {
     setSpinning(true);
     setResult(null);
     setError(null);
+    const spinSessionKey = sessionKey;
     trackEvent("lucky_wheel_spin_started", {
       salon_id: session.qr.salonId,
       points_before: session.customer.points,
@@ -99,9 +118,11 @@ export function WheelPage({ session, onSessionChange }: Props) {
       const spinResult = await withMonitoringTrace("lucky_wheel_spin", () => spinWheel(session), {
         salon_id: session.qr.salonId,
       });
+      if (activeSessionKeyRef.current !== spinSessionKey) return;
       const selectedIndex = selectedIndexFromResult(spinResult, slots);
       const targetRotation = targetWheelRotation(rotationDeg, selectedIndex, slots.length);
       await playWheelAnimation(createWheelAnimationPlan(rotationDeg, targetRotation));
+      if (activeSessionKeyRef.current !== spinSessionKey) return;
       setResult({ ...spinResult, selectedIndex });
       onSessionChange({
         ...session,
@@ -146,6 +167,7 @@ export function WheelPage({ session, onSessionChange }: Props) {
 
   return (
     <section className="page">
+      <RewardNavigation active="wheel" onOpenRewards={onOpenRewards} />
       <header className="page-header premium-hero visual-hero wheel-hero">
         <div className="hero-topline">
           <BrandLogo />
@@ -177,7 +199,7 @@ export function WheelPage({ session, onSessionChange }: Props) {
                 className="wheel-label"
                 key={`${slot.label}-${index}`}
                 style={{
-                  transform: `translate(-50%, -50%) rotate(${angle}deg) translateY(-108px) rotate(${-angle}deg)`,
+                  transform: `translate(-50%, -50%) rotate(${angle}deg) translateY(-108px) rotate(${-angle}deg) rotate(var(--wheel-label-counter))`,
                 }}
               >
                 {shortWheelLabel(slot.label)}
@@ -255,12 +277,18 @@ export function WheelPage({ session, onSessionChange }: Props) {
           ) : (
             <Sparkles size={32} aria-hidden="true" />
           )}
-          <p>{result.isWinning ? "Chúc mừng, bạn nhận được" : "Kết quả lượt quay"}</p>
+          <p>Kết quả lượt vừa quay</p>
           <strong>{result.rewardName}</strong>
           {result.isWinning ? (
             <>
-              <span>Mã quà: {result.rewardCode}</span>
-              <small>Hãy đưa mã này cho nhân viên khi sử dụng.</small>
+              <span>Mã quà đã được lưu trong Quà của tôi.</span>
+              <small>Dùng tại chi nhánh đã phát hành quà; xem chi tiết trong tab Quà.</small>
+              {onOpenRewards ? (
+                <button className="secondary-button compact" type="button" onClick={onOpenRewards}>
+                  <Ticket size={17} aria-hidden="true" />
+                  Xem quà của tôi
+                </button>
+              ) : null}
             </>
           ) : (
             <small>Lượt này không tạo mã quà. Hẹn bạn ở lần quay tiếp theo.</small>

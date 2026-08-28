@@ -82,7 +82,9 @@ type CustomerRewardsFunctionResult = {
     rewardName: string;
     rewardCode: string;
     status: Reward["status"];
+    branchName?: string;
     createdAtMs: number | null;
+    usedAtMs: number | null;
     expiresAtMs: number | null;
   }>;
 };
@@ -880,7 +882,9 @@ export async function getRewards(session: AppSession): Promise<Reward[]> {
       rewardName: reward.rewardName || "",
       rewardCode: reward.rewardCode || "",
       status: normalizeRewardStatus(reward.status),
+      branchName: reward.branchName || "Chi nhánh phát hành",
       createdAt: formatDate(reward.createdAtMs),
+      usedAt: formatDate(reward.usedAtMs),
       expiresAt: formatDate(reward.expiresAtMs),
     }));
   } catch (error) {
@@ -927,7 +931,9 @@ async function getRewardsDirect(session: AppSession): Promise<Reward[]> {
           rewardName: data.rewardName || "",
           rewardCode: data.rewardCode || "",
           status: normalizeRewardStatus(data.status, expiresAtMs),
+          branchName: String(data.branchName || "Chi nhánh phát hành"),
           createdAt: formatDate(createdAtMs),
+          usedAt: formatDate(toMillis(data.usedAt)),
           expiresAt: formatDate(expiresAtMs),
         },
       };
@@ -1094,7 +1100,7 @@ function normalizeRewardStatus(
   status: unknown,
   expiresAtMs: number | null = null,
 ): Reward["status"] {
-  if (status === "used" || status === "expired") {
+  if (status === "used" || status === "expired" || status === "revoked") {
     return status;
   }
 

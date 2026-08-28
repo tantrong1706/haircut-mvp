@@ -1,6 +1,6 @@
-# Checklist xét duyệt Zalo Mini App - CH Haircut Salon Version 19
+# Checklist xét duyệt Zalo Mini App - CH Haircut Salon Version 21
 
-Không gửi xét duyệt Version 19 khi còn mục bắt buộc `[ ]`.
+Không gửi xét duyệt Version 21 khi còn mục bắt buộc `[ ]`.
 
 ## 1. Metadata
 
@@ -40,7 +40,7 @@ Không gửi xét duyệt Version 19 khi còn mục bắt buộc `[ ]`.
 - [x] Test bao phủ token sai, payload bị đổi, token đã rotate và chi nhánh không hoạt động.
 - [x] Tạo QR salon/chi nhánh Testing cuối sau Vietnam gateway; QR salon cũ đã rotate.
 - [ ] Kiểm tra QR bằng tài khoản Zalo thường ngoài nhóm Developer/Admin.
-- [x] QR salon test Version 19 được cung cấp qua ảnh HTTPS versioned; token không nằm trong Git hoặc mô tả Portal.
+- [x] QR salon test Version 21 được cung cấp qua ảnh HTTPS versioned; token không nằm trong Git hoặc mô tả Portal.
 
 `QR_SOURCE_READY=true`
 
@@ -60,14 +60,14 @@ Không gửi xét duyệt Version 19 khi còn mục bắt buộc `[ ]`.
 
 Giá trị trạng thái hợp lệ: `READY_TO_CAPTURE`, `BLOCKED_BY_VN_GATEWAY`, `NOT_REQUIRED`, `CAPTURED`.
 
-| Tên ảnh                  | Trạng thái hiện tại     | Nội dung                     |
-| ------------------------ | ----------------------- | ---------------------------- |
+| Tên ảnh                  | Trạng thái hiện tại | Nội dung                     |
+| ------------------------ | ------------------- | ---------------------------- |
 | `01-open`                | `CAPTURED`          | Mở Mini App không QR an toàn |
 | `02-salon-qr`            | `CAPTURED`          | QR salon hợp lệ              |
 | `03-branch-selector`     | `CAPTURED`          | Chọn chi nhánh từ QR salon   |
 | `04-branch`              | `CAPTURED`          | QR chi nhánh và địa chỉ      |
 | `05-profile-explanation` | `CAPTURED`          | Giải thích quyền hồ sơ       |
-| `06-zalo-permission`     | `READY_TO_CAPTURE` | Popup quyền Zalo thật        |
+| `06-zalo-permission`     | `READY_TO_CAPTURE`  | Popup quyền Zalo thật        |
 | `07-checkin`             | `CAPTURED`          | Xác nhận check-in            |
 | `08-waiting`             | `CAPTURED`          | Trạng thái Waiting           |
 | `09-serving`             | `CAPTURED`          | Trạng thái Serving           |
@@ -102,9 +102,9 @@ Giá trị trạng thái hợp lệ: `READY_TO_CAPTURE`, `BLOCKED_BY_VN_GATEWAY`
 - [x] Vietnam gateway được triển khai, bind loopback và local/public `/health` đạt 200.
 - [ ] Identity verification hoạt động từ bản Testing cuối.
 - [x] CI/readiness xanh trên candidate; Draft PR `#34` không merge.
-- [x] Artifact Version 19 có SHA-256 trong evidence local và Portal hiển thị trạng thái Testing.
+- [x] Artifact Version 21 có SHA-256 trong evidence local và Portal hiển thị trạng thái Testing.
 - [ ] Hoàn tất ảnh thiết bị thật và review độc lập.
-- [x] Chủ tài khoản đã tải Testing Version 19; chưa gửi xét duyệt và chưa Publish.
+- [x] Chủ tài khoản đã tải Testing Version 21; chưa gửi xét duyệt và chưa Publish.
 
 `ZALO_IDENTITY_VERIFICATION_BLOCKED_BY_IP_POLICY=false`
 

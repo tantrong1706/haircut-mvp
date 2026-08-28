@@ -8,6 +8,7 @@ import { getAuth, signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { doc, getDoc, getFirestore } from "firebase/firestore";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import QRCode from "qrcode";
+import { salonTestingUrl } from "./zmp-url.mjs";
 
 const toolDir = dirname(fileURLToPath(import.meta.url));
 const appDir = resolve(toolDir, "..");
@@ -105,6 +106,7 @@ if (!staffProfile) {
     name: "Nhân viên xét duyệt",
     phone: supportPhone,
     canRedeemRewards: true,
+    canAwardPointsDirectly: true,
     branchIds: [staffBranch.id],
   });
   staffResult = await callFunction("listStaffProfiles", { salonId });
@@ -117,6 +119,14 @@ if (!staffProfile) {
 if (!staffProfile?.uid) {
   throw new Error("Không hoàn tất được hồ sơ nhân viên thử nghiệm.");
 }
+
+await callFunction("updateStaffProfile", {
+  salonId,
+  uid: staffProfile.uid,
+  canRedeemRewards: true,
+  canAwardPointsDirectly: true,
+  branchIds: [staffBranch.id],
+});
 
 await upsertAuthUser({
   uid: staffProfile.uid,
@@ -141,6 +151,7 @@ const visibleStaffBranches = Array.isArray(staffBranchesResult.branches)
 if (
   verifiedStaffProfile?.role !== "staff" ||
   !verifiedStaffProfile.isActive ||
+  !verifiedStaffProfile.canAwardPointsDirectly ||
   visibleStaffBranches.length !== 1 ||
   visibleStaffBranches[0]?.id !== staffBranch.id
 ) {
@@ -160,7 +171,7 @@ await seedReviewBusinessData({
 const qrFiles = [];
 if (branchResult.salonQrUrl) {
   const salonQrPath = resolve(appDir, "qr-salon-review-dev.png");
-  await writeQr(salonQrPath, branchResult.salonQrUrl);
+  await writeQr(salonQrPath, salonTestingUrl(branchResult.salonQrUrl));
   qrFiles.push(salonQrPath);
 }
 
@@ -212,6 +223,7 @@ async function readProfile(uid) {
     salonId: String(data.salonId || ""),
     role: String(data.role || ""),
     isActive: data.isActive === true,
+    canAwardPointsDirectly: data.canAwardPointsDirectly === true,
   };
 }
 

@@ -155,10 +155,8 @@ const reviewerDataDeferred = reviewerPlaceholders.every((placeholder) => {
 const reviewerDataCompleted =
   reviewerPlaceholders.every((placeholder) => !submissionText.includes(placeholder)) &&
   submissionText.includes("Salon demo: CH Haircut Salon - Xét duyệt Zalo") &&
-  submissionText.includes("Testing version: 19") &&
-  submissionText.includes(
-    "QR testing: https://app.chhaircutsalon.cc/review-salon-v19.png",
-  ) &&
+  submissionText.includes("Testing version: 21") &&
+  submissionText.includes("QR testing: https://app.chhaircutsalon.cc/review-salon-v21.png") &&
   !/\b(?:qrToken|mirrorId)=/u.test(submissionText);
 check(
   reviewerDataDeferred || reviewerDataCompleted,

@@ -49,10 +49,11 @@ test("khách chuyển qua điểm, lịch sử, vòng quay và quà", async ({ p
   await page.getByRole("button", { name: "Đóng chi tiết" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
 
-  await page.getByRole("button", { name: "Vòng quay" }).last().click();
+  await page.getByRole("button", { name: "Điểm" }).click();
+  await page.getByRole("button", { name: /Quay ngay|Xem vòng quay/ }).click();
   await expect(page.getByRole("heading", { name: "Vòng quay may mắn" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Quà" }).last().click();
+  await page.getByRole("button", { name: "Mã quà" }).click();
   await expect(page.getByRole("heading", { name: "Quà của tôi" })).toBeVisible();
 });
 
@@ -66,7 +67,7 @@ test("giao diện mobile không tràn ngang", async ({ page }) => {
 
 test("vòng quay chạy đủ timeline và dừng giữa ô backend chọn", async ({ page }) => {
   await page.goto(`/?${new URLSearchParams(qr)}`);
-  await page.getByRole("button", { name: "Vòng quay" }).last().click();
+  await page.getByRole("button", { name: /Quay ngay|Xem vòng quay/ }).click();
   await page.getByRole("button", { name: "Quay ngay" }).click();
 
   const wheel = page.getByTestId("lucky-wheel");

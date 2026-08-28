@@ -43,6 +43,7 @@ async function main() {
     role: "owner",
     isActive: true,
     canRedeemRewards: true,
+    canAwardPointsDirectly: true,
     createdAt: now,
     updatedAt: now,
   });
@@ -53,6 +54,7 @@ async function main() {
     role: "staff",
     isActive: true,
     canRedeemRewards: true,
+    canAwardPointsDirectly: true,
     createdAt: now,
     updatedAt: now,
   });

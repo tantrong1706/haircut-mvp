@@ -6,6 +6,7 @@ import {
   canCancelServiceSession,
   countUniqueCustomersSince,
   deletionJobOutcome,
+  directPointAwardDecision,
   effectiveRewardStatus,
   isVerifiedOwnerIdentity,
   isServiceSessionExpired,
@@ -53,6 +54,32 @@ describe("hạn mức khách theo gói", () => {
     expect(
       canCreateCustomerWithinPlan({ plan: "pro", customerCount: 51, freeCustomerLimit: 50 }),
     ).toBe(true);
+  });
+});
+
+describe("cộng điểm trực tiếp có kiểm soát", () => {
+  it("chỉ auto approve cho owner hoặc nhân viên được cấp quyền dưới hạn mức", () => {
+    const base = {
+      canAwardPointsDirectly: true,
+      pointsRequested: 2,
+      pointPerVisit: 2,
+      directAwardsToday: 10,
+      dailyAwardLimit: 100,
+    };
+
+    expect(directPointAwardDecision({ ...base, role: "staff" })).toBe("auto_approve");
+    expect(
+      directPointAwardDecision({ ...base, role: "staff", canAwardPointsDirectly: false }),
+    ).toBe("owner_approval");
+    expect(
+      directPointAwardDecision({ ...base, role: "staff", pointsRequested: 3 }),
+    ).toBe("owner_approval");
+    expect(
+      directPointAwardDecision({ ...base, role: "staff", directAwardsToday: 100 }),
+    ).toBe("owner_approval");
+    expect(
+      directPointAwardDecision({ ...base, role: "owner", directAwardsToday: 100 }),
+    ).toBe("auto_approve");
   });
 });
 

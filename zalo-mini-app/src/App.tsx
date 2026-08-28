@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
-import { Gift, History, House, Sparkles, type LucideIcon } from "lucide-react";
+import { Gift, History, House, type LucideIcon } from "lucide-react";
 import { InstallAppPrompt } from "./components/InstallAppPrompt";
 import { MINI_APP_NAME } from "./config/branding";
 import { trackEvent } from "./services/monitoring";
@@ -50,8 +50,7 @@ const WheelPage = lazy(() =>
 const tabs: Array<{ key: TabKey; label: string; Icon: LucideIcon }> = [
   { key: "home", label: "Điểm", Icon: House },
   { key: "history", label: "Lịch sử", Icon: History },
-  { key: "wheel", label: "Vòng quay", Icon: Sparkles },
-  { key: "rewards", label: "Quà", Icon: Gift },
+  { key: "rewards", label: "Quà và quay", Icon: Gift },
 ];
 
 const managementRoutes = ["/staff", "/owner", "/admin", "/delete-account"];
@@ -494,9 +493,15 @@ export default function App() {
   if (session && activeTab === "history") {
     content = <HistoryPage session={session} />;
   } else if (session && activeTab === "wheel") {
-    content = <WheelPage session={session} onSessionChange={setSession} />;
+    content = (
+      <WheelPage
+        session={session}
+        onSessionChange={setSession}
+        onOpenRewards={() => changeCustomerTab("rewards")}
+      />
+    );
   } else if (session && activeTab === "rewards") {
-    content = <RewardsPage session={session} />;
+    content = <RewardsPage session={session} onOpenWheel={() => changeCustomerTab("wheel")} />;
   } else if (session) {
     content = (
       <HomePage
@@ -527,7 +532,9 @@ export default function App() {
           {tabs.map(({ key, label, Icon }) => (
             <button
               key={key}
-              className={activeTab === key ? "active" : ""}
+              className={
+                activeTab === key || (key === "rewards" && activeTab === "wheel") ? "active" : ""
+              }
               onClick={() => changeCustomerTab(key)}
             >
               <Icon size={20} strokeWidth={2.3} aria-hidden="true" />

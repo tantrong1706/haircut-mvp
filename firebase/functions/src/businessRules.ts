@@ -152,6 +152,33 @@ export function canCreateCustomerWithinPlan(input: {
   return input.plan !== "free" || input.customerCount < input.freeCustomerLimit;
 }
 
+export function directPointAwardDecision(input: {
+  role: "owner" | "staff";
+  canAwardPointsDirectly: boolean;
+  pointsRequested: number;
+  pointPerVisit: number;
+  directAwardsToday: number;
+  dailyAwardLimit: number;
+}): "auto_approve" | "owner_approval" {
+  if (
+    !Number.isSafeInteger(input.pointsRequested) ||
+    !Number.isSafeInteger(input.pointPerVisit) ||
+    input.pointsRequested <= 0 ||
+    input.pointsRequested !== input.pointPerVisit
+  ) {
+    return "owner_approval";
+  }
+  if (input.role === "owner") {
+    return "auto_approve";
+  }
+  return input.canAwardPointsDirectly &&
+    Number.isSafeInteger(input.directAwardsToday) &&
+    input.directAwardsToday >= 0 &&
+    input.directAwardsToday < input.dailyAwardLimit
+    ? "auto_approve"
+    : "owner_approval";
+}
+
 export function canRestoreReward(input: {
   status: unknown;
   usedAtMs: number | null;
