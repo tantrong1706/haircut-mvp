@@ -62,7 +62,9 @@ async function finishCurrentSpin() {
 
 describe("WheelPage", () => {
   beforeEach(() => {
+    vi.restoreAllMocks();
     vi.clearAllMocks();
+    vi.spyOn(window, "matchMedia").mockReturnValue({ matches: false } as MediaQueryList);
     mocks.getCustomerWheelConfig.mockResolvedValue(config);
   });
 

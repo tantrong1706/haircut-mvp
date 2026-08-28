@@ -37,11 +37,14 @@ import {
   isServiceSessionExpired,
   isVerifiedOwnerIdentity,
   legacyBranchPatch,
+  nextWheelConfigVersion,
+  normalizeWheelSlots,
   normalizeWheelSlotType,
   rewardExpiresAtMs,
-  activeWheelSlotCount,
-  selectWheelSlotByIndex,
+  selectWeightedWheelSlotByDraw,
   serviceSessionExpiresAtMs,
+  wheelConfigMatches,
+  wheelConfigVersion,
   wheelRewardOutcome,
 } from "./businessRules";
 import { buildNameSearchPrefixes, normalizeSearchText } from "./customerSearch";
@@ -183,9 +186,11 @@ type PublicEndpoint = keyof typeof PUBLIC_RATE_LIMITS;
 type AuthenticatedEndpoint = keyof typeof AUTHENTICATED_RATE_LIMITS;
 
 type LuckyWheelSlot = {
+  slotId?: string;
   label: string;
   active: boolean;
   type: "reward" | "no_prize";
+  weight?: number;
 };
 
 type SpinWheelResult = {
@@ -195,6 +200,8 @@ type SpinWheelResult = {
   isWinning: boolean;
   pointsAfter: number;
   selectedIndex: number;
+  selectedSlotId: string;
+  configVersion: number;
 };
 
 type ZaloProfile = {
@@ -1358,8 +1365,8 @@ function randomToken(bytes = 20): string {
 function rewardCode(seed?: string): string {
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
   const suffix = seed
-    ? createHash("sha256").update(seed).digest("hex").slice(0, 8).toUpperCase()
-    : randomBytes(4).toString("hex").toUpperCase();
+    ? createHash("sha256").update(seed).digest("hex").slice(0, 16).toUpperCase()
+    : randomBytes(8).toString("hex").toUpperCase();
   return `HC-${date}-${suffix}`;
 }
 
@@ -1611,6 +1618,7 @@ async function spinWheelForCustomer(
   salonId: string,
   customerId: string,
   idempotencyKey: string,
+  requestedConfigVersion: unknown,
   appVersion: unknown,
 ): Promise<SpinWheelResult> {
   await assertFeatureEnabled(
@@ -1632,6 +1640,8 @@ async function spinWheelForCustomer(
   let selectedCode = "";
   let isWinning = true;
   let selectedIndex = 0;
+  let selectedSlotId = "";
+  let configVersion = 1;
   let pointsAfter = 0;
 
   await db.runTransaction(async (tx) => {
@@ -1654,6 +1664,8 @@ async function spinWheelForCustomer(
       selectedCode = String(response?.rewardCode || "");
       isWinning = response?.isWinning === true;
       selectedIndex = Number(response?.selectedIndex ?? 0);
+      selectedSlotId = String(response?.selectedSlotId || "");
+      configVersion = wheelConfigVersion(response?.configVersion);
       pointsAfter = Number(response?.pointsAfter ?? 0);
       return;
     }
@@ -1666,36 +1678,58 @@ async function spinWheelForCustomer(
 
     const wheel = wheelSnap.data();
     const customer = customerSnap.data();
+    configVersion = wheelConfigVersion(wheel?.configVersion);
+    if (!wheelConfigMatches(requestedConfigVersion, configVersion)) {
+      throw apiError(
+        "failed-precondition",
+        ApiErrorCode.STALE_WHEEL_CONFIG,
+        "Vòng quay vừa được cập nhật. Vui lòng quay lại.",
+        { configVersion },
+      );
+    }
     const requiredPoints = Number(wheel?.requiredPoints ?? 5);
     const points = Number(customer?.points ?? 0);
     if (points < requiredPoints) {
       throw new HttpsError("failed-precondition", "Khách chưa đủ điểm để quay");
     }
 
-    const wheelSlots = Array.isArray(wheel?.slots)
-      ? wheel.slots.map((slot: LuckyWheelSlot) => ({
-          label: String(slot.label || "").trim(),
-          active: slot.active !== false,
-          type: normalizeWheelSlotType(slot.type, String(slot.label || "")),
-        }))
-      : [];
-    const availableSlotCount = activeWheelSlotCount(wheelSlots);
+    let wheelSlots;
+    try {
+      wheelSlots = normalizeWheelSlots(
+        Array.isArray(wheel?.slots)
+          ? wheel.slots.map((slot: LuckyWheelSlot) => ({
+              slotId: slot.slotId,
+              label: String(slot.label || "").trim(),
+              active: slot.active !== false,
+              type: normalizeWheelSlotType(slot.type, String(slot.label || "")),
+              weight: slot.weight,
+            }))
+          : [],
+      );
+    } catch {
+      throw new HttpsError("failed-precondition", "Cấu hình vòng quay không hợp lệ");
+    }
+    const totalWeight = wheelSlots
+      .filter((slot) => slot.active && slot.label.length > 0)
+      .reduce((total, slot) => total + slot.weight, 0);
     const selectedSlot =
-      availableSlotCount > 0
-        ? selectWheelSlotByIndex(wheelSlots, randomInt(availableSlotCount))
+      totalWeight > 0
+        ? selectWeightedWheelSlotByDraw(wheelSlots, randomInt(totalWeight))
         : null;
     if (!selectedSlot) {
       throw new HttpsError("failed-precondition", "Vòng quay chưa có ô thưởng đang bật");
     }
 
     selectedIndex = selectedSlot.index;
+    selectedSlotId = selectedSlot.slotId;
     selectedReward = selectedSlot.label;
     const rewardOutcome = wheelRewardOutcome(selectedSlot.type, rewardCode(rewardRef.id));
     isWinning = rewardOutcome.isWinning;
     selectedCode = rewardOutcome.rewardCode ?? "";
     const deductPoints = Boolean(wheel?.deductPointsAfterSpin);
     pointsAfter = deductPoints ? points - requiredPoints : points;
-    const branchId = String(customer?.lastBranchId || defaultBranchIdForSalon(salonId));
+    const sourceBranchId = String(customer?.lastBranchId || defaultBranchIdForSalon(salonId));
+    const sourceBranchName = String(customer?.lastBranchName || "Chi nhánh chính");
     const rewardValidityDays = Math.min(
       Math.max(Math.floor(Number(wheel?.rewardValidityDays ?? 90)), 1),
       365,
@@ -1706,14 +1740,20 @@ async function spinWheelForCustomer(
 
     tx.set(rewardRef, {
       salonId,
-      branchId,
-      branchName: String(customer?.lastBranchName || "Chi nhánh chính"),
+      branchId: sourceBranchId,
+      branchName: sourceBranchName,
       customerId,
+      sourceBranchId,
+      sourceBranchName,
+      sourceSlotId: selectedSlotId,
+      wheelConfigVersion: configVersion,
+      wheelSlotWeight: selectedSlot.weight,
       rewardName: selectedReward,
       rewardCode: rewardOutcome.rewardCode,
       isWinning,
       selectedIndex,
       pointsSpent: deductPoints ? requiredPoints : 0,
+      redemptionScope: "salon",
       status: rewardOutcome.status,
       expiresAt,
       createdAt: now,
@@ -1736,6 +1776,8 @@ async function spinWheelForCustomer(
         isWinning,
         pointsAfter,
         selectedIndex,
+        selectedSlotId,
+        configVersion,
       },
       createdAt: now,
       expiresAt: Timestamp.fromMillis(now.toMillis() + 7 * 24 * 60 * 60 * 1000),
@@ -1749,6 +1791,8 @@ async function spinWheelForCustomer(
     isWinning,
     pointsAfter,
     selectedIndex,
+    selectedSlotId,
+    configVersion,
   };
 }
 
@@ -1818,16 +1862,35 @@ export const createSalon = onCall(qrFunctionOptions, async (request) => {
     );
     tx.set(wheelRef, {
       salonId: salonRef.id,
+      configVersion: 1,
       requiredPoints: 5,
       rewardValidityDays: 90,
       deductPointsAfterSpin: true,
       slots: [
-        { label: "Giảm 10%", active: true, type: "reward" },
-        { label: "Gội đầu miễn phí", active: true, type: "reward" },
-        { label: "Tặng sáp tóc", active: true, type: "reward" },
-        { label: "Giảm 20%", active: true, type: "reward" },
-        { label: "Chúc bạn may mắn", active: true, type: "no_prize" },
-        { label: "Hấp dầu miễn phí", active: true, type: "reward" },
+        { slotId: "slot-1", label: "Giảm 10%", active: true, type: "reward", weight: 25 },
+        {
+          slotId: "slot-2",
+          label: "Gội đầu miễn phí",
+          active: true,
+          type: "reward",
+          weight: 10,
+        },
+        { slotId: "slot-3", label: "Tặng sáp tóc", active: true, type: "reward", weight: 10 },
+        { slotId: "slot-4", label: "Giảm 20%", active: true, type: "reward", weight: 5 },
+        {
+          slotId: "slot-5",
+          label: "Chúc bạn may mắn",
+          active: true,
+          type: "no_prize",
+          weight: 40,
+        },
+        {
+          slotId: "slot-6",
+          label: "Hấp dầu miễn phí",
+          active: true,
+          type: "reward",
+          weight: 10,
+        },
       ],
       updatedAt: now,
     });
@@ -5035,7 +5098,7 @@ export const updateLuckyWheel = onCall(functionOptions, async (request) => {
   if (!Array.isArray(slots) || slots.length !== 6) {
     throw new HttpsError("invalid-argument", "Vòng quay phải có đúng 6 ô");
   }
-  const cleanedSlots: LuckyWheelSlot[] = slots.map((slot: unknown, index) => {
+  const slotInputs: LuckyWheelSlot[] = slots.map((slot: unknown, index) => {
     if (
       typeof slot !== "object" ||
       slot === null ||
@@ -5044,57 +5107,79 @@ export const updateLuckyWheel = onCall(functionOptions, async (request) => {
       throw new HttpsError("invalid-argument", `Ô ${index + 1} không hợp lệ`);
     }
     return {
+      slotId:
+        typeof (slot as { slotId?: unknown }).slotId === "string"
+          ? String((slot as { slotId: string }).slotId)
+          : undefined,
       label: limitedString((slot as { label: string }).label, `slots[${index}].label`, 60),
       active: Boolean((slot as { active?: boolean }).active ?? true),
       type: normalizeWheelSlotType(
         (slot as { type?: unknown }).type,
         (slot as { label: string }).label,
       ),
+      weight:
+        (slot as { weight?: unknown }).weight === undefined
+          ? undefined
+          : Number((slot as { weight: unknown }).weight),
     };
   });
+  let cleanedSlots;
+  try {
+    cleanedSlots = normalizeWheelSlots(slotInputs);
+  } catch (error) {
+    throw new HttpsError(
+      "invalid-argument",
+      error instanceof Error ? error.message : "Cấu hình ô vòng quay không hợp lệ",
+    );
+  }
   if (!cleanedSlots.some((slot) => slot.active)) {
     throw new HttpsError("invalid-argument", "Vòng quay phải có ít nhất một ô đang bật");
   }
 
   const wheelRef = db.collection("lucky_wheel").doc(salonId);
-  const wheelSnap = await wheelRef.get();
   const now = Timestamp.now();
-  const wheelBatch = db.batch();
-  wheelBatch.set(
-    wheelRef,
-    {
-      salonId,
-      requiredPoints,
-      rewardValidityDays,
-      deductPointsAfterSpin,
-      slots: cleanedSlots,
-      updatedAt: now,
-    },
-    { merge: true },
-  );
-  wheelBatch.set(
-    db.collection("audit_events").doc(),
-    auditEventData({
-      salonId,
-      actorId: uid,
-      action: "wheel.config_updated",
-      targetType: "lucky_wheel",
-      targetId: salonId,
-      before: {
-        requiredPoints: wheelSnap.data()?.requiredPoints ?? null,
-        rewardValidityDays: wheelSnap.data()?.rewardValidityDays ?? null,
-      },
-      after: {
+  const configVersion = await db.runTransaction(async (tx) => {
+    const wheelSnap = await tx.get(wheelRef);
+    const nextVersion = nextWheelConfigVersion(wheelSnap.data()?.configVersion);
+    tx.set(
+      wheelRef,
+      {
+        salonId,
+        configVersion: nextVersion,
         requiredPoints,
         rewardValidityDays,
-        activeSlots: cleanedSlots.filter((slot) => slot.active).length,
+        deductPointsAfterSpin,
+        slots: cleanedSlots,
+        updatedAt: now,
       },
-      createdAt: now,
-    }),
-  );
-  await wheelBatch.commit();
+      { merge: true },
+    );
+    tx.set(
+      db.collection("audit_events").doc(),
+      auditEventData({
+        salonId,
+        actorId: uid,
+        action: "wheel.config_updated",
+        targetType: "lucky_wheel",
+        targetId: salonId,
+        before: {
+          configVersion: wheelConfigVersion(wheelSnap.data()?.configVersion),
+          requiredPoints: wheelSnap.data()?.requiredPoints ?? null,
+          rewardValidityDays: wheelSnap.data()?.rewardValidityDays ?? null,
+        },
+        after: {
+          configVersion: nextVersion,
+          requiredPoints,
+          rewardValidityDays,
+          activeSlots: cleanedSlots.filter((slot) => slot.active).length,
+        },
+        createdAt: now,
+      }),
+    );
+    return nextVersion;
+  });
 
-  return { ok: true };
+  return { ok: true, configVersion };
 });
 
 export const spinLuckyWheel = onCall(functionOptions, async (request) => {
@@ -5105,7 +5190,13 @@ export const spinLuckyWheel = onCall(functionOptions, async (request) => {
   await assertSalonRole(uid, salonId, ["owner"]);
   await enforceAuthenticatedRateLimit("spinLuckyWheel", uid, salonId);
 
-  return spinWheelForCustomer(salonId, customerId, idempotencyKey, request.data?.appVersion);
+  return spinWheelForCustomer(
+    salonId,
+    customerId,
+    idempotencyKey,
+    request.data?.configVersion,
+    request.data?.appVersion,
+  );
 });
 
 export const spinLuckyWheelFromZalo = onCall(zaloFunctionOptions, async (request) => {
@@ -5120,7 +5211,13 @@ export const spinLuckyWheelFromZalo = onCall(zaloFunctionOptions, async (request
   const zaloProfile = await verifyZaloAccessToken(request.data?.zaloAccessToken);
   const customerId = customerIdFor(salonId, zaloProfile.zaloUserId);
 
-  return spinWheelForCustomer(salonId, customerId, idempotencyKey, request.data?.appVersion);
+  return spinWheelForCustomer(
+    salonId,
+    customerId,
+    idempotencyKey,
+    request.data?.configVersion,
+    request.data?.appVersion,
+  );
 });
 
 export const getCustomerSessionFromZalo = onCall(zaloFunctionOptions, async (request) => {
@@ -5157,16 +5254,30 @@ export const getCustomerSessionFromZalo = onCall(zaloFunctionOptions, async (req
   const session = sessionSnap.data() ?? {};
   const wheel = wheelSnap.data() ?? {};
   const slots = Array.isArray(wheel.slots)
-    ? wheel.slots.slice(0, 6).map((slot: unknown) => {
+    ? wheel.slots.slice(0, 6).map((slot: unknown, index: number) => {
         const value =
           typeof slot === "object" && slot !== null
-            ? (slot as { label?: unknown; active?: unknown; type?: unknown })
+            ? (slot as {
+                slotId?: unknown;
+                label?: unknown;
+                active?: unknown;
+                type?: unknown;
+                weight?: unknown;
+              })
             : {};
         const label = typeof value.label === "string" ? value.label.trim() : "";
         return {
+          slotId:
+            typeof value.slotId === "string" && value.slotId.trim()
+              ? value.slotId.trim()
+              : `slot-${index + 1}`,
           label,
           active: value.active !== false,
           type: normalizeWheelSlotType(value.type, label),
+          weight:
+            Number.isSafeInteger(Number(value.weight)) && Number(value.weight) > 0
+              ? Number(value.weight)
+              : 1,
         };
       })
     : [];
@@ -5195,7 +5306,12 @@ export const getCustomerSessionFromZalo = onCall(zaloFunctionOptions, async (req
       allowPhoto: Boolean(customer.allowPhoto),
     },
     wheelConfig: {
+      configVersion: wheelConfigVersion(wheel.configVersion),
       requiredPoints: Math.max(1, Math.floor(Number(wheel.requiredPoints ?? 5))),
+      rewardValidityDays: Math.min(
+        Math.max(Math.floor(Number(wheel.rewardValidityDays ?? 90)), 1),
+        365,
+      ),
       deductPointsAfterSpin: wheel.deductPointsAfterSpin !== false,
       slots,
     },

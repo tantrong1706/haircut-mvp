@@ -667,9 +667,12 @@ async function registerCustomerDirect(
   };
 }
 
-export async function spinWheel(session: AppSession): Promise<SpinResult> {
+export async function spinWheel(
+  session: AppSession,
+  configVersion: number,
+): Promise<SpinResult> {
   if (!isFirebaseConfigured()) {
-    return spinWheelDirect(session);
+    return spinWheelDirect(session, configVersion);
   }
 
   const zaloAccessToken = await getZaloAccessToken();
@@ -677,12 +680,18 @@ export async function spinWheel(session: AppSession): Promise<SpinResult> {
     `spin:${session.qr.salonId}:${session.customer.customerId}`,
   );
   const result = await callFunction<
-    { salonId: string; zaloAccessToken: string; idempotencyKey: string },
+    {
+      salonId: string;
+      zaloAccessToken: string;
+      idempotencyKey: string;
+      configVersion: number;
+    },
     SpinResult
   >("spinLuckyWheelFromZalo", {
     salonId: session.qr.salonId,
     zaloAccessToken,
     idempotencyKey: pendingSpin.key,
+    configVersion,
   });
   safeStorageRemove(pendingSpin.storageKey);
   return {
@@ -705,7 +714,10 @@ function getOrCreateIdempotencyKey(scope: string) {
   return { storageKey, key };
 }
 
-async function spinWheelDirect(session: AppSession): Promise<SpinResult> {
+async function spinWheelDirect(
+  session: AppSession,
+  configVersion: number,
+): Promise<SpinResult> {
   const activeSlots = activeWheelSlots(defaultLuckyWheelConfig);
   const forcedIndexValue = safeStorageGet("haircut_mock_spin_index");
   const forcedIndex =
@@ -726,6 +738,8 @@ async function spinWheelDirect(session: AppSession): Promise<SpinResult> {
     pointsAfter,
     isWinning,
     selectedIndex,
+    selectedSlotId: selectedSlot?.slotId || "",
+    configVersion,
   };
 
   if (isWinning) {

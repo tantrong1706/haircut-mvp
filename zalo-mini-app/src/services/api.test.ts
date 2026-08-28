@@ -240,7 +240,7 @@ describe("restoreSavedCustomerSession ở chế độ kiểm thử", () => {
         ...candidate,
         customerId: "mock-customer",
         identityBinding: "b".repeat(64),
-      }),
+      }, 3),
     ).resolves.toEqual({ status: "discarded", reason: "identity_mismatch" });
   });
 });
@@ -300,17 +300,20 @@ describe("spinWheel", () => {
     mocks.isFirebaseConfigured.mockReturnValue(false);
 
     await expect(
-      spinWheel({
-        qr: candidate.qr,
-        sessionId: candidate.sessionId,
-        zaloUserId: "zalo-a",
-        customer: {
-          customerId: candidate.customerId,
-          name: "Khách A",
-          points: 10,
-          allowPhoto: false,
+      spinWheel(
+        {
+          qr: candidate.qr,
+          sessionId: candidate.sessionId,
+          zaloUserId: "zalo-a",
+          customer: {
+            customerId: candidate.customerId,
+            name: "Khách A",
+            points: 10,
+            allowPhoto: false,
+          },
         },
-      }),
+        3,
+      ),
     ).resolves.toMatchObject({ selectedIndex: 1 });
     expect(mocks.callFunction).not.toHaveBeenCalled();
   });
@@ -324,19 +327,24 @@ describe("spinWheel", () => {
       pointsAfter: 5,
       isWinning: true,
       selectedIndex: 3,
+      selectedSlotId: "slot-4",
+      configVersion: 3,
     });
 
-    const result = await spinWheel({
-      qr: candidate.qr,
-      sessionId: candidate.sessionId,
-      zaloUserId: "zalo-a",
-      customer: {
-        customerId: candidate.customerId,
-        name: "Khách A",
-        points: 10,
-        allowPhoto: false,
+    const result = await spinWheel(
+      {
+        qr: candidate.qr,
+        sessionId: candidate.sessionId,
+        zaloUserId: "zalo-a",
+        customer: {
+          customerId: candidate.customerId,
+          name: "Khách A",
+          points: 10,
+          allowPhoto: false,
+        },
       },
-    });
+      3,
+    );
 
     expect(result).toMatchObject({ rewardName: "Quà backend", selectedIndex: 3 });
     expect(mocks.callFunction).toHaveBeenCalledWith(
@@ -345,6 +353,7 @@ describe("spinWheel", () => {
         salonId: "salon-a",
         zaloAccessToken: "fresh-zalo-token",
         idempotencyKey: expect.any(String),
+        configVersion: 3,
       }),
     );
   });

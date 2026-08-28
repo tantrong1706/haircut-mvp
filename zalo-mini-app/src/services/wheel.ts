@@ -22,6 +22,7 @@ export function normalizeLuckyWheelConfig(value: unknown): LuckyWheelConfig {
   }
 
   return {
+    configVersion: positiveInteger(source.configVersion, 1),
     requiredPoints: Math.min(10_000, Math.max(1, Number(source.requiredPoints ?? 5))),
     rewardValidityDays: Math.min(
       365,
@@ -85,12 +86,24 @@ function normalizeSlot(value: unknown, index: number): LuckyWheelSlot {
     slot.type === "no_prize" || (slot.type !== "reward" && /may mắn|không trúng/i.test(label))
       ? "no_prize"
       : "reward";
+  const rawSlotId = typeof slot.slotId === "string" ? slot.slotId.trim() : "";
+  const slotId = /^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/.test(rawSlotId)
+    ? rawSlotId
+    : `slot-${index + 1}`;
+  const weight = positiveInteger(slot.weight, 1, 1_000_000);
 
   return {
+    slotId,
     label,
     active: Boolean(slot.active ?? true),
     type,
+    weight,
   };
+}
+
+function positiveInteger(value: unknown, fallback: number, maximum = Number.MAX_SAFE_INTEGER) {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 && parsed <= maximum ? parsed : fallback;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -33,6 +33,7 @@ export function WheelPage({ session, onSessionChange, onOpenRewards }: Props) {
   const [rotationDeg, setRotationDeg] = useState(0);
   const [animationPlan, setAnimationPlan] = useState<WheelAnimationPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [staleNotice, setStaleNotice] = useState<string | null>(null);
   const [loadVersion, setLoadVersion] = useState(0);
   const spinLockRef = useRef(false);
   const animationResolveRef = useRef<(() => void) | null>(null);
@@ -87,19 +88,30 @@ export function WheelPage({ session, onSessionChange, onOpenRewards }: Props) {
     setRotationDeg(0);
     setAnimationPlan(null);
     setError(null);
+    setStaleNotice(null);
   }, [finishWheelAnimation, sessionKey]);
 
   useEffect(() => {
+    let cancelled = false;
     setLoadingConfig(true);
     getCustomerWheelConfig(session)
       .then((config) => {
-        setWheelConfig(config);
-        setError(null);
+        if (!cancelled) {
+          setWheelConfig(config);
+          setError(null);
+        }
       })
-      .catch((err) =>
-        setError(err instanceof Error ? err.message : "Không tải được cấu hình vòng quay"),
-      )
-      .finally(() => setLoadingConfig(false));
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Không tải được cấu hình vòng quay");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingConfig(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [loadVersion, sessionKey]);
 
   async function handleSpin() {
@@ -108,6 +120,7 @@ export function WheelPage({ session, onSessionChange, onOpenRewards }: Props) {
     setSpinning(true);
     setResult(null);
     setError(null);
+    setStaleNotice(null);
     const spinSessionKey = sessionKey;
     trackEvent("lucky_wheel_spin_started", {
       salon_id: session.qr.salonId,
@@ -115,11 +128,19 @@ export function WheelPage({ session, onSessionChange, onOpenRewards }: Props) {
       required_points: wheelConfig.requiredPoints,
     });
     try {
-      const spinResult = await withMonitoringTrace("lucky_wheel_spin", () => spinWheel(session), {
-        salon_id: session.qr.salonId,
-      });
+      const spinResult = await withMonitoringTrace(
+        "lucky_wheel_spin",
+        () => spinWheel(session, wheelConfig.configVersion),
+        {
+          salon_id: session.qr.salonId,
+        },
+      );
       if (activeSessionKeyRef.current !== spinSessionKey) return;
-      const selectedIndex = selectedIndexFromResult(spinResult, slots);
+      const selectedIndex = selectedIndexFromResult(
+        spinResult,
+        slots,
+        wheelConfig.configVersion,
+      );
       const targetRotation = targetWheelRotation(rotationDeg, selectedIndex, slots.length);
       await playWheelAnimation(createWheelAnimationPlan(rotationDeg, targetRotation));
       if (activeSessionKeyRef.current !== spinSessionKey) return;
@@ -138,7 +159,13 @@ export function WheelPage({ session, onSessionChange, onOpenRewards }: Props) {
         points_after: spinResult.pointsAfter,
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Bạn chưa đủ điểm để quay");
+      const message = err instanceof Error ? err.message : "Bạn chưa đủ điểm để quay";
+      if (message.includes("Vòng quay vừa được cập nhật")) {
+        setStaleNotice("Vòng quay vừa được cập nhật. Vui lòng quay lại.");
+        setLoadVersion((value) => value + 1);
+      } else {
+        setError(message);
+      }
     } finally {
       spinLockRef.current = false;
       setSpinning(false);
@@ -270,6 +297,8 @@ export function WheelPage({ session, onSessionChange, onOpenRewards }: Props) {
         </div>
       ) : null}
 
+      {staleNotice ? <p className="alert warning">{staleNotice}</p> : null}
+
       {result ? (
         <div className={`reward-result${result.isWinning ? "" : " no-prize"}`}>
           {result.isWinning ? (
@@ -314,17 +343,21 @@ function wheelBackground(slotCount: number) {
   }).join(", ")})`;
 }
 
-function selectedIndexFromResult(result: SpinResult, slots: Array<{ label: string }>) {
+function selectedIndexFromResult(
+  result: SpinResult,
+  slots: Array<{ slotId: string }>,
+  configVersion: number,
+) {
   if (
-    typeof result.selectedIndex === "number" &&
+    Number.isSafeInteger(result.selectedIndex) &&
     result.selectedIndex >= 0 &&
-    result.selectedIndex < slots.length
+    result.selectedIndex < slots.length &&
+    result.configVersion === configVersion &&
+    result.selectedSlotId === slots[result.selectedIndex].slotId
   ) {
     return result.selectedIndex;
   }
-
-  const foundIndex = slots.findIndex((slot) => slot.label === result.rewardName);
-  return foundIndex >= 0 ? foundIndex : 0;
+  throw new Error("Vòng quay vừa được cập nhật. Vui lòng quay lại.");
 }
 
 function shortWheelLabel(label: string) {

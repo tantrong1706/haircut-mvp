@@ -64,7 +64,8 @@ describe("hợp đồng xác minh Zalo", () => {
     const spinBody = functionsSource.slice(start, end);
 
     expect(start).toBeGreaterThanOrEqual(0);
-    expect(spinBody).toContain("randomInt(availableSlotCount)");
+    expect(spinBody).toContain("randomInt(totalWeight)");
+    expect(spinBody).toContain("selectWeightedWheelSlotByDraw");
     expect(spinBody).not.toContain("Math.random()");
   });
 

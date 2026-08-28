@@ -160,6 +160,10 @@ export function nextWheelConfigVersion(value: unknown): number {
   return current + 1;
 }
 
+export function wheelConfigMatches(clientVersion: unknown, storedVersion: unknown): boolean {
+  return wheelConfigVersion(clientVersion) === wheelConfigVersion(storedVersion);
+}
+
 export function selectWheelSlot(slots: WheelSlotInput[], randomValue: number) {
   const activeSlots = activeWheelSlots(slots);
 
