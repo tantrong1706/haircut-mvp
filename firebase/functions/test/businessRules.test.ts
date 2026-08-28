@@ -11,11 +11,15 @@ import {
   isVerifiedOwnerIdentity,
   isServiceSessionExpired,
   legacyBranchPatch,
+  nextWheelConfigVersion,
+  normalizeWheelSlots,
   activeWheelSlotCount,
   rewardExpiresAtMs,
   selectWheelSlot,
   selectWheelSlotByIndex,
+  selectWeightedWheelSlotByDraw,
   serviceSessionExpiresAtMs,
+  wheelConfigVersion,
   wheelRewardOutcome,
 } from "../src/businessRules";
 
@@ -111,6 +115,65 @@ describe("vòng đời lượt cắt", () => {
 });
 
 describe("thống kê và vòng quay", () => {
+  it("chọn weighted slot đúng tại mọi boundary và bỏ qua slot đã tắt", () => {
+    const slots = normalizeWheelSlots([
+      { slotId: "disabled", label: "Đã tắt", active: false, type: "reward", weight: 100 },
+      { slotId: "discount", label: "Giảm 10%", active: true, type: "reward", weight: 25 },
+      { slotId: "wash", label: "Gội miễn phí", active: true, type: "reward", weight: 10 },
+      { slotId: "none", label: "Không trúng", active: true, type: "no_prize", weight: 40 },
+    ]);
+
+    expect(selectWeightedWheelSlotByDraw(slots, 0)).toMatchObject({
+      slotId: "discount",
+      index: 0,
+    });
+    expect(selectWeightedWheelSlotByDraw(slots, 24)).toMatchObject({ slotId: "discount" });
+    expect(selectWeightedWheelSlotByDraw(slots, 25)).toMatchObject({
+      slotId: "wash",
+      index: 1,
+    });
+    expect(selectWeightedWheelSlotByDraw(slots, 34)).toMatchObject({ slotId: "wash" });
+    expect(selectWeightedWheelSlotByDraw(slots, 35)).toMatchObject({
+      slotId: "none",
+      index: 2,
+    });
+    expect(selectWeightedWheelSlotByDraw(slots, 74)).toMatchObject({ slotId: "none" });
+    expect(selectWeightedWheelSlotByDraw(slots, 75)).toBeNull();
+  });
+
+  it("chuẩn hóa config legacy với weight 1 và slotId ổn định", () => {
+    expect(
+      normalizeWheelSlots([
+        { label: "Quà A", active: true, type: "reward" },
+        { label: "Quà B", active: true, type: "reward" },
+      ]),
+    ).toEqual([
+      { slotId: "slot-1", label: "Quà A", active: true, type: "reward", weight: 1 },
+      { slotId: "slot-2", label: "Quà B", active: true, type: "reward", weight: 1 },
+    ]);
+  });
+
+  it("từ chối weight không phải số nguyên dương, quá lớn và slotId trùng", () => {
+    for (const weight of [0, -1, 1.5, Number.NaN, 1_000_001]) {
+      expect(() =>
+        normalizeWheelSlots([{ slotId: "slot-a", label: "Quà", active: true, weight }]),
+      ).toThrow(/weight/i);
+    }
+    expect(() =>
+      normalizeWheelSlots([
+        { slotId: "same", label: "Quà A", active: true, weight: 1 },
+        { slotId: "same", label: "Quà B", active: true, weight: 1 },
+      ]),
+    ).toThrow(/slotId/i);
+  });
+
+  it("config legacy bắt đầu ở version 1 và mỗi lần lưu tăng đúng một version", () => {
+    expect(wheelConfigVersion(undefined)).toBe(1);
+    expect(wheelConfigVersion(7)).toBe(7);
+    expect(nextWheelConfigVersion(undefined)).toBe(2);
+    expect(nextWheelConfigVersion(7)).toBe(8);
+  });
+
   it("chọn đúng ô theo chỉ số nguyên đã sinh an toàn", () => {
     const slots = [
       { label: "Đã tắt", active: false, type: "reward" },
