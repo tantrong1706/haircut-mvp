@@ -20,6 +20,7 @@ import {
   selectWeightedWheelSlotByDraw,
   serviceSessionExpiresAtMs,
   wheelConfigVersion,
+  wheelConfigMatches,
   wheelRewardOutcome,
 } from "../src/businessRules";
 
@@ -172,6 +173,13 @@ describe("thống kê và vòng quay", () => {
     expect(wheelConfigVersion(7)).toBe(7);
     expect(nextWheelConfigVersion(undefined)).toBe(2);
     expect(nextWheelConfigVersion(7)).toBe(8);
+  });
+
+  it("chỉ cho spin khi client đang hiển thị đúng configVersion hiện hành", () => {
+    expect(wheelConfigMatches(3, 3)).toBe(true);
+    expect(wheelConfigMatches(2, 3)).toBe(false);
+    expect(wheelConfigMatches(undefined, 1)).toBe(true);
+    expect(wheelConfigMatches(undefined, 2)).toBe(false);
   });
 
   it("chọn đúng ô theo chỉ số nguyên đã sinh an toàn", () => {
