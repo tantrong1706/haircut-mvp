@@ -15,6 +15,7 @@ import {
   normalizeWheelSlots,
   activeWheelSlotCount,
   rewardExpiresAtMs,
+  rewardLookupReason,
   selectWheelSlot,
   selectWheelSlotByIndex,
   selectWeightedWheelSlotByDraw,
@@ -242,6 +243,69 @@ describe("thống kê và vòng quay", () => {
 });
 
 describe("hạn dùng mã quà", () => {
+  it("mặc định reward legacy dùng được tại mọi chi nhánh active cùng salon", () => {
+    expect(
+      rewardLookupReason({
+        found: true,
+        requestSalonId: "salon-a",
+        rewardSalonId: "salon-a",
+        branchSalonId: "salon-a",
+        branchActive: true,
+        branchId: "branch-a2",
+        status: "unused",
+      }),
+    ).toBe("OK");
+  });
+
+  it("reward giới hạn chi nhánh chỉ PASS tại allowedBranchIds", () => {
+    const input = {
+      found: true,
+      requestSalonId: "salon-a",
+      rewardSalonId: "salon-a",
+      branchSalonId: "salon-a",
+      branchActive: true,
+      status: "unused" as const,
+      redemptionScope: "branches" as const,
+      allowedBranchIds: ["branch-a1"],
+    };
+    expect(rewardLookupReason({ ...input, branchId: "branch-a1" })).toBe("OK");
+    expect(rewardLookupReason({ ...input, branchId: "branch-a2" })).toBe("WRONG_BRANCH");
+  });
+
+  it("không bao giờ cho lookup chéo salon hoặc chi nhánh không active", () => {
+    const base = {
+      found: true,
+      requestSalonId: "salon-a",
+      rewardSalonId: "salon-b",
+      branchSalonId: "salon-a",
+      branchActive: true,
+      branchId: "branch-a1",
+      status: "unused" as const,
+    };
+    expect(rewardLookupReason(base)).toBe("NOT_FOUND");
+    expect(
+      rewardLookupReason({ ...base, rewardSalonId: "salon-a", branchActive: false }),
+    ).toBe("WRONG_BRANCH");
+  });
+
+  it.each([
+    ["used", "USED"],
+    ["expired", "EXPIRED"],
+    ["revoked", "REVOKED"],
+  ] as const)("status %s có reason authoritative %s", (status, reason) => {
+    expect(
+      rewardLookupReason({
+        found: true,
+        requestSalonId: "salon-a",
+        rewardSalonId: "salon-a",
+        branchSalonId: "salon-a",
+        branchActive: true,
+        branchId: "branch-a1",
+        status,
+      }),
+    ).toBe(reason);
+  });
+
   it("hết hạn đúng tại mốc thời gian cấu hình", () => {
     const expiresAtMs = rewardExpiresAtMs(1_000, 90);
 
