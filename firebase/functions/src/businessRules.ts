@@ -5,10 +5,22 @@ export type CustomerContactPatch = {
 };
 
 export type WheelSlotInput = {
+  slotId?: string;
   label: string;
   active: boolean;
   type?: "reward" | "no_prize";
+  weight?: number;
 };
+
+export type NormalizedWheelSlot = {
+  slotId: string;
+  label: string;
+  active: boolean;
+  type: "reward" | "no_prize";
+  weight: number;
+};
+
+export const MAX_WHEEL_SLOT_WEIGHT = 1_000_000;
 
 export function isVerifiedOwnerIdentity(input: { email?: unknown; emailVerified?: unknown }) {
   return (
@@ -83,6 +95,69 @@ export function normalizeWheelSlotType(type: unknown, label: string): "reward" |
     return "reward";
   }
   return /may mắn|không trúng/i.test(label) ? "no_prize" : "reward";
+}
+
+export function normalizeWheelSlots(slots: WheelSlotInput[]): NormalizedWheelSlot[] {
+  const slotIds = new Set<string>();
+  return slots.map((slot, index) => {
+    const label = String(slot.label || "").trim();
+    const slotId = typeof slot.slotId === "string" && slot.slotId.trim()
+      ? slot.slotId.trim()
+      : `slot-${index + 1}`;
+    const weight = slot.weight === undefined ? 1 : Number(slot.weight);
+
+    if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/.test(slotId)) {
+      throw new Error(`slotId không hợp lệ tại ô ${index + 1}`);
+    }
+    if (slotIds.has(slotId)) {
+      throw new Error(`slotId bị trùng: ${slotId}`);
+    }
+    if (!Number.isSafeInteger(weight) || weight <= 0 || weight > MAX_WHEEL_SLOT_WEIGHT) {
+      throw new Error(`weight không hợp lệ tại ô ${index + 1}`);
+    }
+    slotIds.add(slotId);
+
+    return {
+      slotId,
+      label,
+      active: slot.active !== false,
+      type: normalizeWheelSlotType(slot.type, label),
+      weight,
+    };
+  });
+}
+
+export function selectWeightedWheelSlotByDraw(slots: WheelSlotInput[], draw: number) {
+  const activeSlots = normalizeWheelSlots(slots).filter(
+    (slot) => slot.active && slot.label.length > 0,
+  );
+  const totalWeight = activeSlots.reduce((total, slot) => total + slot.weight, 0);
+  if (!Number.isSafeInteger(draw) || draw < 0 || draw >= totalWeight) {
+    return null;
+  }
+
+  let boundary = 0;
+  for (let index = 0; index < activeSlots.length; index += 1) {
+    const slot = activeSlots[index];
+    boundary += slot.weight;
+    if (draw < boundary) {
+      return { ...slot, index, totalWeight };
+    }
+  }
+  return null;
+}
+
+export function wheelConfigVersion(value: unknown): number {
+  const version = Number(value);
+  return Number.isSafeInteger(version) && version > 0 ? version : 1;
+}
+
+export function nextWheelConfigVersion(value: unknown): number {
+  const current = wheelConfigVersion(value);
+  if (current >= Number.MAX_SAFE_INTEGER) {
+    throw new Error("configVersion đã vượt giới hạn an toàn");
+  }
+  return current + 1;
 }
 
 export function selectWheelSlot(slots: WheelSlotInput[], randomValue: number) {
