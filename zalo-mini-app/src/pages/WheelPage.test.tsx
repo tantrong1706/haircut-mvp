@@ -21,13 +21,16 @@ vi.mock("../services/monitoring", () => ({
 }));
 
 const config: LuckyWheelConfig = {
+  configVersion: 3,
   requiredPoints: 5,
   rewardValidityDays: 30,
   deductPointsAfterSpin: true,
   slots: Array.from({ length: 6 }, (_, index) => ({
+    slotId: `slot-${index + 1}`,
     label: `Quà ${index + 1}`,
     active: true,
     type: "reward" as const,
+    weight: 1,
   })),
 };
 
@@ -46,6 +49,8 @@ function spinResult(selectedIndex: number): SpinResult {
     pointsAfter: 15,
     isWinning: true,
     selectedIndex,
+    selectedSlotId: config.slots[selectedIndex].slotId,
+    configVersion: config.configVersion,
   };
 }
 
@@ -61,7 +66,9 @@ describe("WheelPage", () => {
     mocks.getCustomerWheelConfig.mockResolvedValue(config);
   });
 
-  it.each([0, 5])("dừng đúng giữa ô backend trả về ở index %s", async (selectedIndex) => {
+  it.each([0, 1, 2, 3, 4, 5])(
+    "dừng đúng giữa ô backend trả về ở index %s",
+    async (selectedIndex) => {
     const user = userEvent.setup();
     mocks.spinWheel.mockResolvedValue(spinResult(selectedIndex));
     render(<WheelPage session={session} onSessionChange={vi.fn()} />);
@@ -83,6 +90,34 @@ describe("WheelPage", () => {
     expect(document.querySelector(".wheel-label")?.getAttribute("style")).toContain(
       "rotate(var(--wheel-label-counter))",
     );
+    },
+  );
+
+  it("fail closed và tải lại config khi response không khớp selectedSlotId", async () => {
+    const user = userEvent.setup();
+    mocks.spinWheel.mockResolvedValue({ ...spinResult(2), selectedSlotId: "slot-khac" });
+    render(<WheelPage session={session} onSessionChange={vi.fn()} />);
+
+    await user.click(await screen.findByRole("button", { name: "Quay ngay" }));
+
+    await waitFor(() =>
+      expect(screen.getByText("Vòng quay vừa được cập nhật. Vui lòng quay lại.")).toBeVisible(),
+    );
+    expect(mocks.getCustomerWheelConfig).toHaveBeenCalledTimes(2);
+    expect(document.querySelector(".reward-result")).not.toBeInTheDocument();
+  });
+
+  it("reduced motion dừng ngay đúng slot backend chọn", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, "matchMedia").mockReturnValue({ matches: true } as MediaQueryList);
+    mocks.spinWheel.mockResolvedValue(spinResult(3));
+    render(<WheelPage session={session} onSessionChange={vi.fn()} />);
+
+    await user.click(await screen.findByRole("button", { name: "Quay ngay" }));
+
+    await waitFor(() => expect(document.querySelector(".reward-result")).toBeInTheDocument());
+    const rotation = Number(screen.getByTestId("lucky-wheel").getAttribute("data-rotation"));
+    expect(normalizeDegrees(3 * 60 + 30 + rotation)).toBeCloseTo(0, 8);
   });
 
   it("khóa double click và disable nút cho tới khi animation kết thúc", async () => {

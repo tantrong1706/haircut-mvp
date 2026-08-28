@@ -17,7 +17,14 @@ describe("normalizeLuckyWheelConfig", () => {
 
     expect(config.requiredPoints).toBe(1);
     expect(config.slots).toHaveLength(6);
-    expect(config.slots[0]).toEqual({ label: "Quà VIP", active: true, type: "reward" });
+    expect(config.slots[0]).toEqual({
+      slotId: "slot-1",
+      label: "Quà VIP",
+      active: true,
+      type: "reward",
+      weight: 1,
+    });
+    expect(config.configVersion).toBe(1);
   });
 
   it("chỉ trả về ô đang bật và có tên", () => {
@@ -45,9 +52,11 @@ describe("normalizeLuckyWheelConfig", () => {
 describe("targetWheelRotation", () => {
   it.each([
     { selectedIndex: 0, slotCount: 6 },
+    { selectedIndex: 1, slotCount: 6 },
+    { selectedIndex: 2, slotCount: 6 },
+    { selectedIndex: 3, slotCount: 6 },
+    { selectedIndex: 4, slotCount: 6 },
     { selectedIndex: 5, slotCount: 6 },
-    { selectedIndex: 1, slotCount: 2 },
-    { selectedIndex: 2, slotCount: 4 },
   ])(
     "đưa chính giữa ô $selectedIndex/$slotCount tới kim ở đỉnh",
     ({ selectedIndex, slotCount }) => {

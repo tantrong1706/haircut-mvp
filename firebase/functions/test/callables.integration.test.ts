@@ -27,6 +27,7 @@ import {
   spinLuckyWheel,
   submitPointRequest,
   updatePendingPointRequestPhotos,
+  updateLuckyWheel,
   updateStaffProfile,
   updateSystemAdminUserStatus,
   updateSystemAdminSalonStatus,
@@ -1156,6 +1157,150 @@ describe("callable transactions", () => {
     expect(
       (await db.collection("audit_events").where("salonId", "==", salonId).get()).size,
     ).toBeGreaterThanOrEqual(2);
+  });
+
+  it("mỗi lần owner lưu wheel tăng configVersion và chuẩn hóa weighted slots", async () => {
+    const salonId = "salon-wheel-version";
+    await seedOwner("owner-wheel-version", salonId);
+    await db.collection("lucky_wheel").doc(salonId).set({ salonId, configVersion: 4 });
+    const slots = Array.from({ length: 6 }, (_, index) => ({
+      slotId: `slot-${index + 1}`,
+      label: `Quà ${index + 1}`,
+      type: index === 5 ? "no_prize" : "reward",
+      active: index === 0,
+      weight: index + 1,
+    }));
+
+    const first = await updateLuckyWheel.run(
+      requestFor("owner-wheel-version", {
+        salonId,
+        requiredPoints: 5,
+        rewardValidityDays: 30,
+        deductPointsAfterSpin: true,
+        slots,
+      }),
+    );
+    const second = await updateLuckyWheel.run(
+      requestFor("owner-wheel-version", {
+        salonId,
+        requiredPoints: 5,
+        rewardValidityDays: 30,
+        deductPointsAfterSpin: true,
+        slots,
+      }),
+    );
+
+    expect(first).toMatchObject({ ok: true, configVersion: 5 });
+    expect(second).toMatchObject({ ok: true, configVersion: 6 });
+    expect((await db.collection("lucky_wheel").doc(salonId).get()).data()).toMatchObject({
+      configVersion: 6,
+      slots: expect.arrayContaining([
+        expect.objectContaining({ slotId: "slot-1", weight: 1 }),
+        expect.objectContaining({ slotId: "slot-6", weight: 6, type: "no_prize" }),
+      ]),
+    });
+  });
+
+  it("reject stale config và snapshot đúng slot backend đã chọn", async () => {
+    const salonId = "salon-wheel-stale";
+    const branchId = "branch-wheel-stale";
+    const customerId = "customer-wheel-stale";
+    await seedOwner("owner-wheel-stale", salonId);
+    await seedBranch(salonId, branchId);
+    await db.collection("customers").doc(customerId).set({
+      salonId,
+      name: "Khách Wheel",
+      points: 10,
+      lastBranchId: branchId,
+      lastBranchName: "Chi nhánh Wheel",
+    });
+    await db
+      .collection("lucky_wheel")
+      .doc(salonId)
+      .set({
+        salonId,
+        configVersion: 3,
+        requiredPoints: 5,
+        rewardValidityDays: 30,
+        deductPointsAfterSpin: true,
+        slots: [
+          {
+            slotId: "only-slot",
+            label: "Gội miễn phí",
+            type: "reward",
+            active: true,
+            weight: 25,
+          },
+        ],
+      });
+
+    await expect(
+      spinLuckyWheel.run(
+        requestFor("owner-wheel-stale", {
+          salonId,
+          customerId,
+          configVersion: 2,
+          idempotencyKey: "spin-wheel-stale-0001",
+        }),
+      ),
+    ).rejects.toMatchObject({ details: { errorCode: "STALE_WHEEL_CONFIG" } });
+    expect((await db.collection("customers").doc(customerId).get()).data()?.points).toBe(10);
+
+    const spin = await spinLuckyWheel.run(
+      requestFor("owner-wheel-stale", {
+        salonId,
+        customerId,
+        configVersion: 3,
+        idempotencyKey: "spin-wheel-stale-0002",
+      }),
+    );
+    expect(spin).toMatchObject({
+      selectedIndex: 0,
+      selectedSlotId: "only-slot",
+      configVersion: 3,
+      rewardName: "Gội miễn phí",
+    });
+    expect((await db.collection("reward_history").doc(spin.rewardId).get()).data()).toMatchObject({
+      salonId,
+      customerId,
+      sourceBranchId: branchId,
+      sourceBranchName: "Chi nhánh Wheel",
+      sourceSlotId: "only-slot",
+      wheelConfigVersion: 3,
+      wheelSlotWeight: 25,
+      rewardName: "Gội miễn phí",
+      redemptionScope: "salon",
+      status: "unused",
+      pointsSpent: 5,
+    });
+  });
+
+  it("no_prize ghi lịch sử nhưng không tạo voucher có thể dùng", async () => {
+    const salonId = "salon-wheel-no-prize";
+    const customerId = "customer-wheel-no-prize";
+    await seedOwner("owner-wheel-no-prize", salonId);
+    await db.collection("customers").doc(customerId).set({ salonId, points: 5 });
+    await db.collection("lucky_wheel").doc(salonId).set({
+      salonId,
+      configVersion: 1,
+      requiredPoints: 5,
+      deductPointsAfterSpin: true,
+      slots: [
+        { slotId: "none", label: "Không trúng", type: "no_prize", active: true, weight: 1 },
+      ],
+    });
+
+    const spin = await spinLuckyWheel.run(
+      requestFor("owner-wheel-no-prize", {
+        salonId,
+        customerId,
+        configVersion: 1,
+        idempotencyKey: "spin-no-prize-0001",
+      }),
+    );
+    const reward = (await db.collection("reward_history").doc(spin.rewardId).get()).data();
+    expect(spin).toMatchObject({ isWinning: false, rewardCode: "", selectedSlotId: "none" });
+    expect(reward).toMatchObject({ status: "no_prize", rewardCode: null, isWinning: false });
   });
 
   it("chặn tenant giả, document thiếu salonId, tài khoản và salon bị khóa", async () => {
