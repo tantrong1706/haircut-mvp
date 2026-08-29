@@ -6,10 +6,15 @@ import { RewardsPage } from "./RewardsPage";
 
 const mocks = vi.hoisted(() => ({
   getRewards: vi.fn(),
+  toDataURL: vi.fn(),
 }));
 
 vi.mock("../services/api", () => ({
   getRewards: mocks.getRewards,
+}));
+
+vi.mock("qrcode", () => ({
+  default: { toDataURL: mocks.toDataURL },
 }));
 
 const session = {
@@ -22,6 +27,7 @@ const session = {
 describe("RewardsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.toDataURL.mockResolvedValue("data:image/png;base64,reward-qr");
   });
 
   it("tải lại danh sách quà sau lỗi tạm thời", async () => {
@@ -53,7 +59,9 @@ describe("RewardsPage", () => {
         rewardName: "Gội đầu miễn phí",
         rewardCode: "HC-ACTIVE",
         status: "unused",
-        branchName: "Chi nhánh Trung tâm",
+        sourceBranchName: "Chi nhánh Trung tâm",
+        redemptionScope: "salon",
+        allowedBranchIds: [],
         createdAt: "24/08/2026",
         expiresAt: "24/09/2026",
       },
@@ -64,6 +72,9 @@ describe("RewardsPage", () => {
         status: "used",
         createdAt: "20/08/2026",
         usedAt: "21/08/2026",
+        usedBranchName: "Chi nhánh Quận 3",
+        redemptionScope: "salon",
+        allowedBranchIds: [],
       },
       {
         id: "reward-expired",
@@ -71,6 +82,8 @@ describe("RewardsPage", () => {
         rewardCode: "HC-EXPIRED",
         status: "expired",
         createdAt: "01/07/2026",
+        redemptionScope: "salon",
+        allowedBranchIds: [],
       },
       {
         id: "reward-revoked",
@@ -78,6 +91,8 @@ describe("RewardsPage", () => {
         rewardCode: "HC-REVOKED",
         status: "revoked",
         createdAt: "01/07/2026",
+        redemptionScope: "salon",
+        allowedBranchIds: [],
       },
     ]);
 
@@ -97,11 +112,20 @@ describe("RewardsPage", () => {
     const activeSection = await screen.findByRole("region", { name: "Quà có thể sử dụng" });
     const historySection = screen.getByRole("region", { name: "Lịch sử quà" });
     expect(within(activeSection).getByText("Gội đầu miễn phí")).toBeInTheDocument();
-    expect(within(activeSection).getByText("Chỉ dùng tại: Chi nhánh Trung tâm")).toBeInTheDocument();
+    expect(within(activeSection).getByText("Dùng tại mọi chi nhánh của salon")).toBeInTheDocument();
+    expect(
+      await within(activeSection).findByRole("img", { name: "QR quà Gội đầu miễn phí" }),
+    ).toHaveAttribute("src", "data:image/png;base64,reward-qr");
+    expect(mocks.toDataURL).toHaveBeenCalledWith(
+      "haircut-reward:v1:HC-ACTIVE",
+      expect.objectContaining({ errorCorrectionLevel: "M" }),
+    );
     expect(within(historySection).getByText("Đã dùng")).toBeInTheDocument();
+    expect(within(historySection).getByText("Đã dùng tại: Chi nhánh Quận 3")).toBeInTheDocument();
     expect(within(historySection).getByText("Hết hạn")).toBeInTheDocument();
     expect(within(historySection).getByText("Đã hủy")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Sao chép mã quà" })).toHaveLength(1);
+    expect(screen.getAllByRole("img", { name: /^QR quà/u })).toHaveLength(1);
 
     await user.click(screen.getByRole("button", { name: "Sao chép mã quà" }));
     expect(writeText).toHaveBeenCalledWith("HC-ACTIVE");
