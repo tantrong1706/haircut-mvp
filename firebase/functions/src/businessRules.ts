@@ -223,6 +223,58 @@ export function effectiveRewardStatus(
   return expiresAtMs !== null && expiresAtMs <= nowMs ? "expired" : "unused";
 }
 
+export type RewardLookupReason =
+  | "OK"
+  | "USED"
+  | "EXPIRED"
+  | "REVOKED"
+  | "WRONG_BRANCH"
+  | "NOT_FOUND";
+
+export function normalizeRedemptionScope(value: unknown): "salon" | "branches" {
+  return value === "branches" ? "branches" : "salon";
+}
+
+export function normalizeAllowedBranchIds(value: unknown): string[] {
+  return Array.isArray(value)
+    ? [...new Set(value.filter((item): item is string => typeof item === "string" && Boolean(item.trim())).map((item) => item.trim()))].slice(0, 100)
+    : [];
+}
+
+export function rewardLookupReason(input: {
+  found: boolean;
+  requestSalonId: string;
+  rewardSalonId: string;
+  branchId: string;
+  branchSalonId: string;
+  branchActive: boolean;
+  status: "unused" | "used" | "expired" | "revoked" | "no_prize";
+  redemptionScope?: unknown;
+  allowedBranchIds?: unknown;
+}): RewardLookupReason {
+  if (!input.found || !input.requestSalonId || input.rewardSalonId !== input.requestSalonId) {
+    return "NOT_FOUND";
+  }
+  if (input.status === "used") return "USED";
+  if (input.status === "expired") return "EXPIRED";
+  if (input.status === "revoked") return "REVOKED";
+  if (input.status === "no_prize") return "NOT_FOUND";
+  if (
+    !input.branchId ||
+    input.branchSalonId !== input.requestSalonId ||
+    input.branchActive !== true
+  ) {
+    return "WRONG_BRANCH";
+  }
+  if (
+    normalizeRedemptionScope(input.redemptionScope) === "branches" &&
+    !normalizeAllowedBranchIds(input.allowedBranchIds).includes(input.branchId)
+  ) {
+    return "WRONG_BRANCH";
+  }
+  return "OK";
+}
+
 export function canCreateCustomerWithinPlan(input: {
   plan: unknown;
   customerCount: number;

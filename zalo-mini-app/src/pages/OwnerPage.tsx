@@ -486,7 +486,7 @@ export function OwnerPage({ currentUser }: Props) {
     setError("");
 
     try {
-      await withMonitoringTrace(
+      const saved = await withMonitoringTrace(
         "owner_save_wheel_config",
         () => saveLuckyWheelConfig(salonId, wheelConfig),
         {
@@ -494,6 +494,7 @@ export function OwnerPage({ currentUser }: Props) {
           active_slots: wheelConfig.slots.filter((slot) => slot.active).length,
         },
       );
+      setWheelConfig((current) => ({ ...current, configVersion: saved.configVersion }));
       trackEvent("owner_wheel_config_saved", {
         salon_id: salonId,
         required_points: wheelConfig.requiredPoints,
@@ -2489,6 +2490,17 @@ function WheelConfigPanel({
     });
   }
 
+  function updateSlotWeight(index: number, weight: number) {
+    onChange({
+      ...config,
+      slots: config.slots.map((slot, slotIndex) =>
+        slotIndex === index
+          ? { ...slot, weight: Math.min(1_000_000, Math.max(1, Math.floor(weight || 1))) }
+          : slot,
+      ),
+    });
+  }
+
   return (
     <div className="panel">
       <div className="detail-stack">
@@ -2496,7 +2508,9 @@ function WheelConfigPanel({
           <Settings2 size={22} aria-hidden="true" />
           <div>
             <h2>Cấu hình vòng quay</h2>
-            <p className="muted">Chủ salon có thể đổi điểm cần quay và nội dung từng ô.</p>
+            <p className="muted">
+              Chủ salon có thể đổi điểm cần quay, nội dung và trọng số xác suất từng ô.
+            </p>
           </div>
         </div>
 
@@ -2545,7 +2559,7 @@ function WheelConfigPanel({
 
         <div className="wheel-config-list" aria-label="Danh sách ô vòng quay">
           {config.slots.map((slot, index) => (
-            <div className="wheel-slot-row" key={index}>
+            <div className="wheel-slot-row" key={slot.slotId}>
               <span>{index + 1}</span>
               <input
                 value={slot.label}
@@ -2563,6 +2577,14 @@ function WheelConfigPanel({
                 <option value="reward">Có quà</option>
                 <option value="no_prize">Không trúng</option>
               </select>
+              <input
+                aria-label={`Trọng số ô ${index + 1}`}
+                type="number"
+                min={1}
+                max={1_000_000}
+                value={slot.weight}
+                onChange={(event) => updateSlotWeight(index, Number(event.target.value || 1))}
+              />
               <label>
                 <input
                   type="checkbox"

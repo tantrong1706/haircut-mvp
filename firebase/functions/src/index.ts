@@ -40,6 +40,9 @@ import {
   nextWheelConfigVersion,
   normalizeWheelSlots,
   normalizeWheelSlotType,
+  normalizeAllowedBranchIds,
+  normalizeRedemptionScope,
+  rewardLookupReason,
   rewardExpiresAtMs,
   selectWeightedWheelSlotByDraw,
   serviceSessionExpiresAtMs,
@@ -176,6 +179,7 @@ const AUTHENTICATED_RATE_LIMITS = {
   submitPointRequest: 20,
   approvePointRequest: 60,
   rejectPointRequest: 60,
+  lookupRewardCode: 60,
   redeemRewardCode: 30,
   spinLuckyWheel: 20,
   claimServiceSession: 60,
@@ -1368,6 +1372,19 @@ function rewardCode(seed?: string): string {
     ? createHash("sha256").update(seed).digest("hex").slice(0, 16).toUpperCase()
     : randomBytes(8).toString("hex").toUpperCase();
   return `HC-${date}-${suffix}`;
+}
+
+function requireRewardCodeInput(value: unknown): string {
+  const rewardCodeInput = requireString(value, "rewardCode").toUpperCase().replace(/\s+/g, "");
+  if (!/^[A-Z0-9][A-Z0-9-]{5,79}$/.test(rewardCodeInput)) {
+    throw apiError(
+      "invalid-argument",
+      ApiErrorCode.INVALID_REQUEST,
+      "Mã quà không hợp lệ",
+      { field: "rewardCode" },
+    );
+  }
+  return rewardCodeInput;
 }
 
 function miniAppUrl(salonId: string, mirrorId: string, qrToken: string): string {
@@ -5432,9 +5449,16 @@ export const getCustomerRewardsFromZalo = onCall(zaloFunctionOptions, async (req
           rewardName: data.rewardName ?? "",
           rewardCode: data.rewardCode ?? "",
           status,
-          branchName: String(data.branchName || "Chi nhánh phát hành"),
+          sourceBranchId: String(data.sourceBranchId || data.branchId || ""),
+          sourceBranchName: String(
+            data.sourceBranchName || data.branchName || "Chi nhánh phát hành",
+          ),
+          redemptionScope: normalizeRedemptionScope(data.redemptionScope),
+          allowedBranchIds: normalizeAllowedBranchIds(data.allowedBranchIds),
           createdAtMs: timestampMillis(data.createdAt),
           usedAtMs: timestampMillis(data.usedAt),
+          usedBranchId: String(data.usedBranchId || ""),
+          usedBranchName: String(data.usedBranchName || ""),
           expiresAtMs: timestampMillis(data.expiresAt),
         },
       ];
@@ -6777,28 +6801,37 @@ async function deleteStoragePrefixStrict(
 export const lookupRewardCode = onCall(functionOptions, async (request) => {
   const uid = currentUid(request.auth);
   const salonId = requireString(request.data?.salonId, "salonId");
-  const rewardCodeInput = requireString(request.data?.rewardCode, "rewardCode");
+  const rewardCodeInput = requireRewardCodeInput(request.data?.rewardCode);
   const user = await assertSalonRole(uid, salonId, ["owner", "staff"]);
+  await enforceAuthenticatedRateLimit("lookupRewardCode", uid, salonId);
 
   if (user.role === "staff" && user.canRedeemRewards !== true) {
     throw new HttpsError("permission-denied", "Nhân viên chưa được phép kiểm tra mã quà");
   }
 
   const branchId = await resolveAuthorizedBranchScope(user, salonId, request.data?.branchId);
-  let rewardQuery = db
+  if (!branchId) {
+    throw apiError(
+      "invalid-argument",
+      ApiErrorCode.INVALID_BRANCH,
+      "Vui lòng chọn chi nhánh kiểm tra quà",
+      { field: "branchId" },
+    );
+  }
+  const query = await db
     .collection("reward_history")
     .where("salonId", "==", salonId)
-    .where("rewardCode", "==", rewardCodeInput);
-  if (branchId) {
-    rewardQuery = rewardQuery.where("branchId", "==", branchId);
-  }
-  const query = await rewardQuery.limit(1).get();
+    .where("rewardCode", "==", rewardCodeInput)
+    .limit(1)
+    .get();
 
   if (query.empty) {
     return {
       found: false,
       rewardCode: rewardCodeInput,
       status: "not_found",
+      redeemableAtBranch: false,
+      reason: "NOT_FOUND" as const,
     };
   }
 
@@ -6809,6 +6842,29 @@ export const lookupRewardCode = onCall(functionOptions, async (request) => {
     timestampMillis(reward.expiresAt),
     Date.now(),
   );
+  const branchSnap = await db.collection("branches").doc(branchId).get();
+  const redemptionScope = normalizeRedemptionScope(reward.redemptionScope);
+  const allowedBranchIds = normalizeAllowedBranchIds(reward.allowedBranchIds);
+  const reason = rewardLookupReason({
+    found: true,
+    requestSalonId: salonId,
+    rewardSalonId: String(reward.salonId || ""),
+    branchId,
+    branchSalonId: String(branchSnap.data()?.salonId || ""),
+    branchActive: branchSnap.data()?.isActive === true,
+    status,
+    redemptionScope,
+    allowedBranchIds,
+  });
+  if (reason === "NOT_FOUND") {
+    return {
+      found: false,
+      rewardCode: rewardCodeInput,
+      status: "not_found",
+      redeemableAtBranch: false,
+      reason,
+    };
+  }
   let customerName = "";
 
   if (reward.customerId) {
@@ -6828,13 +6884,19 @@ export const lookupRewardCode = onCall(functionOptions, async (request) => {
     createdAtMs: timestampMillis(reward.createdAt),
     usedAtMs: timestampMillis(reward.usedAt),
     expiresAtMs: timestampMillis(reward.expiresAt),
+    sourceBranchId: String(reward.sourceBranchId || reward.branchId || ""),
+    sourceBranchName: String(reward.sourceBranchName || reward.branchName || ""),
+    redemptionScope,
+    allowedBranchIds,
+    redeemableAtBranch: reason === "OK",
+    reason,
   };
 });
 
 export const redeemRewardCode = onCall(functionOptions, async (request) => {
   const uid = currentUid(request.auth);
   const salonId = requireString(request.data?.salonId, "salonId");
-  const rewardCodeInput = requireString(request.data?.rewardCode, "rewardCode");
+  const rewardCodeInput = requireRewardCodeInput(request.data?.rewardCode);
   const idempotencyKey = requireIdempotencyKey(request.data?.idempotencyKey);
   const user = await assertSalonRole(uid, salonId, ["owner", "staff"]);
   await enforceAuthenticatedRateLimit("redeemRewardCode", uid, salonId);
@@ -6850,14 +6912,20 @@ export const redeemRewardCode = onCall(functionOptions, async (request) => {
   }
 
   const branchId = await resolveAuthorizedBranchScope(user, salonId, request.data?.branchId);
-  let rewardQuery = db
+  if (!branchId) {
+    throw apiError(
+      "invalid-argument",
+      ApiErrorCode.INVALID_BRANCH,
+      "Vui lòng chọn chi nhánh đổi quà",
+      { field: "branchId" },
+    );
+  }
+  const query = await db
     .collection("reward_history")
     .where("salonId", "==", salonId)
-    .where("rewardCode", "==", rewardCodeInput);
-  if (branchId) {
-    rewardQuery = rewardQuery.where("branchId", "==", branchId);
-  }
-  const query = await rewardQuery.limit(1).get();
+    .where("rewardCode", "==", rewardCodeInput)
+    .limit(1)
+    .get();
 
   if (query.empty) {
     throw new HttpsError("not-found", "Không tìm thấy mã quà");
@@ -6865,14 +6933,7 @@ export const redeemRewardCode = onCall(functionOptions, async (request) => {
 
   const rewardRef = query.docs[0].ref;
   const rewardBeforeTransaction = query.docs[0].data();
-  const usedBranchId = branchId || String(rewardBeforeTransaction.branchId || "");
-  if (!usedBranchId) {
-    throw apiError(
-      "failed-precondition",
-      ApiErrorCode.INVALID_BRANCH,
-      "Chưa xác định được chi nhánh đổi quà",
-    );
-  }
+  const usedBranchId = branchId;
   await assertBranchAccess(user, usedBranchId);
   const now = Timestamp.now();
 
@@ -6885,7 +6946,7 @@ export const redeemRewardCode = onCall(functionOptions, async (request) => {
     ]);
     const reward = rewardSnap.data();
 
-    if (!rewardSnap.exists || reward?.salonId !== salonId || reward?.branchId !== usedBranchId) {
+    if (!rewardSnap.exists || reward?.salonId !== salonId) {
       throw new HttpsError("not-found", "Không tìm thấy mã quà");
     }
     assertBranchIsOperational(branchSnap.data(), salonId, usedBranchId);
@@ -6912,6 +6973,10 @@ export const redeemRewardCode = onCall(functionOptions, async (request) => {
         rewardName: reward.rewardName ?? "",
         customerId: reward.customerId ?? "",
         alreadyRedeemed: true,
+        usedAtMs: timestampMillis(reward.usedAt),
+        usedBy: String(reward.usedBy || ""),
+        usedBranchId: String(reward.usedBranchId || ""),
+        usedBranchName: String(reward.usedBranchName || ""),
       };
     }
     const rewardStatus = effectiveRewardStatus(
@@ -6919,14 +6984,35 @@ export const redeemRewardCode = onCall(functionOptions, async (request) => {
       timestampMillis(reward.expiresAt),
       now.toMillis(),
     );
-    if (rewardStatus === "expired") {
+    const redemptionScope = normalizeRedemptionScope(reward.redemptionScope);
+    const allowedBranchIds = normalizeAllowedBranchIds(reward.allowedBranchIds);
+    const reason = rewardLookupReason({
+      found: true,
+      requestSalonId: salonId,
+      rewardSalonId: String(reward.salonId || ""),
+      branchId: usedBranchId,
+      branchSalonId: String(branchSnap.data()?.salonId || ""),
+      branchActive: branchSnap.data()?.isActive === true,
+      status: rewardStatus,
+      redemptionScope,
+      allowedBranchIds,
+    });
+    if (reason === "EXPIRED") {
       throw apiError("failed-precondition", ApiErrorCode.REWARD_EXPIRED, "Mã quà đã hết hạn");
     }
-    if (rewardStatus !== "unused") {
+    if (reason === "WRONG_BRANCH") {
+      throw apiError(
+        "failed-precondition",
+        ApiErrorCode.INVALID_BRANCH,
+        "Mã quà không áp dụng tại chi nhánh này",
+        { reason },
+      );
+    }
+    if (reason !== "OK") {
       throw apiError(
         "failed-precondition",
         ApiErrorCode.REWARD_ALREADY_REDEEMED,
-        rewardStatus === "revoked" ? "Mã quà đã bị hủy" : "Mã quà đã được xử lý",
+        reason === "REVOKED" ? "Mã quà đã bị hủy" : "Mã quà đã được xử lý",
       );
     }
 
@@ -6937,6 +7023,7 @@ export const redeemRewardCode = onCall(functionOptions, async (request) => {
         usedAt: now,
         usedBy: uid,
         usedBranchId,
+        usedBranchName: String(branchSnap.data()?.name || "Chi nhánh"),
         redemptionIdempotencyKey: idempotencyKey,
         updatedAt: now,
       },
@@ -6964,6 +7051,10 @@ export const redeemRewardCode = onCall(functionOptions, async (request) => {
       rewardName: reward.rewardName ?? "",
       customerId: reward.customerId ?? "",
       alreadyRedeemed: false,
+      usedAtMs: now.toMillis(),
+      usedBy: uid,
+      usedBranchId,
+      usedBranchName: String(branchSnap.data()?.name || "Chi nhánh"),
     };
   });
 
@@ -6981,13 +7072,17 @@ export const redeemRewardCode = onCall(functionOptions, async (request) => {
     rewardName: result.rewardName,
     customerName,
     alreadyRedeemed: result.alreadyRedeemed,
+    usedAtMs: result.usedAtMs,
+    usedBy: result.usedBy,
+    usedBranchId: result.usedBranchId,
+    usedBranchName: result.usedBranchName,
   };
 });
 
 export const restoreRewardCode = onCall(functionOptions, async (request) => {
   const uid = currentUid(request.auth);
   const salonId = requireString(request.data?.salonId, "salonId");
-  const rewardCodeInput = requireString(request.data?.rewardCode, "rewardCode");
+  const rewardCodeInput = requireRewardCodeInput(request.data?.rewardCode);
   const reason = optionalLimitedString(request.data?.reason, "reason", 200) ?? "Bấm nhầm";
   await assertSalonRole(uid, salonId, ["owner"]);
 

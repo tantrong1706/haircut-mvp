@@ -240,7 +240,7 @@ describe("restoreSavedCustomerSession ở chế độ kiểm thử", () => {
         ...candidate,
         customerId: "mock-customer",
         identityBinding: "b".repeat(64),
-      }, 3),
+      }),
     ).resolves.toEqual({ status: "discarded", reason: "identity_mismatch" });
   });
 });

@@ -52,9 +52,14 @@ export type Reward = {
   rewardName: string;
   rewardCode: string;
   status: "unused" | "used" | "expired" | "revoked";
-  branchName?: string;
+  sourceBranchId?: string;
+  sourceBranchName?: string;
+  redemptionScope: "salon" | "branches";
+  allowedBranchIds: string[];
   createdAt: string;
   usedAt?: string;
+  usedBranchId?: string;
+  usedBranchName?: string;
   expiresAt?: string;
 };
 

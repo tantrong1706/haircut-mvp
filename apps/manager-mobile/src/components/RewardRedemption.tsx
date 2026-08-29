@@ -59,7 +59,7 @@ export function RewardRedemption({
     try {
       const next = await withMonitoringTrace(
         "reward_code_lookup",
-        () => lookupRewardCode({ salonId, rewardCode }),
+        () => lookupRewardCode({ salonId, branchId, rewardCode }),
         { salon_id: salonId },
       );
       setInfo(next);
@@ -83,14 +83,22 @@ export function RewardRedemption({
       setResult(next);
       setInfo((current) =>
         current
-          ? { ...current, status: "used", usedAtMs: Date.now() }
+          ? {
+              ...current,
+              status: "used",
+              usedAtMs: next.usedAtMs,
+              usedBranchId: next.usedBranchId,
+              usedBranchName: next.usedBranchName,
+            }
           : {
               found: true,
               rewardCode: next.rewardCode,
               rewardName: next.rewardName,
               customerName: next.customerName,
               status: "used",
-              usedAtMs: Date.now(),
+              usedAtMs: next.usedAtMs,
+              usedBranchId: next.usedBranchId,
+              usedBranchName: next.usedBranchName,
             },
       );
       setRewardCode("");
@@ -186,6 +194,18 @@ export function RewardRedemption({
                 <dd>{formatDateTime(info.expiresAtMs)}</dd>
               </div>
             ) : null}
+            {info.usedAtMs ? (
+              <div>
+                <dt>Đã dùng lúc</dt>
+                <dd>{formatDateTime(info.usedAtMs)}</dd>
+              </div>
+            ) : null}
+            {info.usedBranchName ? (
+              <div>
+                <dt>Chi nhánh sử dụng</dt>
+                <dd>{info.usedBranchName}</dd>
+              </div>
+            ) : null}
           </dl>
           <div className="manager-button-row">
             <button
@@ -204,13 +224,18 @@ export function RewardRedemption({
             <button
               className="manager-button primary"
               type="button"
-              disabled={Boolean(busy) || !info.found || info.status !== "unused"}
+              disabled={
+                Boolean(busy) ||
+                !info.found ||
+                info.status !== "unused" ||
+                info.redeemableAtBranch === false
+              }
               onClick={() =>
                 setConfirm({
                   title: "Xác nhận sử dụng quà?",
                   description: `${info.rewardName || "Mã quà"} của ${
                     info.customerName || "khách hàng"
-                  } sẽ không thể dùng lại.`,
+                  } sẽ được đánh dấu đã sử dụng. Chủ salon có thể hoàn tác trong 15 phút nếu thao tác nhầm.`,
                   confirmLabel: "Xác nhận đã dùng",
                   onConfirm: redeem,
                 })
@@ -252,6 +277,7 @@ export function RewardRedemption({
 
 function rewardStatus(info: RewardCodeInfo) {
   if (!info.found || info.status === "not_found") return "Không thuộc salon này";
+  if (info.reason === "WRONG_BRANCH") return "Không áp dụng tại chi nhánh này";
   if (info.status === "used") return "Đã sử dụng";
   if (info.status === "expired") return "Đã hết hạn";
   if (info.status === "revoked") return "Đã bị hủy";

@@ -104,7 +104,7 @@ export function RedeemRewardPanel({
         rewardName: nextResult.rewardName,
         customerName: nextResult.customerName,
         status: "used",
-        usedAtMs: Date.now(),
+        usedAtMs: nextResult.usedAtMs,
       }));
       setRewardCode("");
       setMessage(
@@ -192,7 +192,13 @@ export function RedeemRewardPanel({
         <button
           className="primary-button compact"
           type="button"
-          disabled={disabled || loading || !info?.found || info.status !== "unused"}
+          disabled={
+            disabled ||
+            loading ||
+            !info?.found ||
+            info.status !== "unused" ||
+            info.redeemableAtBranch === false
+          }
           onClick={() => setConfirming(true)}
         >
           <BadgeCheck size={20} aria-hidden="true" />
@@ -223,7 +229,10 @@ export function RedeemRewardPanel({
       {message ? <p className="alert success">{message}</p> : null}
       {error ? <p className="alert error">{error}</p> : null}
 
-      {confirming && info?.found && info.status === "unused" ? (
+      {confirming &&
+      info?.found &&
+      info.status === "unused" &&
+      info.redeemableAtBranch !== false ? (
         <div className="dialog-backdrop" role="presentation">
           <div
             className="confirm-dialog"
@@ -243,8 +252,8 @@ export function RedeemRewardPanel({
             <h3 id="redeem-confirm-title">Xác nhận sử dụng quà?</h3>
             <p>
               {info.rewardName || "Mã quà"} cho {info.customerName || "khách hàng"}. Sau khi xác
-              nhận đã trao quà, mã này không thể dùng lại. Chủ salon chỉ có thể hoàn tác thao tác
-              bấm nhầm trong vòng 15 phút.
+              nhận đã trao quà, mã sẽ được đánh dấu đã sử dụng. Chủ salon có thể hoàn tác trong 15
+              phút nếu thao tác nhầm.
             </p>
             <div className="button-row">
               <button
@@ -289,6 +298,9 @@ function RewardCodeStatus({
       <small>Tạo lúc: {formatDateTime(info.createdAtMs ?? null) || "Chưa rõ"}</small>
       {info.expiresAtMs ? <small>Hết hạn: {formatDateTime(info.expiresAtMs)}</small> : null}
       {info.usedAtMs ? <small>Đã dùng lúc: {formatDateTime(info.usedAtMs)}</small> : null}
+      {info.reason === "WRONG_BRANCH" ? (
+        <small>Mã quà không áp dụng tại chi nhánh hiện tại.</small>
+      ) : null}
     </div>
   );
 }

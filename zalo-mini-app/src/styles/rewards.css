@@ -127,6 +127,24 @@
   color: #0e5c44;
 }
 
+.rewards-page .reward-qr {
+  width: min(220px, 100%);
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 4px;
+  padding: 12px;
+  border: 1px solid rgba(14, 92, 68, 0.14);
+  border-radius: 18px;
+  background: #ffffff;
+  text-align: center;
+}
+
+.rewards-page .reward-qr img {
+  width: 100%;
+  height: auto;
+  border-radius: 10px;
+}
+
 .rewards-page .reward-copy-button {
   width: fit-content;
   min-height: 36px;

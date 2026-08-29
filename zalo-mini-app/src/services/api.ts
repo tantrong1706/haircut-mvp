@@ -82,9 +82,14 @@ type CustomerRewardsFunctionResult = {
     rewardName: string;
     rewardCode: string;
     status: Reward["status"];
-    branchName?: string;
+    sourceBranchId?: string;
+    sourceBranchName?: string;
+    redemptionScope?: "salon" | "branches";
+    allowedBranchIds?: string[];
     createdAtMs: number | null;
     usedAtMs: number | null;
+    usedBranchId?: string;
+    usedBranchName?: string;
     expiresAtMs: number | null;
   }>;
 };
@@ -749,6 +754,8 @@ async function spinWheelDirect(
       rewardCode: reward.rewardCode,
       status: "unused",
       createdAt: new Date().toISOString(),
+      redemptionScope: "salon",
+      allowedBranchIds: [],
     });
   }
 
@@ -896,9 +903,14 @@ export async function getRewards(session: AppSession): Promise<Reward[]> {
       rewardName: reward.rewardName || "",
       rewardCode: reward.rewardCode || "",
       status: normalizeRewardStatus(reward.status),
-      branchName: reward.branchName || "Chi nhánh phát hành",
+      sourceBranchId: reward.sourceBranchId || "",
+      sourceBranchName: reward.sourceBranchName || "Chi nhánh phát hành",
+      redemptionScope: reward.redemptionScope === "branches" ? "branches" : "salon",
+      allowedBranchIds: Array.isArray(reward.allowedBranchIds) ? reward.allowedBranchIds : [],
       createdAt: formatDate(reward.createdAtMs),
       usedAt: formatDate(reward.usedAtMs),
+      usedBranchId: reward.usedBranchId || "",
+      usedBranchName: reward.usedBranchName || "",
       expiresAt: formatDate(reward.expiresAtMs),
     }));
   } catch (error) {
@@ -945,9 +957,17 @@ async function getRewardsDirect(session: AppSession): Promise<Reward[]> {
           rewardName: data.rewardName || "",
           rewardCode: data.rewardCode || "",
           status: normalizeRewardStatus(data.status, expiresAtMs),
-          branchName: String(data.branchName || "Chi nhánh phát hành"),
+          sourceBranchId: String(data.sourceBranchId || data.branchId || ""),
+          sourceBranchName: String(
+            data.sourceBranchName || data.branchName || "Chi nhánh phát hành",
+          ),
+          redemptionScope:
+            data.redemptionScope === "branches" ? ("branches" as const) : ("salon" as const),
+          allowedBranchIds: Array.isArray(data.allowedBranchIds) ? data.allowedBranchIds : [],
           createdAt: formatDate(createdAtMs),
           usedAt: formatDate(toMillis(data.usedAt)),
+          usedBranchId: String(data.usedBranchId || ""),
+          usedBranchName: String(data.usedBranchName || ""),
           expiresAt: formatDate(expiresAtMs),
         },
       };

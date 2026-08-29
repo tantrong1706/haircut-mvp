@@ -164,6 +164,10 @@ export type RedeemRewardResult = {
   rewardName: string;
   customerName?: string;
   alreadyRedeemed?: boolean;
+  usedAtMs: number;
+  usedBy: string;
+  usedBranchId: string;
+  usedBranchName: string;
 };
 
 export type SubmitPointRequestResult = {
@@ -266,7 +270,15 @@ export type RewardCodeInfo = {
   customerName?: string;
   createdAtMs?: number | null;
   usedAtMs?: number | null;
+  usedBranchId?: string;
+  usedBranchName?: string;
   expiresAtMs?: number | null;
+  sourceBranchId?: string;
+  sourceBranchName?: string;
+  redemptionScope?: "salon" | "branches";
+  allowedBranchIds?: string[];
+  redeemableAtBranch?: boolean;
+  reason?: "OK" | "USED" | "EXPIRED" | "REVOKED" | "WRONG_BRANCH" | "NOT_FOUND";
 };
 
 export type DeleteCustomerDataResult = {
@@ -1534,10 +1546,22 @@ export async function getLuckyWheelConfig(salonId: string): Promise<LuckyWheelCo
   return normalizeLuckyWheelConfig(snap.data());
 }
 
-export async function saveLuckyWheelConfig(salonId: string, config: LuckyWheelConfig) {
+export async function saveLuckyWheelConfig(
+  salonId: string,
+  config: LuckyWheelConfig,
+): Promise<{ ok: true; configVersion: number }> {
   const normalized = normalizeLuckyWheelConfig(config);
 
-  return callWriteFunctionOrFallback(
+  const result = await callWriteFunctionOrFallback<
+    {
+      salonId: string;
+      requiredPoints: number;
+      rewardValidityDays: number;
+      deductPointsAfterSpin: boolean;
+      slots: LuckyWheelConfig["slots"];
+    },
+    { ok: true; configVersion: number }
+  >(
     "updateLuckyWheel",
     {
       salonId,
@@ -1548,6 +1572,10 @@ export async function saveLuckyWheelConfig(salonId: string, config: LuckyWheelCo
     },
     () => saveLuckyWheelConfigDirect(salonId, normalized),
   );
+  return {
+    ok: true,
+    configVersion: Math.max(1, Math.floor(Number(result?.configVersion || 1))),
+  };
 }
 
 export async function redeemRewardCode(input: {
@@ -1576,12 +1604,20 @@ export async function redeemRewardCode(input: {
   );
   safeStorageRemove(pendingOperation.storageKey);
   const maybeResult = result as Partial<RedeemRewardResult> | undefined;
+  const usedAtMs = Number(maybeResult?.usedAtMs);
+  if (!Number.isFinite(usedAtMs) || usedAtMs <= 0) {
+    throw new Error("Backend chưa trả thời gian sử dụng authoritative");
+  }
   return {
     rewardId: maybeResult?.rewardId || "",
     rewardCode,
     rewardName: maybeResult?.rewardName || "",
     customerName: maybeResult?.customerName || "",
     alreadyRedeemed: maybeResult?.alreadyRedeemed === true,
+    usedAtMs,
+    usedBy: maybeResult?.usedBy || "",
+    usedBranchId: maybeResult?.usedBranchId || "",
+    usedBranchName: maybeResult?.usedBranchName || "",
   };
 }
 
@@ -1608,11 +1644,16 @@ async function redeemRewardCodeDirect(
   const db = getFirebaseDb();
 
   if (!isFirebaseConfigured() || !db) {
+    const usedAtMs = Date.now();
     return {
       rewardId: "mock-reward",
       rewardCode,
       rewardName: "Mã quà demo",
       customerName: "Khách demo",
+      usedAtMs,
+      usedBy: "demo-staff",
+      usedBranchId: "demo-branch",
+      usedBranchName: "Chi nhánh demo",
     };
   }
 
@@ -1644,12 +1685,21 @@ async function redeemRewardCodeDirect(
   });
 
   const customer = await getCustomer(String(reward.customerId || ""), salonId);
+  const updatedReward = (await getDoc(rewardDoc.ref)).data();
+  const usedAtMs = toMillis(updatedReward?.usedAt);
+  if (!usedAtMs) {
+    throw new Error("Không xác nhận được thời gian sử dụng từ máy chủ");
+  }
 
   return {
     rewardId: rewardDoc.id,
     rewardCode,
     rewardName: String(reward.rewardName || ""),
     customerName: customer?.name,
+    usedAtMs,
+    usedBy: String(updatedReward?.usedBy || ""),
+    usedBranchId: String(updatedReward?.usedBranchId || ""),
+    usedBranchName: String(updatedReward?.usedBranchName || ""),
   };
 }
 
@@ -1657,21 +1707,29 @@ async function saveLuckyWheelConfigDirect(salonId: string, config: LuckyWheelCon
   const db = getFirebaseDb();
 
   if (!isFirebaseConfigured() || !db) {
-    return;
+    return { ok: true as const, configVersion: config.configVersion };
   }
 
-  await setDoc(
-    doc(db, "lucky_wheel", salonId),
-    {
-      salonId,
-      requiredPoints: config.requiredPoints,
-      rewardValidityDays: config.rewardValidityDays,
-      deductPointsAfterSpin: config.deductPointsAfterSpin,
-      slots: config.slots,
-      updatedAt: serverTimestamp(),
-    },
-    { merge: true },
-  );
+  const wheelRef = doc(db, "lucky_wheel", salonId);
+  let configVersion = config.configVersion;
+  await runTransaction(db, async (transaction) => {
+    const current = await transaction.get(wheelRef);
+    configVersion = Math.max(1, Math.floor(Number(current.data()?.configVersion || 1))) + 1;
+    transaction.set(
+      wheelRef,
+      {
+        salonId,
+        configVersion,
+        requiredPoints: config.requiredPoints,
+        rewardValidityDays: config.rewardValidityDays,
+        deductPointsAfterSpin: config.deductPointsAfterSpin,
+        slots: config.slots,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true },
+    );
+  });
+  return { ok: true as const, configVersion };
 }
 
 async function createMirrorDirect(salonId: string, name: string): Promise<SalonMirror> {

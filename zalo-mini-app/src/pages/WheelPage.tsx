@@ -311,7 +311,7 @@ export function WheelPage({ session, onSessionChange, onOpenRewards }: Props) {
           {result.isWinning ? (
             <>
               <span>Mã quà đã được lưu trong Quà của tôi.</span>
-              <small>Dùng tại chi nhánh đã phát hành quà; xem chi tiết trong tab Quà.</small>
+              <small>Mặc định dùng tại mọi chi nhánh cùng salon; xem chi tiết trong tab Quà.</small>
               {onOpenRewards ? (
                 <button className="secondary-button compact" type="button" onClick={onOpenRewards}>
                   <Ticket size={17} aria-hidden="true" />

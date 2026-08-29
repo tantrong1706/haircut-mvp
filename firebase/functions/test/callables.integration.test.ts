@@ -1140,10 +1140,22 @@ describe("callable transactions", () => {
     );
     expect(firstRedemption.alreadyRedeemed).toBe(false);
     expect(repeatedRedemption.alreadyRedeemed).toBe(true);
+    expect(repeatedRedemption.usedAtMs).toBe(firstRedemption.usedAtMs);
+    expect(repeatedRedemption.usedBy).toBe(firstRedemption.usedBy);
+    expect(repeatedRedemption.usedBranchId).toBe(firstRedemption.usedBranchId);
     expect((await db.collection("reward_history").doc(spin.rewardId).get()).data()?.status).toBe(
       "used",
     );
 
+    await expect(
+      restoreRewardCode.run(
+        requestFor("staff-reward", {
+          salonId,
+          rewardCode: spin.rewardCode,
+          reason: "Staff không được hoàn tác",
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "permission-denied" });
     await restoreRewardCode.run(
       requestFor("owner-reward", {
         salonId,
@@ -1151,12 +1163,43 @@ describe("callable transactions", () => {
         reason: "Kiểm thử hoàn tác",
       }),
     );
-    expect((await db.collection("reward_history").doc(spin.rewardId).get()).data()?.status).toBe(
-      "unused",
-    );
+    const restoredReward = (
+      await db.collection("reward_history").doc(spin.rewardId).get()
+    ).data();
+    expect(restoredReward).toMatchObject({
+      status: "unused",
+      restoredBy: "owner-reward",
+      restoreReason: "Kiểm thử hoàn tác",
+    });
+    expect(restoredReward).not.toHaveProperty("usedAt");
+    expect(restoredReward).not.toHaveProperty("usedBy");
+    expect(restoredReward).not.toHaveProperty("usedBranchId");
+    expect(restoredReward).not.toHaveProperty("redemptionIdempotencyKey");
     expect(
       (await db.collection("audit_events").where("salonId", "==", salonId).get()).size,
     ).toBeGreaterThanOrEqual(2);
+  });
+
+  it("owner không thể hoàn tác reward ngoài cửa sổ 15 phút", async () => {
+    const salonId = "salon-restore-expired";
+    await seedOwner("owner-restore-expired", salonId);
+    await db.collection("reward_history").doc("reward-restore-expired").set({
+      salonId,
+      rewardCode: "HC-RESTORE-EXPIRED",
+      status: "used",
+      usedAt: Timestamp.fromMillis(Date.now() - 16 * 60_000),
+      expiresAt: Timestamp.fromMillis(Date.now() + 60_000),
+    });
+
+    await expect(
+      restoreRewardCode.run(
+        requestFor("owner-restore-expired", {
+          salonId,
+          rewardCode: "HC-RESTORE-EXPIRED",
+          reason: "Đã quá thời gian",
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "failed-precondition" });
   });
 
   it("mỗi lần owner lưu wheel tăng configVersion và chuẩn hóa weighted slots", async () => {
@@ -1604,6 +1647,25 @@ describe("callable transactions", () => {
       status: "used",
       usedBranchId: branchId,
     });
+    const usedBeforeRetry = (
+      await db.collection("reward_history").doc("reward-concurrent").get()
+    ).data();
+    await expect(
+      redeemRewardCode.run(
+        requestFor("staff-concurrent-reward", {
+          salonId,
+          branchId,
+          rewardCode: "HC-CONCURRENT-1234",
+          idempotencyKey: "redeem-after-used-0003",
+        }),
+      ),
+    ).rejects.toMatchObject({ details: { errorCode: "REWARD_ALREADY_REDEEMED" } });
+    const usedAfterRetry = (
+      await db.collection("reward_history").doc("reward-concurrent").get()
+    ).data();
+    expect(usedAfterRetry?.usedAt?.toMillis()).toBe(usedBeforeRetry?.usedAt?.toMillis());
+    expect(usedAfterRetry?.usedBy).toBe(usedBeforeRetry?.usedBy);
+    expect(usedAfterRetry?.usedBranchId).toBe(usedBeforeRetry?.usedBranchId);
   });
 
   it("chỉ system admin đọc được tổng quan hệ thống", async () => {

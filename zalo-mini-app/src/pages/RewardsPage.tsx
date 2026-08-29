@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { BadgeCheck, Copy, Gift, History, RefreshCcw, Ticket } from "lucide-react";
+import QRCode from "qrcode";
 import { getRewards } from "../services/api";
 import { AppSession, Reward } from "../services/types";
 import { RewardNavigation } from "../components/RewardNavigation";
@@ -68,7 +69,7 @@ export function RewardsPage({ session, onOpenWheel }: Props) {
       <header className="page-header">
         <p className="eyebrow">Ưu đãi</p>
         <h1>Quà của tôi</h1>
-        <p className="muted">Mỗi mã ghi rõ chi nhánh áp dụng và chỉ được xác nhận một lần.</p>
+        <p className="muted">Mỗi mã ghi rõ phạm vi áp dụng và chỉ được xác nhận một lần.</p>
       </header>
 
       <div className="rewards-content">
@@ -160,8 +161,14 @@ function RewardCard({ reward, onCopy }: { reward: Reward; onCopy?: () => void })
         {reward.expiresAt ? <small>Hạn dùng: {reward.expiresAt}</small> : null}
         {reward.usedAt ? <small>Đã dùng ngày: {reward.usedAt}</small> : null}
         <small className="usage-note">
-          Chỉ dùng tại: {reward.branchName || "Chi nhánh đã phát hành"}
+          {reward.redemptionScope === "branches"
+            ? "Chỉ dùng tại các chi nhánh được chỉ định"
+            : "Dùng tại mọi chi nhánh của salon"}
         </small>
+        {reward.status === "used" && reward.usedBranchName ? (
+          <small>Đã dùng tại: {reward.usedBranchName}</small>
+        ) : null}
+        {active ? <RewardQrCode reward={reward} /> : null}
         {active ? <small>Nhân viên sẽ kiểm tra và xác nhận sau khi trao ưu đãi.</small> : null}
         {active && onCopy ? (
           <button className="reward-copy-button" type="button" onClick={onCopy}>
@@ -173,6 +180,35 @@ function RewardCard({ reward, onCopy }: { reward: Reward; onCopy?: () => void })
       <span className={active ? "pill" : "pill muted-pill"}>{statusLabel(reward.status)}</span>
     </article>
   );
+}
+
+function RewardQrCode({ reward }: { reward: Reward }) {
+  const [qrDataUrl, setQrDataUrl] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    QRCode.toDataURL(`haircut-reward:v1:${reward.rewardCode}`, {
+      errorCorrectionLevel: "M",
+      margin: 1,
+      width: 220,
+    })
+      .then((value) => {
+        if (!cancelled) setQrDataUrl(value);
+      })
+      .catch(() => {
+        if (!cancelled) setQrDataUrl("");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [reward.rewardCode]);
+
+  return qrDataUrl ? (
+    <div className="reward-qr">
+      <img src={qrDataUrl} alt={`QR quà ${reward.rewardName}`} />
+      <small>Đưa QR này cho nhân viên để kiểm tra quà.</small>
+    </div>
+  ) : null;
 }
 
 function statusLabel(status: Reward["status"]) {

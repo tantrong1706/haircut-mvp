@@ -314,7 +314,7 @@ describe("adversarial tenant access", () => {
       });
     });
 
-    it("does not expose a reward from another branch", async () => {
+    it("allows a salon-wide reward from another branch in the same salon", async () => {
       const result = await lookupRewardCode.run(
         requestFor("staff-a1", {
           salonId: SALON_A,
@@ -323,8 +323,14 @@ describe("adversarial tenant access", () => {
         }),
       );
 
-      expect(result).toMatchObject({ found: false, status: "not_found" });
-      expect(result).not.toHaveProperty("customerName");
+      expect(result).toMatchObject({
+        found: true,
+        status: "unused",
+        sourceBranchId: BRANCH_A2,
+        redemptionScope: "salon",
+        redeemableAtBranch: true,
+        reason: "OK",
+      });
     });
 
     it("does not expose a reward from another salon to staff", async () => {
@@ -341,7 +347,11 @@ describe("adversarial tenant access", () => {
 
     it("does not expose a reward from another salon to an owner", async () => {
       const result = await lookupRewardCode.run(
-        requestFor("owner-a", { salonId: SALON_A, rewardCode: "HC-B1" }),
+        requestFor("owner-a", {
+          salonId: SALON_A,
+          branchId: BRANCH_A1,
+          rewardCode: "HC-B1",
+        }),
       );
 
       expect(result).toMatchObject({ found: false, status: "not_found" });
@@ -373,10 +383,18 @@ describe("adversarial tenant access", () => {
 
     it("returns the same public status for an unknown and an out-of-salon code", async () => {
       const unknown = await lookupRewardCode.run(
-        requestFor("owner-a", { salonId: SALON_A, rewardCode: "HC-UNKNOWN" }),
+        requestFor("owner-a", {
+          salonId: SALON_A,
+          branchId: BRANCH_A1,
+          rewardCode: "HC-UNKNOWN",
+        }),
       );
       const otherSalon = await lookupRewardCode.run(
-        requestFor("owner-a", { salonId: SALON_A, rewardCode: "HC-B1" }),
+        requestFor("owner-a", {
+          salonId: SALON_A,
+          branchId: BRANCH_A1,
+          rewardCode: "HC-B1",
+        }),
       );
 
       expect(pickLookupStatus(unknown)).toEqual(pickLookupStatus(otherSalon));
@@ -384,21 +402,46 @@ describe("adversarial tenant access", () => {
   });
 
   describe("redeemRewardCode", () => {
-    it("prevents cross-branch redemption", async () => {
+    it("allows salon-wide redemption at another active branch in the same salon", async () => {
+      const result = await redeemRewardCode.run(
+        requestFor("staff-a1", {
+          salonId: SALON_A,
+          branchId: BRANCH_A1,
+          rewardCode: "HC-A2",
+          idempotencyKey: "cross-branch-redeem-0001",
+        }),
+      );
+
+      expect(result).toMatchObject({ usedBranchId: BRANCH_A1, alreadyRedeemed: false });
+      expect((await db.collection("reward_history").doc("reward-a2").get()).data()).toMatchObject({
+        status: "used",
+        usedBranchId: BRANCH_A1,
+      });
+    });
+
+    it("rejects a branch-restricted reward during lookup and redeem", async () => {
+      const lookup = await lookupRewardCode.run(
+        requestFor("staff-a1", {
+          salonId: SALON_A,
+          branchId: BRANCH_A1,
+          rewardCode: "HC-RESTRICTED-A2",
+        }),
+      );
+      expect(lookup).toMatchObject({
+        found: true,
+        redeemableAtBranch: false,
+        reason: "WRONG_BRANCH",
+      });
       await expect(
         redeemRewardCode.run(
           requestFor("staff-a1", {
             salonId: SALON_A,
             branchId: BRANCH_A1,
-            rewardCode: "HC-A2",
-            idempotencyKey: "cross-branch-redeem-0001",
+            rewardCode: "HC-RESTRICTED-A2",
+            idempotencyKey: "restricted-redeem-0001",
           }),
         ),
-      ).rejects.toMatchObject({ code: "not-found" });
-
-      expect((await db.collection("reward_history").doc("reward-a2").get()).data()?.status).toBe(
-        "unused",
-      );
+      ).rejects.toMatchObject({ details: { errorCode: "INVALID_BRANCH" } });
     });
 
     it("keeps a repeated redemption idempotent", async () => {
@@ -479,6 +522,15 @@ async function seedFixture() {
       Timestamp.fromMillis(now.toMillis() + 1),
     ),
     seedReward("reward-a2", SALON_A, BRANCH_A2, "customer-a2", "HC-A2", now),
+    seedReward(
+      "reward-restricted-a2",
+      SALON_A,
+      BRANCH_A2,
+      "customer-a2",
+      "HC-RESTRICTED-A2",
+      now,
+      { redemptionScope: "branches", allowedBranchIds: [BRANCH_A2] },
+    ),
     seedReward("reward-b1", SALON_B, BRANCH_B1, "customer-b1", "HC-B1", now),
     seedReward("reward-legacy-a2", SALON_A, BRANCH_A2, "customer-legacy", "HC-LEGACY-A2", now),
   ]);
@@ -561,6 +613,7 @@ function seedReward(
   customerId: string,
   rewardCode: string,
   createdAt: Timestamp,
+  extra: Record<string, unknown> = {},
 ) {
   return db
     .collection("reward_history")
@@ -574,6 +627,7 @@ function seedReward(
       status: "unused",
       createdAt,
       expiresAt: Timestamp.fromMillis(createdAt.toMillis() + 60_000),
+      ...extra,
     });
 }
 
