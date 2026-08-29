@@ -19,7 +19,7 @@ describe("branding Zalo Mini App", () => {
       "utf8",
     );
 
-    expect(MINI_APP_NAME).toBe("CH Haircut Salon");
+    expect(MINI_APP_NAME).toBe("CH Hair Studio");
     expect(appConfig.app?.title).toBe(MINI_APP_NAME);
     expect(appConfig.app?.headerTitle).toBe(MINI_APP_NAME);
     expect(manifest.name).toBe(MINI_APP_NAME);
