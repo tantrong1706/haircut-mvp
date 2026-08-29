@@ -4,7 +4,7 @@ import { PrivacyPage } from "./PrivacyPage";
 import { TermsPage } from "./TermsPage";
 
 describe("trang pháp lý công khai", () => {
-  it("hiển thị điều khoản phù hợp với chức năng CH Haircut Salon", () => {
+  it("hiển thị điều khoản phù hợp với chức năng CH Hair Studio", () => {
     render(<TermsPage />);
 
     expect(screen.getByRole("heading", { name: "Điều khoản sử dụng" })).toBeInTheDocument();
@@ -24,7 +24,7 @@ describe("trang pháp lý công khai", () => {
     render(<PrivacyPage />);
 
     expect(
-      screen.getByRole("link", { name: "Đọc Điều khoản sử dụng của CH Haircut Salon" }),
+      screen.getByRole("link", { name: "Đọc Điều khoản sử dụng của CH Hair Studio" }),
     ).toHaveAttribute("href", "/terms");
   });
 });

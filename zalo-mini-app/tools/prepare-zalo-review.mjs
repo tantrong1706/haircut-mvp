@@ -595,7 +595,7 @@ function writeReviewerFile(input) {
     .map((branch) => `- ${branch.name}: ${branch.address || "Chưa có địa chỉ"}`)
     .join("\n");
   const qrLines = input.qrFiles.map((path) => `- \`${path}\``).join("\n");
-  const content = `# Tài khoản thử nghiệm Zalo - CH Haircut Salon
+  const content = `# Tài khoản thử nghiệm Zalo - CH Hair Studio
 
 File local này chứa mật khẩu thử nghiệm. Không commit hoặc gửi công khai.
 

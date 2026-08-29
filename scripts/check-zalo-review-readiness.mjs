@@ -6,7 +6,7 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const appRoot = resolve(repoRoot, "zalo-mini-app");
 const buildRoot = resolve(appRoot, "www");
 const expectedMiniAppId = "2038116772828167300";
-const expectedMiniAppName = "CH Haircut Salon";
+const expectedMiniAppName = "CH Hair Studio";
 const maxAssetBytes = 500 * 1024;
 const failures = [];
 const passed = [];
@@ -227,8 +227,8 @@ if (sourceConfig && outputConfig) {
   );
   check(
     !/\bHAIRCUT\b/u.test(JSON.stringify(sourceConfig)) &&
-      !/CH Hair Studio/iu.test(JSON.stringify(sourceConfig)),
-    "app-config không dùng branding cũ hoặc tên salon làm tên Mini App",
+      !/CH Haircut Salon/iu.test(JSON.stringify(sourceConfig)),
+    "app-config không dùng branding Mini App cũ",
   );
   check(
     JSON.stringify(sourceConfig) === JSON.stringify(outputConfig),

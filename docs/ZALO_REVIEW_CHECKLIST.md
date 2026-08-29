@@ -1,12 +1,12 @@
-# Checklist xét duyệt Zalo Mini App - CH Haircut Salon Version 21
+# Checklist xét duyệt Zalo Mini App - CH Hair Studio Version 21
 
 Không gửi xét duyệt Version 21 khi còn mục bắt buộc `[ ]`.
 
 ## 1. Metadata
 
-- [x] Tên Mini App trong source: `CH Haircut Salon`.
+- [x] Tên Mini App trong source và Mini App Center: `CH Hair Studio`.
 - [x] Mini App ID trong production: `2038116772828167300`.
-- [ ] Tên Portal đang chờ ticket `28984` đổi từ `CH Hair Studio` sang `CH Haircut Salon`; logo, danh mục, mô tả và hỗ trợ giữ nguyên.
+- [x] Tên Portal chính thức hiện tại là `CH Hair Studio`; logo, danh mục, mô tả và hỗ trợ giữ nguyên.
 - [x] Nội dung phiên bản dùng đúng hướng dẫn 14 bước trong `docs/ZALO_VERSION_8_SUBMISSION.md`.
 
 ## 2. Quyền Zalo

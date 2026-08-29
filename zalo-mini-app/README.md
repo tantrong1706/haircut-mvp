@@ -1,4 +1,4 @@
-# CH Haircut Salon - Web/Zalo Mini App
+# CH Hair Studio - Web/Zalo Mini App
 
 Đây là app web/PWA hiện tại cho khách, nhân viên và chủ salon. Trong Zalo Mini App production, màn khách là luồng chính: khách quét QR có chữ ký của salon hoặc chi nhánh, xác nhận tên hiển thị, rồi salon xử lý điểm, lịch sử và quà.
 

@@ -9,13 +9,13 @@ Tài liệu này dùng để điền Zalo Developer Portal. Không commit deepli
 **Tên phiên bản**
 
 ```text
-CH Haircut Salon - Check-in và tích điểm tại salon
+CH Hair Studio - Check-in và tích điểm tại salon
 ```
 
 **Nội dung cập nhật**
 
 ```text
-CH Haircut Salon - Check-in và tích điểm tại salon
+CH Hair Studio - Check-in và tích điểm tại salon
 
 - Khách mở Mini App từ QR salon hoặc QR chi nhánh có chữ ký.
 - Xác nhận thông tin Zalo để salon nhận diện đúng khách.
@@ -27,7 +27,7 @@ CH Haircut Salon - Check-in và tích điểm tại salon
 ## 2. Mô tả ứng dụng
 
 ```text
-CH Haircut Salon là Zalo Mini App chăm sóc khách hàng tại salon tóc. Khách quét QR chung của salon để chọn chi
+CH Hair Studio là Zalo Mini App chăm sóc khách hàng tại salon tóc. Khách quét QR chung của salon để chọn chi
 nhánh hoặc quét QR riêng của chi nhánh để check-in trực tiếp. Sau khi xác nhận hồ sơ Zalo, khách có thể tạo lượt
 chờ, theo dõi trạng thái phục vụ, xem điểm, lịch sử cắt tóc, quay thưởng và quản lý mã quà.
 
@@ -82,7 +82,7 @@ với dữ liệu giả; source, Git và tài liệu không chứa deeplink ho�
 **Access token và hồ sơ cơ bản**
 
 ```text
-CH Haircut Salon dùng getAccessToken để gửi access token mới tới Firebase Cloud Function qua HTTPS. Backend xác
+CH Hair Studio dùng getAccessToken để gửi access token mới tới Firebase Cloud Function qua HTTPS. Backend xác
 minh danh tính bằng Zalo API. Mini App chỉ gọi getUserInfo sau khi khách xem giải thích và chủ động bấm cho phép.
 Token không được lưu dài hạn, hiển thị hoặc ghi vào log, Analytics hay Sentry.
 ```
