@@ -1,6 +1,6 @@
-# Hồ sơ xét duyệt Zalo Mini App - HAIRCUT
+# HISTORICAL / ARCHIVED - Hồ sơ Zalo Mini App Version 5
 
-> **Tài liệu lịch sử:** nội dung bên dưới ghi trạng thái Version 5 và không còn dùng để gửi xét
+> **KHÔNG DÙNG CHO VERSION 8.** Nội dung bên dưới ghi trạng thái Version 5 và không còn dùng để gửi xét
 > duyệt. Version 7 đã bị từ chối nhưng Zalo chưa cung cấp lý do chi tiết. Dùng
 > `docs/ZALO_VERSION_8_SUBMISSION.md` và `docs/ZALO_REVIEW_CHECKLIST.md` cho lần chuẩn bị tiếp theo.
 

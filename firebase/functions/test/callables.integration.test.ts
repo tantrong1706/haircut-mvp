@@ -18,6 +18,7 @@ import {
   getManagerPointRequestHistory,
   getManagerRewardHistory,
   getManagerSessionHistory,
+  listStaffProfiles,
   redeemRewardCode,
   rejectPointRequest,
   requestSalonDeletion,
@@ -26,6 +27,8 @@ import {
   spinLuckyWheel,
   submitPointRequest,
   updatePendingPointRequestPhotos,
+  updateLuckyWheel,
+  updateStaffProfile,
   updateSystemAdminUserStatus,
   updateSystemAdminSalonStatus,
   updateSystemFeatureFlags,
@@ -131,8 +134,16 @@ describe("callable transactions", () => {
     const repeatedSubmit = await submitPointRequest.run(
       requestFor("staff-flow", { salonId, sessionId, note: "Fade thấp", photoUrls: [] }),
     );
-    expect(firstSubmit).toMatchObject({ requestId: sessionId, alreadySubmitted: false });
-    expect(repeatedSubmit).toMatchObject({ requestId: sessionId, alreadySubmitted: true });
+    expect(firstSubmit).toMatchObject({
+      requestId: sessionId,
+      alreadySubmitted: false,
+      status: "pending_approval",
+    });
+    expect(repeatedSubmit).toMatchObject({
+      requestId: sessionId,
+      alreadySubmitted: true,
+      status: "pending_approval",
+    });
 
     const firstApproval = await approvePointRequest.run(
       requestFor("owner-flow", { salonId, requestId: sessionId }),
@@ -154,6 +165,183 @@ describe("callable transactions", () => {
       (await db.collection("haircut_records").where("customerId", "==", customerId).get()).size,
     ).toBe(1);
     expect((await db.collection("customers").doc(customerId).get()).data()?.points).toBe(1);
+  });
+
+  it("nhân viên tin cậy hoàn tất và cộng điểm ngay đúng một lần", async () => {
+    const salonId = "salon-direct-points";
+    const branchId = "branch-direct-points";
+    const customerId = "customer-direct-points";
+    const sessionId = "session-direct-points";
+    const now = Timestamp.now();
+    await seedOwner("owner-direct-points", salonId, { pointPerVisit: 2, customerCount: 1 });
+    await seedBranch(salonId, branchId);
+    await db
+      .collection("users")
+      .doc("staff-direct-points")
+      .set({
+        salonId,
+        role: "staff",
+        name: "Nhân viên tin cậy",
+        isActive: true,
+        canAwardPointsDirectly: true,
+        branchIds: [branchId],
+      });
+    await db.collection("customers").doc(customerId).set({
+      salonId,
+      name: "Khách cộng trực tiếp",
+      points: 3,
+      allowPhoto: false,
+    });
+    await db
+      .collection("chair_sessions")
+      .doc(sessionId)
+      .set({
+        salonId,
+        branchId,
+        branchName: "Chi nhánh trực tiếp",
+        customerId,
+        customerSummary: {
+          name: "Khách cộng trực tiếp",
+          phoneLast4: "1234",
+          points: 3,
+          allowPhoto: false,
+        },
+        status: "serving",
+        isOpen: true,
+        assignedStaffId: "staff-direct-points",
+        assignedStaffName: "Nhân viên tin cậy",
+        createdAt: now,
+        expiresAt: Timestamp.fromMillis(now.toMillis() + 60 * 60 * 1000),
+      });
+
+    const first = await submitPointRequest.run(
+      requestFor("staff-direct-points", { salonId, sessionId, note: "" }),
+    );
+    const repeated = await submitPointRequest.run(
+      requestFor("staff-direct-points", { salonId, sessionId, note: "" }),
+    );
+
+    expect(first).toMatchObject({
+      requestId: sessionId,
+      alreadySubmitted: false,
+      status: "approved",
+      pointsAdded: 2,
+      pointsAfter: 5,
+    });
+    expect(repeated).toMatchObject({
+      requestId: sessionId,
+      alreadySubmitted: true,
+      status: "approved",
+      pointsAfter: 5,
+    });
+    expect((await db.collection("customers").doc(customerId).get()).data()?.points).toBe(5);
+    expect((await db.collection("chair_sessions").doc(sessionId).get()).data()?.status).toBe(
+      "completed",
+    );
+    expect((await db.collection("point_requests").doc(sessionId).get()).data()).toMatchObject({
+      status: "approved",
+      approvalMode: "staff_direct",
+      approvedBy: "staff-direct-points",
+      pointsBefore: 3,
+      pointsAfter: 5,
+    });
+    expect(
+      (await db.collection("haircut_records").where("pointRequestId", "==", sessionId).get()).size,
+    ).toBe(1);
+
+    const dateKey = new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const counterId = createHash("sha256")
+      .update(`${salonId}:staff-direct-points:${dateKey}`)
+      .digest("hex");
+    await db.collection("staff_daily_point_awards").doc(counterId).set({
+      salonId,
+      staffId: "staff-direct-points",
+      dateKey,
+      awards: 100,
+      pointsAwarded: 200,
+    });
+    await db.collection("customers").doc("customer-direct-limit").set({
+      salonId,
+      name: "Khách vượt hạn mức",
+      points: 0,
+      allowPhoto: false,
+    });
+    await db
+      .collection("chair_sessions")
+      .doc("session-direct-limit")
+      .set({
+        salonId,
+        branchId,
+        branchName: "Chi nhánh trực tiếp",
+        customerId: "customer-direct-limit",
+        customerSummary: { name: "Khách vượt hạn mức", points: 0, allowPhoto: false },
+        status: "serving",
+        isOpen: true,
+        assignedStaffId: "staff-direct-points",
+        assignedStaffName: "Nhân viên tin cậy",
+        createdAt: now,
+        expiresAt: Timestamp.fromMillis(now.toMillis() + 60 * 60 * 1000),
+      });
+
+    const limited = await submitPointRequest.run(
+      requestFor("staff-direct-points", {
+        salonId,
+        sessionId: "session-direct-limit",
+        note: "",
+      }),
+    );
+    expect(limited).toMatchObject({
+      status: "pending_approval",
+      approvalMode: "owner_approval",
+      pointsAdded: 2,
+    });
+    expect(
+      (await db.collection("customers").doc("customer-direct-limit").get()).data()?.points,
+    ).toBe(0);
+    expect(
+      (await db.collection("chair_sessions").doc("session-direct-limit").get()).data()?.status,
+    ).toBe("pending_approval");
+  });
+
+  it("chỉ owner cấp và đọc lại quyền cộng điểm trực tiếp của nhân viên", async () => {
+    const salonId = "salon-direct-permission";
+    const branchId = "branch-direct-permission";
+    await seedOwner("owner-direct-permission", salonId);
+    await seedBranch(salonId, branchId);
+    await db
+      .collection("users")
+      .doc("staff-direct-permission")
+      .set({
+        salonId,
+        role: "staff",
+        name: "Nhân viên chờ cấp quyền",
+        email: "staff-direct@example.com",
+        isActive: true,
+        canAwardPointsDirectly: false,
+        branchId,
+        branchIds: [branchId],
+      });
+
+    await updateStaffProfile.run(
+      requestFor("owner-direct-permission", {
+        salonId,
+        uid: "staff-direct-permission",
+        canAwardPointsDirectly: true,
+      }),
+    );
+    const staff = await listStaffProfiles.run(requestFor("owner-direct-permission", { salonId }));
+    expect(staff.staff).toContainEqual(
+      expect.objectContaining({ uid: "staff-direct-permission", canAwardPointsDirectly: true }),
+    );
+    await expect(
+      updateStaffProfile.run(
+        requestFor("staff-direct-permission", {
+          salonId,
+          uid: "staff-direct-permission",
+          canAwardPointsDirectly: false,
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "permission-denied" });
   });
 
   it("bắt buộc lý do hợp lệ khi owner từ chối yêu cầu điểm", async () => {
@@ -952,10 +1140,22 @@ describe("callable transactions", () => {
     );
     expect(firstRedemption.alreadyRedeemed).toBe(false);
     expect(repeatedRedemption.alreadyRedeemed).toBe(true);
+    expect(repeatedRedemption.usedAtMs).toBe(firstRedemption.usedAtMs);
+    expect(repeatedRedemption.usedBy).toBe(firstRedemption.usedBy);
+    expect(repeatedRedemption.usedBranchId).toBe(firstRedemption.usedBranchId);
     expect((await db.collection("reward_history").doc(spin.rewardId).get()).data()?.status).toBe(
       "used",
     );
 
+    await expect(
+      restoreRewardCode.run(
+        requestFor("staff-reward", {
+          salonId,
+          rewardCode: spin.rewardCode,
+          reason: "Staff không được hoàn tác",
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "permission-denied" });
     await restoreRewardCode.run(
       requestFor("owner-reward", {
         salonId,
@@ -963,12 +1163,247 @@ describe("callable transactions", () => {
         reason: "Kiểm thử hoàn tác",
       }),
     );
-    expect((await db.collection("reward_history").doc(spin.rewardId).get()).data()?.status).toBe(
-      "unused",
-    );
+    const restoredReward = (await db.collection("reward_history").doc(spin.rewardId).get()).data();
+    expect(restoredReward).toMatchObject({
+      status: "unused",
+      restoredBy: "owner-reward",
+      restoreReason: "Kiểm thử hoàn tác",
+    });
+    expect(restoredReward).not.toHaveProperty("usedAt");
+    expect(restoredReward).not.toHaveProperty("usedBy");
+    expect(restoredReward).not.toHaveProperty("usedBranchId");
+    expect(restoredReward).not.toHaveProperty("redemptionIdempotencyKey");
     expect(
       (await db.collection("audit_events").where("salonId", "==", salonId).get()).size,
     ).toBeGreaterThanOrEqual(2);
+  });
+
+  it("owner không thể hoàn tác reward ngoài cửa sổ 15 phút", async () => {
+    const salonId = "salon-restore-expired";
+    await seedOwner("owner-restore-expired", salonId);
+    await db
+      .collection("reward_history")
+      .doc("reward-restore-expired")
+      .set({
+        salonId,
+        rewardCode: "HC-RESTORE-EXPIRED",
+        status: "used",
+        usedAt: Timestamp.fromMillis(Date.now() - 16 * 60_000),
+        expiresAt: Timestamp.fromMillis(Date.now() + 60_000),
+      });
+
+    await expect(
+      restoreRewardCode.run(
+        requestFor("owner-restore-expired", {
+          salonId,
+          rewardCode: "HC-RESTORE-EXPIRED",
+          reason: "Đã quá thời gian",
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "failed-precondition" });
+  });
+
+  it("mỗi lần owner lưu wheel tăng configVersion và chuẩn hóa weighted slots", async () => {
+    const salonId = "salon-wheel-version";
+    await seedOwner("owner-wheel-version", salonId);
+    await db.collection("lucky_wheel").doc(salonId).set({ salonId, configVersion: 4 });
+    const slots = Array.from({ length: 6 }, (_, index) => ({
+      slotId: `slot-${index + 1}`,
+      label: `Quà ${index + 1}`,
+      type: index === 5 ? "no_prize" : "reward",
+      active: index === 0,
+      weight: index + 1,
+    }));
+
+    const first = await updateLuckyWheel.run(
+      requestFor("owner-wheel-version", {
+        salonId,
+        requiredPoints: 5,
+        rewardValidityDays: 30,
+        deductPointsAfterSpin: true,
+        slots,
+      }),
+    );
+    const second = await updateLuckyWheel.run(
+      requestFor("owner-wheel-version", {
+        salonId,
+        requiredPoints: 5,
+        rewardValidityDays: 30,
+        deductPointsAfterSpin: true,
+        slots,
+      }),
+    );
+
+    expect(first).toMatchObject({ ok: true, configVersion: 5 });
+    expect(second).toMatchObject({ ok: true, configVersion: 6 });
+    expect((await db.collection("lucky_wheel").doc(salonId).get()).data()).toMatchObject({
+      configVersion: 6,
+      slots: expect.arrayContaining([
+        expect.objectContaining({ slotId: "slot-1", weight: 1 }),
+        expect.objectContaining({ slotId: "slot-6", weight: 6, type: "no_prize" }),
+      ]),
+    });
+  });
+
+  it("reject stale config và snapshot đúng slot backend đã chọn", async () => {
+    const salonId = "salon-wheel-stale";
+    const branchId = "branch-wheel-stale";
+    const customerId = "customer-wheel-stale";
+    await seedOwner("owner-wheel-stale", salonId);
+    await seedBranch(salonId, branchId);
+    await db.collection("customers").doc(customerId).set({
+      salonId,
+      name: "Khách Wheel",
+      points: 10,
+      lastBranchId: branchId,
+      lastBranchName: "Chi nhánh Wheel",
+    });
+    await db
+      .collection("lucky_wheel")
+      .doc(salonId)
+      .set({
+        salonId,
+        configVersion: 3,
+        requiredPoints: 5,
+        rewardValidityDays: 30,
+        deductPointsAfterSpin: true,
+        slots: [
+          {
+            slotId: "only-slot",
+            label: "Gội miễn phí",
+            type: "reward",
+            active: true,
+            weight: 25,
+          },
+        ],
+      });
+
+    await expect(
+      spinLuckyWheel.run(
+        requestFor("owner-wheel-stale", {
+          salonId,
+          customerId,
+          configVersion: 2,
+          idempotencyKey: "spin-wheel-stale-0001",
+        }),
+      ),
+    ).rejects.toMatchObject({ details: { errorCode: "STALE_WHEEL_CONFIG" } });
+    expect((await db.collection("customers").doc(customerId).get()).data()?.points).toBe(10);
+
+    const spin = await spinLuckyWheel.run(
+      requestFor("owner-wheel-stale", {
+        salonId,
+        customerId,
+        configVersion: 3,
+        idempotencyKey: "spin-wheel-stale-0002",
+      }),
+    );
+    expect(spin).toMatchObject({
+      selectedIndex: 0,
+      selectedSlotId: "only-slot",
+      configVersion: 3,
+      rewardName: "Gội miễn phí",
+    });
+    expect((await db.collection("reward_history").doc(spin.rewardId).get()).data()).toMatchObject({
+      salonId,
+      customerId,
+      sourceBranchId: branchId,
+      sourceBranchName: "Chi nhánh Wheel",
+      sourceSlotId: "only-slot",
+      wheelConfigVersion: 3,
+      wheelSlotWeight: 25,
+      rewardName: "Gội miễn phí",
+      redemptionScope: "salon",
+      status: "unused",
+      pointsSpent: 5,
+    });
+    await updateLuckyWheel.run(
+      requestFor("owner-wheel-stale", {
+        salonId,
+        requiredPoints: 9,
+        rewardValidityDays: 7,
+        deductPointsAfterSpin: true,
+        slots: Array.from({ length: 6 }, (_, index) => ({
+          slotId: `new-${index + 1}`,
+          label: `Quà mới ${index + 1}`,
+          type: "reward",
+          active: index === 0,
+          weight: index + 1,
+        })),
+      }),
+    );
+    expect((await db.collection("reward_history").doc(spin.rewardId).get()).data()).toMatchObject({
+      sourceSlotId: "only-slot",
+      wheelConfigVersion: 3,
+      wheelSlotWeight: 25,
+      rewardName: "Gội miễn phí",
+      pointsSpent: 5,
+    });
+  });
+
+  it("no_prize ghi lịch sử nhưng không tạo voucher có thể dùng", async () => {
+    const salonId = "salon-wheel-no-prize";
+    const customerId = "customer-wheel-no-prize";
+    await seedOwner("owner-wheel-no-prize", salonId);
+    await db.collection("customers").doc(customerId).set({ salonId, points: 5 });
+    await db
+      .collection("lucky_wheel")
+      .doc(salonId)
+      .set({
+        salonId,
+        configVersion: 1,
+        requiredPoints: 5,
+        deductPointsAfterSpin: true,
+        slots: [
+          { slotId: "none", label: "Không trúng", type: "no_prize", active: true, weight: 1 },
+        ],
+      });
+
+    const spin = await spinLuckyWheel.run(
+      requestFor("owner-wheel-no-prize", {
+        salonId,
+        customerId,
+        configVersion: 1,
+        idempotencyKey: "spin-no-prize-0001",
+      }),
+    );
+    const reward = (await db.collection("reward_history").doc(spin.rewardId).get()).data();
+    expect(spin).toMatchObject({ isWinning: false, rewardCode: "", selectedSlotId: "none" });
+    expect(reward).toMatchObject({ status: "no_prize", rewardCode: null, isWinning: false });
+  });
+
+  it("hai spin đồng thời cùng idempotencyKey chỉ trừ điểm và phát quà một lần", async () => {
+    const salonId = "salon-wheel-concurrent";
+    const customerId = "customer-wheel-concurrent";
+    await seedOwner("owner-wheel-concurrent", salonId);
+    await db.collection("customers").doc(customerId).set({ salonId, points: 10 });
+    await db
+      .collection("lucky_wheel")
+      .doc(salonId)
+      .set({
+        salonId,
+        configVersion: 1,
+        requiredPoints: 5,
+        deductPointsAfterSpin: true,
+        slots: [{ slotId: "only", label: "Quà duy nhất", type: "reward", active: true, weight: 1 }],
+      });
+    const input = {
+      salonId,
+      customerId,
+      configVersion: 1,
+      idempotencyKey: "spin-concurrent-same-key-0001",
+    };
+
+    const [first, second] = await Promise.all([
+      spinLuckyWheel.run(requestFor("owner-wheel-concurrent", input)),
+      spinLuckyWheel.run(requestFor("owner-wheel-concurrent", input)),
+    ]);
+
+    expect(second).toEqual(first);
+    expect((await db.collection("customers").doc(customerId).get()).data()?.points).toBe(5);
+    expect((await db.collection("reward_history").where("salonId", "==", salonId).get()).size).toBe(
+      1,
+    );
   });
 
   it("chặn tenant giả, document thiếu salonId, tài khoản và salon bị khóa", async () => {
@@ -1272,6 +1707,25 @@ describe("callable transactions", () => {
       status: "used",
       usedBranchId: branchId,
     });
+    const usedBeforeRetry = (
+      await db.collection("reward_history").doc("reward-concurrent").get()
+    ).data();
+    await expect(
+      redeemRewardCode.run(
+        requestFor("staff-concurrent-reward", {
+          salonId,
+          branchId,
+          rewardCode: "HC-CONCURRENT-1234",
+          idempotencyKey: "redeem-after-used-0003",
+        }),
+      ),
+    ).rejects.toMatchObject({ details: { errorCode: "REWARD_ALREADY_REDEEMED" } });
+    const usedAfterRetry = (
+      await db.collection("reward_history").doc("reward-concurrent").get()
+    ).data();
+    expect(usedAfterRetry?.usedAt?.toMillis()).toBe(usedBeforeRetry?.usedAt?.toMillis());
+    expect(usedAfterRetry?.usedBy).toBe(usedBeforeRetry?.usedBy);
+    expect(usedAfterRetry?.usedBranchId).toBe(usedBeforeRetry?.usedBranchId);
   });
 
   it("chỉ system admin đọc được tổng quan hệ thống", async () => {

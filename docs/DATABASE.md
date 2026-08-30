@@ -38,6 +38,7 @@ users/{uid}
   role: owner | staff | system_admin
   isActive: boolean
   canRedeemRewards: boolean
+  canAwardPointsDirectly: boolean
   branchId: string?
   branchIds: string[]
   createdAt: timestamp
@@ -134,6 +135,7 @@ point_requests/{requestId}
   pointsAdded: number
   pointsRequested: number?
   status: pending | approved | rejected
+  approvalMode: staff_direct | owner_direct | owner_approval
   idempotencyKey: string
   processedAt: timestamp?
   processedBy: string?
@@ -141,6 +143,21 @@ point_requests/{requestId}
   pointsAfter: number?
   createdAt: timestamp
   updatedAt: timestamp?
+```
+
+## staff_daily_point_awards
+
+Bộ đếm server-only giới hạn nhân viên tin cậy tối đa 100 lượt cộng điểm trực tiếp mỗi ngày Việt Nam.
+Client không được đọc hoặc ghi collection này.
+
+```text
+staff_daily_point_awards/{hash(salonId + staffId + dateKey)}
+  salonId: string
+  staffId: string
+  dateKey: YYYY-MM-DD
+  awards: number
+  pointsAwarded: number
+  updatedAt: timestamp
 ```
 
 ## haircut_records
@@ -166,10 +183,18 @@ haircut_records/{recordId}
 ```text
 lucky_wheel/{salonId}
   salonId: string
+  configVersion: number
   requiredPoints: number
+  rewardValidityDays: number
   deductPointsAfterSpin: boolean
   slots: [
-    { label: string, active: boolean }
+    {
+      slotId: string,
+      label: string,
+      type: reward | no_prize,
+      active: boolean,
+      weight: positive integer
+    }
   ]
   updatedAt: timestamp
 ```
@@ -180,6 +205,11 @@ lucky_wheel/{salonId}
 reward_history/{rewardId}
   salonId: string
   branchId: string
+  sourceBranchId: string
+  sourceBranchName: string
+  sourceSlotId: string
+  wheelConfigVersion: number
+  wheelSlotWeight: number
   customerId: string
   zaloUserId: string?
   rewardName: string
@@ -187,12 +217,18 @@ reward_history/{rewardId}
   status: unused | used | expired | revoked | no_prize
   pointsUsed: number?
   pointsSpent: number?
+  redemptionScope: salon | branches
+  allowedBranchIds: string[]?
   createdAt: timestamp
   usedAt: timestamp?
   usedBy: string?
   usedBranchId: string?
+  usedBranchName: string?
   redemptionIdempotencyKey: string?
   expiresAt: timestamp?
+  restoredAt: timestamp?
+  restoredBy: string?
+  restoreReason: string?
 ```
 
 ## audit_events

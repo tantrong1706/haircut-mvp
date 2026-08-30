@@ -25,6 +25,7 @@ export type AppSession = {
   branchAddress?: string;
   mirrorName?: string;
   zaloUserId: string;
+  identityBinding?: string;
   sessionStatus?: "waiting" | "serving" | "pending_approval" | "completed" | "cancelled";
   assignedStaffName?: string;
   claimedAtMs?: number | null;
@@ -35,7 +36,12 @@ export type AppSession = {
 export type HaircutRecord = {
   id: string;
   createdAt: string;
+  salonName?: string;
+  branchId?: string;
+  branchName?: string;
   staffName: string;
+  serviceName?: string;
+  rewardName?: string;
   note: string;
   photoUrls: string[];
   pointsAdded: number;
@@ -45,8 +51,15 @@ export type Reward = {
   id: string;
   rewardName: string;
   rewardCode: string;
-  status: "unused" | "used" | "expired";
+  status: "unused" | "used" | "expired" | "revoked";
+  sourceBranchId?: string;
+  sourceBranchName?: string;
+  redemptionScope: "salon" | "branches";
+  allowedBranchIds: string[];
   createdAt: string;
+  usedAt?: string;
+  usedBranchId?: string;
+  usedBranchName?: string;
   expiresAt?: string;
 };
 
@@ -56,16 +69,21 @@ export type SpinResult = {
   rewardCode: string;
   pointsAfter: number;
   isWinning: boolean;
-  selectedIndex?: number;
+  selectedIndex: number;
+  selectedSlotId: string;
+  configVersion: number;
 };
 
 export type LuckyWheelSlot = {
+  slotId: string;
   label: string;
   active: boolean;
   type: "reward" | "no_prize";
+  weight: number;
 };
 
 export type LuckyWheelConfig = {
+  configVersion: number;
   requiredPoints: number;
   rewardValidityDays: number;
   deductPointsAfterSpin: boolean;
@@ -73,16 +91,35 @@ export type LuckyWheelConfig = {
 };
 
 export const defaultLuckyWheelConfig: LuckyWheelConfig = {
+  configVersion: 1,
   requiredPoints: 5,
   rewardValidityDays: 90,
   deductPointsAfterSpin: true,
   slots: [
-    { label: "Giảm 10%", active: true, type: "reward" },
-    { label: "Gội đầu miễn phí", active: true, type: "reward" },
-    { label: "Tặng sáp tóc", active: true, type: "reward" },
-    { label: "Giảm 20%", active: true, type: "reward" },
-    { label: "Chúc bạn may mắn lần sau", active: true, type: "no_prize" },
-    { label: "Hấp dầu miễn phí", active: true, type: "reward" },
+    { slotId: "slot-1", label: "Giảm 10%", active: true, type: "reward", weight: 25 },
+    {
+      slotId: "slot-2",
+      label: "Gội đầu miễn phí",
+      active: true,
+      type: "reward",
+      weight: 10,
+    },
+    { slotId: "slot-3", label: "Tặng sáp tóc", active: true, type: "reward", weight: 10 },
+    { slotId: "slot-4", label: "Giảm 20%", active: true, type: "reward", weight: 5 },
+    {
+      slotId: "slot-5",
+      label: "Chúc bạn may mắn lần sau",
+      active: true,
+      type: "no_prize",
+      weight: 40,
+    },
+    {
+      slotId: "slot-6",
+      label: "Hấp dầu miễn phí",
+      active: true,
+      type: "reward",
+      weight: 10,
+    },
   ],
 };
 import type { SystemFeatures } from "@haircut/contracts";

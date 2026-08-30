@@ -70,6 +70,22 @@ function Test-TrackedRepositorySafety {
   }
 }
 
+function Get-JavaVersion {
+  if (-not (Get-Command java -ErrorAction SilentlyContinue)) {
+    return "NOT FOUND"
+  }
+
+  $previousErrorActionPreference = $ErrorActionPreference
+  try {
+    $ErrorActionPreference = "Continue"
+    return ((java -version 2>&1 | Select-Object -First 1).ToString())
+  } catch {
+    return "ERROR"
+  } finally {
+    $ErrorActionPreference = $previousErrorActionPreference
+  }
+}
+
 $mode = if ($Full) { "full" } else { "quick" }
 Write-Host "== HAIRCUT repository checks ($mode) ==" -ForegroundColor Green
 Write-Host "Root: $root"
@@ -89,6 +105,14 @@ if ($nodeVersion -notmatch "^v22\.") {
 Invoke-Step "Functions npm ci" (Join-Path $root "firebase/functions") { npm ci }
 Invoke-Step "Functions source checks" (Join-Path $root "firebase/functions") { npm run check }
 Invoke-Step "Functions build" (Join-Path $root "firebase/functions") { npm run build }
+
+$gatewayDirectory = Join-Path $root "services/zalo-verification-gateway"
+Invoke-Step "Gateway npm ci" $gatewayDirectory { npm ci }
+Invoke-Step "Gateway source checks" $gatewayDirectory { npm run check }
+Invoke-Step "Gateway dependency audit" $gatewayDirectory { npm audit --audit-level=high }
+Invoke-Step "Gateway Functions compatibility" (Join-Path $root "firebase/functions") {
+  npm exec -- vitest run test/zaloGatewayVerifier.test.ts test/zaloClient.test.ts test/zaloContract.test.ts
+}
 
 Invoke-Step "Zalo npm ci" (Join-Path $root "zalo-mini-app") { npm ci }
 Invoke-Step "Zalo lint" (Join-Path $root "zalo-mini-app") { npm run lint }
@@ -171,7 +195,7 @@ if ($Full) {
     readyForFirebaseDeploy = ($requiredFailures.Count -eq 0)
     nodeVersion = $(if (Get-Command node -ErrorAction SilentlyContinue) { node --version } else { "NOT FOUND" })
     npmVersion = $(if (Get-Command npm -ErrorAction SilentlyContinue) { npm --version } else { "NOT FOUND" })
-    javaVersion = $(if (Get-Command java -ErrorAction SilentlyContinue) { (java -version 2>&1 | Select-Object -First 1) } else { "NOT FOUND" })
+    javaVersion = Get-JavaVersion
     firebaseCliVersion = $(if (Get-Command firebase -ErrorAction SilentlyContinue) { firebase --version } else { "NOT FOUND" })
     summary = $counts
     results = @($results)

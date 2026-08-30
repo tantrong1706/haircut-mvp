@@ -33,6 +33,7 @@ import {
 } from "./firebase";
 import { LuckyWheelConfig, defaultLuckyWheelConfig } from "./types";
 import { normalizeLuckyWheelConfig } from "./wheel";
+import { safeStorageGet, safeStorageRemove, safeStorageSet } from "./safeStorage";
 
 const SESSION_POINT_REQUEST_WINDOW_MS = 12 * 60 * 60 * 1000;
 
@@ -163,6 +164,19 @@ export type RedeemRewardResult = {
   rewardName: string;
   customerName?: string;
   alreadyRedeemed?: boolean;
+  usedAtMs: number;
+  usedBy: string;
+  usedBranchId: string;
+  usedBranchName: string;
+};
+
+export type SubmitPointRequestResult = {
+  requestId: string;
+  alreadySubmitted: boolean;
+  status: "approved" | "pending_approval";
+  approvalMode?: "staff_direct" | "owner_direct" | "owner_approval";
+  pointsAdded: number;
+  pointsAfter?: number;
 };
 
 export type SalonMirror = {
@@ -199,6 +213,7 @@ export type StaffProfile = {
   role: "staff";
   isActive: boolean;
   canRedeemRewards: boolean;
+  canAwardPointsDirectly: boolean;
   branchId: string;
   branchIds: string[];
   inviteStatus: "pending" | "accepted";
@@ -255,7 +270,15 @@ export type RewardCodeInfo = {
   customerName?: string;
   createdAtMs?: number | null;
   usedAtMs?: number | null;
+  usedBranchId?: string;
+  usedBranchName?: string;
   expiresAtMs?: number | null;
+  sourceBranchId?: string;
+  sourceBranchName?: string;
+  redemptionScope?: "salon" | "branches";
+  allowedBranchIds?: string[];
+  redeemableAtBranch?: boolean;
+  reason?: "OK" | "USED" | "EXPIRED" | "REVOKED" | "WRONG_BRANCH" | "NOT_FOUND";
 };
 
 export type DeleteCustomerDataResult = {
@@ -858,6 +881,7 @@ export async function createStaffProfile(input: {
   name: string;
   phone?: string;
   canRedeemRewards: boolean;
+  canAwardPointsDirectly: boolean;
   branchIds: string[];
 }): Promise<{ uid: string; email: string; inviteEmailSent: boolean }> {
   const email = input.email.trim().toLowerCase();
@@ -882,6 +906,7 @@ export async function createStaffProfile(input: {
       name: string;
       phone?: string;
       canRedeemRewards: boolean;
+      canAwardPointsDirectly: boolean;
       branchIds: string[];
     },
     { uid: string; email: string }
@@ -891,6 +916,7 @@ export async function createStaffProfile(input: {
     name,
     phone: input.phone?.trim() || undefined,
     canRedeemRewards: input.canRedeemRewards,
+    canAwardPointsDirectly: input.canAwardPointsDirectly,
     branchIds: input.branchIds,
   });
 
@@ -926,6 +952,7 @@ export async function updateStaffProfile(input: {
   phone?: string;
   isActive?: boolean;
   canRedeemRewards?: boolean;
+  canAwardPointsDirectly?: boolean;
   branchIds?: string[];
 }) {
   return callWriteFunctionOrFallback("updateStaffProfile", input, () =>
@@ -1024,13 +1051,23 @@ export async function submitPointRequest(input: {
   photoUrls?: string[];
   photoPaths?: string[];
   pointsRequested?: number;
-}) {
+}): Promise<SubmitPointRequestResult> {
   const pointsRequested =
     input.pointsRequested && input.pointsRequested > 0
       ? Math.floor(input.pointsRequested)
       : await getSalonPointPerVisit(input.salonId);
 
-  return callWriteFunctionOrFallback(
+  return callWriteFunctionOrFallback<
+    {
+      salonId: string;
+      sessionId: string;
+      note: string;
+      photoUrls: string[];
+      photoPaths: string[];
+      pointsRequested: number;
+    },
+    SubmitPointRequestResult
+  >(
     "submitPointRequest",
     {
       salonId: input.salonId,
@@ -1211,11 +1248,17 @@ async function submitPointRequestDirect(input: {
   photoUrls?: string[];
   photoPaths?: string[];
   pointsRequested: number;
-}) {
+}): Promise<SubmitPointRequestResult> {
   const db = getFirebaseDb();
 
   if (!isFirebaseConfigured() || !db) {
-    return;
+    return {
+      requestId: input.session.id,
+      alreadySubmitted: false,
+      status: "pending_approval",
+      approvalMode: "owner_approval",
+      pointsAdded: input.pointsRequested,
+    };
   }
 
   const signedStaff = await getSignedStaffForDirectWrite();
@@ -1303,6 +1346,14 @@ async function submitPointRequestDirect(input: {
       { merge: true },
     );
   });
+
+  return {
+    requestId: input.session.id,
+    alreadySubmitted: false,
+    status: "pending_approval",
+    approvalMode: "owner_approval",
+    pointsAdded: pointsRequested,
+  };
 }
 
 async function getSalonPointPerVisit(salonId: string) {
@@ -1336,6 +1387,7 @@ async function getSignedStaffForDirectWrite() {
     uid,
     name: name || "Nhân viên",
     role: data.role === "owner" ? "owner" : "staff",
+    canAwardPointsDirectly: Boolean(data.canAwardPointsDirectly),
     branchIds,
   };
 }
@@ -1494,10 +1546,22 @@ export async function getLuckyWheelConfig(salonId: string): Promise<LuckyWheelCo
   return normalizeLuckyWheelConfig(snap.data());
 }
 
-export async function saveLuckyWheelConfig(salonId: string, config: LuckyWheelConfig) {
+export async function saveLuckyWheelConfig(
+  salonId: string,
+  config: LuckyWheelConfig,
+): Promise<{ ok: true; configVersion: number }> {
   const normalized = normalizeLuckyWheelConfig(config);
 
-  return callWriteFunctionOrFallback(
+  const result = await callWriteFunctionOrFallback<
+    {
+      salonId: string;
+      requiredPoints: number;
+      rewardValidityDays: number;
+      deductPointsAfterSpin: boolean;
+      slots: LuckyWheelConfig["slots"];
+    },
+    { ok: true; configVersion: number }
+  >(
     "updateLuckyWheel",
     {
       salonId,
@@ -1508,6 +1572,10 @@ export async function saveLuckyWheelConfig(salonId: string, config: LuckyWheelCo
     },
     () => saveLuckyWheelConfigDirect(salonId, normalized),
   );
+  return {
+    ok: true,
+    configVersion: Math.max(1, Math.floor(Number(result?.configVersion || 1))),
+  };
 }
 
 export async function redeemRewardCode(input: {
@@ -1534,14 +1602,22 @@ export async function redeemRewardCode(input: {
     },
     () => redeemRewardCodeDirect(input.salonId, rewardCode),
   );
-  localStorage.removeItem(pendingOperation.storageKey);
+  safeStorageRemove(pendingOperation.storageKey);
   const maybeResult = result as Partial<RedeemRewardResult> | undefined;
+  const usedAtMs = Number(maybeResult?.usedAtMs);
+  if (!Number.isFinite(usedAtMs) || usedAtMs <= 0) {
+    throw new Error("Backend chưa trả thời gian sử dụng authoritative");
+  }
   return {
     rewardId: maybeResult?.rewardId || "",
     rewardCode,
     rewardName: maybeResult?.rewardName || "",
     customerName: maybeResult?.customerName || "",
     alreadyRedeemed: maybeResult?.alreadyRedeemed === true,
+    usedAtMs,
+    usedBy: maybeResult?.usedBy || "",
+    usedBranchId: maybeResult?.usedBranchId || "",
+    usedBranchName: maybeResult?.usedBranchName || "",
   };
 }
 
@@ -1568,11 +1644,16 @@ async function redeemRewardCodeDirect(
   const db = getFirebaseDb();
 
   if (!isFirebaseConfigured() || !db) {
+    const usedAtMs = Date.now();
     return {
       rewardId: "mock-reward",
       rewardCode,
       rewardName: "Mã quà demo",
       customerName: "Khách demo",
+      usedAtMs,
+      usedBy: "demo-staff",
+      usedBranchId: "demo-branch",
+      usedBranchName: "Chi nhánh demo",
     };
   }
 
@@ -1604,12 +1685,21 @@ async function redeemRewardCodeDirect(
   });
 
   const customer = await getCustomer(String(reward.customerId || ""), salonId);
+  const updatedReward = (await getDoc(rewardDoc.ref)).data();
+  const usedAtMs = toMillis(updatedReward?.usedAt);
+  if (!usedAtMs) {
+    throw new Error("Không xác nhận được thời gian sử dụng từ máy chủ");
+  }
 
   return {
     rewardId: rewardDoc.id,
     rewardCode,
     rewardName: String(reward.rewardName || ""),
     customerName: customer?.name,
+    usedAtMs,
+    usedBy: String(updatedReward?.usedBy || ""),
+    usedBranchId: String(updatedReward?.usedBranchId || ""),
+    usedBranchName: String(updatedReward?.usedBranchName || ""),
   };
 }
 
@@ -1617,21 +1707,29 @@ async function saveLuckyWheelConfigDirect(salonId: string, config: LuckyWheelCon
   const db = getFirebaseDb();
 
   if (!isFirebaseConfigured() || !db) {
-    return;
+    return { ok: true as const, configVersion: config.configVersion };
   }
 
-  await setDoc(
-    doc(db, "lucky_wheel", salonId),
-    {
-      salonId,
-      requiredPoints: config.requiredPoints,
-      rewardValidityDays: config.rewardValidityDays,
-      deductPointsAfterSpin: config.deductPointsAfterSpin,
-      slots: config.slots,
-      updatedAt: serverTimestamp(),
-    },
-    { merge: true },
-  );
+  const wheelRef = doc(db, "lucky_wheel", salonId);
+  let configVersion = config.configVersion;
+  await runTransaction(db, async (transaction) => {
+    const current = await transaction.get(wheelRef);
+    configVersion = Math.max(1, Math.floor(Number(current.data()?.configVersion || 1))) + 1;
+    transaction.set(
+      wheelRef,
+      {
+        salonId,
+        configVersion,
+        requiredPoints: config.requiredPoints,
+        rewardValidityDays: config.rewardValidityDays,
+        deductPointsAfterSpin: config.deductPointsAfterSpin,
+        slots: config.slots,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true },
+    );
+  });
+  return { ok: true as const, configVersion };
 }
 
 async function createMirrorDirect(salonId: string, name: string): Promise<SalonMirror> {
@@ -1722,6 +1820,7 @@ async function getStaffProfilesDirect(salonId: string): Promise<{ staff: StaffPr
           role: "staff",
           isActive: true,
           canRedeemRewards: true,
+          canAwardPointsDirectly: true,
           branchId: "demo-branch-main",
           branchIds: ["demo-branch-main"],
           inviteStatus: "accepted",
@@ -1744,6 +1843,7 @@ async function updateStaffProfileDirect(input: {
   phone?: string;
   isActive?: boolean;
   canRedeemRewards?: boolean;
+  canAwardPointsDirectly?: boolean;
   branchIds?: string[];
 }) {
   const db = getFirebaseDb();
@@ -1774,6 +1874,9 @@ async function updateStaffProfileDirect(input: {
   }
   if (typeof input.canRedeemRewards === "boolean") {
     payload.canRedeemRewards = input.canRedeemRewards;
+  }
+  if (typeof input.canAwardPointsDirectly === "boolean") {
+    payload.canAwardPointsDirectly = input.canAwardPointsDirectly;
   }
   if (input.branchIds?.length) {
     payload.branchId = input.branchIds[0];
@@ -1962,6 +2065,7 @@ function mapStaffProfile(docSnap: QueryDocumentSnapshot<DocumentData>): StaffPro
     role: "staff",
     isActive: Boolean(data.isActive),
     canRedeemRewards: Boolean(data.canRedeemRewards),
+    canAwardPointsDirectly: Boolean(data.canAwardPointsDirectly),
     branchId: String(data.branchId || ""),
     branchIds: Array.isArray(data.branchIds)
       ? data.branchIds.filter((value): value is string => typeof value === "string")
@@ -2291,12 +2395,12 @@ function localScopeHash(value: string) {
 
 function getOrCreatePendingOperationKey(scope: string) {
   const storageKey = `haircut_pending_operation:${scope}`;
-  const existing = localStorage.getItem(storageKey);
+  const existing = safeStorageGet(storageKey);
   if (existing && /^[A-Za-z0-9_-]{16,128}$/.test(existing)) {
     return { storageKey, key: existing };
   }
   const key = randomToken();
-  localStorage.setItem(storageKey, key);
+  safeStorageSet(storageKey, key);
   return { storageKey, key };
 }
 

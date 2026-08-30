@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "candidateSha": "0000000000000000000000000000000000000000",
+  "artifactSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "gateway": {
+    "publicHealthReady": false,
+    "publicAuthReady": false,
+    "vnEgressPreserved": false,
+    "realZaloReady": false,
+    "directExposure": false,
+    "httpsEnforced": false,
+    "runtimeHardened": false
+  },
+  "firebase": {
+    "configPrepared": false,
+    "productionGatewayEnabled": false,
+    "deployedSha": ""
+  },
+  "zalo": {
+    "testingVersionId": "",
+    "androidVerified": false,
+    "iosVerified": false,
+    "reviewSubmitted": false,
+    "published": false
+  }
+}

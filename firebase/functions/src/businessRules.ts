@@ -5,10 +5,22 @@ export type CustomerContactPatch = {
 };
 
 export type WheelSlotInput = {
+  slotId?: string;
   label: string;
   active: boolean;
   type?: "reward" | "no_prize";
+  weight?: number;
 };
+
+export type NormalizedWheelSlot = {
+  slotId: string;
+  label: string;
+  active: boolean;
+  type: "reward" | "no_prize";
+  weight: number;
+};
+
+export const MAX_WHEEL_SLOT_WEIGHT = 1_000_000;
 
 export function isVerifiedOwnerIdentity(input: { email?: unknown; emailVerified?: unknown }) {
   return (
@@ -85,13 +97,75 @@ export function normalizeWheelSlotType(type: unknown, label: string): "reward" |
   return /may mắn|không trúng/i.test(label) ? "no_prize" : "reward";
 }
 
+export function normalizeWheelSlots(slots: WheelSlotInput[]): NormalizedWheelSlot[] {
+  const slotIds = new Set<string>();
+  return slots.map((slot, index) => {
+    const label = String(slot.label || "").trim();
+    const slotId = typeof slot.slotId === "string" && slot.slotId.trim()
+      ? slot.slotId.trim()
+      : `slot-${index + 1}`;
+    const weight = slot.weight === undefined ? 1 : Number(slot.weight);
+
+    if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/.test(slotId)) {
+      throw new Error(`slotId không hợp lệ tại ô ${index + 1}`);
+    }
+    if (slotIds.has(slotId)) {
+      throw new Error(`slotId bị trùng: ${slotId}`);
+    }
+    if (!Number.isSafeInteger(weight) || weight <= 0 || weight > MAX_WHEEL_SLOT_WEIGHT) {
+      throw new Error(`weight không hợp lệ tại ô ${index + 1}`);
+    }
+    slotIds.add(slotId);
+
+    return {
+      slotId,
+      label,
+      active: slot.active !== false,
+      type: normalizeWheelSlotType(slot.type, label),
+      weight,
+    };
+  });
+}
+
+export function selectWeightedWheelSlotByDraw(slots: WheelSlotInput[], draw: number) {
+  const activeSlots = normalizeWheelSlots(slots).filter(
+    (slot) => slot.active && slot.label.length > 0,
+  );
+  const totalWeight = activeSlots.reduce((total, slot) => total + slot.weight, 0);
+  if (!Number.isSafeInteger(draw) || draw < 0 || draw >= totalWeight) {
+    return null;
+  }
+
+  let boundary = 0;
+  for (let index = 0; index < activeSlots.length; index += 1) {
+    const slot = activeSlots[index];
+    boundary += slot.weight;
+    if (draw < boundary) {
+      return { ...slot, index, totalWeight };
+    }
+  }
+  return null;
+}
+
+export function wheelConfigVersion(value: unknown): number {
+  const version = Number(value);
+  return Number.isSafeInteger(version) && version > 0 ? version : 1;
+}
+
+export function nextWheelConfigVersion(value: unknown): number {
+  const current = wheelConfigVersion(value);
+  if (current >= Number.MAX_SAFE_INTEGER) {
+    throw new Error("configVersion đã vượt giới hạn an toàn");
+  }
+  return current + 1;
+}
+
+export function wheelConfigMatches(clientVersion: unknown, storedVersion: unknown): boolean {
+  return wheelConfigVersion(clientVersion) === wheelConfigVersion(storedVersion);
+}
+
 export function selectWheelSlot(slots: WheelSlotInput[], randomValue: number) {
-  const activeSlots = slots
-    .map((slot) => ({
-      ...slot,
-      type: normalizeWheelSlotType(slot.type, slot.label),
-    }))
-    .filter((slot) => slot.active && slot.label.trim().length > 0);
+  const activeSlots = activeWheelSlots(slots);
 
   if (activeSlots.length === 0) {
     return null;
@@ -100,8 +174,28 @@ export function selectWheelSlot(slots: WheelSlotInput[], randomValue: number) {
   const normalizedRandom = Number.isFinite(randomValue)
     ? Math.min(Math.max(randomValue, 0), 0.999999999)
     : 0;
-  const index = Math.floor(normalizedRandom * activeSlots.length);
+  return selectWheelSlotByIndex(slots, Math.floor(normalizedRandom * activeSlots.length));
+}
+
+export function activeWheelSlotCount(slots: WheelSlotInput[]) {
+  return activeWheelSlots(slots).length;
+}
+
+export function selectWheelSlotByIndex(slots: WheelSlotInput[], index: number) {
+  const activeSlots = activeWheelSlots(slots);
+  if (!Number.isSafeInteger(index) || index < 0 || index >= activeSlots.length) {
+    return null;
+  }
   return { ...activeSlots[index], index };
+}
+
+function activeWheelSlots(slots: WheelSlotInput[]) {
+  return slots
+    .map((slot) => ({
+      ...slot,
+      type: normalizeWheelSlotType(slot.type, slot.label),
+    }))
+    .filter((slot) => slot.active && slot.label.trim().length > 0);
 }
 
 export function wheelRewardOutcome(type: "reward" | "no_prize", generatedCode: string) {
@@ -129,12 +223,91 @@ export function effectiveRewardStatus(
   return expiresAtMs !== null && expiresAtMs <= nowMs ? "expired" : "unused";
 }
 
+export type RewardLookupReason =
+  | "OK"
+  | "USED"
+  | "EXPIRED"
+  | "REVOKED"
+  | "WRONG_BRANCH"
+  | "NOT_FOUND";
+
+export function normalizeRedemptionScope(value: unknown): "salon" | "branches" {
+  return value === "branches" ? "branches" : "salon";
+}
+
+export function normalizeAllowedBranchIds(value: unknown): string[] {
+  return Array.isArray(value)
+    ? [...new Set(value.filter((item): item is string => typeof item === "string" && Boolean(item.trim())).map((item) => item.trim()))].slice(0, 100)
+    : [];
+}
+
+export function rewardLookupReason(input: {
+  found: boolean;
+  requestSalonId: string;
+  rewardSalonId: string;
+  branchId: string;
+  branchSalonId: string;
+  branchActive: boolean;
+  status: "unused" | "used" | "expired" | "revoked" | "no_prize";
+  redemptionScope?: unknown;
+  allowedBranchIds?: unknown;
+}): RewardLookupReason {
+  if (!input.found || !input.requestSalonId || input.rewardSalonId !== input.requestSalonId) {
+    return "NOT_FOUND";
+  }
+  if (input.status === "used") return "USED";
+  if (input.status === "expired") return "EXPIRED";
+  if (input.status === "revoked") return "REVOKED";
+  if (input.status === "no_prize") return "NOT_FOUND";
+  if (
+    !input.branchId ||
+    input.branchSalonId !== input.requestSalonId ||
+    input.branchActive !== true
+  ) {
+    return "WRONG_BRANCH";
+  }
+  if (
+    normalizeRedemptionScope(input.redemptionScope) === "branches" &&
+    !normalizeAllowedBranchIds(input.allowedBranchIds).includes(input.branchId)
+  ) {
+    return "WRONG_BRANCH";
+  }
+  return "OK";
+}
+
 export function canCreateCustomerWithinPlan(input: {
   plan: unknown;
   customerCount: number;
   freeCustomerLimit: number;
 }) {
   return input.plan !== "free" || input.customerCount < input.freeCustomerLimit;
+}
+
+export function directPointAwardDecision(input: {
+  role: "owner" | "staff";
+  canAwardPointsDirectly: boolean;
+  pointsRequested: number;
+  pointPerVisit: number;
+  directAwardsToday: number;
+  dailyAwardLimit: number;
+}): "auto_approve" | "owner_approval" {
+  if (
+    !Number.isSafeInteger(input.pointsRequested) ||
+    !Number.isSafeInteger(input.pointPerVisit) ||
+    input.pointsRequested <= 0 ||
+    input.pointsRequested !== input.pointPerVisit
+  ) {
+    return "owner_approval";
+  }
+  if (input.role === "owner") {
+    return "auto_approve";
+  }
+  return input.canAwardPointsDirectly &&
+    Number.isSafeInteger(input.directAwardsToday) &&
+    input.directAwardsToday >= 0 &&
+    input.directAwardsToday < input.dailyAwardLimit
+    ? "auto_approve"
+    : "owner_approval";
 }
 
 export function canRestoreReward(input: {

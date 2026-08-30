@@ -1,3 +1,4 @@
+import { MINI_APP_NAME } from "../config/branding";
 import { isZaloMiniAppRuntime } from "./runtime";
 
 export type ZaloIdentity = {
@@ -11,7 +12,7 @@ type ZaloIdentityOptions = {
   requestProfilePermission?: boolean;
 };
 
-const ZALO_REQUIRED_MESSAGE = "Vui lòng mở HAIRCUT trong Zalo để xác nhận danh tính khách hàng.";
+const ZALO_REQUIRED_MESSAGE = `Vui lòng mở ${MINI_APP_NAME} trong Zalo để xác nhận danh tính khách hàng.`;
 const ZALO_PROFILE_PERMISSION_CODE = "ZALO_PROFILE_PERMISSION_REQUIRED";
 const ZALO_PROFILE_RETRY_CODE = "ZALO_PROFILE_RETRY_REQUIRED";
 const PROFILE_PERMISSION_ERROR_CODES = new Set([-1401, -2002]);

@@ -370,13 +370,8 @@ function routeFromUrl(value: string) {
 export function extractRewardCode(value: string) {
   const raw = value.trim();
   if (!raw) return "";
-  try {
-    const url = new URL(raw);
-    const fromUrl = url.searchParams.get("rewardCode") || url.searchParams.get("code") || "";
-    return normalizeRewardCode(fromUrl);
-  } catch {
-    return normalizeRewardCode(raw);
-  }
+  const match = raw.match(/^haircut-reward:v1:([A-Z0-9][A-Z0-9-]{5,79})$/i);
+  return match ? normalizeRewardCode(match[1]) : "";
 }
 
 function normalizeRewardCode(value: string) {
