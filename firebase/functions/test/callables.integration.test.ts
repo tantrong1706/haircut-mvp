@@ -1317,6 +1317,28 @@ describe("callable transactions", () => {
       status: "unused",
       pointsSpent: 5,
     });
+    await updateLuckyWheel.run(
+      requestFor("owner-wheel-stale", {
+        salonId,
+        requiredPoints: 9,
+        rewardValidityDays: 7,
+        deductPointsAfterSpin: true,
+        slots: Array.from({ length: 6 }, (_, index) => ({
+          slotId: `new-${index + 1}`,
+          label: `Quà mới ${index + 1}`,
+          type: "reward",
+          active: index === 0,
+          weight: index + 1,
+        })),
+      }),
+    );
+    expect((await db.collection("reward_history").doc(spin.rewardId).get()).data()).toMatchObject({
+      sourceSlotId: "only-slot",
+      wheelConfigVersion: 3,
+      wheelSlotWeight: 25,
+      rewardName: "Gội miễn phí",
+      pointsSpent: 5,
+    });
   });
 
   it("no_prize ghi lịch sử nhưng không tạo voucher có thể dùng", async () => {
@@ -1348,6 +1370,40 @@ describe("callable transactions", () => {
     const reward = (await db.collection("reward_history").doc(spin.rewardId).get()).data();
     expect(spin).toMatchObject({ isWinning: false, rewardCode: "", selectedSlotId: "none" });
     expect(reward).toMatchObject({ status: "no_prize", rewardCode: null, isWinning: false });
+  });
+
+  it("hai spin đồng thời cùng idempotencyKey chỉ trừ điểm và phát quà một lần", async () => {
+    const salonId = "salon-wheel-concurrent";
+    const customerId = "customer-wheel-concurrent";
+    await seedOwner("owner-wheel-concurrent", salonId);
+    await db.collection("customers").doc(customerId).set({ salonId, points: 10 });
+    await db
+      .collection("lucky_wheel")
+      .doc(salonId)
+      .set({
+        salonId,
+        configVersion: 1,
+        requiredPoints: 5,
+        deductPointsAfterSpin: true,
+        slots: [{ slotId: "only", label: "Quà duy nhất", type: "reward", active: true, weight: 1 }],
+      });
+    const input = {
+      salonId,
+      customerId,
+      configVersion: 1,
+      idempotencyKey: "spin-concurrent-same-key-0001",
+    };
+
+    const [first, second] = await Promise.all([
+      spinLuckyWheel.run(requestFor("owner-wheel-concurrent", input)),
+      spinLuckyWheel.run(requestFor("owner-wheel-concurrent", input)),
+    ]);
+
+    expect(second).toEqual(first);
+    expect((await db.collection("customers").doc(customerId).get()).data()?.points).toBe(5);
+    expect((await db.collection("reward_history").where("salonId", "==", salonId).get()).size).toBe(
+      1,
+    );
   });
 
   it("chặn tenant giả, document thiếu salonId, tài khoản và salon bị khóa", async () => {

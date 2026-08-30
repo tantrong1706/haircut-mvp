@@ -69,6 +69,16 @@ describe("hợp đồng xác minh Zalo", () => {
     expect(spinBody).not.toContain("Math.random()");
   });
 
+  it("mã quà backend có tối thiểu 64 bit entropy và không nhúng định danh khách", () => {
+    const start = functionsSource.indexOf("function rewardCode");
+    const end = functionsSource.indexOf("\nfunction miniAppUrl", start);
+    const rewardCodeBody = functionsSource.slice(start, end);
+
+    expect(rewardCodeBody).toContain("randomBytes(8)");
+    expect(rewardCodeBody).toContain("slice(0, 16)");
+    expect(rewardCodeBody).not.toMatch(/customerId|zaloUserId|phone|accessToken/u);
+  });
+
   it("lịch sử khách chỉ query đúng customer được suy ra từ token Zalo", () => {
     const body = callableBody("getCustomerHistoryFromZalo");
     const derivedCustomerIndex = body.indexOf("customerIdFor(salonId, zaloProfile.zaloUserId)");
