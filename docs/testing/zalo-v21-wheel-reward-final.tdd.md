@@ -47,4 +47,3 @@ Journeys were derived from the owner request for the unified PR #34 + PR #35 can
 - Repository-wide Zalo coverage is below the TDD skill's aspirational 80% line target, although it passes the repository's configured 70% threshold. The changed wheel helper is at 98.85% line coverage.
 - Device-only Zalo Testing evidence and adding a Testing User remain manual Portal/device steps. They are not simulated as PASS.
 - No Firebase, Gateway or Zalo deployment was run for this candidate.
-
