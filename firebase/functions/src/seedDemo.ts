@@ -19,6 +19,7 @@ async function main() {
   const ownerId = "demo-owner";
   const staffId = "demo-staff";
   const salonId = "demo-salon";
+  const branchId = "demo-branch-main";
   const mirrorId = "demo-mirror-1";
   const qrToken = "demo-token";
   const zaloUserId = "demo-zalo-user";
@@ -33,6 +34,15 @@ async function main() {
     plan: "free",
     freeCustomerLimit: 50,
     pointPerVisit: 1,
+    defaultBranchId: branchId,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  await db.collection("branches").doc(branchId).set({
+    salonId,
+    name: "Chi nhánh trung tâm",
+    isActive: true,
     createdAt: now,
     updatedAt: now,
   });
@@ -102,15 +112,35 @@ async function main() {
     .doc(salonId)
     .set({
       salonId,
+      configVersion: 1,
       requiredPoints: 5,
+      rewardValidityDays: 90,
       deductPointsAfterSpin: true,
       slots: [
-        { label: "Giảm 10%", active: true },
-        { label: "Gội đầu miễn phí", active: true },
-        { label: "Tặng sáp tóc", active: true },
-        { label: "Giảm 20%", active: true },
-        { label: "Chúc bạn may mắn", active: true },
-        { label: "Hấp dầu miễn phí", active: true },
+        { slotId: "slot-1", label: "Giảm 10%", active: true, type: "reward", weight: 25 },
+        {
+          slotId: "slot-2",
+          label: "Gội đầu miễn phí",
+          active: true,
+          type: "reward",
+          weight: 10,
+        },
+        { slotId: "slot-3", label: "Tặng sáp tóc", active: true, type: "reward", weight: 10 },
+        { slotId: "slot-4", label: "Giảm 20%", active: true, type: "reward", weight: 5 },
+        {
+          slotId: "slot-5",
+          label: "Chúc bạn may mắn",
+          active: true,
+          type: "no_prize",
+          weight: 40,
+        },
+        {
+          slotId: "slot-6",
+          label: "Hấp dầu miễn phí",
+          active: true,
+          type: "reward",
+          weight: 10,
+        },
       ],
       updatedAt: now,
     });
@@ -121,9 +151,15 @@ async function main() {
     .set({
       salonId,
       customerId,
+      sourceBranchId: branchId,
+      sourceBranchName: "Chi nhánh trung tâm",
+      sourceSlotId: "slot-1",
+      wheelConfigVersion: 1,
+      wheelSlotWeight: 25,
       rewardName: "Giảm 10%",
       rewardCode: `HC-${token().slice(0, 4).toUpperCase()}`,
       pointsSpent: 5,
+      redemptionScope: "salon",
       status: "unused",
       createdAt: now,
     });

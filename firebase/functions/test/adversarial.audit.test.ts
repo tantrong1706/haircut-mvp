@@ -522,15 +522,10 @@ async function seedFixture() {
       Timestamp.fromMillis(now.toMillis() + 1),
     ),
     seedReward("reward-a2", SALON_A, BRANCH_A2, "customer-a2", "HC-A2", now),
-    seedReward(
-      "reward-restricted-a2",
-      SALON_A,
-      BRANCH_A2,
-      "customer-a2",
-      "HC-RESTRICTED-A2",
-      now,
-      { redemptionScope: "branches", allowedBranchIds: [BRANCH_A2] },
-    ),
+    seedReward("reward-restricted-a2", SALON_A, BRANCH_A2, "customer-a2", "HC-RESTRICTED-A2", now, {
+      redemptionScope: "branches",
+      allowedBranchIds: [BRANCH_A2],
+    }),
     seedReward("reward-b1", SALON_B, BRANCH_B1, "customer-b1", "HC-B1", now),
     seedReward("reward-legacy-a2", SALON_A, BRANCH_A2, "customer-legacy", "HC-LEGACY-A2", now),
   ]);

@@ -183,10 +183,18 @@ haircut_records/{recordId}
 ```text
 lucky_wheel/{salonId}
   salonId: string
+  configVersion: number
   requiredPoints: number
+  rewardValidityDays: number
   deductPointsAfterSpin: boolean
   slots: [
-    { label: string, active: boolean }
+    {
+      slotId: string,
+      label: string,
+      type: reward | no_prize,
+      active: boolean,
+      weight: positive integer
+    }
   ]
   updatedAt: timestamp
 ```
@@ -197,6 +205,11 @@ lucky_wheel/{salonId}
 reward_history/{rewardId}
   salonId: string
   branchId: string
+  sourceBranchId: string
+  sourceBranchName: string
+  sourceSlotId: string
+  wheelConfigVersion: number
+  wheelSlotWeight: number
   customerId: string
   zaloUserId: string?
   rewardName: string
@@ -204,12 +217,18 @@ reward_history/{rewardId}
   status: unused | used | expired | revoked | no_prize
   pointsUsed: number?
   pointsSpent: number?
+  redemptionScope: salon | branches
+  allowedBranchIds: string[]?
   createdAt: timestamp
   usedAt: timestamp?
   usedBy: string?
   usedBranchId: string?
+  usedBranchName: string?
   redemptionIdempotencyKey: string?
   expiresAt: timestamp?
+  restoredAt: timestamp?
+  restoredBy: string?
+  restoreReason: string?
 ```
 
 ## audit_events

@@ -1163,9 +1163,7 @@ describe("callable transactions", () => {
         reason: "Kiểm thử hoàn tác",
       }),
     );
-    const restoredReward = (
-      await db.collection("reward_history").doc(spin.rewardId).get()
-    ).data();
+    const restoredReward = (await db.collection("reward_history").doc(spin.rewardId).get()).data();
     expect(restoredReward).toMatchObject({
       status: "unused",
       restoredBy: "owner-reward",
@@ -1183,13 +1181,16 @@ describe("callable transactions", () => {
   it("owner không thể hoàn tác reward ngoài cửa sổ 15 phút", async () => {
     const salonId = "salon-restore-expired";
     await seedOwner("owner-restore-expired", salonId);
-    await db.collection("reward_history").doc("reward-restore-expired").set({
-      salonId,
-      rewardCode: "HC-RESTORE-EXPIRED",
-      status: "used",
-      usedAt: Timestamp.fromMillis(Date.now() - 16 * 60_000),
-      expiresAt: Timestamp.fromMillis(Date.now() + 60_000),
-    });
+    await db
+      .collection("reward_history")
+      .doc("reward-restore-expired")
+      .set({
+        salonId,
+        rewardCode: "HC-RESTORE-EXPIRED",
+        status: "used",
+        usedAt: Timestamp.fromMillis(Date.now() - 16 * 60_000),
+        expiresAt: Timestamp.fromMillis(Date.now() + 60_000),
+      });
 
     await expect(
       restoreRewardCode.run(
@@ -1323,15 +1324,18 @@ describe("callable transactions", () => {
     const customerId = "customer-wheel-no-prize";
     await seedOwner("owner-wheel-no-prize", salonId);
     await db.collection("customers").doc(customerId).set({ salonId, points: 5 });
-    await db.collection("lucky_wheel").doc(salonId).set({
-      salonId,
-      configVersion: 1,
-      requiredPoints: 5,
-      deductPointsAfterSpin: true,
-      slots: [
-        { slotId: "none", label: "Không trúng", type: "no_prize", active: true, weight: 1 },
-      ],
-    });
+    await db
+      .collection("lucky_wheel")
+      .doc(salonId)
+      .set({
+        salonId,
+        configVersion: 1,
+        requiredPoints: 5,
+        deductPointsAfterSpin: true,
+        slots: [
+          { slotId: "none", label: "Không trúng", type: "no_prize", active: true, weight: 1 },
+        ],
+      });
 
     const spin = await spinLuckyWheel.run(
       requestFor("owner-wheel-no-prize", {

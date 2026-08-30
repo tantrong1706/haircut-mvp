@@ -177,19 +177,20 @@ Input:
 {
   "salonId": "...",
   "requiredPoints": 5,
+  "rewardValidityDays": 90,
   "deductPointsAfterSpin": true,
   "slots": [
-    { "label": "Giảm 10%", "active": true },
-    { "label": "Gội đầu miễn phí", "active": true },
-    { "label": "Tặng sáp tóc", "active": true },
-    { "label": "Giảm 20%", "active": true },
-    { "label": "Chúc bạn may mắn", "active": true },
-    { "label": "Hấp dầu miễn phí", "active": true }
+    { "slotId": "slot-1", "label": "Giảm 10%", "type": "reward", "active": true, "weight": 25 },
+    { "slotId": "slot-2", "label": "Gội đầu miễn phí", "type": "reward", "active": true, "weight": 10 },
+    { "slotId": "slot-3", "label": "Tặng sáp tóc", "type": "reward", "active": true, "weight": 10 },
+    { "slotId": "slot-4", "label": "Giảm 20%", "type": "reward", "active": true, "weight": 5 },
+    { "slotId": "slot-5", "label": "Không trúng", "type": "no_prize", "active": true, "weight": 40 },
+    { "slotId": "slot-6", "label": "Hấp dầu miễn phí", "type": "reward", "active": true, "weight": 10 }
   ]
 }
 ```
 
-Chỉ owner được gọi.
+Chỉ owner được gọi. Mỗi lần lưu tăng `configVersion`; slot legacy thiếu `weight` dùng `1`, thiếu `slotId` dùng `slot-1...slot-6`.
 
 ## spinLuckyWheelFromZalo
 
@@ -199,6 +200,7 @@ Input:
 {
   "salonId": "...",
   "zaloAccessToken": "...",
+  "configVersion": 3,
   "idempotencyKey": "random-16-128-characters"
 }
 ```
@@ -209,11 +211,15 @@ Output:
 {
   "rewardId": "...",
   "rewardName": "Giảm 10%",
-  "rewardCode": "HC-20260701-ABCD1234",
+  "rewardCode": "HC-20260701-ABCD1234ABCD1234",
   "pointsAfter": 0,
-  "selectedIndex": 0
+  "selectedIndex": 0,
+  "selectedSlotId": "slot-1",
+  "configVersion": 3
 }
 ```
+
+Nếu config client đã cũ, backend trả `STALE_WHEEL_CONFIG` trước khi trừ điểm hoặc tạo reward.
 
 Kết quả quay được tạo trong transaction ở server. `selectedIndex` giúp frontend quay đúng ô.
 
@@ -238,7 +244,10 @@ Owner/staff tìm khách theo tên hoặc 4 số cuối SĐT. Output gồm điể
 ## lookupRewardCode / redeemRewardCode
 
 Owner hoặc staff có `canRedeemRewards=true` được kiểm tra và xác nhận mã quà đã sử dụng.
-`redeemRewardCode` nhận thêm `branchId` và `idempotencyKey`; backend xác minh branch theo user, ghi `usedBranchId` và chỉ cho trạng thái `unused`.
+`lookupRewardCode` và `redeemRewardCode` đều nhận `branchId`, nên UI biết reward có dùng được tại chi nhánh hiện tại trước khi hiện nút xác nhận.
+Reward legacy hoặc `redemptionScope=salon` dùng được tại mọi chi nhánh active cùng salon; `redemptionScope=branches` chỉ dùng tại `allowedBranchIds`.
+`redeemRewardCode` nhận thêm `idempotencyKey`, chạy transaction, ghi `usedAt` phía server và trả `usedAtMs`, `usedBy`, `usedBranchId`, `usedBranchName` authoritative.
+Lookup trả `redeemableAtBranch` và `reason`: `OK`, `USED`, `EXPIRED`, `REVOKED`, `WRONG_BRANCH`, `NOT_FOUND`.
 
 ## Error code ổn định
 
@@ -256,6 +265,7 @@ BRANCH_ACCESS_DENIED
 SESSION_ALREADY_CLAIMED
 SESSION_NOT_OPEN
 REQUEST_ALREADY_PROCESSED
+STALE_WHEEL_CONFIG
 REWARD_ALREADY_REDEEMED
 REWARD_EXPIRED
 INVALID_REQUEST
