@@ -71,27 +71,27 @@ describe("WheelPage", () => {
   it.each([0, 1, 2, 3, 4, 5])(
     "dừng đúng giữa ô backend trả về ở index %s",
     async (selectedIndex) => {
-    const user = userEvent.setup();
-    mocks.spinWheel.mockResolvedValue(spinResult(selectedIndex));
-    render(<WheelPage session={session} onSessionChange={vi.fn()} />);
+      const user = userEvent.setup();
+      mocks.spinWheel.mockResolvedValue(spinResult(selectedIndex));
+      render(<WheelPage session={session} onSessionChange={vi.fn()} />);
 
-    await user.click(await screen.findByRole("button", { name: "Quay ngay" }));
-    const wheel = await screen.findByTestId("lucky-wheel");
-    await finishCurrentSpin();
+      await user.click(await screen.findByRole("button", { name: "Quay ngay" }));
+      const wheel = await screen.findByTestId("lucky-wheel");
+      await finishCurrentSpin();
 
-    await waitFor(() => expect(document.querySelector(".reward-result")).toBeInTheDocument());
-    expect(
-      within(document.querySelector(".reward-result")!).getByText(
-        config.slots[selectedIndex].label,
-      ),
-    ).toBeInTheDocument();
-    const finalRotation = Number(wheel.getAttribute("data-rotation"));
-    const selectedCenter = selectedIndex * 60 + 30;
-    expect(normalizeDegrees(selectedCenter + finalRotation)).toBeCloseTo(0, 8);
-    expect(wheel.style.getPropertyValue("--wheel-label-counter")).toBe(`${-finalRotation}deg`);
-    expect(document.querySelector(".wheel-label")?.getAttribute("style")).toContain(
-      "rotate(var(--wheel-label-counter))",
-    );
+      await waitFor(() => expect(document.querySelector(".reward-result")).toBeInTheDocument());
+      expect(
+        within(document.querySelector(".reward-result")!).getByText(
+          config.slots[selectedIndex].label,
+        ),
+      ).toBeInTheDocument();
+      const finalRotation = Number(wheel.getAttribute("data-rotation"));
+      const selectedCenter = selectedIndex * 60 + 30;
+      expect(normalizeDegrees(selectedCenter + finalRotation)).toBeCloseTo(0, 8);
+      expect(wheel.style.getPropertyValue("--wheel-label-counter")).toBe(`${-finalRotation}deg`);
+      expect(document.querySelector(".wheel-label")?.getAttribute("style")).toContain(
+        "rotate(var(--wheel-label-counter))",
+      );
     },
   );
 
