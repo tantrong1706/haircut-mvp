@@ -19,7 +19,7 @@ Journeys were derived from the owner request for the unified PR #34 + PR #35 can
 | --- | --- | --- | --- |
 | Weighted slots, legacy defaults and version increment | `b45bd5d`, `9cf805c` | `4fe51b8`, `4026be8` | Functions business-rule tests: 27/27 PASS; wheel UI/service tests included in 154/154 Zalo unit PASS |
 | Exact pointer, double-click, reduced-motion and stale response fail-closed | `6f2831d` | `4026be8` | `WheelPage.test.tsx`: 12/12 PASS, including selectedIndex 0–5 |
-| Salon-wide and branch-restricted reward eligibility | `b0fc754` | `8eb1eda`, `22d3ced` | Functions emulator integration: 59/59 PASS; adversarial tenant suite: 21/21 PASS |
+| Salon-wide and branch-restricted reward eligibility | `b0fc754` | `8eb1eda`, `22d3ced` | Functions emulator integration: 60/60 PASS; adversarial tenant suite: 21/21 PASS |
 | Customer reward QR and status UX | `be94659` | `8eb1eda` | `RewardsPage.test.tsx`: 2/2 PASS; only unused reward renders QR |
 | Strict scanner payload | `0b1b73f` | `8eb1eda` | Manager `nativeRuntime.test.ts`: PASS for `haircut-reward:v1:<code>` and malformed rejection |
 | Branch-consistent lookup and server-authoritative usedAt | `4c6d1ec` | `8eb1eda` | Manager redemption component test PASS; callable concurrency/idempotency tests PASS |
@@ -31,8 +31,8 @@ Journeys were derived from the owner request for the unified PR #34 + PR #35 can
 | --- | --- | --- |
 | Functions typecheck | `npm run typecheck` | PASS |
 | Functions lint | `npm run lint` | PASS |
-| Functions unit | `npm run test:unit` | 92/92 PASS |
-| Functions integration | Firebase Emulator in WSL, `test:integration:emulator` | 59/59 PASS |
+| Functions unit | `npm run test:unit` | 93/93 PASS |
+| Functions integration | Firebase Emulator in WSL, `test:integration:emulator` | 60/60 PASS |
 | Firestore/Storage rules | Firebase Emulator in WSL, `test:rules:emulator` | 20/20 PASS |
 | Functions build | `npm run build` | PASS |
 | Zalo lint | `npm run lint` | PASS |
