@@ -1376,7 +1376,7 @@ function rewardCode(seed?: string): string {
 
 function requireRewardCodeInput(value: unknown): string {
   const rewardCodeInput = requireString(value, "rewardCode").toUpperCase().replace(/\s+/g, "");
-  if (!/^[A-Z0-9][A-Z0-9-]{5,79}$/.test(rewardCodeInput)) {
+  if (!/^[A-Z0-9][A-Z0-9-]{4,79}$/.test(rewardCodeInput)) {
     throw apiError(
       "invalid-argument",
       ApiErrorCode.INVALID_REQUEST,
@@ -6801,13 +6801,13 @@ async function deleteStoragePrefixStrict(
 export const lookupRewardCode = onCall(functionOptions, async (request) => {
   const uid = currentUid(request.auth);
   const salonId = requireString(request.data?.salonId, "salonId");
-  const rewardCodeInput = requireRewardCodeInput(request.data?.rewardCode);
   const user = await assertSalonRole(uid, salonId, ["owner", "staff"]);
   await enforceAuthenticatedRateLimit("lookupRewardCode", uid, salonId);
 
   if (user.role === "staff" && user.canRedeemRewards !== true) {
     throw new HttpsError("permission-denied", "Nhân viên chưa được phép kiểm tra mã quà");
   }
+  const rewardCodeInput = requireRewardCodeInput(request.data?.rewardCode);
 
   const branchId = await resolveAuthorizedBranchScope(user, salonId, request.data?.branchId);
   if (!branchId) {
@@ -6896,7 +6896,6 @@ export const lookupRewardCode = onCall(functionOptions, async (request) => {
 export const redeemRewardCode = onCall(functionOptions, async (request) => {
   const uid = currentUid(request.auth);
   const salonId = requireString(request.data?.salonId, "salonId");
-  const rewardCodeInput = requireRewardCodeInput(request.data?.rewardCode);
   const idempotencyKey = requireIdempotencyKey(request.data?.idempotencyKey);
   const user = await assertSalonRole(uid, salonId, ["owner", "staff"]);
   await enforceAuthenticatedRateLimit("redeemRewardCode", uid, salonId);
@@ -6910,6 +6909,7 @@ export const redeemRewardCode = onCall(functionOptions, async (request) => {
   if (user.role === "staff" && user.canRedeemRewards !== true) {
     throw new HttpsError("permission-denied", "Nhân viên chưa được phép xác nhận mã quà");
   }
+  const rewardCodeInput = requireRewardCodeInput(request.data?.rewardCode);
 
   const branchId = await resolveAuthorizedBranchScope(user, salonId, request.data?.branchId);
   if (!branchId) {
@@ -7082,9 +7082,9 @@ export const redeemRewardCode = onCall(functionOptions, async (request) => {
 export const restoreRewardCode = onCall(functionOptions, async (request) => {
   const uid = currentUid(request.auth);
   const salonId = requireString(request.data?.salonId, "salonId");
-  const rewardCodeInput = requireRewardCodeInput(request.data?.rewardCode);
   const reason = optionalLimitedString(request.data?.reason, "reason", 200) ?? "Bấm nhầm";
   await assertSalonRole(uid, salonId, ["owner"]);
+  const rewardCodeInput = requireRewardCodeInput(request.data?.rewardCode);
 
   const query = await db
     .collection("reward_history")
