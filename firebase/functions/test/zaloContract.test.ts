@@ -45,6 +45,7 @@ describe("hợp đồng xác minh Zalo", () => {
 
   it.each([
     ["registerCustomerFromZalo", "const qrResolution = await resolveCustomerQrData"],
+    ["getCustomerCheckinProfileFromZalo", "const customerSnap = await customerRef.get()"],
     ["spinLuckyWheelFromZalo", "return spinWheelForCustomer"],
     ["getCustomerSessionFromZalo", "const [customerSnap"],
     ["getCustomerHistoryFromZalo", "const [recordsSnap"],
@@ -99,5 +100,17 @@ describe("hợp đồng xác minh Zalo", () => {
     expect(decodeIndex).toBeGreaterThanOrEqual(0);
     expect(contactIndex).toBeGreaterThan(decodeIndex);
     expect(body).toContain('phoneLast4: String(customerSnap.data()?.phoneLast4 || "")');
+  });
+
+  it("hồ sơ check-in chỉ trả trạng thái số đã che của khách suy ra từ token", () => {
+    const body = callableBody("getCustomerCheckinProfileFromZalo");
+
+    expect(body).toContain("customerIdFor(salonId, zaloProfile.zaloUserId)");
+    expect(body).toContain("await resolveCustomerQrData(request.data)");
+    expect(body).toContain("phoneLast4");
+    expect(body).toContain("hasPhone");
+    expect(body).not.toContain("request.data?.customerId");
+    expect(body).not.toMatch(/return\s*\{[^}]*\bphone\s*:/su);
+    expect(body).not.toMatch(/return\s*\{[^}]*zaloUserId/su);
   });
 });

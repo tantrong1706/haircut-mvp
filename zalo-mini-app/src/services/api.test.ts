@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildRegisterInput,
   customerSessionRefreshDelay,
+  getCustomerCheckinProfile,
   getHaircutHistory,
   resolveCustomerQr,
   restoreSavedCustomerSession,
@@ -145,6 +146,36 @@ describe("buildRegisterInput", () => {
     expect(input).not.toHaveProperty("zaloUserId");
     expect(input).not.toHaveProperty("phoneToken");
     expect(input).not.toHaveProperty("phone");
+  });
+});
+
+describe("getCustomerCheckinProfile", () => {
+  it("gửi token Zalo và QR đã ký, chỉ nhận trạng thái số điện thoại đã che", async () => {
+    mocks.isFirebaseConfigured.mockReturnValue(true);
+    mocks.callFunction.mockResolvedValue({
+      exists: true,
+      hasPhone: true,
+      phoneLast4: "5678",
+      allowPhoto: true,
+    });
+
+    const result = await getCustomerCheckinProfile(candidate.qr, {
+      accessToken: "fresh-profile-token",
+      name: "Khách A",
+    });
+
+    expect(result).toEqual({
+      exists: true,
+      hasPhone: true,
+      phoneLast4: "5678",
+      allowPhoto: true,
+    });
+    expect(mocks.callFunction).toHaveBeenCalledWith("getCustomerCheckinProfileFromZalo", {
+      ...candidate.qr,
+      zaloAccessToken: "fresh-profile-token",
+    });
+    expect(result).not.toHaveProperty("phone");
+    expect(result).not.toHaveProperty("zaloUserId");
   });
 });
 

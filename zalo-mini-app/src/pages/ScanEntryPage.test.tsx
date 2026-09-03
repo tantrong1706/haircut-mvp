@@ -6,6 +6,7 @@ import { ScanEntryPage } from "./ScanEntryPage";
 
 const mocks = vi.hoisted(() => ({
   buildRegisterInput: vi.fn(),
+  getCustomerCheckinProfile: vi.fn(),
   getZaloIdentity: vi.fn(),
   registerCustomer: vi.fn(),
   resolveCustomerQr: vi.fn(),
@@ -27,6 +28,7 @@ vi.mock("../services/zalo", () => ({
 
 vi.mock("../services/api", () => ({
   buildRegisterInput: mocks.buildRegisterInput,
+  getCustomerCheckinProfile: mocks.getCustomerCheckinProfile,
   registerCustomer: mocks.registerCustomer,
   resolveCustomerQr: mocks.resolveCustomerQr,
 }));
@@ -91,6 +93,12 @@ describe("ScanEntryPage", () => {
       avatar: "https://example.com/avatar.jpg",
     });
     mocks.buildRegisterInput.mockReturnValue({ request: "register" });
+    mocks.getCustomerCheckinProfile.mockResolvedValue({
+      exists: true,
+      hasPhone: true,
+      phoneLast4: "5678",
+      allowPhoto: false,
+    });
     mocks.registerCustomer.mockResolvedValue(session);
     mocks.isZaloProfilePermissionError.mockImplementation(
       (error: unknown) =>
@@ -294,6 +302,12 @@ describe("ScanEntryPage", () => {
 
   it("chỉ gửi số điện thoại khi khách tự nhập", async () => {
     const user = userEvent.setup();
+    mocks.getCustomerCheckinProfile.mockResolvedValue({
+      exists: false,
+      hasPhone: false,
+      phoneLast4: "",
+      allowPhoto: false,
+    });
     render(<ScanEntryPage onReady={vi.fn()} />);
 
     await screen.findByText("Anh Tân");
@@ -308,5 +322,86 @@ describe("ScanEntryPage", () => {
       "0912345678",
       undefined,
     );
+  });
+
+  it("khách cũ không phải nhập lại số điện thoại và chỉ gửi xác nhận", async () => {
+    const user = userEvent.setup();
+    const onReady = vi.fn();
+
+    render(<ScanEntryPage onReady={onReady} />);
+
+    expect(await screen.findByText("Đã lưu số kết thúc 5678")).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: /^Số điện thoại/ })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Xác nhận vào hàng chờ" }));
+
+    await waitFor(() => expect(onReady).toHaveBeenCalledWith(session));
+    expect(mocks.getCustomerCheckinProfile).toHaveBeenCalledWith(
+      expect.objectContaining({ salonId: "salon-a", qrToken: "token-test" }),
+      expect.objectContaining({ accessToken: "access-token-test" }),
+    );
+    expect(mocks.buildRegisterInput).toHaveBeenCalledWith(
+      expect.objectContaining({ branchId: "branch-a" }),
+      expect.anything(),
+      false,
+      undefined,
+      undefined,
+    );
+  });
+
+  it("lần đầu bắt buộc nhập số điện thoại hợp lệ", async () => {
+    const user = userEvent.setup();
+    mocks.getCustomerCheckinProfile.mockResolvedValue({
+      exists: false,
+      hasPhone: false,
+      phoneLast4: "",
+      allowPhoto: false,
+    });
+
+    render(<ScanEntryPage onReady={vi.fn()} />);
+
+    const phoneInput = await screen.findByRole("textbox", { name: /^Số điện thoại/ });
+    const submit = screen.getByRole("button", { name: "Xác nhận vào hàng chờ" });
+    expect(submit).toBeDisabled();
+
+    await user.type(phoneInput, "123");
+    expect(submit).toBeDisabled();
+
+    await user.clear(phoneInput);
+    await user.type(phoneInput, "0912345678");
+    expect(submit).toBeEnabled();
+  });
+
+  it("QR salon luôn để khách tự chọn chi nhánh, không ưu tiên chi nhánh cũ", async () => {
+    const user = userEvent.setup();
+    mocks.resolveCustomerQr.mockResolvedValue({
+      qrType: "salon",
+      salonId: "salon-a",
+      salonName: "HAIRCUT Studio",
+      salonAvatarUrl: "",
+      branchId: null,
+      branchName: "",
+      branchAddress: "",
+      selectionRequired: true,
+      branches: [
+        { id: "branch-a", name: "Chi nhánh A", address: "A", phone: "", isActive: true },
+        { id: "branch-b", name: "Chi nhánh B", address: "B", phone: "", isActive: true },
+      ],
+    });
+    window.history.replaceState(
+      {},
+      "",
+      "/?qrType=salon&salonId=salon-a&qrToken=token-test",
+    );
+
+    render(<ScanEntryPage onReady={vi.fn()} />);
+
+    const branchSelect = await screen.findByRole("combobox", { name: "Chọn chi nhánh" });
+    expect(branchSelect).toHaveValue("");
+    expect(screen.getByRole("button", { name: "Xác nhận vào hàng chờ" })).toBeDisabled();
+
+    await user.selectOptions(branchSelect, "branch-b");
+    expect(branchSelect).toHaveValue("branch-b");
+    expect(screen.getByRole("button", { name: "Xác nhận vào hàng chờ" })).toBeEnabled();
   });
 });
