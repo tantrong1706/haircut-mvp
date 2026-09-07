@@ -50,13 +50,13 @@ const session: AppSession = {
   branchName: "Chi nhánh Trung tâm",
   branchAddress: "123 Nguyễn Huệ, Quận 1, TP.HCM",
   zaloUserId: "zalo-a",
-  sessionStatus: "waiting",
+  sessionStatus: "pending_approval",
   customer: {
     customerId: "customer-a",
     name: "Anh Tân",
     phoneLast4: "",
     points: 0,
-    allowPhoto: false,
+    allowPhoto: true,
   },
 };
 
@@ -126,7 +126,7 @@ describe("ScanEntryPage", () => {
     expect(screen.getAllByText("123 Nguyễn Huệ, Quận 1, TP.HCM")).not.toHaveLength(0);
     expect(screen.getByText("Thông tin tùy chọn").closest("details")).toHaveAttribute("open");
 
-    await user.click(screen.getByRole("button", { name: "Xác nhận vào hàng chờ" }));
+    await user.click(screen.getByRole("button", { name: "Yêu cầu tích điểm" }));
 
     await waitFor(() => expect(onReady).toHaveBeenCalledWith(session));
     expect(mocks.getZaloIdentity).toHaveBeenCalledTimes(2);
@@ -136,7 +136,7 @@ describe("ScanEntryPage", () => {
         name: "Anh Tân",
         zaloUserId: "zalo-a",
       }),
-      false,
+      true,
       undefined,
       undefined,
     );
@@ -312,13 +312,13 @@ describe("ScanEntryPage", () => {
 
     await screen.findByText("Anh Tân");
     await user.type(screen.getByRole("textbox", { name: /^Số điện thoại/ }), "0912345678");
-    await user.click(screen.getByRole("button", { name: "Xác nhận vào hàng chờ" }));
+    await user.click(screen.getByRole("button", { name: "Yêu cầu tích điểm" }));
 
     await waitFor(() => expect(mocks.registerCustomer).toHaveBeenCalled());
     expect(mocks.buildRegisterInput).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
-      false,
+      true,
       "0912345678",
       undefined,
     );
@@ -333,7 +333,9 @@ describe("ScanEntryPage", () => {
     expect(await screen.findByText("Đã lưu số kết thúc 5678")).toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: /^Số điện thoại/ })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Xác nhận vào hàng chờ" }));
+    expect(screen.getByText(/đồng ý để salon chụp và lưu ảnh kiểu tóc/i)).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Yêu cầu tích điểm" }));
 
     await waitFor(() => expect(onReady).toHaveBeenCalledWith(session));
     expect(mocks.getCustomerCheckinProfile).toHaveBeenCalledWith(
@@ -343,7 +345,7 @@ describe("ScanEntryPage", () => {
     expect(mocks.buildRegisterInput).toHaveBeenCalledWith(
       expect.objectContaining({ branchId: "branch-a" }),
       expect.anything(),
-      false,
+      true,
       undefined,
       undefined,
     );
@@ -361,7 +363,7 @@ describe("ScanEntryPage", () => {
     render(<ScanEntryPage onReady={vi.fn()} />);
 
     const phoneInput = await screen.findByRole("textbox", { name: /^Số điện thoại/ });
-    const submit = screen.getByRole("button", { name: "Xác nhận vào hàng chờ" });
+    const submit = screen.getByRole("button", { name: "Yêu cầu tích điểm" });
     expect(submit).toBeDisabled();
 
     await user.type(phoneInput, "123");
@@ -372,22 +374,10 @@ describe("ScanEntryPage", () => {
     expect(submit).toBeEnabled();
   });
 
-  it("QR salon luôn để khách tự chọn chi nhánh, không ưu tiên chi nhánh cũ", async () => {
-    const user = userEvent.setup();
-    mocks.resolveCustomerQr.mockResolvedValue({
-      qrType: "salon",
-      salonId: "salon-a",
-      salonName: "HAIRCUT Studio",
-      salonAvatarUrl: "",
-      branchId: null,
-      branchName: "",
-      branchAddress: "",
-      selectionRequired: true,
-      branches: [
-        { id: "branch-a", name: "Chi nhánh A", address: "A", phone: "", isActive: true },
-        { id: "branch-b", name: "Chi nhánh B", address: "B", phone: "", isActive: true },
-      ],
-    });
+  it("QR salon chung bị từ chối và không hiện chọn chi nhánh", async () => {
+    mocks.resolveCustomerQr.mockRejectedValue(
+      new Error("Vui lòng quét QR riêng tại chi nhánh."),
+    );
     window.history.replaceState(
       {},
       "",
@@ -396,12 +386,8 @@ describe("ScanEntryPage", () => {
 
     render(<ScanEntryPage onReady={vi.fn()} />);
 
-    const branchSelect = await screen.findByRole("combobox", { name: "Chọn chi nhánh" });
-    expect(branchSelect).toHaveValue("");
-    expect(screen.getByRole("button", { name: "Xác nhận vào hàng chờ" })).toBeDisabled();
-
-    await user.selectOptions(branchSelect, "branch-b");
-    expect(branchSelect).toHaveValue("branch-b");
-    expect(screen.getByRole("button", { name: "Xác nhận vào hàng chờ" })).toBeEnabled();
+    expect(await screen.findByText("Vui lòng quét QR riêng tại chi nhánh.")).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Chọn chi nhánh" })).not.toBeInTheDocument();
+    expect(mocks.registerCustomer).not.toHaveBeenCalled();
   });
 });

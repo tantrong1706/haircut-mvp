@@ -57,6 +57,26 @@ describe("photo upload operation callables", () => {
     ).rejects.toMatchObject({ code: "permission-denied" });
   });
 
+  it("cho nhân viên đúng chi nhánh chụp ảnh cho yêu cầu QR đang chờ xác nhận", async () => {
+    await db.collection("chair_sessions").doc("session-photo").set(
+      {
+        status: "pending_approval",
+        approvalMode: "staff_confirmation",
+        photoConsentGranted: true,
+        assignedStaffId: null,
+        assignedStaffName: null,
+      },
+      { merge: true },
+    );
+
+    await expect(
+      beginHaircutPhotoUpload.run(requestFor("staff-photo", beginData("photo-request-qr"))),
+    ).resolves.toMatchObject({ sessionId: "session-photo" });
+    await expect(
+      beginHaircutPhotoUpload.run(requestFor("staff-other", beginData("photo-request-qr-other"))),
+    ).rejects.toMatchObject({ code: "permission-denied" });
+  });
+
   it("finalize idempotent, gắn ảnh đúng một lần và chặn xóa ảnh đã gắn", async () => {
     const begin = await beginOperation("photo-request-finalize");
     await saveUploadedObject(begin);

@@ -167,6 +167,127 @@ describe("callable transactions", () => {
     expect((await db.collection("customers").doc(customerId).get()).data()?.points).toBe(1);
   });
 
+  it("nhân viên đúng chi nhánh xác nhận yêu cầu QR đúng một lần và áp dụng cooldown 2 giờ", async () => {
+    const salonId = "salon-staff-confirm";
+    const branchId = "branch-staff-confirm";
+    const customerId = "customer-staff-confirm";
+    const sessionId = "session-staff-confirm";
+    const now = Timestamp.now();
+    await seedOwner("owner-staff-confirm", salonId, { pointPerVisit: 2, customerCount: 1 });
+    await seedBranch(salonId, branchId);
+    await Promise.all([
+      db.collection("users").doc("staff-confirm").set({
+        salonId,
+        role: "staff",
+        name: "Nhân viên xác nhận",
+        isActive: true,
+        branchIds: [branchId],
+      }),
+      db.collection("users").doc("staff-wrong-branch").set({
+        salonId,
+        role: "staff",
+        name: "Nhân viên chi nhánh khác",
+        isActive: true,
+        branchIds: ["branch-other"],
+      }),
+      db.collection("customers").doc(customerId).set({
+        salonId,
+        name: "Khách QR",
+        points: 3,
+        phoneLast4: "6789",
+        allowPhoto: true,
+      }),
+      db.collection("chair_sessions").doc(sessionId).set({
+        salonId,
+        branchId,
+        branchName: "Chi nhánh QR",
+        customerId,
+        status: "pending_approval",
+        approvalMode: "staff_confirmation",
+        photoConsentGranted: true,
+        isOpen: true,
+        createdAt: now,
+        expiresAt: Timestamp.fromMillis(now.toMillis() + 30 * 60 * 1000),
+      }),
+      db.collection("point_requests").doc(sessionId).set({
+        salonId,
+        branchId,
+        branchName: "Chi nhánh QR",
+        customerId,
+        sessionId,
+        pointsRequested: 2,
+        pointsAdded: 2,
+        status: "pending",
+        approvalMode: "staff_confirmation",
+        photoConsentGranted: true,
+        photoUrls: [],
+        photoPaths: [],
+        createdAt: now,
+        expiresAt: Timestamp.fromMillis(now.toMillis() + 30 * 60 * 1000),
+      }),
+    ]);
+
+    await expect(
+      approvePointRequest.run(
+        requestFor("staff-wrong-branch", { salonId, requestId: sessionId }),
+      ),
+    ).rejects.toMatchObject({ code: "permission-denied" });
+
+    const first = await approvePointRequest.run(
+      requestFor("staff-confirm", { salonId, requestId: sessionId }),
+    );
+    const repeated = await approvePointRequest.run(
+      requestFor("staff-confirm", { salonId, requestId: sessionId }),
+    );
+
+    expect(first).toMatchObject({ ok: true, alreadyProcessed: false });
+    expect(repeated).toMatchObject({ ok: true, alreadyProcessed: true });
+    const customer = (await db.collection("customers").doc(customerId).get()).data();
+    expect(customer?.points).toBe(5);
+    expect(customer?.nextPointEligibleAt.toMillis()).toBeGreaterThanOrEqual(
+      now.toMillis() + 2 * 60 * 60 * 1000,
+    );
+    expect(
+      (await db.collection("haircut_records").where("pointRequestId", "==", sessionId).get())
+        .docs[0]
+        ?.data(),
+    ).toMatchObject({ staffId: "staff-confirm", staffName: "Nhân viên xác nhận" });
+
+    const secondSessionId = "session-staff-confirm-cooldown";
+    await Promise.all([
+      db.collection("chair_sessions").doc(secondSessionId).set({
+        salonId,
+        branchId,
+        customerId,
+        status: "pending_approval",
+        approvalMode: "staff_confirmation",
+        photoConsentGranted: true,
+        isOpen: true,
+        createdAt: Timestamp.now(),
+        expiresAt: Timestamp.fromMillis(Date.now() + 30 * 60 * 1000),
+      }),
+      db.collection("point_requests").doc(secondSessionId).set({
+        salonId,
+        branchId,
+        customerId,
+        sessionId: secondSessionId,
+        pointsRequested: 2,
+        pointsAdded: 2,
+        status: "pending",
+        approvalMode: "staff_confirmation",
+        photoUrls: [],
+        photoPaths: [],
+        createdAt: Timestamp.now(),
+        expiresAt: Timestamp.fromMillis(Date.now() + 30 * 60 * 1000),
+      }),
+    ]);
+    await expect(
+      approvePointRequest.run(
+        requestFor("staff-confirm", { salonId, requestId: secondSessionId }),
+      ),
+    ).rejects.toMatchObject({ code: "failed-precondition" });
+  });
+
   it("nhân viên tin cậy hoàn tất và cộng điểm ngay đúng một lần", async () => {
     const salonId = "salon-direct-points";
     const branchId = "branch-direct-points";

@@ -121,4 +121,24 @@ describe("hợp đồng xác minh Zalo", () => {
     expect(body).not.toMatch(/return\s*\{[^}]*\bphone\s*:/su);
     expect(body).not.toMatch(/return\s*\{[^}]*zaloUserId/su);
   });
+
+  it("QR khách chỉ chấp nhận QR chi nhánh và tạo thẳng yêu cầu nhân viên xác nhận", () => {
+    const body = callableBody("registerCustomerFromZalo");
+
+    expect(body).toContain("assertBranchOnlyCustomerQr");
+    expect(body).toContain('db.collection("point_requests")');
+    expect(body).toContain('approvalMode: "staff_confirmation"');
+    expect(body).toContain('status: "pending_approval"');
+    expect(body).toContain("POINT_REQUEST_CONFIRMATION_WINDOW_MS");
+    expect(body).toContain("POINT_AWARD_COOLDOWN_MS");
+  });
+
+  it("nhân viên xác nhận theo đúng chi nhánh và backend đặt cooldown sau khi cộng điểm", () => {
+    const body = callableBody("approvePointRequest");
+
+    expect(body).toContain('approvalMode === "staff_confirmation"');
+    expect(body).toContain("assertBranchAccess");
+    expect(body).toContain("nextPointEligibleAt");
+    expect(body).toContain("POINT_AWARD_COOLDOWN_MS");
+  });
 });

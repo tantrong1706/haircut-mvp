@@ -11,6 +11,8 @@ import {
   isVerifiedOwnerIdentity,
   isServiceSessionExpired,
   legacyBranchPatch,
+  pointCooldownRemainingMs,
+  staffCanConfirmCustomerPointRequest,
   nextWheelConfigVersion,
   normalizeWheelSlots,
   activeWheelSlotCount,
@@ -24,6 +26,53 @@ import {
   wheelConfigMatches,
   wheelRewardOutcome,
 } from "../src/businessRules";
+
+describe("yêu cầu tích điểm trực tiếp tại chi nhánh", () => {
+  it("cooldown bắt đầu lúc điểm được xác nhận và kết thúc đúng sau 2 giờ", () => {
+    const twoHours = 2 * 60 * 60 * 1000;
+
+    expect(
+      pointCooldownRemainingMs({
+        nowMs: 10_000,
+        lastVisitAtMs: 9_000,
+        nextEligibleAtMs: null,
+        cooldownMs: twoHours,
+      }),
+    ).toBe(twoHours - 1_000);
+    expect(
+      pointCooldownRemainingMs({
+        nowMs: 10_000 + twoHours,
+        lastVisitAtMs: 10_000,
+        nextEligibleAtMs: 10_000 + twoHours,
+        cooldownMs: twoHours,
+      }),
+    ).toBe(0);
+  });
+
+  it("chỉ thành viên đúng chi nhánh xác nhận yêu cầu staff_confirmation", () => {
+    const base = {
+      assignedBranchIds: ["branch-a"],
+      branchId: "branch-a",
+      approvalMode: "staff_confirmation",
+    };
+
+    expect(staffCanConfirmCustomerPointRequest({ ...base, role: "staff" })).toBe(true);
+    expect(
+      staffCanConfirmCustomerPointRequest({
+        ...base,
+        role: "staff",
+        assignedBranchIds: ["branch-b"],
+      }),
+    ).toBe(false);
+    expect(
+      staffCanConfirmCustomerPointRequest({
+        ...base,
+        role: "staff",
+        approvalMode: "owner_approval",
+      }),
+    ).toBe(false);
+  });
+});
 
 describe("danh tính owner", () => {
   it("chỉ cho tạo salon khi email đã xác minh", () => {

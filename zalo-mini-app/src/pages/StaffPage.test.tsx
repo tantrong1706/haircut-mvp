@@ -6,6 +6,8 @@ import { StaffPage } from "./StaffPage";
 
 const mocks = vi.hoisted(() => ({
   claimServiceSession: vi.fn(),
+  confirmCustomerPointRequest: vi.fn(),
+  rejectCustomerPointRequest: vi.fn(),
   cancelServiceSession: vi.fn(),
   deleteHaircutPhoto: vi.fn(),
   uploadHaircutPhoto: vi.fn(),
@@ -31,6 +33,8 @@ beforeAll(() => {
 
 vi.mock("../services/operations", () => ({
   claimServiceSession: mocks.claimServiceSession,
+  confirmCustomerPointRequest: mocks.confirmCustomerPointRequest,
+  rejectCustomerPointRequest: mocks.rejectCustomerPointRequest,
   cancelServiceSession: mocks.cancelServiceSession,
   submitPointRequest: mocks.submitPointRequest,
   listenActiveSessions: mocks.listenActiveSessions,
@@ -120,6 +124,13 @@ describe("StaffPage", () => {
       assignedStaffName: "Nam",
     });
     mocks.cancelServiceSession.mockResolvedValue({ ok: true, status: "cancelled" });
+    mocks.confirmCustomerPointRequest.mockResolvedValue({
+      ok: true,
+      alreadyProcessed: false,
+      pointsAdded: 2,
+      pointsAfter: 6,
+    });
+    mocks.rejectCustomerPointRequest.mockResolvedValue({ ok: true, alreadyProcessed: false });
     mocks.uploadHaircutPhoto.mockResolvedValue({
       id: "photo-a",
       path: "salons/salon-a/customers/customer-a/sessions/session-a/" + `op-${"a".repeat(40)}.jpg`,
@@ -262,5 +273,84 @@ describe("StaffPage", () => {
     await waitFor(() => expect(mocks.submitPointRequest).toHaveBeenCalledOnce());
     expect(screen.getByText("Đã hoàn tất và cộng 2 điểm cho khách.")).toBeInTheDocument();
     expect(screen.getByText("Chưa có khách")).toBeInTheDocument();
+  });
+
+  it("yêu cầu QR mới cho nhân viên chụp ảnh và xác nhận điểm mà không nhận khách", async () => {
+    sessionsForTest = [
+      {
+        ...waitingSession,
+        status: "pending_approval",
+        approvalMode: "staff_confirmation",
+        photoConsentGranted: true,
+        customer: { ...waitingSession.customer!, allowPhoto: true },
+      },
+    ];
+    const user = userEvent.setup();
+    render(
+      <StaffPage
+        currentUser={{
+          uid: "staff-a",
+          salonId: "salon-a",
+          name: "Nam",
+          avatarUrl: "",
+          role: "staff",
+          isActive: true,
+          canRedeemRewards: false,
+          canAwardPointsDirectly: false,
+          branchId: "branch-a",
+          branchIds: ["branch-a"],
+        }}
+      />,
+    );
+
+    expect(await screen.findByPlaceholderText(/Fade thấp/i)).toBeEnabled();
+    expect(screen.queryByRole("button", { name: /Nhận khách/i })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Chụp ảnh kiểu tóc")).toBeEnabled();
+
+    await user.click(screen.getByRole("button", { name: "Xác nhận cộng 2 điểm" }));
+
+    await waitFor(() => expect(mocks.confirmCustomerPointRequest).toHaveBeenCalledOnce());
+    expect(mocks.confirmCustomerPointRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        salonId: "salon-a",
+        session: expect.objectContaining({ id: "session-a", branchId: "branch-a" }),
+        note: "",
+        photoPaths: [],
+      }),
+    );
+    expect(screen.getByText("Đã xác nhận và cộng 2 điểm cho khách.")).toBeInTheDocument();
+  });
+
+  it("nhân viên có thể từ chối yêu cầu QR tại đúng chi nhánh", async () => {
+    sessionsForTest = [
+      {
+        ...waitingSession,
+        status: "pending_approval",
+        approvalMode: "staff_confirmation",
+        photoConsentGranted: true,
+      },
+    ];
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const user = userEvent.setup();
+    render(
+      <StaffPage
+        currentUser={{
+          uid: "staff-a",
+          salonId: "salon-a",
+          name: "Nam",
+          avatarUrl: "",
+          role: "staff",
+          isActive: true,
+          canRedeemRewards: false,
+          canAwardPointsDirectly: false,
+          branchId: "branch-a",
+          branchIds: ["branch-a"],
+        }}
+      />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "Từ chối yêu cầu" }));
+
+    await waitFor(() => expect(mocks.rejectCustomerPointRequest).toHaveBeenCalledOnce());
   });
 });

@@ -66,7 +66,9 @@ describe("HomePage", () => {
       />,
     );
 
-    expect(screen.getByText("Đang chờ chủ salon duyệt điểm.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Đã gửi yêu cầu. Nhân viên chi nhánh sẽ xác nhận điểm."),
+    ).toBeInTheDocument();
     expect(screen.getByText("Thêm 2 điểm để mở lượt quay.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Xem vòng quay" })).toBeInTheDocument();
     expect(screen.getByText("Kết nối hệ thống đang chậm")).toBeInTheDocument();

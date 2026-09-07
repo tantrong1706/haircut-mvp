@@ -97,18 +97,16 @@ describe("customerSessionRefreshDelay", () => {
 });
 
 describe("resolveCustomerQr ở chế độ xem trước", () => {
-  it("QR salon yêu cầu chọn khi có nhiều chi nhánh", async () => {
-    const result = await resolveCustomerQr({
-      qrType: "salon",
-      salonId: "demo-salon",
-      branchId: "",
-      mirrorId: "",
-      qrToken: "demo-token",
-    });
-
-    expect(result.selectionRequired).toBe(true);
-    expect(result.branchId).toBe("");
-    expect(result.branches).toHaveLength(2);
+  it("từ chối QR salon chung", async () => {
+    await expect(
+      resolveCustomerQr({
+        qrType: "salon",
+        salonId: "demo-salon",
+        branchId: "",
+        mirrorId: "",
+        qrToken: "demo-token",
+      }),
+    ).rejects.toThrow("QR riêng tại chi nhánh");
   });
 
   it("QR chi nhánh mở thẳng đúng tên và địa chỉ", async () => {
