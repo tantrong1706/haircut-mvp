@@ -102,6 +102,14 @@ describe("hợp đồng xác minh Zalo", () => {
     expect(body).toContain('phoneLast4: String(customerSnap.data()?.phoneLast4 || "")');
   });
 
+  it("chỉ yêu cầu số điện thoại lần đầu và giữ số đã lưu ở các lần sau", () => {
+    const body = callableBody("registerCustomerFromZalo");
+
+    expect(body).toContain("const effectivePhoneLast4");
+    expect(body).toContain("Bạn chỉ cần nhập ở lần đầu");
+    expect(body).toContain("contactPatch.phoneLast4 !== undefined");
+  });
+
   it("hồ sơ check-in chỉ trả trạng thái số đã che của khách suy ra từ token", () => {
     const body = callableBody("getCustomerCheckinProfileFromZalo");
 

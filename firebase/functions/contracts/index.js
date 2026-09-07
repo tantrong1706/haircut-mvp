@@ -31,6 +31,7 @@ const CloudFunctionNames = Object.freeze([
   "listStaffProfiles",
   "createManualCustomer",
   "resolveCustomerQr",
+  "getCustomerCheckinProfileFromZalo",
   "registerCustomerFromZalo",
   "submitPointRequest",
   "updatePendingPointRequestPhotos",

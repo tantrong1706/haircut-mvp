@@ -14,8 +14,10 @@ import {
 import { BrandLogo } from "../components/BrandLogo";
 import { MINI_APP_NAME } from "../config/branding";
 import {
+  CustomerCheckinProfile,
   CustomerQrResolution,
   buildRegisterInput,
+  getCustomerCheckinProfile,
   registerCustomer,
   resolveCustomerQr,
 } from "../services/api";
@@ -28,6 +30,7 @@ import {
   isZaloProfilePermissionError,
   isZaloProfileRetryableError,
   openZaloProfilePermissionSettings,
+  type ZaloIdentity,
 } from "../services/zalo";
 
 type Props = {
@@ -46,6 +49,11 @@ export function ScanEntryPage({ onReady, onOpenLegalPage }: Props) {
   const [qrResolution, setQrResolution] = useState<CustomerQrResolution | null>(null);
   const [selectedBranchId, setSelectedBranchId] = useState("");
   const [qrError, setQrError] = useState("");
+  const [zaloIdentity, setZaloIdentity] = useState<ZaloIdentity | null>(null);
+  const [customerProfile, setCustomerProfile] = useState<CustomerCheckinProfile | null>(null);
+  const [loadingCustomerProfile, setLoadingCustomerProfile] = useState(true);
+  const [customerProfileError, setCustomerProfileError] = useState("");
+  const [customerProfileRetry, setCustomerProfileRetry] = useState(0);
   const [zaloRequired, setZaloRequired] = useState(false);
   const [loading, setLoading] = useState(false);
   const [permissionSettingsRequired, setPermissionSettingsRequired] = useState(false);
@@ -61,6 +69,8 @@ export function ScanEntryPage({ onReady, onOpenLegalPage }: Props) {
   const checkinUnavailable =
     qrResolution?.features?.maintenanceMode === true ||
     qrResolution?.features?.checkinEnabled === false;
+  const hasStoredPhone = customerProfile?.hasPhone === true;
+  const phoneReady = hasStoredPhone || isValidCustomerPhone(phone);
 
   useEffect(() => {
     if (!hasQr) {
@@ -132,6 +142,10 @@ export function ScanEntryPage({ onReady, onOpenLegalPage }: Props) {
     }
 
     setLoadingIdentity(true);
+    setZaloIdentity(null);
+    setCustomerProfile(null);
+    setLoadingCustomerProfile(true);
+    setCustomerProfileError("");
     setZaloRequired(false);
     setError(null);
     if (requestProfilePermission) {
@@ -152,6 +166,7 @@ export function ScanEntryPage({ onReady, onOpenLegalPage }: Props) {
 
         setDisplayName(nextDisplayName);
         setZaloAvatarUrl(nextIdentity.avatar || "");
+        setZaloIdentity(nextIdentity);
         setIdentityRetryRequired(false);
         setPermissionSettingsRequired(false);
       })
@@ -184,6 +199,49 @@ export function ScanEntryPage({ onReady, onOpenLegalPage }: Props) {
         }
       });
   }
+
+  useEffect(() => {
+    if (!hasQr || !qrResolution || !zaloIdentity) {
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingCustomerProfile(true);
+    setCustomerProfileError("");
+
+    getCustomerCheckinProfile(qr, zaloIdentity)
+      .then((profile) => {
+        if (cancelled) {
+          return;
+        }
+
+        setCustomerProfile(profile);
+        setAllowPhoto(profile.allowPhoto);
+      })
+      .catch((err) => {
+        captureError(err, {
+          area: "customer_checkin_profile",
+          salon_id: qr.salonId,
+        });
+        if (!cancelled) {
+          setCustomerProfile(null);
+          setCustomerProfileError(
+            err instanceof Error
+              ? err.message
+              : "Không kiểm tra được hồ sơ đã lưu. Vui lòng thử lại.",
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoadingCustomerProfile(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [customerProfileRetry, hasQr, qr, qrResolution, zaloIdentity]);
 
   function openProfilePermissionSettings() {
     setLoadingIdentity(true);
@@ -229,6 +287,14 @@ export function ScanEntryPage({ onReady, onOpenLegalPage }: Props) {
       setError("Vui lòng nhập tên hiển thị tại salon để nhân viên dễ nhận khách.");
       return;
     }
+    if (!customerProfile) {
+      setError("Vui lòng đợi hệ thống kiểm tra hồ sơ khách hàng.");
+      return;
+    }
+    if (!phoneReady) {
+      setError("Vui lòng nhập số điện thoại hợp lệ. Bạn chỉ cần nhập ở lần đầu.");
+      return;
+    }
     if (!qrResolution || !selectedBranchId || !selectedBranch) {
       setError("Vui lòng chọn một chi nhánh đang hoạt động.");
       return;
@@ -262,7 +328,7 @@ export function ScanEntryPage({ onReady, onOpenLegalPage }: Props) {
                 name: confirmedName,
               },
               allowPhoto,
-              phone || undefined,
+              hasStoredPhone ? undefined : phone.trim() || undefined,
               undefined,
             ),
           ),
@@ -513,6 +579,19 @@ export function ScanEntryPage({ onReady, onOpenLegalPage }: Props) {
           </div>
 
           {qrError ? <p className="alert error">{qrError}</p> : null}
+          {customerProfileError ? (
+            <div className="panel zalo-required-card" role="alert">
+              <p>{customerProfileError}</p>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setCustomerProfileRetry((attempt) => attempt + 1)}
+              >
+                <RefreshCcw size={18} aria-hidden="true" />
+                Kiểm tra lại hồ sơ
+              </button>
+            </div>
+          ) : null}
           {checkinUnavailable ? (
             <p className="alert error" role="status">
               {qrResolution?.features?.maintenanceMode
@@ -549,7 +628,11 @@ export function ScanEntryPage({ onReady, onOpenLegalPage }: Props) {
             <summary>
               <span>
                 <strong>Thông tin tùy chọn</strong>
-                <small>Sửa tên, thêm số điện thoại hoặc đồng ý lưu ảnh</small>
+                <small>
+                  {hasStoredPhone
+                    ? "Số điện thoại đã lưu, bạn chỉ cần xác nhận"
+                    : "Nhập số điện thoại lần đầu và tùy chọn lưu ảnh"}
+                </small>
               </span>
               <ChevronDown size={20} aria-hidden="true" />
             </summary>
@@ -569,22 +652,37 @@ export function ScanEntryPage({ onReady, onOpenLegalPage }: Props) {
                 />
               </label>
 
-              <label className="field">
-                <span>
-                  <Phone size={18} aria-hidden="true" />
-                  Số điện thoại
-                </span>
+              {loadingCustomerProfile ? (
+                <p className="field-note">Đang kiểm tra thông tin đã lưu...</p>
+              ) : hasStoredPhone ? (
+                <div className="field" aria-label="Số điện thoại đã lưu">
+                  <span>
+                    <Phone size={18} aria-hidden="true" />
+                    Đã lưu số kết thúc {customerProfile.phoneLast4}
+                  </span>
+                  <small>Bạn không cần nhập lại; nhân viên chỉ thấy 4 số cuối.</small>
+                </div>
+              ) : customerProfile ? (
+                <label className="field">
+                  <span>
+                    <Phone size={18} aria-hidden="true" />
+                    Số điện thoại (chỉ lần đầu)
+                  </span>
 
-                <input
-                  inputMode="tel"
-                  value={phone}
-                  onChange={(event) => setPhone(event.target.value)}
-                  placeholder="Nhập nếu bạn muốn salon liên hệ"
-                  disabled={loading}
-                />
+                  <input
+                    inputMode="tel"
+                    autoComplete="tel"
+                    value={phone}
+                    onChange={(event) => setPhone(event.target.value)}
+                    placeholder="Ví dụ: 0912 345 678"
+                    disabled={loading}
+                    required
+                    aria-invalid={phone.length > 0 && !isValidCustomerPhone(phone)}
+                  />
 
-                <small>Không bắt buộc; nhân viên chỉ thấy 4 số cuối.</small>
-              </label>
+                  <small>Lần sau hệ thống tự nhận diện; nhân viên chỉ thấy 4 số cuối.</small>
+                </label>
+              ) : null}
 
               <label className="toggle-row photo-consent">
                 <input
@@ -611,10 +709,13 @@ export function ScanEntryPage({ onReady, onOpenLegalPage }: Props) {
               loading ||
               loadingQr ||
               loadingIdentity ||
+              loadingCustomerProfile ||
+              !customerProfile ||
               !selectedBranchId ||
               checkinUnavailable ||
               Boolean(qrError) ||
-              displayName.trim().length === 0
+              displayName.trim().length === 0 ||
+              !phoneReady
             }
             onClick={continueWithZalo}
           >
@@ -635,6 +736,11 @@ export function ScanEntryPage({ onReady, onOpenLegalPage }: Props) {
 
 function normalizeDisplayName(name: string) {
   return name.replace(/\s+/g, " ").trim();
+}
+
+function isValidCustomerPhone(phone: string) {
+  const digits = phone.replace(/\D/g, "");
+  return digits.length >= 9 && digits.length <= 11;
 }
 
 function zaloOpenUrl(qr: ReturnType<typeof parseQrContext>) {

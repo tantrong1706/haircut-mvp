@@ -164,6 +164,7 @@ const REWARD_RESTORE_WINDOW_MS = 15 * 60 * 1000;
 const DIRECT_POINT_AWARD_DAILY_LIMIT = 100;
 const PUBLIC_RATE_LIMITS = {
   resolveCustomerQr: { windowMs: 60_000, tokenLimit: 30, ipLimit: 180 },
+  getCustomerCheckinProfileFromZalo: { windowMs: 60_000, tokenLimit: 12, ipLimit: 120 },
   registerCustomerFromZalo: { windowMs: 60_000, tokenLimit: 6, ipLimit: 60 },
   getCustomerSessionFromZalo: { windowMs: 60_000, tokenLimit: 20, ipLimit: 180 },
   getCustomerHistoryFromZalo: { windowMs: 60_000, tokenLimit: 12, ipLimit: 120 },
@@ -1267,6 +1268,14 @@ function last4(phone?: string): string | undefined {
   }
   const digits = phone.replace(/\D/g, "");
   return digits.length >= 4 ? digits.slice(-4) : undefined;
+}
+
+function isValidCustomerPhone(phone?: string): boolean {
+  if (!phone) {
+    return false;
+  }
+  const digits = phone.replace(/\D/g, "");
+  return digits.length >= 9 && digits.length <= 11;
 }
 
 async function migrateCustomerSearchFields(salonId: string): Promise<number> {
@@ -2861,6 +2870,51 @@ export const resolveCustomerQr = onCall(qrFunctionOptions, async (request) => {
   return resolveCustomerQrData(request.data);
 });
 
+export const getCustomerCheckinProfileFromZalo = onCall(
+  zaloQrFunctionOptions,
+  async (request) => {
+    const verificationRequestId = createZaloVerificationRequestId();
+    const salonId = requireString(request.data?.salonId, "salonId");
+    await enforcePublicRequestPolicy(
+      "getCustomerCheckinProfileFromZalo",
+      request,
+      salonId,
+      request.data?.zaloAccessToken,
+    );
+    const zaloProfile = await verifyZaloAccessToken(request.data?.zaloAccessToken, {
+      requestId: verificationRequestId,
+      functionName: "getCustomerCheckinProfileFromZalo",
+    });
+
+    // QR được kiểm tra lại ở backend trước khi đọc hồ sơ thuộc salon.
+    await resolveCustomerQrData(request.data);
+    const customerId = customerIdFor(salonId, zaloProfile.zaloUserId);
+    const customerRef = db.collection("customers").doc(customerId);
+    const customerSnap = await customerRef.get();
+    const customer = customerSnap.data();
+
+    if (!customerSnap.exists || customer?.salonId !== salonId) {
+      return {
+        exists: false,
+        hasPhone: false,
+        phoneLast4: "",
+        allowPhoto: false,
+      };
+    }
+
+    const storedPhoneLast4 = String(customer.phoneLast4 || customer.phone || "")
+      .replace(/\D/g, "")
+      .slice(-4);
+
+    return {
+      exists: true,
+      hasPhone: Boolean(storedPhoneLast4),
+      phoneLast4: storedPhoneLast4,
+      allowPhoto: customer.allowPhoto === true,
+    };
+  },
+);
+
 export const registerCustomerFromZalo = onCall(zaloQrFunctionOptions, async (request) => {
   const verificationRequestId = createZaloVerificationRequestId();
   const salonId = requireString(request.data?.salonId, "salonId");
@@ -2910,6 +2964,9 @@ export const registerCustomerFromZalo = onCall(zaloQrFunctionOptions, async (req
         "Không lấy được số điện thoại từ Zalo. Vui lòng bấm xác nhận lại.",
       );
     }
+  }
+  if (phone && !isValidCustomerPhone(phone)) {
+    throw new HttpsError("invalid-argument", "Số điện thoại không hợp lệ");
   }
   const birthday = optionalLimitedString(request.data?.birthday, "birthday", 20);
   const contactPatch = buildCustomerContactPatch({
@@ -2994,12 +3051,22 @@ export const registerCustomerFromZalo = onCall(zaloQrFunctionOptions, async (req
     }
 
     const existingCustomer = customerSnap.exists ? customerSnap.data() : {};
+    const storedPhoneLast4 = String(existingCustomer?.phoneLast4 || existingCustomer?.phone || "")
+      .replace(/\D/g, "")
+      .slice(-4);
+    const effectivePhoneLast4 =
+      contactPatch.phoneLast4 !== undefined
+        ? (contactPatch.phoneLast4 ?? "")
+        : storedPhoneLast4;
+    if (!effectivePhoneLast4) {
+      throw new HttpsError(
+        "invalid-argument",
+        "Vui lòng nhập số điện thoại. Bạn chỉ cần nhập ở lần đầu.",
+      );
+    }
     const customerSummary = {
       name,
-      phoneLast4:
-        contactPatch.phoneLast4 !== undefined
-          ? (contactPatch.phoneLast4 ?? "")
-          : String(existingCustomer?.phoneLast4 || ""),
+      phoneLast4: effectivePhoneLast4,
       points: Math.max(0, Number(existingCustomer?.points ?? 0)),
       allowPhoto,
     };

@@ -136,6 +136,13 @@ export type CustomerQrResolution = {
   features: SystemFeatures;
 };
 
+export type CustomerCheckinProfile = {
+  exists: boolean;
+  hasPhone: boolean;
+  phoneLast4: string;
+  allowPhoto: boolean;
+};
+
 export function listenSessionLiveUpdates(
   session: AppSession,
   onChange: (session: AppSession) => void,
@@ -528,6 +535,42 @@ export async function resolveCustomerQr(qr: QrContext): Promise<CustomerQrResolu
   }
 
   return callFunction<QrContext, CustomerQrResolution>("resolveCustomerQr", qr);
+}
+
+export async function getCustomerCheckinProfile(
+  qr: QrContext,
+  identity: ZaloIdentity,
+): Promise<CustomerCheckinProfile> {
+  if (!qr.qrToken) {
+    throw new Error("QR không có mã xác thực");
+  }
+
+  if (!isFirebaseConfigured()) {
+    return {
+      exists: true,
+      hasPhone: true,
+      phoneLast4: "8761",
+      allowPhoto: false,
+    };
+  }
+
+  const result = await callFunction<
+    QrContext & { zaloAccessToken: string },
+    CustomerCheckinProfile
+  >("getCustomerCheckinProfileFromZalo", {
+    ...qr,
+    zaloAccessToken: identity.accessToken,
+  });
+  const phoneLast4 = String(result.phoneLast4 || "")
+    .replace(/\D/g, "")
+    .slice(-4);
+
+  return {
+    exists: result.exists === true,
+    hasPhone: result.hasPhone === true && phoneLast4.length === 4,
+    phoneLast4,
+    allowPhoto: result.allowPhoto === true,
+  };
 }
 
 async function registerCustomerDirect(

@@ -159,7 +159,8 @@ describe("getCustomerCheckinProfile", () => {
       allowPhoto: true,
     });
 
-    const result = await getCustomerCheckinProfile(candidate.qr, {
+    const signedQr = { ...candidate.qr, qrToken: "signed-qr-token" };
+    const result = await getCustomerCheckinProfile(signedQr, {
       accessToken: "fresh-profile-token",
       name: "Khách A",
     });
@@ -171,7 +172,7 @@ describe("getCustomerCheckinProfile", () => {
       allowPhoto: true,
     });
     expect(mocks.callFunction).toHaveBeenCalledWith("getCustomerCheckinProfileFromZalo", {
-      ...candidate.qr,
+      ...signedQr,
       zaloAccessToken: "fresh-profile-token",
     });
     expect(result).not.toHaveProperty("phone");

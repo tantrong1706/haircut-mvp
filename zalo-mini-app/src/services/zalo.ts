@@ -135,7 +135,12 @@ export function classifyZaloProfileError(error: unknown): ZaloProfileErrorClassi
 }
 
 function previewIdentity(): ZaloIdentity | null {
-  if (import.meta.env.VITE_ZALO_PREVIEW !== "true") {
+  const queryPreviewEnabled =
+    import.meta.env.VITE_APP_ENV === "test" &&
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("zaloPreview") === "true";
+
+  if (import.meta.env.VITE_ZALO_PREVIEW !== "true" && !queryPreviewEnabled) {
     return null;
   }
 
