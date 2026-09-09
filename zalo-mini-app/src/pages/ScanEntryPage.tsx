@@ -39,7 +39,7 @@ type Props = {
 };
 
 export function ScanEntryPage({ onReady, onOpenLegalPage }: Props) {
-  const [allowPhoto, setAllowPhoto] = useState(false);
+  const allowPhoto = true;
   const [phone, setPhone] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [zaloAvatarUrl, setZaloAvatarUrl] = useState("");
@@ -54,6 +54,8 @@ export function ScanEntryPage({ onReady, onOpenLegalPage }: Props) {
   const [loadingCustomerProfile, setLoadingCustomerProfile] = useState(true);
   const [customerProfileError, setCustomerProfileError] = useState("");
   const [customerProfileRetry, setCustomerProfileRetry] = useState(0);
+  const [cooldownUntil, setCooldownUntil] = useState(0);
+  const [clockNow, setClockNow] = useState(Date.now());
   const [zaloRequired, setZaloRequired] = useState(false);
   const [loading, setLoading] = useState(false);
   const [permissionSettingsRequired, setPermissionSettingsRequired] = useState(false);
@@ -71,6 +73,13 @@ export function ScanEntryPage({ onReady, onOpenLegalPage }: Props) {
     qrResolution?.features?.checkinEnabled === false;
   const hasStoredPhone = customerProfile?.hasPhone === true;
   const phoneReady = hasStoredPhone || isValidCustomerPhone(phone);
+  const cooldownMinutes = Math.max(0, Math.ceil((cooldownUntil - clockNow) / 60_000));
+
+  useEffect(() => {
+    if (!cooldownUntil) return;
+    const timer = window.setInterval(() => setClockNow(Date.now()), 15_000);
+    return () => window.clearInterval(timer);
+  }, [cooldownUntil]);
 
   useEffect(() => {
     if (!hasQr) {
@@ -216,7 +225,10 @@ export function ScanEntryPage({ onReady, onOpenLegalPage }: Props) {
         }
 
         setCustomerProfile(profile);
-        setAllowPhoto(profile.allowPhoto);
+        setClockNow(Date.now());
+        setCooldownUntil(
+          profile.cooldownRemainingMs ? Date.now() + profile.cooldownRemainingMs : 0,
+        );
       })
       .catch((err) => {
         captureError(err, {
@@ -370,14 +382,14 @@ export function ScanEntryPage({ onReady, onOpenLegalPage }: Props) {
           <p className="eyebrow">Check-in</p>
           <h1>Quét QR tại salon</h1>
 
-          <p className="muted">Khách cần quét QR chung của salon hoặc QR tại chi nhánh.</p>
+          <p className="muted">Hãy quét QR riêng tại chi nhánh để yêu cầu tích điểm.</p>
         </header>
 
         <div className="panel missing-qr-panel">
           <QrCode size={38} aria-hidden="true" />
 
           <div>
-            <h2>Cần QR của salon</h2>
+            <h2>Cần QR của chi nhánh</h2>
 
             <p className="muted">
               QR giúp {MINI_APP_NAME} xác định đúng salon và chi nhánh. Hãy quét QR do salon cung
@@ -549,23 +561,6 @@ export function ScanEntryPage({ onReady, onOpenLegalPage }: Props) {
               <span>Chi nhánh phục vụ</span>
 
               {loadingQr ? <strong>Đang xác minh QR...</strong> : null}
-              {!loadingQr && qrResolution?.selectionRequired ? (
-                <label className="field compact-field">
-                  <span>Chọn chi nhánh</span>
-                  <select
-                    value={selectedBranchId}
-                    onChange={(event) => setSelectedBranchId(event.target.value)}
-                    disabled={loading}
-                  >
-                    <option value="">Chọn nơi bạn đang có mặt</option>
-                    {qrResolution.branches.map((branch) => (
-                      <option key={branch.id} value={branch.id}>
-                        {branch.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ) : null}
               {selectedBranch ? (
                 <>
                   <strong>{selectedBranch.name}</strong>
@@ -631,7 +626,7 @@ export function ScanEntryPage({ onReady, onOpenLegalPage }: Props) {
                 <small>
                   {hasStoredPhone
                     ? "Số điện thoại đã lưu, bạn chỉ cần xác nhận"
-                    : "Nhập số điện thoại lần đầu và tùy chọn lưu ảnh"}
+                    : "Nhập số điện thoại một lần để salon nhận đúng khách"}
                 </small>
               </span>
               <ChevronDown size={20} aria-hidden="true" />
@@ -684,25 +679,21 @@ export function ScanEntryPage({ onReady, onOpenLegalPage }: Props) {
                 </label>
               ) : null}
 
-              <label className="toggle-row photo-consent">
-                <input
-                  type="checkbox"
-                  checked={allowPhoto}
-                  onChange={(event) => setAllowPhoto(event.target.checked)}
-                  disabled={loading || qrResolution?.features?.photoUploadEnabled === false}
-                />
-
-                <Camera size={18} aria-hidden="true" />
-
-                <span>Đồng ý lưu ảnh kiểu tóc cho lần sau</span>
-              </label>
-
               <p className="field-note">Dữ liệu chỉ dùng để phục vụ bạn tại salon này.</p>
             </div>
           </details>
 
           {error ? <p className="alert error">{error}</p> : null}
 
+          {cooldownMinutes > 0 ? (
+            <p className="alert" role="status">
+              Bạn vừa được cộng điểm. Có thể yêu cầu lại sau {cooldownMinutes} phút.
+            </p>
+          ) : null}
+          <p className="field-note">
+            <Camera size={18} aria-hidden="true" /> Khi yêu cầu tích điểm, bạn đồng ý để salon chụp
+            và lưu ảnh kiểu tóc của lần phục vụ này.
+          </p>
           <button
             className="primary-button"
             disabled={
@@ -710,6 +701,7 @@ export function ScanEntryPage({ onReady, onOpenLegalPage }: Props) {
               loadingQr ||
               loadingIdentity ||
               loadingCustomerProfile ||
+              cooldownMinutes > 0 ||
               !customerProfile ||
               !selectedBranchId ||
               checkinUnavailable ||
@@ -724,7 +716,7 @@ export function ScanEntryPage({ onReady, onOpenLegalPage }: Props) {
             ) : (
               <>
                 <CheckCircle2 size={20} aria-hidden="true" />
-                Xác nhận vào hàng chờ
+                Yêu cầu tích điểm
               </>
             )}
           </button>

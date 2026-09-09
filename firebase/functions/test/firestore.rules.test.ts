@@ -155,6 +155,54 @@ afterAll(async () => {
 });
 
 describe("Firestore production rules", () => {
+  it("nhân viên tải và đọc ảnh yêu cầu QR đúng chi nhánh, hết hạn thì chặn upload", async () => {
+    const operationId = `op-${"e".repeat(40)}`;
+    const path = `salons/${salonA}/customers/customer-photo/sessions/session-photo/${operationId}.jpg`;
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), "chair_sessions", "session-photo"), {
+        status: "pending_approval",
+        approvalMode: "staff_confirmation",
+        photoConsentGranted: true,
+        assignedStaffId: null,
+        expiresAt: Timestamp.fromMillis(Date.now() + 60_000),
+      });
+      await setDoc(doc(context.firestore(), "photo_upload_operations", operationId), {
+        salonId: salonA,
+        branchId: branchA,
+        customerId: "customer-photo",
+        sessionId: "session-photo",
+        staffUid: "staff-a",
+        requestId: "fixture-qr-photo",
+        storagePath: path,
+        status: "pending",
+        expectedMaxBytes: 1024,
+        expiresAt: Timestamp.fromMillis(Date.now() + 60_000),
+      });
+    });
+    const metadata = {
+      contentType: "image/jpeg",
+      customMetadata: {
+        salonId: salonA,
+        branchId: branchA,
+        customerId: "customer-photo",
+        sessionId: "session-photo",
+        uploaderUid: "staff-a",
+        operationId,
+        requestId: "fixture-qr-photo",
+      },
+    };
+    const staff = testEnv.authenticatedContext("staff-a").storage();
+    await assertSucceeds(uploadBytes(ref(staff, path), new Uint8Array([1, 2, 3]), metadata));
+    await assertSucceeds(getBytes(ref(staff, path)));
+    await assertFails(getBytes(ref(testEnv.authenticatedContext("staff-other-a").storage(), path)));
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), "chair_sessions", "session-photo"), {
+        expiresAt: Timestamp.fromMillis(Date.now() - 1),
+      });
+      await deleteObject(ref(context.storage(), path));
+    });
+    await assertFails(uploadBytes(ref(staff, path), new Uint8Array([1]), metadata));
+  });
   it("chặn người chưa đăng nhập đọc dữ liệu riêng của khách", async () => {
     const db = testEnv.unauthenticatedContext().firestore();
 

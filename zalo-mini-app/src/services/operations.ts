@@ -47,6 +47,9 @@ export type CustomerSummary = {
 };
 
 export type StaffSession = {
+  pointsRequested?: number;
+  approvalMode?: string;
+  photoConsentGranted?: boolean;
   id: string;
   salonId: string;
   branchId: string;
@@ -1703,6 +1706,39 @@ async function redeemRewardCodeDirect(
   };
 }
 
+export async function confirmCustomerPointRequest(input: {
+  salonId: string;
+  session: StaffSession;
+  note: string;
+  photoPaths: string[];
+}): Promise<{ ok: boolean; alreadyProcessed: boolean; pointsAdded: number }> {
+  if (!isFirebaseConfigured()) {
+    return {
+      ok: true,
+      alreadyProcessed: false,
+      pointsAdded: await getSalonPointPerVisit(input.salonId),
+    };
+  }
+  return callFunction("approvePointRequest", {
+    salonId: input.salonId,
+    requestId: input.session.id,
+    note: input.note,
+    photoPaths: input.photoPaths,
+  });
+}
+
+export async function rejectCustomerPointRequest(input: {
+  salonId: string;
+  session: StaffSession;
+}) {
+  if (!isFirebaseConfigured()) return { ok: true, alreadyProcessed: false };
+  return callFunction("rejectPointRequest", {
+    salonId: input.salonId,
+    requestId: input.session.id,
+    reason: "Nhân viên xác nhận yêu cầu không hợp lệ",
+  });
+}
+
 async function saveLuckyWheelConfigDirect(salonId: string, config: LuckyWheelConfig) {
   const db = getFirebaseDb();
 
@@ -2085,6 +2121,9 @@ function mapSession(docSnap: QueryDocumentSnapshot<DocumentData>): StaffSession 
   const customerId = String(data.customerId || "");
 
   return {
+    pointsRequested: typeof data.pointsRequested === "number" ? data.pointsRequested : undefined,
+    approvalMode: String(data.approvalMode || ""),
+    photoConsentGranted: data.photoConsentGranted === true,
     id: docSnap.id,
     salonId: String(data.salonId || ""),
     branchId: String(data.branchId || ""),

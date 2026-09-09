@@ -39,7 +39,7 @@ describe("sessionStore", () => {
     vi.setSystemTime(new Date("2026-08-09T10:00:00Z"));
     await saveSession(session);
 
-    const candidate = loadSavedSessionCandidate({ ...qr, branchId: "branch-b" });
+    const candidate = loadSavedSessionCandidate(qr);
     const raw = localStorage.getItem("haircut_customer_session_v2") || "";
 
     expect(candidate).toMatchObject({
@@ -64,6 +64,13 @@ describe("sessionStore", () => {
 
     expect(loadSavedSessionCandidate(qr)).toBeNull();
     expect(localStorage.getItem("haircut_app_session_v1")).toBeNull();
+  });
+
+  it("không dùng phiên chi nhánh trước để thay QR mới hoặc QR salon chung", async () => {
+    await saveSession(session);
+    expect(loadSavedSessionCandidate({ ...qr, branchId: "branch-b" })).toBeNull();
+    await saveSession(session);
+    expect(loadSavedSessionCandidate({ ...qr, qrType: "salon", branchId: "" })).toBeNull();
   });
 
   it("xoa candidate het TTL", async () => {

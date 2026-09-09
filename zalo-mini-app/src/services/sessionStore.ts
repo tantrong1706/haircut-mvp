@@ -47,6 +47,13 @@ export function loadSavedSessionCandidate(currentQr: QrContext): SavedSessionCan
       clearSavedSession();
       return null;
     }
+    if (
+      currentQr.salonId &&
+      (currentQr.qrType !== "branch" || candidate.qr.branchId !== currentQr.branchId)
+    ) {
+      clearSavedSession();
+      return null;
+    }
 
     return candidate;
   } catch {
@@ -120,17 +127,17 @@ function isValidCandidate(value: unknown): value is SavedSessionCandidate {
   const qr = candidate.qr;
   return Boolean(
     candidate.schemaVersion === SESSION_SCHEMA_VERSION &&
-      isNonEmptyString(candidate.salonId) &&
-      isNonEmptyString(candidate.sessionId) &&
-      isNonEmptyString(candidate.customerId) &&
-      isIdentityBinding(candidate.identityBinding) &&
-      isFiniteTimestamp(candidate.savedAt) &&
-      isFiniteTimestamp(candidate.expiresAt) &&
-      candidate.expiresAt! > candidate.savedAt! &&
-      qr &&
-      isQrType(qr.qrType) &&
-      qr.salonId === candidate.salonId &&
-      (isNonEmptyString(qr.branchId) || isNonEmptyString(qr.mirrorId)),
+    isNonEmptyString(candidate.salonId) &&
+    isNonEmptyString(candidate.sessionId) &&
+    isNonEmptyString(candidate.customerId) &&
+    isIdentityBinding(candidate.identityBinding) &&
+    isFiniteTimestamp(candidate.savedAt) &&
+    isFiniteTimestamp(candidate.expiresAt) &&
+    candidate.expiresAt! > candidate.savedAt! &&
+    qr &&
+    isQrType(qr.qrType) &&
+    qr.salonId === candidate.salonId &&
+    (isNonEmptyString(qr.branchId) || isNonEmptyString(qr.mirrorId)),
   );
 }
 

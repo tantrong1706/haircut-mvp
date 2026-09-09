@@ -56,7 +56,6 @@ import {
   migrateSalonBranches,
   rejectPointRequest,
   rotateBranchQr,
-  rotateSalonQr,
   sendStaffInviteEmail,
   saveLuckyWheelConfig,
   searchSalonCustomers,
@@ -1285,7 +1284,7 @@ function OverviewPanel({
           <QrCode size={20} aria-hidden="true" />
           <span>
             <strong>Chi nhánh & QR</strong>
-            <small>QR chung cho salon và QR riêng từng chi nhánh</small>
+            <small>QR riêng của từng chi nhánh để khách yêu cầu tích điểm</small>
           </span>
         </button>
         <button type="button" onClick={() => onOpenTab("staff")}>
@@ -1431,7 +1430,6 @@ function BranchesPanel({
   onConfirm: (request: ConfirmRequest) => void;
 }) {
   const [branches, setBranches] = useState<SalonBranch[]>([]);
-  const [salonQrUrl, setSalonQrUrl] = useState("");
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
@@ -1446,7 +1444,6 @@ function BranchesPanel({
     setLoading(true);
     try {
       const settings = await getBranchQrSettings(salonId);
-      setSalonQrUrl(settings.salonQrUrl);
       setBranches(settings.branches);
       onError("");
     } catch (err) {
@@ -1518,18 +1515,6 @@ function BranchesPanel({
     }
   }
 
-  async function regenerateSalonQr() {
-    setBusyId("salon-qr");
-    try {
-      setSalonQrUrl(await rotateSalonQr(salonId));
-      onMessage("Đã tạo lại QR chung. QR chi nhánh vẫn giữ nguyên.");
-    } catch (err) {
-      onError(err instanceof Error ? err.message : "Không tạo lại được QR salon");
-    } finally {
-      setBusyId("");
-    }
-  }
-
   async function regenerateBranchQr(branch: SalonBranch) {
     setBusyId(branch.id);
     try {
@@ -1537,7 +1522,7 @@ function BranchesPanel({
       setBranches((current) =>
         current.map((item) => (item.id === branch.id ? { ...item, qrUrl } : item)),
       );
-      onMessage("Đã tạo lại QR chi nhánh. QR chung của salon vẫn giữ nguyên.");
+      onMessage("Đã tạo lại QR chi nhánh.");
     } catch (err) {
       onError(err instanceof Error ? err.message : "Không tạo lại được QR chi nhánh");
     } finally {
@@ -1564,30 +1549,11 @@ function BranchesPanel({
         <QrCode size={22} aria-hidden="true" />
         <div>
           <h2>Chi nhánh và QR</h2>
-          <p className="muted">Một QR chung cho salon và một QR riêng cho mỗi chi nhánh.</p>
+          <p className="muted">
+            Mỗi chi nhánh dùng QR riêng. Khách quét tại đâu sẽ yêu cầu tích điểm tại đó.
+          </p>
         </div>
       </div>
-
-      {salonQrUrl ? (
-        <ManagedQrCard
-          title="QR chung của salon"
-          description="Khách quét để chọn chi nhánh; nếu chỉ có một chi nhánh, app tự chọn."
-          qrUrl={salonQrUrl}
-          active
-          busy={busyId === "salon-qr"}
-          onCopy={copyQr}
-          onError={onError}
-          onRegenerate={() =>
-            onConfirm({
-              title: "Tạo lại QR chung?",
-              description: "QR chung cũ sẽ ngừng hoạt động. QR của từng chi nhánh không thay đổi.",
-              confirmLabel: "Tạo QR chung mới",
-              tone: "danger",
-              onConfirm: regenerateSalonQr,
-            })
-          }
-        />
-      ) : null}
 
       <div className="staff-create-grid">
         <input
@@ -1654,7 +1620,7 @@ function BranchesPanel({
               onRegenerate={() =>
                 onConfirm({
                   title: "Tạo lại QR chi nhánh?",
-                  description: `QR cũ của ${branch.name} sẽ ngừng hoạt động. QR chung của salon không thay đổi.`,
+                  description: `QR cũ của ${branch.name} sẽ ngừng hoạt động.`,
                   confirmLabel: "Tạo QR mới",
                   tone: "danger",
                   onConfirm: () => regenerateBranchQr(branch),
@@ -2219,9 +2185,7 @@ function StaffCard({
         <button
           className="secondary-button"
           disabled={busy}
-          onClick={() =>
-            onSave(staff, { canAwardPointsDirectly: !staff.canAwardPointsDirectly })
-          }
+          onClick={() => onSave(staff, { canAwardPointsDirectly: !staff.canAwardPointsDirectly })}
         >
           <UserRoundCheck size={18} aria-hidden="true" />
           {staff.canAwardPointsDirectly ? "Yêu cầu chủ duyệt điểm" : "Cho cộng điểm trực tiếp"}

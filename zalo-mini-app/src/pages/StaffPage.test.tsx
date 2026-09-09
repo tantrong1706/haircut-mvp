@@ -266,9 +266,7 @@ describe("StaffPage", () => {
       />,
     );
 
-    await user.click(
-      await screen.findByRole("button", { name: /Hoàn tất và cộng ngay 2 điểm/i }),
-    );
+    await user.click(await screen.findByRole("button", { name: /Hoàn tất và cộng ngay 2 điểm/i }));
 
     await waitFor(() => expect(mocks.submitPointRequest).toHaveBeenCalledOnce());
     expect(screen.getByText("Đã hoàn tất và cộng 2 điểm cho khách.")).toBeInTheDocument();

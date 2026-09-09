@@ -36,6 +36,7 @@ export { parseQrContext } from "./qr";
 const SESSION_POINT_REQUEST_WINDOW_MS = 12 * 60 * 60 * 1000;
 
 type RegisterInput = QrContext & {
+  photoConsentVersion?: string;
   zaloAccessToken: string;
   zaloUserId?: string;
   phoneToken?: string;
@@ -137,6 +138,7 @@ export type CustomerQrResolution = {
 };
 
 export type CustomerCheckinProfile = {
+  cooldownRemainingMs?: number;
   exists: boolean;
   hasPhone: boolean;
   phoneLast4: string;
@@ -497,6 +499,11 @@ export async function registerCustomer(input: RegisterInput): Promise<AppSession
 }
 
 export async function resolveCustomerQr(qr: QrContext): Promise<CustomerQrResolution> {
+  if (qr.qrType !== "branch" || !qr.branchId) {
+    throw new Error(
+      "Vui lòng quét QR riêng tại chi nhánh. QR chung của salon không dùng để tích điểm.",
+    );
+  }
   if (!qr.qrToken) {
     throw new Error("QR không có mã xác thực");
   }
@@ -517,7 +524,7 @@ export async function resolveCustomerQr(qr: QrContext): Promise<CustomerQrResolu
         isActive: true,
       },
     ];
-    const selectionRequired = qr.qrType === "salon" && !qr.branchId;
+    const selectionRequired = false;
     const branchId = selectionRequired ? "" : qr.branchId || previewBranches[0].id;
     const selectedBranch = previewBranches.find((branch) => branch.id === branchId);
     return {
@@ -570,6 +577,9 @@ export async function getCustomerCheckinProfile(
     hasPhone: result.hasPhone === true && phoneLast4.length === 4,
     phoneLast4,
     allowPhoto: result.allowPhoto === true,
+    ...(Number(result.cooldownRemainingMs) > 0
+      ? { cooldownRemainingMs: Number(result.cooldownRemainingMs) }
+      : {}),
   };
 }
 
@@ -715,10 +725,7 @@ async function registerCustomerDirect(
   };
 }
 
-export async function spinWheel(
-  session: AppSession,
-  configVersion: number,
-): Promise<SpinResult> {
+export async function spinWheel(session: AppSession, configVersion: number): Promise<SpinResult> {
   if (!isFirebaseConfigured()) {
     return spinWheelDirect(session, configVersion);
   }
@@ -762,10 +769,7 @@ function getOrCreateIdempotencyKey(scope: string) {
   return { storageKey, key };
 }
 
-async function spinWheelDirect(
-  session: AppSession,
-  configVersion: number,
-): Promise<SpinResult> {
+async function spinWheelDirect(session: AppSession, configVersion: number): Promise<SpinResult> {
   const activeSlots = activeWheelSlots(defaultLuckyWheelConfig);
   const forcedIndexValue = safeStorageGet("haircut_mock_spin_index");
   const forcedIndex =
@@ -1033,6 +1037,7 @@ export function buildRegisterInput(
     zaloAccessToken: identity.accessToken,
     name: identity.name,
     allowPhoto,
+    ...(allowPhoto ? { photoConsentVersion: "point-request-v1" } : {}),
   };
 
   if (identity.zaloUserId) input.zaloUserId = identity.zaloUserId;
@@ -1048,9 +1053,11 @@ function mockRegisterCustomer(input: RegisterInput): AppSession {
   const previewStatusValue = safeStorageGet("haircut_mock_session_status");
   const previewStatus: AppSession["sessionStatus"] =
     import.meta.env.VITE_APP_ENV === "test" &&
-    (previewStatusValue === "serving" || previewStatusValue === "completed")
+    (previewStatusValue === "waiting" ||
+      previewStatusValue === "serving" ||
+      previewStatusValue === "completed")
       ? previewStatusValue
-      : "waiting";
+      : "pending_approval";
 
   return {
     qr: {
@@ -1122,6 +1129,8 @@ function mapCustomerProfile(
     phoneLast4: String(data.phoneLast4 || fallback.phoneLast4 || ""),
     points: Number(data.points ?? fallback.points ?? 0),
     allowPhoto: Boolean(data.allowPhoto ?? fallback.allowPhoto),
+    nextPointEligibleAtMs:
+      typeof data.nextPointEligibleAtMs === "number" ? data.nextPointEligibleAtMs : undefined,
   };
 }
 

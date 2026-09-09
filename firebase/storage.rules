@@ -74,19 +74,13 @@ service firebase.storage {
     }
 
     function canAccessBranch(salonId, branchId) {
-      return isOwner(salonId)
-        || (
-          isActiveMember(salonId)
-          && userDoc().data.role == "staff"
-          && (
-            (
-              "branchIds" in userDoc().data
-              && userDoc().data.branchIds is list
-              && branchId in userDoc().data.branchIds
-            )
-            || ("branchId" in userDoc().data && userDoc().data.branchId == branchId)
-          )
-        );
+      let member = userDoc().data;
+      return isActiveMember(salonId) && (
+        member.role == "owner" || (member.role == "staff" && (
+          ("branchIds" in member && member.branchIds is list && branchId in member.branchIds)
+          || ("branchId" in member && member.branchId == branchId)
+        ))
+      );
     }
 
     function customerExists(customerId) {
@@ -168,6 +162,17 @@ service firebase.storage {
           == "salons/" + salonId + "/customers/" + customerId
             + "/sessions/" + sessionId + "/" + operationId + ".jpg"
         && photoOperation(operationId).data.expiresAt > request.time
+        && sessionExists(sessionId)
+        && canAccessBranch(salonId, sessionDoc(sessionId).data.branchId)
+        && (
+          !("approvalMode" in sessionDoc(sessionId).data)
+          || sessionDoc(sessionId).data.approvalMode != "staff_confirmation"
+          || (
+            sessionDoc(sessionId).data.status == "pending_approval"
+            && sessionDoc(sessionId).data.photoConsentGranted == true
+            && sessionDoc(sessionId).data.expiresAt > request.time
+          )
+        )
         && request.resource != null
         && request.resource.size > 0
         && request.resource.size <= photoOperation(operationId).data.expectedMaxBytes
@@ -179,6 +184,19 @@ service firebase.storage {
         && request.resource.metadata.uploaderUid == request.auth.uid
         && request.resource.metadata.operationId == operationId
         && request.resource.metadata.requestId == photoOperation(operationId).data.requestId;
+    }
+
+    function canReadOperationPhoto(salonId, customerId, sessionId) {
+      let session = sessionDoc(sessionId).data;
+      return customerAllowsPhoto(salonId, customerId)
+        && session.salonId == salonId && session.customerId == customerId
+        && canAccessBranch(salonId, session.branchId)
+        && (
+          userDoc().data.role == "owner"
+          || ("assignedStaffId" in session && session.assignedStaffId == request.auth.uid)
+          || ("approvalMode" in session && session.approvalMode == "staff_confirmation"
+            && session.photoConsentGranted == true && resource.metadata.uploaderUid == request.auth.uid)
+        );
     }
 
     function isAllowedAvatarUpload() {
@@ -213,11 +231,7 @@ service firebase.storage {
     }
 
     match /salons/{salonId}/customers/{customerId}/sessions/{sessionId}/{fileName} {
-      allow read: if customerAllowsPhoto(salonId, customerId)
-        && (
-          isOwner(salonId)
-          || isAssignedSessionMember(salonId, customerId, sessionId)
-        );
+      allow read: if signedIn() && sessionExists(sessionId) && canReadOperationPhoto(salonId, customerId, sessionId);
       allow create: if fileName.matches('op-[a-f0-9]{40}\\.jpg')
         && photoUploadEnabled(salonId)
         && customerAllowsPhoto(salonId, customerId)

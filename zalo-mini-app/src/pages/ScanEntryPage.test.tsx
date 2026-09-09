@@ -351,6 +351,20 @@ describe("ScanEntryPage", () => {
     );
   });
 
+  it("hiện số phút còn lại và khóa yêu cầu trong cooldown", async () => {
+    mocks.getCustomerCheckinProfile.mockResolvedValue({
+      exists: true,
+      hasPhone: true,
+      phoneLast4: "5678",
+      allowPhoto: true,
+      cooldownRemainingMs: 90 * 60_000,
+    });
+    render(<ScanEntryPage onReady={vi.fn()} />);
+    expect(await screen.findByText(/Có thể yêu cầu lại sau 90 phút/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Yêu cầu tích điểm" })).toBeDisabled();
+    expect(mocks.registerCustomer).not.toHaveBeenCalled();
+  });
+
   it("lần đầu bắt buộc nhập số điện thoại hợp lệ", async () => {
     const user = userEvent.setup();
     mocks.getCustomerCheckinProfile.mockResolvedValue({
@@ -375,14 +389,8 @@ describe("ScanEntryPage", () => {
   });
 
   it("QR salon chung bị từ chối và không hiện chọn chi nhánh", async () => {
-    mocks.resolveCustomerQr.mockRejectedValue(
-      new Error("Vui lòng quét QR riêng tại chi nhánh."),
-    );
-    window.history.replaceState(
-      {},
-      "",
-      "/?qrType=salon&salonId=salon-a&qrToken=token-test",
-    );
+    mocks.resolveCustomerQr.mockRejectedValue(new Error("Vui lòng quét QR riêng tại chi nhánh."));
+    window.history.replaceState({}, "", "/?qrType=salon&salonId=salon-a&qrToken=token-test");
 
     render(<ScanEntryPage onReady={vi.fn()} />);
 

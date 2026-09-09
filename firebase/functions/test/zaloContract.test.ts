@@ -44,7 +44,7 @@ describe("hợp đồng xác minh Zalo", () => {
   });
 
   it.each([
-    ["registerCustomerFromZalo", "const qrResolution = await resolveCustomerQrData"],
+    ["registerCustomerFromZalo", "const qrResolution = assertBranchOnlyCustomerQr"],
     ["getCustomerCheckinProfileFromZalo", "const customerSnap = await customerRef.get()"],
     ["spinLuckyWheelFromZalo", "return spinWheelForCustomer"],
     ["getCustomerSessionFromZalo", "const [customerSnap"],

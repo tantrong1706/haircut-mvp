@@ -43,6 +43,16 @@ export function HomePage({
   onResetSession,
 }: Props) {
   const { customer } = session;
+  const [clockNow, setClockNow] = useState(Date.now());
+  const cooldownMinutes = Math.max(
+    0,
+    Math.ceil(((customer.nextPointEligibleAtMs ?? 0) - clockNow) / 60_000),
+  );
+  useEffect(() => {
+    if (!customer.nextPointEligibleAtMs) return;
+    const timer = window.setInterval(() => setClockNow(Date.now()), 15_000);
+    return () => window.clearInterval(timer);
+  }, [customer.nextPointEligibleAtMs]);
   const status = session.sessionStatus || "waiting";
   const [wheelConfig, setWheelConfig] = useState(defaultLuckyWheelConfig);
   const wheelSlots = useMemo(() => activeWheelSlots(wheelConfig), [wheelConfig]);
@@ -159,7 +169,7 @@ export function HomePage({
         <StatusStep
           done
           icon={<CheckCircle2 size={20} />}
-          title="Đã check-in"
+          title="Đã gửi yêu cầu"
           text={
             session.branchAddress
               ? `${branchLabel(session)} · ${session.branchAddress}`
@@ -197,9 +207,19 @@ export function HomePage({
       </div>
 
       {status === "completed" || status === "cancelled" ? (
-        <button className="secondary-button" type="button" onClick={onResetSession}>
-          Tạo lượt mới
-        </button>
+        <>
+          {cooldownMinutes > 0 ? (
+            <p role="status">Có thể yêu cầu tích điểm lại sau {cooldownMinutes} phút.</p>
+          ) : null}
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={onResetSession}
+            disabled={cooldownMinutes > 0}
+          >
+            Quét QR cho lần tiếp theo
+          </button>
+        </>
       ) : null}
     </section>
   );
@@ -240,7 +260,7 @@ function shortStatusText(status: AppSession["sessionStatus"], assignedStaffName?
       : "Nhân viên đang phục vụ bạn.";
   }
   if (status === "pending_approval") {
-    return "Đang chờ chủ salon duyệt điểm.";
+    return "Đã gửi yêu cầu. Nhân viên chi nhánh sẽ xác nhận điểm.";
   }
   return "Salon đã nhận khách.";
 }
@@ -274,7 +294,7 @@ function staffStepText(status: AppSession["sessionStatus"], assignedStaffName?: 
       : "Đã có nhân viên phụ trách.";
   }
   if (status === "pending_approval") {
-    return "Đã gửi chủ salon duyệt điểm.";
+    return "Nhân viên đang kiểm tra yêu cầu của bạn.";
   }
   return "Dịch vụ đã hoàn tất.";
 }
@@ -287,7 +307,7 @@ function ownerStepTitle(status: AppSession["sessionStatus"]) {
     return "Không cộng điểm";
   }
   if (status === "pending_approval") {
-    return "Chờ chủ duyệt";
+    return "Chờ xác nhận điểm";
   }
   return "Cập nhật điểm";
 }
@@ -300,7 +320,7 @@ function ownerStepText(status: AppSession["sessionStatus"]) {
     return "Hỏi salon nếu cần.";
   }
   if (status === "pending_approval") {
-    return "Chủ salon đang kiểm tra.";
+    return "Điểm sẽ cập nhật ngay khi nhân viên xác nhận.";
   }
   return "Điểm cập nhật khi dịch vụ hoàn tất.";
 }

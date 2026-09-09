@@ -11,6 +11,7 @@ export type QrContext = {
 };
 
 export type CustomerProfile = {
+  nextPointEligibleAtMs?: number;
   customerId: string;
   name: string;
   phoneLast4?: string;

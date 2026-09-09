@@ -2,7 +2,9 @@ import { expect, test } from "@playwright/test";
 
 test.use({ userAgent: "Zalo/24.0 MiniApp" });
 
-test("khách cũ quét QR chi nhánh rồi yêu cầu điểm mà không nhập lại số điện thoại", async ({ page }) => {
+test("khách cũ quét QR chi nhánh rồi yêu cầu điểm mà không nhập lại số điện thoại", async ({
+  page,
+}) => {
   const branchQr = new URLSearchParams({
     qrType: "branch",
     salonId: "salon-e2e",

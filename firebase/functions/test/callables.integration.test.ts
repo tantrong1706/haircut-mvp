@@ -1,9 +1,26 @@
 import { createHash } from "node:crypto";
 import { deleteApp, getApps } from "firebase-admin/app";
 import { Timestamp, getFirestore } from "firebase-admin/firestore";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { createSignedQrToken } from "../src/security";
+
+vi.mock("../src/zaloIdentityVerifier", async (importOriginal) => {
+  const original = await importOriginal<typeof import("../src/zaloIdentityVerifier")>();
+  return {
+    ...original,
+    createZaloIdentityVerifier: () => ({
+      verify: async ({ accessToken }: { accessToken: string }) => {
+        if (accessToken !== "fixture-access-token") throw new Error("Invalid test identity");
+        return { zaloUserId: "fixture-customer-identity" };
+      },
+    }),
+  };
+});
 import {
   acceptStaffInvite,
+  registerCustomerFromZalo,
+  getCustomerCheckinProfileFromZalo,
+  resolveCustomerQr,
   approvePointRequest,
   cancelSessionAsSystemAdmin,
   cancelSalonDeletion,
@@ -52,6 +69,7 @@ describe("callable transactions", () => {
   });
 
   afterAll(async () => {
+    vi.unstubAllEnvs();
     if (originalAdminWriteFlag === undefined) delete process.env.ADMIN_WRITE_OPERATIONS_ENABLED;
     else process.env.ADMIN_WRITE_OPERATIONS_ENABLED = originalAdminWriteFlag;
     await Promise.all(getApps().map((app) => deleteApp(app)));
@@ -85,6 +103,112 @@ describe("callable transactions", () => {
       exists: true,
     });
     expect((await db.collection("salons").doc("salon-quota").get()).data()?.customerCount).toBe(50);
+  });
+
+  it("QR chi nhánh → gửi trùng → staff xác nhận → khóa cả salon 2 giờ", async () => {
+    const salonId = "salon-qr-end-to-end";
+    const branchId = "branch-qr-a";
+    const branchB = "branch-qr-b";
+    const secret = "fixture-qr-signing-key-only-32-characters";
+    vi.stubEnv("QR_SIGNING_SECRET", secret);
+    vi.stubEnv("ZALO_APP_SECRET", "fixture-app-secret");
+    await seedOwner("owner-qr", salonId, { pointPerVisit: 2, customerCount: 0 });
+    await seedBranch(salonId, branchId);
+    await seedBranch(salonId, branchB);
+    await db
+      .collection("users")
+      .doc("staff-qr")
+      .set({
+        salonId,
+        role: "staff",
+        name: "Staff QR",
+        isActive: true,
+        branchIds: [branchId, branchB],
+      });
+    const qrToken = createSignedQrToken(secret, { kind: "branch", salonId, branchId, version: 1 });
+    const input = {
+      salonId,
+      branchId,
+      qrType: "branch",
+      qrToken,
+      zaloAccessToken: "fixture-access-token",
+      name: "Khách fixture",
+      allowPhoto: true,
+      photoConsentVersion: "point-request-v1",
+      phone: "0912345678",
+    };
+    const publicRequest = (data: Record<string, unknown>) =>
+      ({ data, rawRequest: { ip: "127.0.0.1", get: () => undefined } }) as never;
+    await expect(
+      registerCustomerFromZalo.run(publicRequest({ ...input, phone: undefined })),
+    ).rejects.toMatchObject({ code: "invalid-argument" });
+    const results = await Promise.all([
+      registerCustomerFromZalo.run(publicRequest(input)),
+      registerCustomerFromZalo.run(publicRequest(input)),
+    ]);
+    expect(results[0].sessionId).toBe(results[1].sessionId);
+    const sessionId = results[0].sessionId;
+    expect(results[0].sessionStatus).toBe("pending_approval");
+    expect((await db.collection("point_requests").get()).size).toBe(1);
+    const session = (await db.collection("chair_sessions").doc(sessionId).get()).data()!;
+    expect(session.expiresAt.toMillis() - session.createdAt.toMillis()).toBe(30 * 60_000);
+    expect(session.photoConsentGranted).toBe(true);
+    const profile = await getCustomerCheckinProfileFromZalo.run(publicRequest(input));
+    expect(profile).toMatchObject({ hasPhone: true, phoneLast4: "5678" });
+    expect(profile).not.toHaveProperty("phone");
+    const approvals = await Promise.all([
+      approvePointRequest.run(requestFor("staff-qr", { salonId, requestId: sessionId })),
+      approvePointRequest.run(requestFor("staff-qr", { salonId, requestId: sessionId })),
+    ]);
+    expect(approvals.filter((result) => !result.alreadyProcessed)).toHaveLength(1);
+    const secondQr = createSignedQrToken(secret, {
+      kind: "branch",
+      salonId,
+      branchId: branchB,
+      version: 1,
+    });
+    await expect(
+      registerCustomerFromZalo.run(
+        publicRequest({ ...input, phone: undefined, branchId: branchB, qrToken: secondQr }),
+      ),
+    ).rejects.toMatchObject({ details: { errorCode: "POINT_COOLDOWN" } });
+    const customerId = results[0].customerId;
+    expect((await db.collection("customers").doc(customerId).get()).data()?.points).toBe(2);
+    await db
+      .collection("customers")
+      .doc(customerId)
+      .update({
+        lastVisitAt: Timestamp.fromMillis(Date.now() - 2 * 60 * 60_000 - 100),
+        nextPointEligibleAt: Timestamp.fromMillis(Date.now() - 100),
+      });
+    const next = await registerCustomerFromZalo.run(
+      publicRequest({ ...input, phone: undefined, branchId: branchB, qrToken: secondQr }),
+    );
+    expect(next.sessionId).not.toBe(sessionId);
+    expect(next.branchId).toBe(branchB);
+    expect((await db.collection("customers").doc(customerId).get()).data()?.phone).toBe(
+      "0912345678",
+    );
+    await db
+      .collection("point_requests")
+      .doc(next.sessionId)
+      .update({ expiresAt: Timestamp.fromMillis(Date.now() - 1) });
+    await expect(
+      approvePointRequest.run(requestFor("staff-qr", { salonId, requestId: next.sessionId })),
+    ).rejects.toMatchObject({ code: "failed-precondition" });
+    await rejectPointRequest.run(
+      requestFor("staff-qr", {
+        salonId,
+        requestId: next.sessionId,
+        reason: "Khách gửi nhầm yêu cầu",
+      }),
+    );
+    expect((await db.collection("customers").doc(customerId).get()).data()?.points).toBe(2);
+    const salonQr = createSignedQrToken(secret, { kind: "salon", salonId, version: 1 });
+    await expect(
+      resolveCustomerQr.run(publicRequest({ salonId, qrType: "salon", qrToken: salonQr })),
+    ).rejects.toMatchObject({ code: "failed-precondition" });
+    vi.unstubAllEnvs();
   });
 
   it("chạy đúng nhận khách, gửi điểm và owner duyệt một lần", async () => {
@@ -176,20 +300,26 @@ describe("callable transactions", () => {
     await seedOwner("owner-staff-confirm", salonId, { pointPerVisit: 2, customerCount: 1 });
     await seedBranch(salonId, branchId);
     await Promise.all([
-      db.collection("users").doc("staff-confirm").set({
-        salonId,
-        role: "staff",
-        name: "Nhân viên xác nhận",
-        isActive: true,
-        branchIds: [branchId],
-      }),
-      db.collection("users").doc("staff-wrong-branch").set({
-        salonId,
-        role: "staff",
-        name: "Nhân viên chi nhánh khác",
-        isActive: true,
-        branchIds: ["branch-other"],
-      }),
+      db
+        .collection("users")
+        .doc("staff-confirm")
+        .set({
+          salonId,
+          role: "staff",
+          name: "Nhân viên xác nhận",
+          isActive: true,
+          branchIds: [branchId],
+        }),
+      db
+        .collection("users")
+        .doc("staff-wrong-branch")
+        .set({
+          salonId,
+          role: "staff",
+          name: "Nhân viên chi nhánh khác",
+          isActive: true,
+          branchIds: ["branch-other"],
+        }),
       db.collection("customers").doc(customerId).set({
         salonId,
         name: "Khách QR",
@@ -197,40 +327,44 @@ describe("callable transactions", () => {
         phoneLast4: "6789",
         allowPhoto: true,
       }),
-      db.collection("chair_sessions").doc(sessionId).set({
-        salonId,
-        branchId,
-        branchName: "Chi nhánh QR",
-        customerId,
-        status: "pending_approval",
-        approvalMode: "staff_confirmation",
-        photoConsentGranted: true,
-        isOpen: true,
-        createdAt: now,
-        expiresAt: Timestamp.fromMillis(now.toMillis() + 30 * 60 * 1000),
-      }),
-      db.collection("point_requests").doc(sessionId).set({
-        salonId,
-        branchId,
-        branchName: "Chi nhánh QR",
-        customerId,
-        sessionId,
-        pointsRequested: 2,
-        pointsAdded: 2,
-        status: "pending",
-        approvalMode: "staff_confirmation",
-        photoConsentGranted: true,
-        photoUrls: [],
-        photoPaths: [],
-        createdAt: now,
-        expiresAt: Timestamp.fromMillis(now.toMillis() + 30 * 60 * 1000),
-      }),
+      db
+        .collection("chair_sessions")
+        .doc(sessionId)
+        .set({
+          salonId,
+          branchId,
+          branchName: "Chi nhánh QR",
+          customerId,
+          status: "pending_approval",
+          approvalMode: "staff_confirmation",
+          photoConsentGranted: true,
+          isOpen: true,
+          createdAt: now,
+          expiresAt: Timestamp.fromMillis(now.toMillis() + 30 * 60 * 1000),
+        }),
+      db
+        .collection("point_requests")
+        .doc(sessionId)
+        .set({
+          salonId,
+          branchId,
+          branchName: "Chi nhánh QR",
+          customerId,
+          sessionId,
+          pointsRequested: 2,
+          pointsAdded: 2,
+          status: "pending",
+          approvalMode: "staff_confirmation",
+          photoConsentGranted: true,
+          photoUrls: [],
+          photoPaths: [],
+          createdAt: now,
+          expiresAt: Timestamp.fromMillis(now.toMillis() + 30 * 60 * 1000),
+        }),
     ]);
 
     await expect(
-      approvePointRequest.run(
-        requestFor("staff-wrong-branch", { salonId, requestId: sessionId }),
-      ),
+      approvePointRequest.run(requestFor("staff-wrong-branch", { salonId, requestId: sessionId })),
     ).rejects.toMatchObject({ code: "permission-denied" });
 
     const first = await approvePointRequest.run(
@@ -248,43 +382,47 @@ describe("callable transactions", () => {
       now.toMillis() + 2 * 60 * 60 * 1000,
     );
     expect(
-      (await db.collection("haircut_records").where("pointRequestId", "==", sessionId).get())
-        .docs[0]
-        ?.data(),
+      (
+        await db.collection("haircut_records").where("pointRequestId", "==", sessionId).get()
+      ).docs[0]?.data(),
     ).toMatchObject({ staffId: "staff-confirm", staffName: "Nhân viên xác nhận" });
 
     const secondSessionId = "session-staff-confirm-cooldown";
     await Promise.all([
-      db.collection("chair_sessions").doc(secondSessionId).set({
-        salonId,
-        branchId,
-        customerId,
-        status: "pending_approval",
-        approvalMode: "staff_confirmation",
-        photoConsentGranted: true,
-        isOpen: true,
-        createdAt: Timestamp.now(),
-        expiresAt: Timestamp.fromMillis(Date.now() + 30 * 60 * 1000),
-      }),
-      db.collection("point_requests").doc(secondSessionId).set({
-        salonId,
-        branchId,
-        customerId,
-        sessionId: secondSessionId,
-        pointsRequested: 2,
-        pointsAdded: 2,
-        status: "pending",
-        approvalMode: "staff_confirmation",
-        photoUrls: [],
-        photoPaths: [],
-        createdAt: Timestamp.now(),
-        expiresAt: Timestamp.fromMillis(Date.now() + 30 * 60 * 1000),
-      }),
+      db
+        .collection("chair_sessions")
+        .doc(secondSessionId)
+        .set({
+          salonId,
+          branchId,
+          customerId,
+          status: "pending_approval",
+          approvalMode: "staff_confirmation",
+          photoConsentGranted: true,
+          isOpen: true,
+          createdAt: Timestamp.now(),
+          expiresAt: Timestamp.fromMillis(Date.now() + 30 * 60 * 1000),
+        }),
+      db
+        .collection("point_requests")
+        .doc(secondSessionId)
+        .set({
+          salonId,
+          branchId,
+          customerId,
+          sessionId: secondSessionId,
+          pointsRequested: 2,
+          pointsAdded: 2,
+          status: "pending",
+          approvalMode: "staff_confirmation",
+          photoUrls: [],
+          photoPaths: [],
+          createdAt: Timestamp.now(),
+          expiresAt: Timestamp.fromMillis(Date.now() + 30 * 60 * 1000),
+        }),
     ]);
     await expect(
-      approvePointRequest.run(
-        requestFor("staff-confirm", { salonId, requestId: secondSessionId }),
-      ),
+      approvePointRequest.run(requestFor("staff-confirm", { salonId, requestId: secondSessionId })),
     ).rejects.toMatchObject({ code: "failed-precondition" });
   });
 

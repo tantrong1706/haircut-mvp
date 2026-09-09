@@ -59,6 +59,30 @@ export function serviceSessionExpiresAtMs(createdAtMs: number, maxAgeMs: number)
   return createdAtMs + maxAgeMs;
 }
 
+export function pointCooldownRemainingMs(input: {
+  nowMs: number;
+  lastVisitAtMs: number | null;
+  nextEligibleAtMs: number | null;
+  cooldownMs: number;
+}) {
+  const inferredEligibleAt =
+    input.lastVisitAtMs === null ? 0 : input.lastVisitAtMs + Math.max(0, input.cooldownMs);
+  const eligibleAt = Math.max(input.nextEligibleAtMs ?? 0, inferredEligibleAt);
+  return Math.max(0, eligibleAt - input.nowMs);
+}
+
+export function staffCanConfirmCustomerPointRequest(input: {
+  role: "owner" | "staff";
+  assignedBranchIds: string[];
+  branchId: string;
+  approvalMode: unknown;
+}) {
+  if (input.approvalMode !== "staff_confirmation" || !input.branchId) {
+    return false;
+  }
+  return input.role === "owner" || input.assignedBranchIds.includes(input.branchId);
+}
+
 export function isServiceSessionExpired(expiresAtMs: number | null, nowMs: number) {
   return expiresAtMs !== null && expiresAtMs <= nowMs;
 }

@@ -37,6 +37,8 @@ import {
   isServiceSessionExpired,
   isVerifiedOwnerIdentity,
   legacyBranchPatch,
+  pointCooldownRemainingMs,
+  staffCanConfirmCustomerPointRequest,
   nextWheelConfigVersion,
   normalizeWheelSlots,
   normalizeWheelSlotType,
@@ -156,6 +158,8 @@ const zaloQrFunctionOptions = {
   secrets: [zaloAppSecret, zaloGatewayHmacSecret, qrSigningSecret],
 };
 const SESSION_POINT_REQUEST_WINDOW_MS = 12 * 60 * 60 * 1000;
+const POINT_REQUEST_CONFIRMATION_WINDOW_MS = 30 * 60 * 1000;
+const POINT_AWARD_COOLDOWN_MS = 2 * 60 * 60 * 1000;
 const OPEN_SESSION_STATUSES = ["waiting", "serving", "pending_approval"] as const;
 const SESSION_EXPIRY_BATCH_SIZE = 100;
 const ZALO_PROFILE_CACHE_TTL_MS = 60_000;
@@ -1602,6 +1606,16 @@ async function resolveCustomerQrData(data: unknown): Promise<CustomerQrResolutio
   };
 }
 
+function assertBranchOnlyCustomerQr(resolution: CustomerQrResolution): CustomerQrResolution {
+  if (resolution.qrType !== "branch" || !resolution.branchId) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Vui lòng quét QR riêng tại chi nhánh. QR chung của salon không dùng để tích điểm.",
+    );
+  }
+  return resolution;
+}
+
 function timestampMillis(value: unknown): number | null {
   return value instanceof Timestamp ? value.toMillis() : null;
 }
@@ -2867,7 +2881,7 @@ export const createManualCustomer = onCall(functionOptions, async (request) => {
 export const resolveCustomerQr = onCall(qrFunctionOptions, async (request) => {
   const salonId = requireString(request.data?.salonId, "salonId");
   await enforcePublicRequestPolicy("resolveCustomerQr", request, salonId, request.data?.qrToken);
-  return resolveCustomerQrData(request.data);
+  return assertBranchOnlyCustomerQr(await resolveCustomerQrData(request.data));
 });
 
 export const getCustomerCheckinProfileFromZalo = onCall(
@@ -2887,7 +2901,7 @@ export const getCustomerCheckinProfileFromZalo = onCall(
     });
 
     // QR được kiểm tra lại ở backend trước khi đọc hồ sơ thuộc salon.
-    await resolveCustomerQrData(request.data);
+    assertBranchOnlyCustomerQr(await resolveCustomerQrData(request.data));
     const customerId = customerIdFor(salonId, zaloProfile.zaloUserId);
     const customerRef = db.collection("customers").doc(customerId);
     const customerSnap = await customerRef.get();
@@ -2911,6 +2925,9 @@ export const getCustomerCheckinProfileFromZalo = onCall(
       hasPhone: Boolean(storedPhoneLast4),
       phoneLast4: storedPhoneLast4,
       allowPhoto: customer.allowPhoto === true,
+      cooldownRemainingMs: pointCooldownRemainingMs({ nowMs: Date.now(),
+        lastVisitAtMs: timestampMillis(customer.lastVisitAt),
+        nextEligibleAtMs: timestampMillis(customer.nextPointEligibleAt), cooldownMs: POINT_AWARD_COOLDOWN_MS }),
     };
   },
 );
@@ -2976,12 +2993,9 @@ export const registerCustomerFromZalo = onCall(zaloQrFunctionOptions, async (req
     clearBirthday: request.data?.clearBirthday === true,
   });
   const allowPhoto = requireBoolean(request.data?.allowPhoto, "allowPhoto");
-  const qrResolution = await resolveCustomerQrData(request.data);
-  if (qrResolution.selectionRequired) {
-    throw new HttpsError("failed-precondition", "Vui lòng chọn chi nhánh trước khi tạo lượt");
-  }
-  if (!qrResolution.branchId) {
-    throw new HttpsError("failed-precondition", "Salon chưa có chi nhánh đang hoạt động");
+  const qrResolution = assertBranchOnlyCustomerQr(await resolveCustomerQrData(request.data));
+  if (!allowPhoto || request.data?.photoConsentVersion !== "point-request-v1") {
+    throw new HttpsError("failed-precondition", "Vui lòng mở lại ứng dụng và xác nhận yêu cầu tích điểm.");
   }
   const branchId = qrResolution.branchId;
 
@@ -2989,16 +3003,17 @@ export const registerCustomerFromZalo = onCall(zaloQrFunctionOptions, async (req
   const customerRef = db.collection("customers").doc(customerId);
   const salonRef = db.collection("salons").doc(salonId);
   const sessionRef = db.collection("chair_sessions").doc();
+  const pointRequestRef = db.collection("point_requests").doc(sessionRef.id);
   const activeSessionRef = activeSessionRefFor(salonId, customerId);
   const now = Timestamp.now();
   const expiresAt = Timestamp.fromMillis(
-    serviceSessionExpiresAtMs(now.toMillis(), SESSION_POINT_REQUEST_WINDOW_MS),
+    serviceSessionExpiresAtMs(now.toMillis(), POINT_REQUEST_CONFIRMATION_WINDOW_MS),
   );
   let returnedSessionId = sessionRef.id;
   let returnedBranchId = branchId;
   let returnedBranchName = qrResolution.branchName;
   let returnedBranchAddress = qrResolution.branchAddress;
-  let returnedStatus = "waiting";
+  let returnedStatus = "pending_approval";
 
   await ensureSalonCustomerCount(salonId);
   await db.runTransaction(async (tx) => {
@@ -3028,17 +3043,23 @@ export const registerCustomerFromZalo = onCall(zaloQrFunctionOptions, async (req
       ? db.collection("chair_sessions").doc(previousSessionId)
       : null;
     const previousSessionSnap = previousSessionRef ? await tx.get(previousSessionRef) : null;
+    const previousRequestSnap = previousSessionId ? await tx.get(db.collection("point_requests").doc(previousSessionId)) : null;
 
     if (
       reuseExistingSession &&
       (!previousSessionSnap?.exists ||
         previousSessionSnap.data()?.salonId !== salonId ||
-        previousSessionSnap.data()?.customerId !== customerId)
+        previousSessionSnap.data()?.customerId !== customerId ||
+        !OPEN_SESSION_STATUSES.includes(previousSessionSnap.data()?.status) ||
+        (timestampMillis(previousSessionSnap.data()?.expiresAt) ?? Number.MAX_SAFE_INTEGER) <= now.toMillis())
     ) {
       reuseExistingSession = false;
     }
 
     if (reuseExistingSession && activeSession) {
+      if (activeSession.branchId && activeSession.branchId !== branchId) {
+        throw new HttpsError("failed-precondition", "Bạn đang có yêu cầu tại chi nhánh khác. Hãy nhờ nhân viên xử lý yêu cầu đó trước.");
+      }
       returnedSessionId = String(activeSession.sessionId);
       returnedBranchId = String(activeSession.branchId || branchId);
       returnedBranchName = String(activeSession.branchName || qrResolution.branchName);
@@ -3051,6 +3072,19 @@ export const registerCustomerFromZalo = onCall(zaloQrFunctionOptions, async (req
     }
 
     const existingCustomer = customerSnap.exists ? customerSnap.data() : {};
+    if (!reuseExistingSession) {
+      const remainingMs = pointCooldownRemainingMs({
+        nowMs: now.toMillis(),
+        lastVisitAtMs: timestampMillis(existingCustomer?.lastVisitAt),
+        nextEligibleAtMs: timestampMillis(existingCustomer?.nextPointEligibleAt),
+        cooldownMs: POINT_AWARD_COOLDOWN_MS,
+      });
+      if (remainingMs > 0) {
+        throw new HttpsError("failed-precondition", "Bạn vừa được cộng điểm. Vui lòng chờ đủ 2 giờ.", {
+          errorCode: "POINT_COOLDOWN", retryAfterMs: remainingMs,
+        });
+      }
+    }
     const storedPhoneLast4 = String(existingCustomer?.phoneLast4 || existingCustomer?.phone || "")
       .replace(/\D/g, "")
       .slice(-4);
@@ -3133,6 +3167,8 @@ export const registerCustomerFromZalo = onCall(zaloQrFunctionOptions, async (req
     }
 
     tx.set(sessionRef, {
+      // Expired requests cannot be approved after a subsequent scan.
+      pointsRequested: Math.max(1, Math.floor(Number(salonSnap.data()?.pointPerVisit ?? 1))),
       salonId,
       branchId,
       branchName: qrResolution.branchName,
@@ -3143,7 +3179,11 @@ export const registerCustomerFromZalo = onCall(zaloQrFunctionOptions, async (req
       mirrorName: qrResolution.branchName,
       customerId,
       customerSummary,
-      status: "waiting",
+      status: "pending_approval",
+      approvalMode: "staff_confirmation",
+      photoConsentGranted: true,
+      photoConsentVersion: "point-request-v1",
+      photoConsentAt: now,
       isOpen: true,
       expiresAt,
       createdAt: now,
@@ -3158,11 +3198,26 @@ export const registerCustomerFromZalo = onCall(zaloQrFunctionOptions, async (req
       branchAddress: qrResolution.branchAddress,
       qrType: qrResolution.qrType,
       legacyMirrorId: qrResolution.legacyMirrorId ?? null,
-      status: "waiting",
+      status: "pending_approval",
+      approvalMode: "staff_confirmation",
       isOpen: true,
       expiresAt,
       createdAt: now,
       updatedAt: now,
+    });
+    const pointsRequested = Math.max(1, Math.floor(Number(salonSnap.data()?.pointPerVisit ?? 1)));
+    if (previousRequestSnap?.data()?.status === "pending") {
+      tx.set(previousRequestSnap.ref, { status: "rejected", rejectionReason: "Yêu cầu hết hạn",
+        processedBy: "system", processedAt: now, updatedAt: now }, { merge: true });
+    }
+    tx.create(pointRequestRef, {
+      salonId, branchId, branchName: qrResolution.branchName, customerId,
+      sessionId: sessionRef.id, customerSummary,
+      status: "pending", approvalMode: "staff_confirmation",
+      pointsRequested, pointsAdded: pointsRequested,
+      photoConsentGranted: true, photoConsentVersion: "point-request-v1", photoConsentAt: now,
+      photoUrls: [], photoPaths: [], note: "", staffId: "", staffName: "",
+      expiresAt, createdAt: now, updatedAt: now,
     });
   });
 
@@ -3189,6 +3244,25 @@ type PhotoUploadContext = {
   sessionId: string;
   sessionStatus: string;
 };
+
+function pendingPhotoRequestAllowed(session: DocumentData | undefined) {
+  return session?.status === "pending_approval" &&
+    session?.approvalMode === "staff_confirmation" &&
+    session?.photoConsentGranted === true &&
+    (timestampMillis(session.expiresAt) ?? 0) > Date.now();
+}
+
+function assertPointRequestActor(user: AppUser, pointRequest: DocumentData) {
+  if (user.role === "owner") return;
+  if (!staffCanConfirmCustomerPointRequest({
+    role: user.role,
+    assignedBranchIds: [...(user.branchIds ?? []), user.branchId ?? ""],
+    branchId: String(pointRequest.branchId || ""),
+    approvalMode: pointRequest.approvalMode,
+  })) {
+    throw new HttpsError("permission-denied", "Bạn không được xác nhận yêu cầu tại chi nhánh này.");
+  }
+}
 
 async function loadPhotoUploadContext(input: {
   uid: string;
@@ -3225,7 +3299,10 @@ async function loadPhotoUploadContext(input: {
   const staffOwnsServingSession =
     session.status === "serving" && session.assignedStaffId === input.uid;
   const ownerCanEditPendingSession = user.role === "owner" && session.status === "pending_approval";
-  if (!staffOwnsServingSession && !ownerCanEditPendingSession) {
+  if (session.approvalMode === "staff_confirmation" && !pendingPhotoRequestAllowed(session)) {
+    throw new HttpsError("failed-precondition", "Yêu cầu đã hết hạn hoặc không còn cho phép lưu ảnh.");
+  }
+  if (!staffOwnsServingSession && !ownerCanEditPendingSession && !pendingPhotoRequestAllowed(session)) {
     throw new HttpsError("permission-denied", "Bạn không phụ trách ảnh của lượt cắt này");
   }
   return {
@@ -3316,7 +3393,8 @@ export const beginHaircutPhotoUpload = onCall(functionOptions, async (request) =
       session?.branchId === context.branchId &&
       session?.customerId === context.customerId &&
       ((session?.status === "serving" && session?.assignedStaffId === uid) ||
-        (context.user.role === "owner" && session?.status === "pending_approval"));
+        (context.user.role === "owner" && session?.status === "pending_approval" && session?.approvalMode !== "staff_confirmation") ||
+        pendingPhotoRequestAllowed(session));
     if (!accessStillValid) {
       throw new HttpsError("failed-precondition", "Phiên phục vụ đã thay đổi, vui lòng tải lại");
     }
@@ -3499,7 +3577,8 @@ export const finalizeHaircutPhotoUpload = onCall(functionOptions, async (request
       session?.branchId === context.branchId &&
       session?.customerId === context.customerId &&
       ((session?.status === "serving" && session?.assignedStaffId === uid) ||
-        (user.role === "owner" && session?.status === "pending_approval"));
+        (user.role === "owner" && session?.status === "pending_approval" && session?.approvalMode !== "staff_confirmation") ||
+        pendingPhotoRequestAllowed(session));
     if (!sessionAllowed || !customerSnap.exists || customer?.allowPhoto !== true) {
       finalizationFailure = true;
       tx.set(
@@ -4087,7 +4166,8 @@ export const updatePendingPointRequestPhotos = onCall(functionOptions, async (re
   const requestId = requireString(request.data?.requestId, "requestId");
   const photoUrls = safePhotoUrls(request.data?.photoUrls);
   const photoPaths = safePhotoPaths(request.data?.photoPaths);
-  await assertSalonRole(uid, salonId, ["owner"]);
+  const actor = await assertSalonRole(uid, salonId, ["owner", "staff"]);
+  const note = optionalLimitedString(request.data?.note, "note", 1000);
 
   const requestRef = db.collection("point_requests").doc(requestId);
   const requestSnap = await requestRef.get();
@@ -4100,6 +4180,7 @@ export const updatePendingPointRequestPhotos = onCall(functionOptions, async (re
   }
 
   const sessionId = String(pointRequest.sessionId || requestId);
+  assertPointRequestActor(actor, pointRequest);
   const customerId = String(pointRequest.customerId || "");
   const branchId = String(pointRequest.branchId || "");
   if (!sessionId || !customerId || !branchId) {
@@ -4163,6 +4244,10 @@ export const updatePendingPointRequestPhotos = onCall(functionOptions, async (re
     const currentRequest = currentRequestSnap.data();
     const currentSession = currentSessionSnap.data();
     const currentCustomer = currentCustomerSnap.data();
+    if (currentRequest) assertPointRequestActor(actor, currentRequest);
+    if (currentSession?.approvalMode === "staff_confirmation" && !pendingPhotoRequestAllowed(currentSession)) {
+      throw new HttpsError("failed-precondition", "Yêu cầu đã hết hạn hoặc không còn cho phép lưu ảnh.");
+    }
 
     if (
       !currentRequestSnap.exists ||
@@ -4241,6 +4326,7 @@ export const updatePendingPointRequestPhotos = onCall(functionOptions, async (re
           allowPhoto: Boolean(currentCustomer.allowPhoto),
         },
         photosUpdatedBy: uid,
+        ...(note === undefined ? {} : { note }),
         photosUpdatedAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
       },
@@ -4745,7 +4831,7 @@ export const approvePointRequest = onCall(functionOptions, async (request) => {
   const uid = currentUid(request.auth);
   const salonId = requireString(request.data?.salonId, "salonId");
   const requestId = requireString(request.data?.requestId, "requestId");
-  const owner = await assertSalonRole(uid, salonId, ["owner"]);
+  const owner = await assertSalonRole(uid, salonId, ["owner", "staff"]);
   await enforceAuthenticatedRateLimit("approvePointRequest", uid, salonId);
   await assertFeatureEnabled(
     salonId,
@@ -4755,8 +4841,23 @@ export const approvePointRequest = onCall(functionOptions, async (request) => {
   );
 
   const requestRef = db.collection("point_requests").doc(requestId);
+  const submittedPaths = request.data?.photoPaths === undefined ? undefined : safePhotoPaths(request.data.photoPaths);
+  const submittedNote = optionalLimitedString(request.data?.note, "note", 1000);
+  if (submittedPaths?.length) {
+    const pending = (await requestRef.get()).data();
+    if (!pending || pending.salonId !== salonId) throw new HttpsError("not-found", "Không tìm thấy yêu cầu cộng điểm");
+    assertPointRequestActor(owner, pending);
+    if (pending.status !== "approved") {
+      await assertFeatureEnabled(salonId, "photoUploadEnabled", "Tính năng lưu ảnh kiểu tóc đang tạm ngừng.", request.data?.appVersion);
+      await assertFinalizedPhotoUploadPaths({
+        photoPaths: submittedPaths, salonId, branchId: String(pending.branchId),
+        customerId: String(pending.customerId), sessionId: String(pending.sessionId), uploaderUid: uid,
+      });
+    }
+  }
   const now = Timestamp.now();
   let alreadyProcessed = false;
+  let confirmedPoints = 0;
 
   const discardedPhotos = await db.runTransaction(async (tx) => {
     const pointSnap = await tx.get(requestRef);
@@ -4767,8 +4868,12 @@ export const approvePointRequest = onCall(functionOptions, async (request) => {
     if (pointRequest?.salonId !== salonId) {
       throw new HttpsError("permission-denied", "Yêu cầu không thuộc salon này");
     }
+    assertPointRequestActor(owner, pointRequest);
+    await assertBranchAccess(owner, String(pointRequest.branchId || ""));
+    const staffConfirmation = pointRequest.approvalMode === "staff_confirmation";
     if (pointRequest?.status === "approved") {
       alreadyProcessed = true;
+      confirmedPoints = Number(pointRequest.pointsRequested ?? pointRequest.pointsAdded ?? 0);
       return null;
     }
     if (pointRequest?.status !== "pending") {
@@ -4813,7 +4918,20 @@ export const approvePointRequest = onCall(functionOptions, async (request) => {
     const pointsAdded = Number(pointRequest.pointsRequested ?? pointRequest.pointsAdded ?? 1);
     const pointsBefore = Math.max(0, Number(customerSnap.data()?.points ?? 0));
     const pointsAfter = pointsBefore + pointsAdded;
-    const canKeepPhotos = customerSnap.data()?.allowPhoto === true;
+    if (staffConfirmation) {
+      if ((timestampMillis(pointRequest.expiresAt) ?? 0) <= now.toMillis() ||
+          (timestampMillis(sessionSnap.data()?.expiresAt) ?? 0) <= now.toMillis()) {
+        throw new HttpsError("failed-precondition", "Yêu cầu đã hết hạn. Vui lòng quét QR và gửi lại.");
+      }
+      const remainingMs = pointCooldownRemainingMs({
+        nowMs: now.toMillis(), lastVisitAtMs: timestampMillis(customerSnap.data()?.lastVisitAt),
+        nextEligibleAtMs: timestampMillis(customerSnap.data()?.nextPointEligibleAt), cooldownMs: POINT_AWARD_COOLDOWN_MS,
+      });
+      if (remainingMs > 0) throw new HttpsError("failed-precondition", "Khách vừa được cộng điểm. Vui lòng chờ đủ 2 giờ.");
+    }
+    const canKeepPhotos = customerSnap.data()?.allowPhoto === true &&
+      (!staffConfirmation || sessionSnap.data()?.photoConsentGranted === true);
+    const selectedPaths = staffConfirmation && submittedPaths !== undefined ? submittedPaths : pointRequest.photoPaths;
     const recordPhotoUrls = canKeepPhotos
       ? trustedStoredHaircutPhotoUrls(pointRequest.photoUrls, {
           salonId,
@@ -4822,7 +4940,7 @@ export const approvePointRequest = onCall(functionOptions, async (request) => {
         })
       : [];
     const recordPhotoPaths = canKeepPhotos
-      ? trustedStoredHaircutPhotoPaths(pointRequest.photoPaths, {
+      ? trustedStoredHaircutPhotoPaths(selectedPaths, {
           salonId,
           customerId: String(pointRequest.customerId || ""),
           sessionId: String(pointRequest.sessionId || ""),
@@ -4833,9 +4951,32 @@ export const approvePointRequest = onCall(functionOptions, async (request) => {
       throw new HttpsError("failed-precondition", "Số điểm cộng không hợp lệ");
     }
 
+    const attachmentSnaps = [];
+    if (staffConfirmation && submittedPaths?.length) {
+      if (!canKeepPhotos) throw new HttpsError("failed-precondition", "Yêu cầu không còn cho phép lưu ảnh.");
+      for (const photoPath of submittedPaths) {
+        const operationId = operationIdFromPhotoPath(photoPath);
+        if (!operationId) throw new HttpsError("invalid-argument", "Đường dẫn ảnh không hợp lệ");
+        const snap = await tx.get(db.collection("photo_upload_operations").doc(operationId));
+        const operation = snap.data();
+        if (!snap.exists || operation?.status !== "finalized" || operation?.staffUid !== uid ||
+            operation?.salonId !== salonId || operation?.branchId !== branchId ||
+            operation?.sessionId !== pointRequest.sessionId || operation?.customerId !== pointRequest.customerId ||
+            operation?.storagePath !== photoPath || operation?.attachmentStatus === "attached") {
+          throw new HttpsError("failed-precondition", "Ảnh tải lên không còn hợp lệ");
+        }
+        attachmentSnaps.push(snap);
+      }
+    }
+    confirmedPoints = pointsAdded;
+    for (const snap of attachmentSnaps) {
+      tx.set(snap.ref, { attachmentStatus: "attached", attachedTo: { type: "point_request", id: requestId },
+        attachedAt: now, orphanExpiresAt: null, updatedAt: now }, { merge: true });
+    }
     tx.update(customerRef, {
       points: pointsAfter,
       lastVisitAt: now,
+      nextPointEligibleAt: Timestamp.fromMillis(now.toMillis() + POINT_AWARD_COOLDOWN_MS),
       updatedAt: now,
     });
     tx.update(requestRef, {
@@ -4848,6 +4989,7 @@ export const approvePointRequest = onCall(functionOptions, async (request) => {
       pointsAfter,
       photoUrls: recordPhotoUrls,
       photoPaths: recordPhotoPaths,
+      ...(staffConfirmation ? { staffId: uid, staffName: owner.name, note: submittedNote ?? pointRequest.note ?? "" } : {}),
       updatedAt: now,
     });
     tx.set(recordRef, {
@@ -4855,10 +4997,10 @@ export const approvePointRequest = onCall(functionOptions, async (request) => {
       branchId,
       branchName: pointRequest.branchName ?? "",
       customerId: pointRequest.customerId,
-      staffId: pointRequest.staffId,
-      staffName: pointRequest.staffName ?? "",
+      staffId: staffConfirmation ? uid : (pointRequest.staffId || ""),
+      staffName: staffConfirmation ? owner.name : (pointRequest.staffName ?? ""),
       pointRequestId: requestId,
-      note: pointRequest.note ?? "",
+      note: staffConfirmation ? (submittedNote ?? pointRequest.note ?? "") : (pointRequest.note ?? ""),
       photoUrls: recordPhotoUrls,
       photoPaths: recordPhotoPaths,
       pointsAdded,
@@ -4924,7 +5066,7 @@ export const approvePointRequest = onCall(functionOptions, async (request) => {
     });
   }
 
-  return { ok: true, alreadyProcessed };
+   return { ok: true, alreadyProcessed, pointsAdded: confirmedPoints };
 });
 
 export const rejectPointRequest = onCall(functionOptions, async (request) => {
@@ -4932,7 +5074,7 @@ export const rejectPointRequest = onCall(functionOptions, async (request) => {
   const salonId = requireString(request.data?.salonId, "salonId");
   const requestId = requireString(request.data?.requestId, "requestId");
   const reason = requirePointRejectionReason(request.data?.reason);
-  const owner = await assertSalonRole(uid, salonId, ["owner"]);
+  const owner = await assertSalonRole(uid, salonId, ["owner", "staff"]);
   await enforceAuthenticatedRateLimit("rejectPointRequest", uid, salonId);
   await assertFeatureEnabled(
     salonId,
@@ -4952,6 +5094,8 @@ export const rejectPointRequest = onCall(functionOptions, async (request) => {
     }
 
     const pointRequest = snap.data();
+    assertPointRequestActor(owner, pointRequest!);
+    await assertBranchAccess(owner, String(pointRequest?.branchId || ""));
     if (pointRequest?.status === "rejected") {
       alreadyProcessed = true;
       return null;
@@ -5369,6 +5513,8 @@ export const getCustomerSessionFromZalo = onCall(zaloFunctionOptions, async (req
   return {
     identityBinding: createHash("sha256").update(zaloProfile.zaloUserId).digest("hex"),
     sessionStatus:
+      session.approvalMode === "staff_confirmation" && session.status === "pending_approval" &&
+      (timestampMillis(session.expiresAt) ?? 0) <= Date.now() ? "cancelled" :
       session.status === "serving" && !session.assignedStaffId
         ? "pending_approval"
         : ["waiting", "serving", "pending_approval", "completed", "cancelled"].includes(
@@ -5385,6 +5531,7 @@ export const getCustomerSessionFromZalo = onCall(zaloFunctionOptions, async (req
     customer: {
       customerId,
       name: String(customer.name ?? zaloProfile.name ?? "Khách hàng"),
+      nextPointEligibleAtMs: timestampMillis(customer.nextPointEligibleAt),
       phoneLast4: String(customer.phoneLast4 ?? ""),
       points: Math.max(0, Number(customer.points ?? 0)),
       allowPhoto: Boolean(customer.allowPhoto),
@@ -8127,11 +8274,13 @@ export const notifyOwnerOnPointRequest = onDocumentCreated(
     try {
       await sendManagerPush({
         salonId,
-        role: "owner",
+        ...(pointRequest.approvalMode === "staff_confirmation"
+          ? { branchId: String(pointRequest.branchId || "") }
+          : { role: "owner" as const }),
         title: "Có yêu cầu cộng điểm mới",
-        body: "Mở HAIRCUT Manager để kiểm tra và duyệt yêu cầu.",
+        body: "Mở trang nhân viên để kiểm tra và xác nhận yêu cầu.",
         data: {
-          route: "/approvals",
+          route: pointRequest.approvalMode === "staff_confirmation" ? "/staff" : "/approvals",
           requestId: event.params.requestId,
         },
       });

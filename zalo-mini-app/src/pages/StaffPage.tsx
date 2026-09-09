@@ -16,6 +16,8 @@ import {
   StaffSession,
   cancelServiceSession,
   claimServiceSession,
+  confirmCustomerPointRequest,
+  rejectCustomerPointRequest,
   formatDateTime,
   getBranchQrSettings,
   getSalonProfile,
@@ -59,6 +61,7 @@ export function StaffPage({ currentUser }: Props) {
     {},
   );
   const [photoBusy, setPhotoBusy] = useState(false);
+  const [failedPhotoSessionId, setFailedPhotoSessionId] = useState("");
   const [photoProgress, setPhotoProgress] = useState(0);
   const photoAbortRef = useRef<AbortController | null>(null);
   const recoveredPhotoSessionsRef = useRef(new Set<string>());
@@ -72,10 +75,21 @@ export function StaffPage({ currentUser }: Props) {
     (session) => session.status === "pending_approval",
   ).length;
   const isPendingApproval = selectedSession?.status === "pending_approval";
+  const isCustomerPointRequest =
+    isPendingApproval && selectedSession?.approvalMode === "staff_confirmation";
+  const canConfirmRequest =
+    isCustomerPointRequest &&
+    (currentUser.role === "owner" ||
+      [...(currentUser.branchIds ?? []), currentUser.branchId ?? ""].includes(
+        selectedSession?.branchId ?? "",
+      ));
   const isAssignedToCurrentUser = selectedSession?.assignedStaffId === currentUser.uid;
-  const canEditService = selectedSession?.status === "serving" && isAssignedToCurrentUser;
+  const canEditService =
+    canConfirmRequest || (selectedSession?.status === "serving" && isAssignedToCurrentUser);
   const selectedPhotos = selectedSession ? (photosBySession[selectedSession.id] ?? []) : [];
-  const customerAllowsPhoto = selectedSession?.customer?.allowPhoto === true;
+  const customerAllowsPhoto =
+    selectedSession?.customer?.allowPhoto === true &&
+    (!isCustomerPointRequest || selectedSession?.photoConsentGranted === true);
   const hasRevokedPhotoConsent = selectedPhotos.length > 0 && !customerAllowsPhoto;
   const isAssignedToAnother =
     selectedSession?.status === "serving" &&
@@ -99,6 +113,16 @@ export function StaffPage({ currentUser }: Props) {
       : branches.find((branch) => branch.id === branchFilter)?.name || "Chi nhánh được phân công";
 
   useEffect(() => () => photoAbortRef.current?.abort(), []);
+  useEffect(() => {
+    const timer = window.setInterval(
+      () =>
+        setSessions((current) =>
+          current.filter((item) => item.expiresAtMs === null || item.expiresAtMs > Date.now()),
+        ),
+      15_000,
+    );
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     if (!salonId) {
@@ -273,6 +297,55 @@ export function StaffPage({ currentUser }: Props) {
     }
   }
 
+  async function handleConfirmPoints() {
+    if (
+      !selectedSession ||
+      !canConfirmRequest ||
+      loading ||
+      photoBusy ||
+      failedPhotoSessionId === selectedSession.id
+    )
+      return;
+    setLoading(true);
+    setError("");
+    setMessage("");
+    try {
+      const result = await confirmCustomerPointRequest({
+        salonId,
+        session: selectedSession,
+        note,
+        photoPaths: selectedPhotos.map((photo) => photo.path),
+      });
+      setSessions((current) => current.filter((session) => session.id !== selectedSession.id));
+      setPhotosBySession((current) => {
+        const next = { ...current };
+        delete next[selectedSession.id];
+        return next;
+      });
+      setMessage(`Đã xác nhận và cộng ${result.pointsAdded} điểm cho khách.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không xác nhận được yêu cầu.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleRejectPoints() {
+    if (!selectedSession || !canConfirmRequest || loading || photoBusy) return;
+    if (!window.confirm("Từ chối yêu cầu tích điểm này?")) return;
+    setLoading(true);
+    setError("");
+    try {
+      await rejectCustomerPointRequest({ salonId, session: selectedSession });
+      setSessions((current) => current.filter((session) => session.id !== selectedSession.id));
+      setMessage("Đã từ chối yêu cầu. Khách có thể gửi lại khi cần.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không từ chối được yêu cầu.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function handlePhotoFiles(files: File[]) {
     const session = selectedSession;
     if (!session || !canEditService || !customerAllowsPhoto || photoBusy) {
@@ -331,10 +404,12 @@ export function StaffPage({ currentUser }: Props) {
         photo_count: uploadedCount,
       });
       setMessage(`Đã thêm ${uploadedCount} ảnh kiểu tóc.`);
+      setFailedPhotoSessionId("");
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
         setMessage("Đã hủy tải ảnh.");
       } else {
+        setFailedPhotoSessionId(session.id);
         setError(err instanceof Error ? err.message : "Không tải được ảnh kiểu tóc");
       }
     } finally {
@@ -462,7 +537,7 @@ export function StaffPage({ currentUser }: Props) {
         <BrandLogo />
         <div>
           <p className="eyebrow">Nhân viên</p>
-          <h1>Khách đang chờ</h1>
+          <h1>Xác nhận tích điểm</h1>
           <span>
             {currentUser.name || "Nhân viên"} · {salonName || "Salon của bạn"} · {currentBranchName}
           </span>
@@ -484,19 +559,23 @@ export function StaffPage({ currentUser }: Props) {
       ) : null}
 
       <div className="metrics-row compact-metrics">
-        <Metric icon={<UsersRound size={20} />} label="Đang chờ" value={waitingCount} />
-        <Metric icon={<UserRoundCheck size={20} />} label="Đang phục vụ" value={servingCount} />
+        {waitingCount > 0 ? (
+          <Metric icon={<UsersRound size={20} />} label="Lượt cũ đang chờ" value={waitingCount} />
+        ) : null}
+        {servingCount > 0 ? (
+          <Metric
+            icon={<UserRoundCheck size={20} />}
+            label="Lượt cũ đang phục vụ"
+            value={servingCount}
+          />
+        ) : null}
         <Metric
           icon={<UserRoundCheck size={20} />}
-          label="Chờ duyệt"
+          label="Chờ xác nhận"
           value={pendingApprovalCount}
         />
         <Metric icon={<ClipboardPenLine size={20} />} label="Điểm/lượt" value={pointPerVisit} />
-        <Metric
-          icon={<UserRoundCheck size={20} />}
-          label="Cộng điểm"
-          value={canAwardPointsDirectly ? "Trực tiếp" : "Chờ duyệt"}
-        />
+        <Metric icon={<UserRoundCheck size={20} />} label="Cộng điểm" value="Nhân viên xác nhận" />
         {canRedeemRewards ? (
           <Metric icon={<TicketCheck size={20} />} label="Đổi quà" value="Bật" />
         ) : null}
@@ -531,7 +610,9 @@ export function StaffPage({ currentUser }: Props) {
                 <div className="ops-card-row">
                   <span className="ops-card-title">{session.customer?.name || "Khách hàng"}</span>
                   <span className={statusPillClass(session.status)}>
-                    {statusLabel(session.status)}
+                    {session.approvalMode === "staff_confirmation"
+                      ? "Chờ xác nhận"
+                      : statusLabel(session.status)}
                   </span>
                 </div>
                 <span>{customerLine(session)}</span>
@@ -568,7 +649,9 @@ export function StaffPage({ currentUser }: Props) {
               </div>
               <div className="summary-item">
                 <span>Trạng thái</span>
-                <strong>{statusLabel(selectedSession.status)}</strong>
+                <strong>
+                  {isCustomerPointRequest ? "Chờ xác nhận" : statusLabel(selectedSession.status)}
+                </strong>
               </div>
             </div>
 
@@ -577,8 +660,16 @@ export function StaffPage({ currentUser }: Props) {
             >
               <Clock3 size={20} aria-hidden="true" />
               <div>
-                <strong>{detailStatusTitle(selectedSession, currentUser.uid)}</strong>
-                <span>{detailStatusText(selectedSession, currentUser.uid)}</span>
+                <strong>
+                  {isCustomerPointRequest
+                    ? "Khách yêu cầu tích điểm"
+                    : detailStatusTitle(selectedSession, currentUser.uid)}
+                </strong>
+                <span>
+                  {isCustomerPointRequest
+                    ? "Kiểm tra tên và 4 số điện thoại cuối, thêm ảnh nếu cần rồi xác nhận. Yêu cầu có hiệu lực 30 phút."
+                    : detailStatusText(selectedSession, currentUser.uid)}
+                </span>
               </div>
             </div>
 
@@ -624,7 +715,43 @@ export function StaffPage({ currentUser }: Props) {
               />
             </label>
 
-            {selectedSession.status === "waiting" ? (
+            {isCustomerPointRequest ? (
+              <div className="button-row wrap-row">
+                {failedPhotoSessionId === selectedSession.id ? (
+                  <button
+                    className="secondary-button"
+                    onClick={() => {
+                      setFailedPhotoSessionId("");
+                      setError("");
+                    }}
+                  >
+                    Bỏ ảnh chưa tải và tiếp tục
+                  </button>
+                ) : null}
+                <button
+                  className="primary-button"
+                  disabled={
+                    !canConfirmRequest ||
+                    loading ||
+                    photoBusy ||
+                    hasRevokedPhotoConsent ||
+                    failedPhotoSessionId === selectedSession.id
+                  }
+                  onClick={() => void handleConfirmPoints()}
+                >
+                  {loading
+                    ? "Đang xác nhận..."
+                    : `Xác nhận cộng ${selectedSession.pointsRequested ?? pointPerVisit} điểm`}
+                </button>
+                <button
+                  className="secondary-button"
+                  disabled={!canConfirmRequest || loading || photoBusy}
+                  onClick={() => void handleRejectPoints()}
+                >
+                  Từ chối yêu cầu
+                </button>
+              </div>
+            ) : selectedSession.status === "waiting" ? (
               <div className="button-row wrap-row">
                 <button
                   className="primary-button"
@@ -649,12 +776,7 @@ export function StaffPage({ currentUser }: Props) {
               <div className="button-row wrap-row">
                 <button
                   className="primary-button"
-                  disabled={
-                    loading ||
-                    photoBusy ||
-                    hasRevokedPhotoConsent ||
-                    !canEditService
-                  }
+                  disabled={loading || photoBusy || hasRevokedPhotoConsent || !canEditService}
                   onClick={handleSubmit}
                 >
                   {isPendingApproval ? (
