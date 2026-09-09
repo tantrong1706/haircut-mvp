@@ -4841,6 +4841,13 @@ export const approvePointRequest = onCall(functionOptions, async (request) => {
   );
 
   const requestRef = db.collection("point_requests").doc(requestId);
+  const initialPointSnap = await requestRef.get();
+  const initialPointRequest = initialPointSnap.data();
+  if (!initialPointSnap.exists || initialPointRequest?.salonId !== salonId) {
+    throw new HttpsError("not-found", "Không tìm thấy yêu cầu cộng điểm");
+  }
+  assertPointRequestActor(owner, initialPointRequest);
+  await assertBranchAccess(owner, String(initialPointRequest.branchId || ""));
   const submittedPaths = request.data?.photoPaths === undefined ? undefined : safePhotoPaths(request.data.photoPaths);
   const submittedNote = optionalLimitedString(request.data?.note, "note", 1000);
   if (submittedPaths?.length) {
@@ -4869,7 +4876,6 @@ export const approvePointRequest = onCall(functionOptions, async (request) => {
       throw new HttpsError("permission-denied", "Yêu cầu không thuộc salon này");
     }
     assertPointRequestActor(owner, pointRequest);
-    await assertBranchAccess(owner, String(pointRequest.branchId || ""));
     const staffConfirmation = pointRequest.approvalMode === "staff_confirmation";
     if (pointRequest?.status === "approved") {
       alreadyProcessed = true;
@@ -5084,6 +5090,13 @@ export const rejectPointRequest = onCall(functionOptions, async (request) => {
   );
 
   const requestRef = db.collection("point_requests").doc(requestId);
+  const initialPointSnap = await requestRef.get();
+  const initialPointRequest = initialPointSnap.data();
+  if (!initialPointSnap.exists || initialPointRequest?.salonId !== salonId) {
+    throw new HttpsError("not-found", "Không tìm thấy yêu cầu cộng điểm");
+  }
+  assertPointRequestActor(owner, initialPointRequest);
+  await assertBranchAccess(owner, String(initialPointRequest.branchId || ""));
   const now = Timestamp.now();
   let alreadyProcessed = false;
 
@@ -5095,7 +5108,6 @@ export const rejectPointRequest = onCall(functionOptions, async (request) => {
 
     const pointRequest = snap.data();
     assertPointRequestActor(owner, pointRequest!);
-    await assertBranchAccess(owner, String(pointRequest?.branchId || ""));
     if (pointRequest?.status === "rejected") {
       alreadyProcessed = true;
       return null;

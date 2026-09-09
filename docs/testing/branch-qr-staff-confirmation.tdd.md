@@ -17,6 +17,7 @@ RED checkpoint: `ab9ceca`.
 - Emulator RED: the two new tests failed because staff could neither confirm nor upload photos for new requests.
 - Backend unit/contract GREEN: 100 tests passed.
 - Backend integration GREEN: 63 tests passed across callable transactions, photo operations, branding and adversarial cases. Zalo verification is replaced with an explicit test-only verifier; no real tokens or customer data are used.
+- GitHub CI initially reproduced a closed-transaction race in concurrent legacy approval. Branch authorization was moved before the transaction and the complete callable integration file then passed 32/32 locally.
 - Firestore/Storage rules GREEN: 21 tests passed. The added test verifies staff upload/read within the correct branch and rejection of an expired upload. A Storage expression-limit failure was reproduced and fixed by consolidating repeated membership checks.
 - Mini App unit/component GREEN: 162 tests passed across 30 files. Includes saved phone, branch-cache isolation, cooldown display, staff confirmation and rejection.
 - Browser GREEN: 21 tests passed on desktop Chromium, mobile Chromium and mobile WebKit. Three screenshot-capture jobs remain intentionally skipped.
