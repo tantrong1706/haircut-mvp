@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { MINI_APP_NAME } from "./branding";
 
 describe("branding Zalo Mini App", () => {
-  it("đồng bộ tên chính thức trong source config, metadata và hồ sơ Version 23", () => {
+  it("đồng bộ tên chính thức trong source config, metadata và hồ sơ Version 24", () => {
     const appRoot = process.cwd();
     const repoRoot = resolve(appRoot, "..");
     const appConfig = JSON.parse(readFileSync(resolve(appRoot, "app-config.json"), "utf8")) as {
@@ -16,8 +16,8 @@ describe("branding Zalo Mini App", () => {
     const html = readFileSync(resolve(appRoot, "index.html"), "utf8");
     const privacy = readFileSync(resolve(appRoot, "src", "pages", "PrivacyPage.tsx"), "utf8");
     const terms = readFileSync(resolve(appRoot, "src", "pages", "TermsPage.tsx"), "utf8");
-    const version23Submission = readFileSync(
-      resolve(repoRoot, "docs", "ZALO_VERSION_23_SUBMISSION.md"),
+    const version24Submission = readFileSync(
+      resolve(repoRoot, "docs", "ZALO_VERSION_24_SUBMISSION.md"),
       "utf8",
     );
 
@@ -28,11 +28,9 @@ describe("branding Zalo Mini App", () => {
     expect(html).toContain(`<title>${MINI_APP_NAME}</title>`);
     expect(privacy).toContain(MINI_APP_NAME);
     expect(terms).toContain(MINI_APP_NAME);
-    expect([privacy, terms, version23Submission].join("\n")).not.toContain("CH Hair Studio");
-    expect(version23Submission).toContain("Testing Version 23");
-    expect(version23Submission).toContain(
-      "https://app.chhaircutsalon.cc/review-branch-v23.png",
-    );
-    expect(version23Submission).not.toMatch(/(?:qrToken|access_token|appsecret_proof)=/u);
+    expect([privacy, terms, version24Submission].join("\n")).not.toContain("CH Hair Studio");
+    expect(version24Submission).toContain("Testing Version 24");
+    expect(version24Submission).toContain("https://app.chhaircutsalon.cc/review-branch-v24.png");
+    expect(version24Submission).not.toMatch(/(?:qrToken|access_token|appsecret_proof)=/u);
   });
 });

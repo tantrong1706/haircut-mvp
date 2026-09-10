@@ -530,7 +530,7 @@ export async function resolveCustomerQr(qr: QrContext): Promise<CustomerQrResolu
     return {
       qrType: qr.qrType,
       salonId: qr.salonId,
-      salonName: "HAIRCUT Studio",
+      salonName: "CH Haircut Salon",
       salonAvatarUrl: "",
       branchId,
       branchName: selectedBranch?.name || "",

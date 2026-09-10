@@ -648,7 +648,7 @@ async function getSalonProfileDirect(salonId: string): Promise<SalonProfile> {
   if (!isFirebaseConfigured() || !db) {
     return {
       id: salonId,
-      name: "HAIRCUT Studio",
+      name: "CH Haircut Salon",
       address: "",
       phone: "",
       avatarUrl: "",

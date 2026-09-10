@@ -6,7 +6,7 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const appRoot = resolve(repoRoot, "zalo-mini-app");
 const buildRoot = resolve(appRoot, "www");
 const expectedMiniAppId = "2038116772828167300";
-const expectedMiniAppName = "CH Hair Studio";
+const expectedMiniAppName = "CH Haircut Salon";
 const maxAssetBytes = 500 * 1024;
 const failures = [];
 const passed = [];
@@ -90,7 +90,7 @@ const appSource = readText(resolve(appRoot, "src", "App.tsx"));
 const scanEntrySource = readText(resolve(appRoot, "src", "pages", "ScanEntryPage.tsx"));
 const zaloSource = readText(resolve(appRoot, "src", "services", "zalo.ts"));
 const qrSource = readText(resolve(appRoot, "src", "services", "qr.ts"));
-const submissionText = readText(resolve(repoRoot, "docs", "ZALO_VERSION_8_SUBMISSION.md"));
+const submissionText = readText(resolve(repoRoot, "docs", "ZALO_VERSION_24_SUBMISSION.md"));
 const reviewChecklistText = readText(resolve(repoRoot, "docs", "ZALO_REVIEW_CHECKLIST.md"));
 const staticReadinessText = readText(
   resolve(repoRoot, "docs", "ZALO_VERSION_8_STATIC_READINESS.md"),
@@ -106,7 +106,7 @@ const currentBrandingText = [
   resolve(appRoot, "src", "pages", "TermsPage.tsx"),
   resolve(appRoot, "src", "pages", "WheelPage.tsx"),
   resolve(appRoot, "src", "services", "zalo.ts"),
-  resolve(repoRoot, "docs", "ZALO_VERSION_8_SUBMISSION.md"),
+  resolve(repoRoot, "docs", "ZALO_VERSION_24_SUBMISSION.md"),
 ]
   .map(readText)
   .join("\n");
@@ -134,13 +134,13 @@ check(
       qrSource.indexOf("function removeQrTokenFromUrl"),
     )
     .includes('qr.qrType === "legacy-mirror"'),
-  "Runtime Version 8 từ chối QR gương legacy có token thô",
+  "Runtime Version 24 từ chối QR gương legacy có token thô",
 );
 
-const reviewerSteps = Array.from({ length: 14 }, (_, index) => `${index + 1}.`);
+const reviewerSteps = Array.from({ length: 7 }, (_, index) => `${index + 1}.`);
 check(
   reviewerSteps.every((step) => submissionText.includes(step)),
-  "Hồ sơ reviewer có đủ luồng 14 bước",
+  "Hồ sơ reviewer có đủ luồng 7 bước",
 );
 const reviewerPlaceholders = [
   "[TÊN_SALON_DEMO]",
@@ -154,9 +154,9 @@ const reviewerDataDeferred = reviewerPlaceholders.every((placeholder) => {
 });
 const reviewerDataCompleted =
   reviewerPlaceholders.every((placeholder) => !submissionText.includes(placeholder)) &&
-  submissionText.includes("Salon demo: CH Haircut Salon - Xét duyệt Zalo") &&
-  submissionText.includes("Testing version: 21") &&
-  submissionText.includes("QR testing: https://app.chhaircutsalon.cc/review-salon-v21.png") &&
+  submissionText.includes("Mini App: `CH Haircut Salon`") &&
+  submissionText.includes("Testing Version 24") &&
+  submissionText.includes("https://app.chhaircutsalon.cc/review-branch-v24.png") &&
   !/\b(?:qrToken|mirrorId)=/u.test(submissionText);
 check(
   reviewerDataDeferred || reviewerDataCompleted,
@@ -227,7 +227,7 @@ if (sourceConfig && outputConfig) {
   );
   check(
     !/\bHAIRCUT\b/u.test(JSON.stringify(sourceConfig)) &&
-      !/CH Haircut Salon/iu.test(JSON.stringify(sourceConfig)),
+      !/CH Hair Studio/iu.test(JSON.stringify(sourceConfig)),
     "app-config không dùng branding Mini App cũ",
   );
   check(
@@ -255,11 +255,11 @@ if (sourceConfig && outputConfig) {
 
 check(
   !/\bHAIRCUT\b/u.test(miniAppBrandingText),
-  "Runtime và hồ sơ Version 8 không còn branding ứng dụng cũ HAIRCUT",
+  "Runtime và hồ sơ Version 24 không còn branding ứng dụng cũ HAIRCUT",
 );
 check(
   currentBrandingText.includes(expectedMiniAppName),
-  `Runtime và hồ sơ Version 8 dùng ${expectedMiniAppName}`,
+  `Runtime và hồ sơ Version 24 dùng ${expectedMiniAppName}`,
 );
 
 const bundleFiles = listFiles(buildRoot).filter((path) =>

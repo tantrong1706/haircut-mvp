@@ -1,12 +1,12 @@
-# Checklist xét duyệt Zalo Mini App - CH Hair Studio Version 21
+# Checklist xét duyệt Zalo Mini App - CH Haircut Salon Version 24
 
-Không gửi xét duyệt Version 21 khi còn mục bắt buộc `[ ]`.
+Không gửi xét duyệt Version 24 khi còn mục bắt buộc `[ ]`.
 
 ## 1. Metadata
 
-- [x] Tên Mini App trong source và Mini App Center: `CH Hair Studio`.
+- [x] Tên Mini App trong source và Mini App Center: `CH Haircut Salon`.
 - [x] Mini App ID trong production: `2038116772828167300`.
-- [x] Tên Portal chính thức hiện tại là `CH Hair Studio`; logo, danh mục, mô tả và hỗ trợ giữ nguyên.
+- [x] Tên Portal chính thức hiện tại là `CH Haircut Salon`; logo, danh mục, mô tả và hỗ trợ giữ nguyên.
 - [x] Nội dung phiên bản dùng đúng hướng dẫn 14 bước trong `docs/ZALO_VERSION_8_SUBMISSION.md`.
 
 ## 2. Quyền Zalo
@@ -34,13 +34,14 @@ Không gửi xét duyệt Version 21 khi còn mục bắt buộc `[ ]`.
 ## 4. QR và reviewer flow
 
 - [x] Link chung không QR không crash và không lộ owner/staff/admin.
-- [x] Frontend Version 8 chỉ chấp nhận QR salon/chi nhánh; QR `legacy-mirror` bị từ chối.
-- [x] QR salon hỗ trợ chọn chi nhánh; QR chi nhánh mở đúng chi nhánh theo source/test.
+- [x] Frontend Version 24 chỉ chấp nhận QR chi nhánh; QR salon chung và QR `legacy-mirror` bị từ chối.
+- [x] QR chi nhánh mở thẳng đúng chi nhánh, không hiển thị bước chọn chi nhánh.
 - [x] QR token bị loại khỏi URL sau khi parse và không được lưu trong localStorage.
 - [x] Test bao phủ token sai, payload bị đổi, token đã rotate và chi nhánh không hoạt động.
 - [x] Tạo QR salon/chi nhánh Testing cuối sau Vietnam gateway; QR salon cũ đã rotate.
 - [ ] Kiểm tra QR bằng tài khoản Zalo thường ngoài nhóm Developer/Admin.
-- [x] QR salon test Version 21 được cung cấp qua ảnh HTTPS versioned; token không nằm trong Git hoặc mô tả Portal.
+- [x] Hai QR chi nhánh Version 24 được tạo ở chế độ `env=TESTING`, giải mã độc lập và được backend production xác nhận HTTP 200.
+- [x] Hồ sơ chỉ cung cấp URL ảnh HTTPS versioned; không ghi token vào mô tả Portal.
 
 `QR_SOURCE_READY=true`
 
@@ -102,9 +103,9 @@ Giá trị trạng thái hợp lệ: `READY_TO_CAPTURE`, `BLOCKED_BY_VN_GATEWAY`
 - [x] Vietnam gateway được triển khai, bind loopback và local/public `/health` đạt 200.
 - [ ] Identity verification hoạt động từ bản Testing cuối.
 - [x] CI/readiness xanh trên candidate; Draft PR `#34` không merge.
-- [x] Artifact Version 21 có SHA-256 trong evidence local và Portal hiển thị trạng thái Testing.
+- [ ] Artifact Version 24 có SHA-256 trong evidence local và Portal hiển thị trạng thái Testing.
 - [ ] Hoàn tất ảnh thiết bị thật và review độc lập.
-- [x] Chủ tài khoản đã tải Testing Version 21; chưa gửi xét duyệt và chưa Publish.
+- [ ] Chủ tài khoản đã tải Testing Version 24; chưa gửi xét duyệt và chưa Publish.
 
 `ZALO_IDENTITY_VERIFICATION_BLOCKED_BY_IP_POLICY=false`
 
