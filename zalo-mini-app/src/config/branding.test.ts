@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { MINI_APP_NAME } from "./branding";
 
 describe("branding Zalo Mini App", () => {
-  it("đồng bộ tên chính thức trong source config, metadata và hồ sơ Version 8", () => {
+  it("đồng bộ tên chính thức trong source config, metadata và hồ sơ Version 23", () => {
     const appRoot = process.cwd();
     const repoRoot = resolve(appRoot, "..");
     const appConfig = JSON.parse(readFileSync(resolve(appRoot, "app-config.json"), "utf8")) as {
@@ -14,17 +14,25 @@ describe("branding Zalo Mini App", () => {
       readFileSync(resolve(appRoot, "public", "manifest.webmanifest"), "utf8"),
     ) as { name?: string };
     const html = readFileSync(resolve(appRoot, "index.html"), "utf8");
-    const version8Submission = readFileSync(
-      resolve(repoRoot, "docs", "ZALO_VERSION_8_SUBMISSION.md"),
+    const privacy = readFileSync(resolve(appRoot, "src", "pages", "PrivacyPage.tsx"), "utf8");
+    const terms = readFileSync(resolve(appRoot, "src", "pages", "TermsPage.tsx"), "utf8");
+    const version23Submission = readFileSync(
+      resolve(repoRoot, "docs", "ZALO_VERSION_23_SUBMISSION.md"),
       "utf8",
     );
 
-    expect(MINI_APP_NAME).toBe("CH Hair Studio");
+    expect(MINI_APP_NAME).toBe("CH Haircut Salon");
     expect(appConfig.app?.title).toBe(MINI_APP_NAME);
     expect(appConfig.app?.headerTitle).toBe(MINI_APP_NAME);
     expect(manifest.name).toBe(MINI_APP_NAME);
     expect(html).toContain(`<title>${MINI_APP_NAME}</title>`);
-    expect(version8Submission).toContain(MINI_APP_NAME);
-    expect(version8Submission.replace(/HAIRCUT Manager/g, "")).not.toMatch(/\bHAIRCUT\b/u);
+    expect(privacy).toContain(MINI_APP_NAME);
+    expect(terms).toContain(MINI_APP_NAME);
+    expect([privacy, terms, version23Submission].join("\n")).not.toContain("CH Hair Studio");
+    expect(version23Submission).toContain("Testing Version 23");
+    expect(version23Submission).toContain(
+      "https://app.chhaircutsalon.cc/review-branch-v23.png",
+    );
+    expect(version23Submission).not.toMatch(/(?:qrToken|access_token|appsecret_proof)=/u);
   });
 });
