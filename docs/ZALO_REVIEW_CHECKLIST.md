@@ -103,9 +103,9 @@ Giá trị trạng thái hợp lệ: `READY_TO_CAPTURE`, `BLOCKED_BY_VN_GATEWAY`
 - [x] Vietnam gateway được triển khai, bind loopback và local/public `/health` đạt 200.
 - [ ] Identity verification hoạt động từ bản Testing cuối.
 - [x] CI/readiness xanh trên candidate; Draft PR `#34` không merge.
-- [ ] Artifact Version 24 có SHA-256 trong evidence local và Portal hiển thị trạng thái Testing.
+- [x] Artifact Version 24 có SHA-256 trong evidence local và Portal hiển thị trạng thái Testing.
 - [ ] Hoàn tất ảnh thiết bị thật và review độc lập.
-- [ ] Chủ tài khoản đã tải Testing Version 24; chưa gửi xét duyệt và chưa Publish.
+- [x] Chủ tài khoản đã tải Testing Version 24; chưa gửi xét duyệt và chưa Publish.
 
 `ZALO_IDENTITY_VERIFICATION_BLOCKED_BY_IP_POLICY=false`
 
