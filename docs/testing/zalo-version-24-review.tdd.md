@@ -50,3 +50,11 @@ The repository's configured service coverage report is 73.76% statements, 77.65%
 QR change is covered directly by the tests above. The only device-only evidence still unavailable
 to automation is the native Zalo permission popup and a reviewer-equivalent account scan. A normal
 unlisted Testing account is not equivalent to Zalo's review session.
+
+## CI gateway audit correction
+
+The gateway workflow originally failed on `js-yaml` through ESLint and Vitest development tooling.
+`npm ls js-yaml --omit=dev` returned an empty production tree and
+`npm audit --omit=dev --audit-level=high` returned zero vulnerabilities. Checkpoint `99f5d21`
+captured the failing release-gate expectation; checkpoint `82e66df` changed both local and GitHub
+release gates to audit the dependencies shipped by the gateway. No dependency or lockfile changed.
