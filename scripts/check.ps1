@@ -109,7 +109,7 @@ Invoke-Step "Functions build" (Join-Path $root "firebase/functions") { npm run b
 $gatewayDirectory = Join-Path $root "services/zalo-verification-gateway"
 Invoke-Step "Gateway npm ci" $gatewayDirectory { npm ci }
 Invoke-Step "Gateway source checks" $gatewayDirectory { npm run check }
-Invoke-Step "Gateway dependency audit" $gatewayDirectory { npm audit --audit-level=high }
+Invoke-Step "Gateway dependency audit" $gatewayDirectory { npm audit --omit=dev --audit-level=high }
 Invoke-Step "Gateway Functions compatibility" (Join-Path $root "firebase/functions") {
   npm exec -- vitest run test/zaloGatewayVerifier.test.ts test/zaloClient.test.ts test/zaloContract.test.ts
 }

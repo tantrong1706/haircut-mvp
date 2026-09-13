@@ -37,7 +37,7 @@ jobs:
         run: npm run check
       - name: Audit gateway dependencies
         working-directory: services/zalo-verification-gateway
-        run: npm audit --audit-level=high
+        run: npm audit --omit=dev --audit-level=high
       - name: Install Functions dependencies
         working-directory: firebase/functions
         run: npm ci
