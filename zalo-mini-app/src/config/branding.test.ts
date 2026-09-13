@@ -31,6 +31,9 @@ describe("branding Zalo Mini App", () => {
     expect([privacy, terms, version24Submission].join("\n")).not.toContain("CH Hair Studio");
     expect(version24Submission).toContain("Testing Version 24");
     expect(version24Submission).toContain("https://app.chhaircutsalon.cc/review-branch-v24.png");
+    expect(version24Submission).toContain(
+      "Chi nhánh chính — QR đề xuất: <https://app.chhaircutsalon.cc/review-branch-v24-chi-nhanh-chinh.png>",
+    );
     expect(version24Submission).not.toMatch(/(?:qrToken|access_token|appsecret_proof)=/u);
   });
 });
