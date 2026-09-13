@@ -14,15 +14,15 @@
 Mở một trong các ảnh HTTPS sau trên máy tính hoặc màn hình thứ hai, sau đó dùng chức năng quét QR
 trong Zalo của kiểm duyệt viên:
 
-- Chi nhánh Trung tâm — QR đề xuất: <https://app.chhaircutsalon.cc/review-branch-v24.png>
-- Chi nhánh chính: <https://app.chhaircutsalon.cc/review-branch-v24-chi-nhanh-chinh.png>
+- Chi nhánh chính — QR đề xuất: <https://app.chhaircutsalon.cc/review-branch-v24-chi-nhanh-chinh.png>
+- Chi nhánh Trung tâm: <https://app.chhaircutsalon.cc/review-branch-v24.png>
 
 Hai QR đều mở thẳng đúng chi nhánh, không yêu cầu khách chọn chi nhánh. QR chỉ nhận diện chi nhánh;
 điểm chỉ được cộng sau khi nhân viên của đúng chi nhánh xác nhận.
 
 ## Luồng kiểm duyệt đề xuất
 
-1. Quét QR Chi nhánh Trung tâm bằng Zalo và kiểm tra tên, địa chỉ chi nhánh.
+1. Quét QR Chi nhánh chính bằng Zalo và kiểm tra tên, địa chỉ chi nhánh.
 2. Cho phép ứng dụng đọc hồ sơ Zalo cơ bản khi hộp thoại Zalo xuất hiện.
 3. Nhập số điện thoại kiểm thử ở lần đầu; các lần sau ứng dụng dùng lại số đã lưu cho cùng khách.
 4. Nhấn **Yêu cầu tích điểm**. Yêu cầu có hiệu lực 30 phút và chưa cộng điểm ngay.

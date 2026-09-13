@@ -35,10 +35,10 @@ reviewers without changing the point-award business flow.
 - Firebase Hosting deployment completed for project `haircut-c7d12`; Functions were not deployed.
 - Mini App Center displays Version 24 with status `Testing` and description
   `Version 24: reviewer branch QR and CH Haircut Salon branding`.
-- Public reviewer QR:
-  `https://app.chhaircutsalon.cc/review-branch-v24.png`.
-- Alternate branch QR:
+- Public reviewer QR matching the staff account's assigned branch:
   `https://app.chhaircutsalon.cc/review-branch-v24-chi-nhanh-chinh.png`.
+- Alternate branch QR:
+  `https://app.chhaircutsalon.cc/review-branch-v24.png`.
 - Deterministic SHA-256 over sorted Version 24 ZMP artifact paths and bytes:
   `5abe55bae52de72475e2a05c6e24b8b38026998235f8080b113bae6ec6bf4f62`.
 - Review has not been submitted and Version 24 has not been published.
