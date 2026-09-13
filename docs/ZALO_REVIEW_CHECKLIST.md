@@ -1,6 +1,6 @@
 # Checklist xét duyệt Zalo Mini App - CH Haircut Salon Version 24
 
-Không gửi xét duyệt Version 24 khi còn mục bắt buộc `[ ]`.
+Version 24 đã được gửi xét duyệt. Không Publish trước khi Zalo duyệt phiên bản.
 
 ## 1. Metadata
 
@@ -102,13 +102,15 @@ Giá trị trạng thái hợp lệ: `READY_TO_CAPTURE`, `BLOCKED_BY_VN_GATEWAY`
 - [x] Artifact reviewer local nằm trong đường dẫn bị Git ignore.
 - [x] Vietnam gateway được triển khai, bind loopback và local/public `/health` đạt 200.
 - [ ] Identity verification hoạt động từ bản Testing cuối.
-- [x] CI/readiness xanh trên candidate; Draft PR `#34` không merge.
+- [x] CI/readiness xanh trên candidate; Draft PR `#36` không merge.
 - [x] Artifact Version 24 có SHA-256 trong evidence local và Portal hiển thị trạng thái Testing.
 - [ ] Hoàn tất ảnh thiết bị thật và review độc lập.
-- [x] Chủ tài khoản đã tải Testing Version 24; chưa gửi xét duyệt và chưa Publish.
+- [x] Chủ tài khoản đã gửi xét duyệt Testing Version 24 lúc `21:58:42 13/09/2026`; chưa Publish.
 
 `ZALO_IDENTITY_VERIFICATION_BLOCKED_BY_IP_POLICY=false`
 
 `VIETNAM_GATEWAY_REQUIRED=false`
 
 `SUBMISSION_READY=false`
+
+`SUBMISSION_STATUS=IN_REVIEW`

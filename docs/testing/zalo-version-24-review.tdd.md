@@ -41,7 +41,8 @@ reviewers without changing the point-award business flow.
   `https://app.chhaircutsalon.cc/review-branch-v24.png`.
 - Deterministic SHA-256 over sorted Version 24 ZMP artifact paths and bytes:
   `5abe55bae52de72475e2a05c6e24b8b38026998235f8080b113bae6ec6bf4f62`.
-- Review has not been submitted and Version 24 has not been published.
+- Mini App Center accepted the Version 24 review request at `21:58:42 13/09/2026` and now shows
+  `In Review`. Version 24 has not been published.
 
 ## Coverage and remaining manual evidence
 
