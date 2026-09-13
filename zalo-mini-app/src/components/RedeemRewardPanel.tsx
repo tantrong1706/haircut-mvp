@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BadgeCheck, Copy, ScanLine, Search, ShieldCheck, TicketCheck, X } from "lucide-react";
+import { BadgeCheck, ScanLine, Search, ShieldCheck, TicketCheck, X } from "lucide-react";
 import {
   RedeemRewardResult,
   RewardCodeInfo,
@@ -104,9 +104,14 @@ export function RedeemRewardPanel({
         rewardName: nextResult.rewardName,
         customerName: nextResult.customerName,
         status: "used",
-        usedAtMs: Date.now(),
+        usedAtMs: nextResult.usedAtMs,
       }));
       setRewardCode("");
+      setMessage(
+        nextResult.alreadyRedeemed
+          ? "Mã quà này đã được xác nhận trước đó. Không ghi nhận thêm lần sử dụng."
+          : "",
+      );
       trackEvent("reward_code_redeemed", {
         salon_id: salonId,
         reward_status: "used",
@@ -145,7 +150,9 @@ export function RedeemRewardPanel({
         <TicketCheck size={22} aria-hidden="true" />
         <div>
           <h2>Xác nhận mã quà</h2>
-          <p className="muted">Nhập mã khách đưa để đánh dấu là đã sử dụng.</p>
+          <p className="muted">
+            Kiểm tra tên khách và quà, sau đó chỉ xác nhận khi ưu đãi đã được trao.
+          </p>
         </div>
       </div>
 
@@ -164,6 +171,7 @@ export function RedeemRewardPanel({
             setResult(null);
             setConfirming(false);
             setMessage("");
+            setError("");
           }}
           placeholder="Ví dụ: HC-20260629-1A2B3C4D"
           disabled={disabled || loading || checking}
@@ -184,33 +192,32 @@ export function RedeemRewardPanel({
         <button
           className="primary-button compact"
           type="button"
-          disabled={disabled || loading || !info?.found || info.status !== "unused"}
+          disabled={
+            disabled ||
+            loading ||
+            !info?.found ||
+            info.status !== "unused" ||
+            info.redeemableAtBranch === false
+          }
           onClick={() => setConfirming(true)}
         >
           <BadgeCheck size={20} aria-hidden="true" />
-          {loading ? "Đang xác nhận..." : "Đánh dấu đã sử dụng"}
+          {loading ? "Đang xác nhận..." : "Xác nhận khách đã dùng"}
         </button>
       </div>
 
       {info ? (
-        <RewardCodeStatus
-          info={info}
-          onCopySuccess={() => {
-            setMessage("Đã sao chép mã quà.");
-            setError("");
-          }}
-          onCopyError={() => {
-            setMessage("");
-            setError("Thiết bị không cho phép sao chép. Hãy giữ để chọn mã thủ công.");
-          }}
-        />
+        <RewardCodeStatus info={info} />
       ) : null}
 
       {result ? (
         <div className="alert success retry-alert">
           <span>
-            Đã xác nhận {result.rewardName || "mã quà"}{" "}
-            {result.customerName ? `cho ${result.customerName}` : ""}.
+            {result.alreadyRedeemed
+              ? "Mã đã ở trạng thái sử dụng."
+              : `Đã xác nhận ${result.rewardName || "mã quà"} ${
+                  result.customerName ? `cho ${result.customerName}` : ""
+                }.`}
           </span>
           {allowRestore ? (
             <button type="button" disabled={restoring} onClick={restore}>
@@ -222,7 +229,10 @@ export function RedeemRewardPanel({
       {message ? <p className="alert success">{message}</p> : null}
       {error ? <p className="alert error">{error}</p> : null}
 
-      {confirming && info?.found && info.status === "unused" ? (
+      {confirming &&
+      info?.found &&
+      info.status === "unused" &&
+      info.redeemableAtBranch !== false ? (
         <div className="dialog-backdrop" role="presentation">
           <div
             className="confirm-dialog"
@@ -242,7 +252,8 @@ export function RedeemRewardPanel({
             <h3 id="redeem-confirm-title">Xác nhận sử dụng quà?</h3>
             <p>
               {info.rewardName || "Mã quà"} cho {info.customerName || "khách hàng"}. Sau khi xác
-              nhận, mã này không thể dùng lại.
+              nhận đã trao quà, mã sẽ được đánh dấu đã sử dụng. Chủ salon có thể hoàn tác trong 15
+              phút nếu thao tác nhầm.
             </p>
             <div className="button-row">
               <button
@@ -254,7 +265,7 @@ export function RedeemRewardPanel({
               </button>
               <button className="primary-button compact" type="button" onClick={redeem}>
                 <BadgeCheck size={18} aria-hidden="true" />
-                Xác nhận đã dùng
+                Xác nhận đã trao quà
               </button>
             </div>
           </div>
@@ -266,12 +277,8 @@ export function RedeemRewardPanel({
 
 function RewardCodeStatus({
   info,
-  onCopySuccess,
-  onCopyError,
 }: {
   info: RewardCodeInfo;
-  onCopySuccess: () => void;
-  onCopyError: () => void;
 }) {
   if (!info.found || info.status === "not_found") {
     return <p className="alert error">Không tìm thấy mã quà trong salon này.</p>;
@@ -291,23 +298,9 @@ function RewardCodeStatus({
       <small>Tạo lúc: {formatDateTime(info.createdAtMs ?? null) || "Chưa rõ"}</small>
       {info.expiresAtMs ? <small>Hết hạn: {formatDateTime(info.expiresAtMs)}</small> : null}
       {info.usedAtMs ? <small>Đã dùng lúc: {formatDateTime(info.usedAtMs)}</small> : null}
-      <button
-        type="button"
-        onClick={async () => {
-          try {
-            if (!navigator.clipboard) {
-              throw new Error("clipboard unavailable");
-            }
-            await navigator.clipboard.writeText(info.rewardCode);
-            onCopySuccess();
-          } catch {
-            onCopyError();
-          }
-        }}
-      >
-        <Copy size={16} aria-hidden="true" />
-        Copy mã
-      </button>
+      {info.reason === "WRONG_BRANCH" ? (
+        <small>Mã quà không áp dụng tại chi nhánh hiện tại.</small>
+      ) : null}
     </div>
   );
 }

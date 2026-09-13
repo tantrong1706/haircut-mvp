@@ -1,0 +1,34 @@
+{
+	admin off
+}
+
+GATEWAY_FQDN {
+	encode zstd gzip
+	request_body {
+		max_size 8KB
+	}
+	header {
+		-Server
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		Content-Security-Policy "default-src 'none'; frame-ancestors 'none'"
+	}
+	reverse_proxy 127.0.0.1:3000
+
+	# Application logs are authoritative. Request headers are removed here so
+	# signatures and Zalo credentials never enter the Caddy access log.
+	log {
+		output file /var/log/caddy/zalo-gateway-access.log {
+			roll_size 10MiB
+			roll_keep 5
+		}
+		format filter {
+			wrap json
+			fields {
+				request>headers delete
+				resp_headers delete
+			}
+		}
+	}
+}

@@ -182,7 +182,7 @@ if ($webEnv.Count -eq 0) {
   }
 
   if ($webEnv["VITE_ZALO_MINI_APP_ID"] -eq "2038116772828167300") {
-    Add-Result "Zalo Mini App ID production" "OK" "Đúng ứng dụng CH Hair Studio"
+    Add-Result "Zalo Mini App ID production" "OK" "Đúng ứng dụng CH Haircut Salon"
   } else {
     Add-Result "Zalo Mini App ID production" "FAIL" "Phải là 2038116772828167300"
   }
@@ -273,11 +273,11 @@ if (-not (Test-Path -LiteralPath $appConfigPath)) {
     } elseif (
       $StrictRelease -and
       (
-        [string]$appConfig.app.title -ne "CH Hair Studio" -or
-        [string]$appConfig.app.headerTitle -ne "CH Hair Studio"
+        [string]$appConfig.app.title -ne "CH Haircut Salon" -or
+        [string]$appConfig.app.headerTitle -ne "CH Haircut Salon"
       )
     ) {
-      Add-Result "ZMP app-config" "FAIL" "title và headerTitle phải là CH Hair Studio"
+      Add-Result "ZMP app-config" "FAIL" "title và headerTitle phải là CH Haircut Salon"
     } else {
       Add-Result "ZMP app-config" "OK" "Mọi JS/CSS trong app-config đều tồn tại"
     }
@@ -425,13 +425,23 @@ if ($RunBuild) {
 }
 
 if ($CheckLiveUrls) {
-  $urls = @(
+  $defaultHostingUrls = @(
     "https://haircut-c7d12.web.app",
     "https://haircut-c7d12.web.app/staff",
     "https://haircut-c7d12.web.app/owner",
     "https://haircut-c7d12.web.app/privacy",
     "https://haircut-c7d12.web.app/terms"
   )
+  $customHostingUrls = @(
+    "https://app.chhaircutsalon.cc",
+    "https://app.chhaircutsalon.cc/history",
+    "https://app.chhaircutsalon.cc/wheel",
+    "https://app.chhaircutsalon.cc/staff",
+    "https://app.chhaircutsalon.cc/owner",
+    "https://app.chhaircutsalon.cc/privacy",
+    "https://app.chhaircutsalon.cc/terms"
+  )
+  $urls = @($defaultHostingUrls + $customHostingUrls)
 
   foreach ($url in $urls) {
     $statusCode = Test-Url $url

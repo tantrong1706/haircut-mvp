@@ -6,6 +6,7 @@ import { ScanEntryPage } from "./ScanEntryPage";
 
 const mocks = vi.hoisted(() => ({
   buildRegisterInput: vi.fn(),
+  getCustomerCheckinProfile: vi.fn(),
   getZaloIdentity: vi.fn(),
   registerCustomer: vi.fn(),
   resolveCustomerQr: vi.fn(),
@@ -27,6 +28,7 @@ vi.mock("../services/zalo", () => ({
 
 vi.mock("../services/api", () => ({
   buildRegisterInput: mocks.buildRegisterInput,
+  getCustomerCheckinProfile: mocks.getCustomerCheckinProfile,
   registerCustomer: mocks.registerCustomer,
   resolveCustomerQr: mocks.resolveCustomerQr,
 }));
@@ -48,13 +50,13 @@ const session: AppSession = {
   branchName: "Chi nhánh Trung tâm",
   branchAddress: "123 Nguyễn Huệ, Quận 1, TP.HCM",
   zaloUserId: "zalo-a",
-  sessionStatus: "waiting",
+  sessionStatus: "pending_approval",
   customer: {
     customerId: "customer-a",
     name: "Anh Tân",
     phoneLast4: "",
     points: 0,
-    allowPhoto: false,
+    allowPhoto: true,
   },
 };
 
@@ -91,6 +93,12 @@ describe("ScanEntryPage", () => {
       avatar: "https://example.com/avatar.jpg",
     });
     mocks.buildRegisterInput.mockReturnValue({ request: "register" });
+    mocks.getCustomerCheckinProfile.mockResolvedValue({
+      exists: true,
+      hasPhone: true,
+      phoneLast4: "5678",
+      allowPhoto: false,
+    });
     mocks.registerCustomer.mockResolvedValue(session);
     mocks.isZaloProfilePermissionError.mockImplementation(
       (error: unknown) =>
@@ -118,7 +126,7 @@ describe("ScanEntryPage", () => {
     expect(screen.getAllByText("123 Nguyễn Huệ, Quận 1, TP.HCM")).not.toHaveLength(0);
     expect(screen.getByText("Thông tin tùy chọn").closest("details")).toHaveAttribute("open");
 
-    await user.click(screen.getByRole("button", { name: "Xác nhận vào hàng chờ" }));
+    await user.click(screen.getByRole("button", { name: "Yêu cầu tích điểm" }));
 
     await waitFor(() => expect(onReady).toHaveBeenCalledWith(session));
     expect(mocks.getZaloIdentity).toHaveBeenCalledTimes(2);
@@ -128,7 +136,7 @@ describe("ScanEntryPage", () => {
         name: "Anh Tân",
         zaloUserId: "zalo-a",
       }),
-      false,
+      true,
       undefined,
       undefined,
     );
@@ -148,7 +156,7 @@ describe("ScanEntryPage", () => {
 
     expect(screen.getByRole("heading", { name: "Quét QR tại salon" })).toBeInTheDocument();
     expect(
-      screen.getByText(/QR giúp HAIRCUT xác định đúng salon và chi nhánh/i),
+      screen.getByText(/QR giúp CH Haircut Salon xác định đúng salon và chi nhánh/i),
     ).toBeInTheDocument();
     expect(screen.queryByText("Trang chủ salon")).not.toBeInTheDocument();
     expect(screen.queryByText("Trang nhân viên")).not.toBeInTheDocument();
@@ -187,7 +195,7 @@ describe("ScanEntryPage", () => {
     render(<ScanEntryPage onReady={vi.fn()} />);
 
     expect(await screen.findByText("Chưa nhận được thông tin Zalo")).toBeInTheDocument();
-    expect(screen.getByText(/Cho phép HAIRCUT đọc tên hiển thị/i)).toBeInTheDocument();
+    expect(screen.getByText(/Cho phép CH Haircut Salon đọc tên hiển thị/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Mở trong Zalo" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Cho phép đọc tên Zalo" }));
@@ -294,19 +302,100 @@ describe("ScanEntryPage", () => {
 
   it("chỉ gửi số điện thoại khi khách tự nhập", async () => {
     const user = userEvent.setup();
+    mocks.getCustomerCheckinProfile.mockResolvedValue({
+      exists: false,
+      hasPhone: false,
+      phoneLast4: "",
+      allowPhoto: false,
+    });
     render(<ScanEntryPage onReady={vi.fn()} />);
 
     await screen.findByText("Anh Tân");
     await user.type(screen.getByRole("textbox", { name: /^Số điện thoại/ }), "0912345678");
-    await user.click(screen.getByRole("button", { name: "Xác nhận vào hàng chờ" }));
+    await user.click(screen.getByRole("button", { name: "Yêu cầu tích điểm" }));
 
     await waitFor(() => expect(mocks.registerCustomer).toHaveBeenCalled());
     expect(mocks.buildRegisterInput).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
-      false,
+      true,
       "0912345678",
       undefined,
     );
+  });
+
+  it("khách cũ không phải nhập lại số điện thoại và chỉ gửi xác nhận", async () => {
+    const user = userEvent.setup();
+    const onReady = vi.fn();
+
+    render(<ScanEntryPage onReady={onReady} />);
+
+    expect(await screen.findByText("Đã lưu số kết thúc 5678")).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: /^Số điện thoại/ })).not.toBeInTheDocument();
+
+    expect(screen.getByText(/đồng ý để salon chụp và lưu ảnh kiểu tóc/i)).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Yêu cầu tích điểm" }));
+
+    await waitFor(() => expect(onReady).toHaveBeenCalledWith(session));
+    expect(mocks.getCustomerCheckinProfile).toHaveBeenCalledWith(
+      expect.objectContaining({ salonId: "salon-a", qrToken: "token-test" }),
+      expect.objectContaining({ accessToken: "access-token-test" }),
+    );
+    expect(mocks.buildRegisterInput).toHaveBeenCalledWith(
+      expect.objectContaining({ branchId: "branch-a" }),
+      expect.anything(),
+      true,
+      undefined,
+      undefined,
+    );
+  });
+
+  it("hiện số phút còn lại và khóa yêu cầu trong cooldown", async () => {
+    mocks.getCustomerCheckinProfile.mockResolvedValue({
+      exists: true,
+      hasPhone: true,
+      phoneLast4: "5678",
+      allowPhoto: true,
+      cooldownRemainingMs: 90 * 60_000,
+    });
+    render(<ScanEntryPage onReady={vi.fn()} />);
+    expect(await screen.findByText(/Có thể yêu cầu lại sau 90 phút/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Yêu cầu tích điểm" })).toBeDisabled();
+    expect(mocks.registerCustomer).not.toHaveBeenCalled();
+  });
+
+  it("lần đầu bắt buộc nhập số điện thoại hợp lệ", async () => {
+    const user = userEvent.setup();
+    mocks.getCustomerCheckinProfile.mockResolvedValue({
+      exists: false,
+      hasPhone: false,
+      phoneLast4: "",
+      allowPhoto: false,
+    });
+
+    render(<ScanEntryPage onReady={vi.fn()} />);
+
+    const phoneInput = await screen.findByRole("textbox", { name: /^Số điện thoại/ });
+    const submit = screen.getByRole("button", { name: "Yêu cầu tích điểm" });
+    expect(submit).toBeDisabled();
+
+    await user.type(phoneInput, "123");
+    expect(submit).toBeDisabled();
+
+    await user.clear(phoneInput);
+    await user.type(phoneInput, "0912345678");
+    expect(submit).toBeEnabled();
+  });
+
+  it("QR salon chung bị từ chối và không hiện chọn chi nhánh", async () => {
+    mocks.resolveCustomerQr.mockRejectedValue(new Error("Vui lòng quét QR riêng tại chi nhánh."));
+    window.history.replaceState({}, "", "/?qrType=salon&salonId=salon-a&qrToken=token-test");
+
+    render(<ScanEntryPage onReady={vi.fn()} />);
+
+    expect(await screen.findByText("Vui lòng quét QR riêng tại chi nhánh.")).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Chọn chi nhánh" })).not.toBeInTheDocument();
+    expect(mocks.registerCustomer).not.toHaveBeenCalled();
   });
 });

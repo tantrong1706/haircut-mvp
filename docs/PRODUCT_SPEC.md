@@ -51,9 +51,9 @@ HAIRCUT giúp salon tiếp nhận khách qua Zalo, vận hành hàng chờ theo 
 1. Khách quét QR hợp lệ và xác nhận thông tin Zalo.
 2. Backend xác minh Zalo, salon, chi nhánh và QR trước khi tạo `chair_sessions`.
 3. Nhân viên đúng chi nhánh nhận lượt; giao dịch chỉ cho một người nhận thành công.
-4. Nhân viên hoàn tất dịch vụ và gửi `point_requests` theo lượt cắt.
-5. Chủ salon duyệt hoặc từ chối; thao tác được xử lý idempotent và ghi audit.
-6. Khi duyệt, hệ thống cộng điểm, tạo `haircut_records` và đóng lượt trong một giao dịch.
+4. Nhân viên hoàn tất dịch vụ; ghi chú là tùy chọn và điểm chuẩn do server lấy từ cấu hình salon.
+5. Nhân viên được owner tin cậy cộng điểm ngay; nhân viên thường hoặc vượt hạn mức tự chuyển owner duyệt.
+6. Cả auto-approve và owner approve đều cộng điểm, tạo `haircut_records`, đóng lượt idempotent và ghi audit trong transaction.
 7. Khách dùng điểm để quay; kết quả và mã quà do backend quyết định.
 8. Mã quà chỉ được đổi một lần tại đúng salon, có trạng thái hết hạn/đã dùng/thu hồi rõ ràng.
 
@@ -62,6 +62,7 @@ HAIRCUT giúp salon tiếp nhận khách qua Zalo, vận hành hàng chờ theo 
 - Dữ liệu nghiệp vụ luôn mang `salonId`; dữ liệu theo cơ sở còn có `branchId`.
 - Firebase Auth và `users/{uid}` quyết định vai trò, trạng thái và phạm vi chi nhánh.
 - Owner/staff không được tin cậy `salonId`, `branchId`, tên nhân viên hoặc số điểm do client tự khai.
+- Quyền `canAwardPointsDirectly` do owner cấp theo từng nhân viên; client không thể tự nâng quyền.
 - Điểm, vòng quay, đổi quà và chuyển trạng thái lượt chỉ ghi qua Cloud Functions.
 - Firestore/Storage mặc định từ chối truy cập không phù hợp tenant và vai trò.
 - Ảnh khách chỉ lưu khi có consent, đúng đường dẫn salon/khách và loại tệp được phép.

@@ -19,6 +19,7 @@ export type AppUser = {
   role: UserRole;
   isActive: boolean;
   canRedeemRewards?: boolean;
+  canAwardPointsDirectly?: boolean;
   inviteStatus?: "pending" | "accepted";
   branchId?: string;
   branchIds?: string[];

@@ -79,7 +79,7 @@ export function StaffManager({ salonId }: { salonId: string }) {
       <div className="manager-section-heading">
         <div>
           <h2>Nhân viên</h2>
-          <p>Tạo tài khoản, phân chi nhánh và quyền đổi quà.</p>
+          <p>Tạo tài khoản, phân chi nhánh và cấp quyền nghiệp vụ.</p>
         </div>
         <button
           className="manager-button primary compact"
@@ -167,6 +167,7 @@ function CreateStaffForm({
   const [phone, setPhone] = useState("");
   const [branchId, setBranchId] = useState(branches[0]?.id || "");
   const [canRedeem, setCanRedeem] = useState(false);
+  const [canAwardPointsDirectly, setCanAwardPointsDirectly] = useState(false);
 
   useEffect(() => {
     if (!branchId && branches[0]) setBranchId(branches[0].id);
@@ -183,6 +184,7 @@ function CreateStaffForm({
         name,
         phone,
         canRedeemRewards: canRedeem,
+        canAwardPointsDirectly,
         branchIds: [branchId],
       });
       onCreated({
@@ -194,6 +196,7 @@ function CreateStaffForm({
         role: "staff",
         isActive: true,
         canRedeemRewards: canRedeem,
+        canAwardPointsDirectly,
         branchId,
         branchIds: [branchId],
         inviteStatus: "pending",
@@ -247,6 +250,14 @@ function CreateStaffForm({
           onChange={(event) => setCanRedeem(event.target.checked)}
         />
         <span>Cho phép xác nhận mã quà</span>
+      </label>
+      <label className="manager-toggle">
+        <input
+          type="checkbox"
+          checked={canAwardPointsDirectly}
+          onChange={(event) => setCanAwardPointsDirectly(event.target.checked)}
+        />
+        <span>Cho hoàn tất và cộng điểm trực tiếp</span>
       </label>
       <button
         className="manager-button primary wide"
@@ -304,6 +315,7 @@ function StaffDetail({
         phone: payload.phone,
         isActive: payload.isActive,
         canRedeemRewards: payload.canRedeemRewards,
+        canAwardPointsDirectly: payload.canAwardPointsDirectly,
         branchIds: payload.branchIds,
       });
       onChange({ ...staff, ...payload });
@@ -371,6 +383,24 @@ function StaffDetail({
       </Section>
 
       <Section title="Quyền và trạng thái">
+        <button
+          className="manager-button secondary wide"
+          type="button"
+          disabled={busy}
+          onClick={() =>
+            void save(
+              { canAwardPointsDirectly: !staff.canAwardPointsDirectly },
+              staff.canAwardPointsDirectly
+                ? "Đã chuyển nhân viên về luồng chờ duyệt điểm."
+                : "Đã cho nhân viên hoàn tất và cộng điểm trực tiếp.",
+            )
+          }
+        >
+          <Save aria-hidden="true" />
+          {staff.canAwardPointsDirectly
+            ? "Chuyển về chờ duyệt điểm"
+            : "Cho cộng điểm trực tiếp"}
+        </button>
         <button
           className="manager-button secondary wide"
           type="button"

@@ -9,13 +9,15 @@ describe("parseQrContext", () => {
   it("đọc đúng salon, gương và token từ URL", () => {
     window.history.replaceState({}, "", "/?salonId=salon-a&mirrorId=mirror-2&qrToken=secure-token");
 
-    expect(parseQrContext()).toEqual({
+    const legacyQr = parseQrContext();
+    expect(legacyQr).toEqual({
       qrType: "legacy-mirror",
       salonId: "salon-a",
       branchId: "",
       mirrorId: "mirror-2",
       qrToken: "secure-token",
     });
+    expect(hasQrContext(legacyQr)).toBe(false);
     expect(window.location.search).not.toContain("qrToken");
   });
 

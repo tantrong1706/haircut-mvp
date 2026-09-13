@@ -23,11 +23,13 @@ import {
   Trash2,
   UserPlus,
   UserRound,
+  UserRoundCheck,
   UsersRound,
   XCircle,
 } from "lucide-react";
 import QRCode from "qrcode";
 import { BrandLogo } from "../components/BrandLogo";
+import { MINI_APP_NAME } from "../config/branding";
 import { AccountDeletionPanel } from "../components/AccountDeletionPanel";
 import { HaircutPhotoCapture, type HaircutPhotoItem } from "../components/HaircutPhotoCapture";
 import { RedeemRewardPanel } from "../components/RedeemRewardPanel";
@@ -54,7 +56,6 @@ import {
   migrateSalonBranches,
   rejectPointRequest,
   rotateBranchQr,
-  rotateSalonQr,
   sendStaffInviteEmail,
   saveLuckyWheelConfig,
   searchSalonCustomers,
@@ -484,7 +485,7 @@ export function OwnerPage({ currentUser }: Props) {
     setError("");
 
     try {
-      await withMonitoringTrace(
+      const saved = await withMonitoringTrace(
         "owner_save_wheel_config",
         () => saveLuckyWheelConfig(salonId, wheelConfig),
         {
@@ -492,6 +493,7 @@ export function OwnerPage({ currentUser }: Props) {
           active_slots: wheelConfig.slots.filter((slot) => slot.active).length,
         },
       );
+      setWheelConfig((current) => ({ ...current, configVersion: saved.configVersion }));
       trackEvent("owner_wheel_config_saved", {
         salon_id: salonId,
         required_points: wheelConfig.requiredPoints,
@@ -1282,7 +1284,7 @@ function OverviewPanel({
           <QrCode size={20} aria-hidden="true" />
           <span>
             <strong>Chi nhánh & QR</strong>
-            <small>QR chung cho salon và QR riêng từng chi nhánh</small>
+            <small>QR riêng của từng chi nhánh để khách yêu cầu tích điểm</small>
           </span>
         </button>
         <button type="button" onClick={() => onOpenTab("staff")}>
@@ -1428,7 +1430,6 @@ function BranchesPanel({
   onConfirm: (request: ConfirmRequest) => void;
 }) {
   const [branches, setBranches] = useState<SalonBranch[]>([]);
-  const [salonQrUrl, setSalonQrUrl] = useState("");
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
@@ -1443,7 +1444,6 @@ function BranchesPanel({
     setLoading(true);
     try {
       const settings = await getBranchQrSettings(salonId);
-      setSalonQrUrl(settings.salonQrUrl);
       setBranches(settings.branches);
       onError("");
     } catch (err) {
@@ -1515,18 +1515,6 @@ function BranchesPanel({
     }
   }
 
-  async function regenerateSalonQr() {
-    setBusyId("salon-qr");
-    try {
-      setSalonQrUrl(await rotateSalonQr(salonId));
-      onMessage("Đã tạo lại QR chung. QR chi nhánh vẫn giữ nguyên.");
-    } catch (err) {
-      onError(err instanceof Error ? err.message : "Không tạo lại được QR salon");
-    } finally {
-      setBusyId("");
-    }
-  }
-
   async function regenerateBranchQr(branch: SalonBranch) {
     setBusyId(branch.id);
     try {
@@ -1534,7 +1522,7 @@ function BranchesPanel({
       setBranches((current) =>
         current.map((item) => (item.id === branch.id ? { ...item, qrUrl } : item)),
       );
-      onMessage("Đã tạo lại QR chi nhánh. QR chung của salon vẫn giữ nguyên.");
+      onMessage("Đã tạo lại QR chi nhánh.");
     } catch (err) {
       onError(err instanceof Error ? err.message : "Không tạo lại được QR chi nhánh");
     } finally {
@@ -1561,30 +1549,11 @@ function BranchesPanel({
         <QrCode size={22} aria-hidden="true" />
         <div>
           <h2>Chi nhánh và QR</h2>
-          <p className="muted">Một QR chung cho salon và một QR riêng cho mỗi chi nhánh.</p>
+          <p className="muted">
+            Mỗi chi nhánh dùng QR riêng. Khách quét tại đâu sẽ yêu cầu tích điểm tại đó.
+          </p>
         </div>
       </div>
-
-      {salonQrUrl ? (
-        <ManagedQrCard
-          title="QR chung của salon"
-          description="Khách quét để chọn chi nhánh; nếu chỉ có một chi nhánh, app tự chọn."
-          qrUrl={salonQrUrl}
-          active
-          busy={busyId === "salon-qr"}
-          onCopy={copyQr}
-          onError={onError}
-          onRegenerate={() =>
-            onConfirm({
-              title: "Tạo lại QR chung?",
-              description: "QR chung cũ sẽ ngừng hoạt động. QR của từng chi nhánh không thay đổi.",
-              confirmLabel: "Tạo QR chung mới",
-              tone: "danger",
-              onConfirm: regenerateSalonQr,
-            })
-          }
-        />
-      ) : null}
 
       <div className="staff-create-grid">
         <input
@@ -1651,7 +1620,7 @@ function BranchesPanel({
               onRegenerate={() =>
                 onConfirm({
                   title: "Tạo lại QR chi nhánh?",
-                  description: `QR cũ của ${branch.name} sẽ ngừng hoạt động. QR chung của salon không thay đổi.`,
+                  description: `QR cũ của ${branch.name} sẽ ngừng hoạt động.`,
                   confirmLabel: "Tạo QR mới",
                   tone: "danger",
                   onConfirm: () => regenerateBranchQr(branch),
@@ -1745,7 +1714,7 @@ function ManagedQrCard({
       <html lang="vi">
         <head>
           <meta charset="utf-8" />
-          <title>${escapeHtml(title)} - HAIRCUT QR</title>
+          <title>${escapeHtml(title)} - ${escapeHtml(MINI_APP_NAME)} QR</title>
           <style>
             body { font-family: Arial, sans-serif; margin: 28px; color: #0b1712; text-align: center; }
             h1 { margin: 0 0 8px; font-size: 28px; }
@@ -1755,7 +1724,7 @@ function ManagedQrCard({
         </head>
         <body>
           <h1>${escapeHtml(title)}</h1>
-          <p>Quét QR để check-in HAIRCUT</p>
+          <p>Quét QR để check-in ${escapeHtml(MINI_APP_NAME)}</p>
           <img src="${qrImageUrl}" alt="" />
           <script>window.onload = () => window.print();</script>
         </body>
@@ -1902,6 +1871,7 @@ function StaffManagementPanel({
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [canRedeemRewards, setCanRedeemRewards] = useState(false);
+  const [canAwardPointsDirectly, setCanAwardPointsDirectly] = useState(false);
   const [branches, setBranches] = useState<SalonBranch[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState("");
   const [loading, setLoading] = useState(true);
@@ -1945,6 +1915,7 @@ function StaffManagementPanel({
         name,
         phone,
         canRedeemRewards,
+        canAwardPointsDirectly,
         branchIds: [selectedBranchId],
       });
       const createdUid = createdStaff.uid;
@@ -1958,6 +1929,7 @@ function StaffManagementPanel({
           role: "staff",
           isActive: true,
           canRedeemRewards,
+          canAwardPointsDirectly,
           branchId: selectedBranchId,
           branchIds: [selectedBranchId],
           inviteStatus: "pending",
@@ -1972,6 +1944,7 @@ function StaffManagementPanel({
       setName("");
       setPhone("");
       setCanRedeemRewards(false);
+      setCanAwardPointsDirectly(false);
       onMessage(
         createdStaff.inviteEmailSent
           ? "Đã gửi email mời. Nhân viên tự đặt mật khẩu trong hộp thư của họ."
@@ -2015,6 +1988,7 @@ function StaffManagementPanel({
         phone: payload.phone,
         isActive: payload.isActive,
         canRedeemRewards: payload.canRedeemRewards,
+        canAwardPointsDirectly: payload.canAwardPointsDirectly,
         branchIds: payload.branchIds,
       });
       setStaff((current) =>
@@ -2074,6 +2048,14 @@ function StaffManagementPanel({
             onChange={(event) => setCanRedeemRewards(event.target.checked)}
           />
           <span>Cho đổi mã quà</span>
+        </label>
+        <label className="toggle-row inline-toggle">
+          <input
+            type="checkbox"
+            checked={canAwardPointsDirectly}
+            onChange={(event) => setCanAwardPointsDirectly(event.target.checked)}
+          />
+          <span>Cho hoàn tất và cộng điểm trực tiếp</span>
         </label>
         <button
           className="primary-button"
@@ -2199,6 +2181,14 @@ function StaffCard({
         >
           <TicketCheck size={18} aria-hidden="true" />
           {staff.canRedeemRewards ? "Tắt đổi quà" : "Cho đổi quà"}
+        </button>
+        <button
+          className="secondary-button"
+          disabled={busy}
+          onClick={() => onSave(staff, { canAwardPointsDirectly: !staff.canAwardPointsDirectly })}
+        >
+          <UserRoundCheck size={18} aria-hidden="true" />
+          {staff.canAwardPointsDirectly ? "Yêu cầu chủ duyệt điểm" : "Cho cộng điểm trực tiếp"}
         </button>
       </div>
     </article>
@@ -2464,6 +2454,17 @@ function WheelConfigPanel({
     });
   }
 
+  function updateSlotWeight(index: number, weight: number) {
+    onChange({
+      ...config,
+      slots: config.slots.map((slot, slotIndex) =>
+        slotIndex === index
+          ? { ...slot, weight: Math.min(1_000_000, Math.max(1, Math.floor(weight || 1))) }
+          : slot,
+      ),
+    });
+  }
+
   return (
     <div className="panel">
       <div className="detail-stack">
@@ -2471,7 +2472,9 @@ function WheelConfigPanel({
           <Settings2 size={22} aria-hidden="true" />
           <div>
             <h2>Cấu hình vòng quay</h2>
-            <p className="muted">Chủ salon có thể đổi điểm cần quay và nội dung từng ô.</p>
+            <p className="muted">
+              Chủ salon có thể đổi điểm cần quay, nội dung và trọng số xác suất từng ô.
+            </p>
           </div>
         </div>
 
@@ -2520,7 +2523,7 @@ function WheelConfigPanel({
 
         <div className="wheel-config-list" aria-label="Danh sách ô vòng quay">
           {config.slots.map((slot, index) => (
-            <div className="wheel-slot-row" key={index}>
+            <div className="wheel-slot-row" key={slot.slotId}>
               <span>{index + 1}</span>
               <input
                 value={slot.label}
@@ -2538,6 +2541,14 @@ function WheelConfigPanel({
                 <option value="reward">Có quà</option>
                 <option value="no_prize">Không trúng</option>
               </select>
+              <input
+                aria-label={`Trọng số ô ${index + 1}`}
+                type="number"
+                min={1}
+                max={1_000_000}
+                value={slot.weight}
+                onChange={(event) => updateSlotWeight(index, Number(event.target.value || 1))}
+              />
               <label>
                 <input
                   type="checkbox"

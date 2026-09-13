@@ -9,6 +9,7 @@ import {
   finalizeHaircutPhotoUpload,
   getRecoverableHaircutPhotoUploads,
   submitPointRequest,
+  approvePointRequest,
 } from "../src/index";
 import { requireFirestoreEmulator } from "./emulatorEnvironment";
 
@@ -55,6 +56,69 @@ describe("photo upload operation callables", () => {
         requestFor("owner-other", { ...beginData("photo-request-tenant"), salonId: "salon-photo" }),
       ),
     ).rejects.toMatchObject({ code: "permission-denied" });
+  });
+
+  it("cho nhân viên đúng chi nhánh chụp ảnh cho yêu cầu QR đang chờ xác nhận", async () => {
+    await db.collection("chair_sessions").doc("session-photo").set(
+      {
+        status: "pending_approval",
+        approvalMode: "staff_confirmation",
+        photoConsentGranted: true,
+        assignedStaffId: null,
+        assignedStaffName: null,
+      },
+      { merge: true },
+    );
+
+    await expect(
+      beginHaircutPhotoUpload.run(requestFor("staff-photo", beginData("photo-request-qr"))),
+    ).resolves.toMatchObject({ storagePath: expect.stringContaining("/sessions/session-photo/") });
+    await expect(
+      beginHaircutPhotoUpload.run(requestFor("staff-other", beginData("photo-request-qr-other"))),
+    ).rejects.toMatchObject({ code: "permission-denied" });
+    const begin = await beginOperation("photo-qr-confirm-complete");
+    await saveUploadedObject(begin);
+    await finalizeHaircutPhotoUpload.run(
+      requestFor("staff-photo", { salonId: "salon-photo", operationId: begin.operationId }),
+    );
+    await db
+      .collection("point_requests")
+      .doc("session-photo")
+      .set({
+        salonId: "salon-photo",
+        branchId: "branch-photo",
+        customerId: "customer-photo",
+        sessionId: "session-photo",
+        status: "pending",
+        approvalMode: "staff_confirmation",
+        photoConsentGranted: true,
+        pointsRequested: 1,
+        photoPaths: [],
+        photoUrls: [],
+        expiresAt: Timestamp.fromMillis(Date.now() + 30 * 60_000),
+      });
+    await approvePointRequest.run(
+      requestFor("staff-photo", {
+        salonId: "salon-photo",
+        requestId: "session-photo",
+        photoPaths: [begin.storagePath],
+        note: "Ảnh cùng lần tích điểm",
+      }),
+    );
+    const records = await db
+      .collection("haircut_records")
+      .where("pointRequestId", "==", "session-photo")
+      .get();
+    expect(records.docs[0]?.data()).toMatchObject({
+      staffId: "staff-photo",
+      photoPaths: [begin.storagePath],
+      note: "Ảnh cùng lần tích điểm",
+      pointsAdded: 1,
+    });
+    expect(
+      (await db.collection("photo_upload_operations").doc(begin.operationId).get()).data()
+        ?.attachmentStatus,
+    ).toBe("attached");
   });
 
   it("finalize idempotent, gắn ảnh đúng một lần và chặn xóa ảnh đã gắn", async () => {

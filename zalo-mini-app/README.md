@@ -1,6 +1,6 @@
-# HAIRCUT Web/Zalo Mini App
+# CH Hair Studio - Web/Zalo Mini App
 
-Đây là app web/PWA hiện tại cho khách, nhân viên và chủ salon. Khi đưa vào Zalo Mini App production, màn khách là luồng chính: khách quét QR tại gương, xác nhận tên hiển thị, rồi salon xử lý điểm/lịch sử/quà.
+Đây là app web/PWA hiện tại cho khách, nhân viên và chủ salon. Trong Zalo Mini App production, màn khách là luồng chính: khách quét QR có chữ ký của salon hoặc chi nhánh, xác nhận tên hiển thị, rồi salon xử lý điểm, lịch sử và quà.
 
 ## Chạy Dev
 
@@ -10,13 +10,13 @@ npm install
 npm run dev
 ```
 
-Mở URL kèm tham số test:
+Mở trang xem trước cục bộ:
 
 ```text
-http://localhost:5173/?salonId=demo-salon&mirrorId=demo-mirror-1&qrToken=demo-token
+http://localhost:5173/
 ```
 
-Lưu ý: khi Firebase đã cấu hình, luồng khách thật cần mở trong Zalo để lấy `zaloAccessToken`. Web ngoài Zalo chỉ nên dùng để xem giao diện hoặc test owner/staff.
+Lưu ý: URL cục bộ chỉ dùng để xem giao diện. Luồng reviewer và khách thật phải mở trong Zalo bằng QR salon/chi nhánh có chữ ký và phiên bản do hệ thống quản lý QR tạo. Không dùng QR gương cũ hoặc `qrToken` thô trong tài liệu, ảnh hay deeplink reviewer.
 
 ## Kết Nối Firebase
 
@@ -46,6 +46,7 @@ Muốn khóa Firestore rules và chạy salon thật thì phải deploy Function
 
 - `getAccessToken`: bắt buộc cho luồng khách thật. Token được gửi lên Cloud Functions để server xác minh và suy ra `zaloUserId`.
 - `getUserInfo`: chỉ dùng để điền sẵn tên/avatar cho khách, khách vẫn có thể sửa tên hiển thị tại salon.
-- `getPhoneNumber`: chỉ gọi khi thật sự cần và đã giải thích lý do cho khách.
+- Không dùng `getPhoneNumber`: số điện thoại là tùy chọn và chỉ được lưu khi khách tự nhập.
+- Không dùng `scanQRCode`, vị trí, notification, theo dõi OA hoặc API chia sẻ trong Version 8.
 
 Không ép khách cung cấp số điện thoại ngay màn đầu nếu salon chưa thật sự cần.

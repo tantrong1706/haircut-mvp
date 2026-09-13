@@ -30,6 +30,7 @@ export type AppUser = {
   role: AppRole;
   isActive: boolean;
   canRedeemRewards?: boolean;
+  canAwardPointsDirectly?: boolean;
   inviteStatus?: "pending" | "accepted";
   branchId?: string;
   branchIds?: string[];
@@ -402,6 +403,7 @@ export async function getAppUser(uid: string): Promise<AppUser | null> {
     role,
     isActive: Boolean(data.isActive),
     canRedeemRewards: Boolean(data.canRedeemRewards),
+    canAwardPointsDirectly: Boolean(data.canAwardPointsDirectly),
     inviteStatus:
       data.inviteStatus === "pending" || data.inviteStatus === "accepted"
         ? data.inviteStatus

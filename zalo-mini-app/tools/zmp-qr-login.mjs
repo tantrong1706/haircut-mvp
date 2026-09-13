@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import QRCode from "qrcode";
+import { zmpLoginUrl } from "./zmp-url.mjs";
 
 const envPath = resolve(".env");
 const qrPath = resolve("qr-zmp-login-dev.png");
@@ -14,7 +15,7 @@ if (!appId) {
 const loginRequest = await apiGet(
   `https://zmp-api.developers.zalo.me/admin/request-login?appId=${encodeURIComponent(appId)}`,
 );
-const loginUrl = String(loginRequest?.data?.loginUrl || "");
+const loginUrl = zmpLoginUrl(loginRequest?.data?.loginUrl);
 const loginKey = String(loginRequest?.data?.zmpsk || "");
 
 if (Number(loginRequest?.err) < 0 || !loginUrl || !loginKey) {

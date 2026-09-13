@@ -1,0 +1,36 @@
+[Unit]
+Description=CH Haircut Salon Zalo identity verification gateway
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=zalo-gateway
+Group=zalo-gateway
+WorkingDirectory=/opt/zalo-gateway/current
+EnvironmentFile=/etc/zalo-gateway/gateway.env
+ExecStart=/usr/local/bin/node /opt/zalo-gateway/current/dist/src/server.js
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=15s
+UMask=0077
+
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictRealtime=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=/var/lib/zalo-gateway
+
+[Install]
+WantedBy=multi-user.target

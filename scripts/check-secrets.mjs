@@ -25,13 +25,7 @@ const files = includeWorkingTree
     )
   : trackedFiles;
 
-const forbiddenExtensions = new Set([
-  ".jks",
-  ".keystore",
-  ".mobileprovision",
-  ".p12",
-  ".p8",
-]);
+const forbiddenExtensions = new Set([".jks", ".keystore", ".mobileprovision", ".p12", ".p8"]);
 const patterns = [
   {
     name: "private key",
@@ -56,7 +50,11 @@ const patterns = [
   {
     name: "server secret assignment",
     regex:
-      /\b(?:ZALO_(?:APP_SECRET|OPEN_API_KEY|OA_SECRET_KEY)|QR_SIGNING_SECRET|SENTRY_AUTH_TOKEN)\s*=\s*(?!your-|example|changeme|\.{3}|<|\[|$)[^\s#]+/u,
+      /\b(?:ZALO_(?:APP_SECRET|OPEN_API_KEY|OA_SECRET_KEY|GATEWAY_HMAC_SECRET)|QR_SIGNING_SECRET|SENTRY_AUTH_TOKEN)\s*=\s*(?!your-|example|changeme|managed-by-|\.{3}|<|\[|$)[^\s#]+/u,
+  },
+  {
+    name: "gateway HMAC key map",
+    regex: /\bGATEWAY_HMAC_KEYS\s*=\s*\{[^\r\n]{0,512}"[a-f0-9]{64,}"/u,
   },
 ];
 

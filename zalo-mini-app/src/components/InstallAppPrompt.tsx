@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { Download } from "lucide-react";
+import { MINI_APP_NAME } from "../config/branding";
+import { safeStorageGet, safeStorageSet } from "../services/safeStorage";
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -9,7 +11,7 @@ type BeforeInstallPromptEvent = Event & {
 export function InstallAppPrompt() {
   const [installEvent, setInstallEvent] = useState<BeforeInstallPromptEvent | null>(null);
   const [hidden, setHidden] = useState(
-    () => localStorage.getItem("haircut_install_hidden") === "1",
+    () => safeStorageGet("haircut_install_hidden") === "1",
   );
 
   useEffect(() => {
@@ -39,14 +41,14 @@ export function InstallAppPrompt() {
   }
 
   function dismiss() {
-    localStorage.setItem("haircut_install_hidden", "1");
+    safeStorageSet("haircut_install_hidden", "1");
     setHidden(true);
   }
 
   return (
     <div className="install-prompt">
       <div>
-        <strong>Thêm HAIRCUT vào màn hình chính</strong>
+        <strong>Thêm {MINI_APP_NAME} vào màn hình chính</strong>
         <span>Mở nhanh như một app trên điện thoại salon.</span>
       </div>
       <button type="button" onClick={install}>

@@ -13,7 +13,7 @@ function callableBody(name: string) {
 
 describe("hợp đồng xác minh Zalo", () => {
   it("xác minh token bằng App Secret ở backend", () => {
-    const start = functionsSource.indexOf("async function verifyZaloAccessToken");
+    const start = functionsSource.indexOf("async function verifyZaloAccessTokenDirect");
     const end = functionsSource.indexOf("\nfunction last4", start);
     const verificationBody = functionsSource.slice(start, end);
 
@@ -27,19 +27,69 @@ describe("hợp đồng xác minh Zalo", () => {
     expect(verificationBody).not.toContain("payload.picture");
   });
 
+  it("chuẩn hóa lỗi xác minh và gắn requestId mà không lộ credential", () => {
+    const start = functionsSource.indexOf("async function verifyZaloAccessTokenDirect");
+    const end = functionsSource.indexOf("\nfunction last4", start);
+    const verificationBody = functionsSource.slice(start, end);
+    const registerBody = callableBody("registerCustomerFromZalo");
+
+    expect(verificationBody).toContain("requestId");
+    expect(verificationBody).toContain('event: "zalo_identity_verification_failed"');
+    expect(verificationBody).toContain("ZALO_VERIFICATION_USER_MESSAGE");
+    expect(verificationBody).toContain('errorCode: "ZALO_VERIFICATION_FAILED"');
+    expect(verificationBody).toContain("for (const sensitiveValue of [accessToken, appSecret, appsecretProof])");
+    expect(registerBody).toContain("createZaloVerificationRequestId()");
+    expect(registerBody).toContain('functionName: "registerCustomerFromZalo"');
+    expect(registerBody).not.toContain("request.data?.zaloUserId");
+  });
+
   it.each([
-    ["registerCustomerFromZalo", "const qrResolution = await resolveCustomerQrData"],
+    ["registerCustomerFromZalo", "const qrResolution = assertBranchOnlyCustomerQr"],
+    ["getCustomerCheckinProfileFromZalo", "const customerSnap = await customerRef.get()"],
     ["spinLuckyWheelFromZalo", "return spinWheelForCustomer"],
     ["getCustomerSessionFromZalo", "const [customerSnap"],
     ["getCustomerHistoryFromZalo", "const [recordsSnap"],
     ["getCustomerRewardsFromZalo", "const rewardsSnap"],
   ])("%s xác minh Zalo trước khi đọc hoặc ghi nghiệp vụ khách", (name, businessMarker) => {
     const body = callableBody(name);
-    const verificationIndex = body.indexOf("verifyZaloAccessToken(request.data?.zaloAccessToken)");
+    const verificationIndex = body.indexOf("await verifyZaloAccessToken(");
     const businessIndex = body.indexOf(businessMarker);
 
     expect(verificationIndex).toBeGreaterThanOrEqual(0);
     expect(businessIndex).toBeGreaterThan(verificationIndex);
+  });
+
+  it("vòng quay production dùng entropy mật mã phía server", () => {
+    const start = functionsSource.indexOf("async function spinWheelForCustomer");
+    const end = functionsSource.indexOf("\nexport const createSalon", start);
+    const spinBody = functionsSource.slice(start, end);
+
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(spinBody).toContain("randomInt(totalWeight)");
+    expect(spinBody).toContain("selectWeightedWheelSlotByDraw");
+    expect(spinBody).not.toContain("Math.random()");
+  });
+
+  it("mã quà backend có tối thiểu 64 bit entropy và không nhúng định danh khách", () => {
+    const start = functionsSource.indexOf("function rewardCode");
+    const end = functionsSource.indexOf("\nfunction miniAppUrl", start);
+    const rewardCodeBody = functionsSource.slice(start, end);
+
+    expect(rewardCodeBody).toContain("randomBytes(8)");
+    expect(rewardCodeBody).toContain("slice(0, 16)");
+    expect(rewardCodeBody).not.toMatch(/customerId|zaloUserId|phone|accessToken/u);
+  });
+
+  it("lịch sử khách chỉ query đúng customer được suy ra từ token Zalo", () => {
+    const body = callableBody("getCustomerHistoryFromZalo");
+    const derivedCustomerIndex = body.indexOf("customerIdFor(salonId, zaloProfile.zaloUserId)");
+    const salonFilterIndex = body.indexOf('.where("salonId", "==", salonId)');
+    const customerFilterIndex = body.indexOf('.where("customerId", "==", customerId)');
+
+    expect(derivedCustomerIndex).toBeGreaterThanOrEqual(0);
+    expect(salonFilterIndex).toBeGreaterThan(derivedCustomerIndex);
+    expect(customerFilterIndex).toBeGreaterThan(salonFilterIndex);
+    expect(body).not.toContain("request.data?.customerId");
   });
 
   it("giải mã phone token ở backend trước khi lưu khách", () => {
@@ -50,5 +100,45 @@ describe("hợp đồng xác minh Zalo", () => {
     expect(decodeIndex).toBeGreaterThanOrEqual(0);
     expect(contactIndex).toBeGreaterThan(decodeIndex);
     expect(body).toContain('phoneLast4: String(customerSnap.data()?.phoneLast4 || "")');
+  });
+
+  it("chỉ yêu cầu số điện thoại lần đầu và giữ số đã lưu ở các lần sau", () => {
+    const body = callableBody("registerCustomerFromZalo");
+
+    expect(body).toContain("const effectivePhoneLast4");
+    expect(body).toContain("Bạn chỉ cần nhập ở lần đầu");
+    expect(body).toContain("contactPatch.phoneLast4 !== undefined");
+  });
+
+  it("hồ sơ check-in chỉ trả trạng thái số đã che của khách suy ra từ token", () => {
+    const body = callableBody("getCustomerCheckinProfileFromZalo");
+
+    expect(body).toContain("customerIdFor(salonId, zaloProfile.zaloUserId)");
+    expect(body).toContain("await resolveCustomerQrData(request.data)");
+    expect(body).toContain("phoneLast4");
+    expect(body).toContain("hasPhone");
+    expect(body).not.toContain("request.data?.customerId");
+    expect(body).not.toMatch(/return\s*\{[^}]*\bphone\s*:/su);
+    expect(body).not.toMatch(/return\s*\{[^}]*zaloUserId/su);
+  });
+
+  it("QR khách chỉ chấp nhận QR chi nhánh và tạo thẳng yêu cầu nhân viên xác nhận", () => {
+    const body = callableBody("registerCustomerFromZalo");
+
+    expect(body).toContain("assertBranchOnlyCustomerQr");
+    expect(body).toContain('db.collection("point_requests")');
+    expect(body).toContain('approvalMode: "staff_confirmation"');
+    expect(body).toContain('status: "pending_approval"');
+    expect(body).toContain("POINT_REQUEST_CONFIRMATION_WINDOW_MS");
+    expect(body).toContain("POINT_AWARD_COOLDOWN_MS");
+  });
+
+  it("nhân viên xác nhận theo đúng chi nhánh và backend đặt cooldown sau khi cộng điểm", () => {
+    const body = callableBody("approvePointRequest");
+
+    expect(body).toContain('approvalMode === "staff_confirmation"');
+    expect(body).toContain("assertBranchAccess");
+    expect(body).toContain("nextPointEligibleAt");
+    expect(body).toContain("POINT_AWARD_COOLDOWN_MS");
   });
 });

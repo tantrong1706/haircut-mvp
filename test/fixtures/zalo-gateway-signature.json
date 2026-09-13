@@ -1,0 +1,13 @@
+{
+  "method": "POST",
+  "path": "/v1/zalo/verify",
+  "timestamp": "1760000000000",
+  "nonce": "00112233445566778899aabbccddeeff",
+  "requestId": "req_fixture_0001",
+  "keyId": "fixture-v1",
+  "hmacKeyHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+  "body": "{\"accessToken\":\"fixture-access-token\",\"appsecretProof\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"requestId\":\"req_fixture_0001\"}",
+  "bodySha256": "10187323c5d54ae3e864f2abe0e9e5b9704c2ffd04ecb2345a9a18e3553e64e5",
+  "canonical": "POST\n/v1/zalo/verify\n1760000000000\n00112233445566778899aabbccddeeff\nreq_fixture_0001\n10187323c5d54ae3e864f2abe0e9e5b9704c2ffd04ecb2345a9a18e3553e64e5",
+  "signature": "cf308f84d47e161ae590c2f608c6ab398a37dcd7f38be0d56024c755a92d1053"
+}

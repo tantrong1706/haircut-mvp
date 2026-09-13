@@ -68,6 +68,22 @@ describe("QR salon và chi nhánh", () => {
     expect(isValidSignedQrToken(secret, input, oldToken)).toBe(false);
   });
 
+  it("từ chối token khi payload salon hoặc chi nhánh bị thay đổi", () => {
+    const input = {
+      kind: "branch" as const,
+      salonId: "salon-a",
+      branchId: "branch-a",
+      version: 1,
+    };
+    const token = createSignedQrToken(secret, input);
+
+    expect(isValidSignedQrToken(secret, { ...input, salonId: "salon-b" }, token)).toBe(false);
+    expect(isValidSignedQrToken(secret, { ...input, branchId: "branch-b" }, token)).toBe(false);
+    expect(isValidSignedQrToken(secret, { ...input, kind: "salon", branchId: undefined }, token)).toBe(
+      false,
+    );
+  });
+
   it("xoay QR salon và QR chi nhánh không làm hết hạn lẫn nhau", () => {
     const salonInput = { kind: "salon" as const, salonId: "salon-a", version: 1 };
     const branchInput = {
