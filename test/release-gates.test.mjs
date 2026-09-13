@@ -18,7 +18,7 @@ test("repository check includes the gateway release gates", () => {
   assert.match(checkScript, /Gateway dependency audit/u);
   assert.match(checkScript, /Gateway Functions compatibility/u);
   assert.match(checkScript, /services\/zalo-verification-gateway/u);
-  assert.match(checkScript, /npm audit --audit-level=high/u);
+  assert.match(checkScript, /npm audit --omit=dev --audit-level=high/u);
 });
 
 test("gateway CI validates both integration and main PRs", () => {
@@ -26,6 +26,8 @@ test("gateway CI validates both integration and main PRs", () => {
     gatewayWorkflow,
     /pull_request:\s*\n\s*branches:\s*\[release\/zalo-version-8-readiness, main\]/u,
   );
+  assert.match(gatewayWorkflow, /npm audit --omit=dev --audit-level=high/u);
+  assert.doesNotMatch(gatewayWorkflow, /run:\s*npm audit --audit-level=high/u);
 });
 
 test("secret scanner covers both gateway HMAC representations", () => {
