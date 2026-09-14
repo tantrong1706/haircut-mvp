@@ -86,6 +86,11 @@ beforeEach(async () => {
       }),
       setDoc(doc(db, "customers", "customer-a"), customer(salonA)),
       setDoc(doc(db, "customers", "customer-b"), customer(salonB)),
+      setDoc(doc(db, "customers", "customer-web-a"), {
+        ...customer(salonA),
+        firebaseUid: "web-customer-a",
+        identityProvider: "firebase_phone",
+      }),
       setDoc(doc(db, "customers", "customer-photo"), {
         ...customer(salonA),
         allowPhoto: true,
@@ -210,6 +215,22 @@ describe("Firestore production rules", () => {
     await assertFails(getDoc(doc(db, "chair_sessions", "session-a")));
     await assertFails(getDocs(query(collection(db, "haircut_records"), limit(20))));
     await assertFails(getDocs(query(collection(db, "reward_history"), limit(20))));
+  });
+
+  it("khách web chỉ đọc dữ liệu qua callable dù document thuộc đúng UID", async () => {
+    const webCustomerDb = testEnv
+      .authenticatedContext("web-customer-a", {
+        phone_number: "+84901234567",
+        firebase: { sign_in_provider: "phone" },
+      })
+      .firestore();
+
+    await assertFails(getDoc(doc(webCustomerDb, "customers", "customer-web-a")));
+    await assertFails(
+      getDocs(query(collection(webCustomerDb, "customers"), where("salonId", "==", salonA))),
+    );
+    await assertFails(getDoc(doc(webCustomerDb, "haircut_records", "record-a")));
+    await assertFails(getDoc(doc(webCustomerDb, "reward_history", "reward-a")));
   });
 
   it("mặc định từ chối collection và đường dẫn Storage chưa khai báo", async () => {
