@@ -54,6 +54,12 @@ import {
 } from "./businessRules";
 import { buildNameSearchPrefixes, normalizeSearchText } from "./customerSearch";
 import {
+  customerIdForWeb,
+  customerIdForZalo,
+  webPhonePrincipal,
+  type WebPhonePrincipal,
+} from "./customerWebIdentity";
+import {
   isExpectedSalonAvatarPath,
   isValidSalonAvatarMetadata,
   salonAvatarObjectPath,
@@ -187,6 +193,12 @@ const AUTHENTICATED_RATE_LIMITS = {
   lookupRewardCode: 60,
   redeemRewardCode: 30,
   spinLuckyWheel: 20,
+  getWebCustomerContext: 30,
+  checkInWebCustomer: 10,
+  getWebCustomerSession: 60,
+  getWebCustomerHistory: 30,
+  getWebCustomerRewards: 30,
+  spinWebLuckyWheel: 4,
   claimServiceSession: 60,
   adminMutation: 40,
 } as const;
@@ -938,7 +950,15 @@ async function resolveStaffBranchIds(salonId: string, value: unknown): Promise<s
 }
 
 function customerIdFor(salonId: string, zaloUserId: string): string {
-  return createHash("sha256").update(`${salonId}:${zaloUserId}`).digest("hex").slice(0, 40);
+  return customerIdForZalo(salonId, zaloUserId);
+}
+
+function requireWebPhonePrincipal(auth: Parameters<typeof webPhonePrincipal>[0]) {
+  try {
+    return webPhonePrincipal(auth);
+  } catch {
+    throw new HttpsError("unauthenticated", "Yêu cầu Firebase Phone Auth đã xác minh");
+  }
 }
 
 function activeSessionRefFor(salonId: string, customerId: string) {
@@ -1435,8 +1455,20 @@ function signedQrUrl(input: {
     params.set("branchId", input.branchId);
   }
 
-  const miniAppId = process.env.ZALO_MINI_APP_ID || "your-mini-app-id";
-  return `https://zalo.me/s/${miniAppId}?${params.toString()}`;
+  const configuredBase = String(
+    process.env.CUSTOMER_WEB_CHECKIN_URL || "https://app.chhaircutsalon.cc/checkin",
+  ).trim();
+  let checkinUrl: URL;
+  try {
+    checkinUrl = new URL(configuredBase);
+  } catch {
+    throw new HttpsError("failed-precondition", "CUSTOMER_WEB_CHECKIN_URL không hợp lệ");
+  }
+  if (checkinUrl.protocol !== "https:") {
+    throw new HttpsError("failed-precondition", "CUSTOMER_WEB_CHECKIN_URL phải dùng HTTPS");
+  }
+  for (const [key, value] of params.entries()) checkinUrl.searchParams.set(key, value);
+  return checkinUrl.toString();
 }
 
 function publicBranch(doc: { id: string; data(): DocumentData }) {
@@ -2882,6 +2914,298 @@ export const resolveCustomerQr = onCall(qrFunctionOptions, async (request) => {
   const salonId = requireString(request.data?.salonId, "salonId");
   await enforcePublicRequestPolicy("resolveCustomerQr", request, salonId, request.data?.qrToken);
   return assertBranchOnlyCustomerQr(await resolveCustomerQrData(request.data));
+});
+
+function assertWebCheckinQr(resolution: CustomerQrResolution) {
+  if (resolution.branchId) {
+    return resolution;
+  }
+  throw new HttpsError(
+    "failed-precondition",
+    resolution.selectionRequired
+      ? "Salon có nhiều chi nhánh. Vui lòng quét QR riêng tại chi nhánh."
+      : "Salon chưa có chi nhánh hoạt động.",
+  );
+}
+
+function webCustomerProfileView(customerId: string, data: DocumentData | undefined) {
+  const customer = data ?? {};
+  return {
+    customerId,
+    name: String(customer.name || "Khách hàng"),
+    phoneLast4: String(customer.phoneLast4 || ""),
+    points: Math.max(0, Number(customer.points ?? 0)),
+    allowPhoto: customer.allowPhoto === true,
+    nextPointEligibleAtMs: timestampMillis(customer.nextPointEligibleAt) ?? undefined,
+  };
+}
+
+async function assertDedicatedWebCustomerUid(uid: string) {
+  const member = await db.collection("users").doc(uid).get();
+  if (member.exists && ["owner", "staff", "system_admin"].includes(String(member.data()?.role))) {
+    throw new HttpsError(
+      "permission-denied",
+      "Tài khoản quản lý không dùng cho phiên khách hàng.",
+    );
+  }
+}
+
+async function getOrCreateWebCustomer(
+  principal: WebPhonePrincipal,
+  resolution: CustomerQrResolution,
+) {
+  const salonId = resolution.salonId;
+  const customerId = customerIdForWeb(salonId, principal.uid);
+  const customerRef = db.collection("customers").doc(customerId);
+  const salonRef = db.collection("salons").doc(salonId);
+  const now = Timestamp.now();
+
+  await assertDedicatedWebCustomerUid(principal.uid);
+  await ensureSalonCustomerCount(salonId);
+  await db.runTransaction(async (tx) => {
+    const [customerSnap, salonSnap] = await Promise.all([
+      tx.get(customerRef),
+      tx.get(salonRef),
+    ]);
+    if (!salonSnap.exists) {
+      throw new HttpsError("not-found", "Không tìm thấy salon");
+    }
+    assertSalonIsOperational(salonSnap.data());
+    const baseCustomer = {
+      salonId,
+      firebaseUid: principal.uid,
+      identityProvider: "firebase_phone",
+      phone: principal.phone,
+      phoneLast4: principal.phoneLast4,
+      updatedAt: now,
+    };
+    if (customerSnap.exists) {
+      if (
+        customerSnap.data()?.salonId !== salonId ||
+        customerSnap.data()?.firebaseUid !== principal.uid
+      ) {
+        throw new HttpsError("permission-denied", "Hồ sơ khách không thuộc tài khoản này");
+      }
+      tx.set(customerRef, baseCustomer, { merge: true });
+      return;
+    }
+
+    const customerCount = assertCustomerQuota(salonSnap.data() ?? {});
+    const name = `Khách ${principal.phoneLast4}`;
+    tx.create(customerRef, {
+      ...baseCustomer,
+      name,
+      nameSearch: normalizeSearchText(name),
+      namePrefixes: buildNameSearchPrefixes(name),
+      points: 0,
+      allowPhoto: false,
+      createdAt: now,
+    });
+    tx.set(salonRef, { customerCount: customerCount + 1, updatedAt: now }, { merge: true });
+  });
+
+  const customerSnap = await customerRef.get();
+  return { customerId, customer: customerSnap.data() ?? {} };
+}
+
+function webQrView(resolution: CustomerQrResolution) {
+  return {
+    salonId: resolution.salonId,
+    salonName: resolution.salonName,
+    salonAvatarUrl: resolution.salonAvatarUrl,
+    branchId: resolution.branchId,
+    branchName: resolution.branchName,
+    branchAddress: resolution.branchAddress,
+  };
+}
+
+async function activeWebSessionView(
+  principal: WebPhonePrincipal,
+  resolution: CustomerQrResolution,
+  customerId: string,
+) {
+  const activeSnap = await activeSessionRefFor(resolution.salonId, customerId).get();
+  const active = activeSnap.data();
+  if (
+    !activeSnap.exists ||
+    active?.salonId !== resolution.salonId ||
+    active?.customerId !== customerId ||
+    !shouldReuseActiveSession({
+      status: active?.status,
+      sessionId: active?.sessionId,
+      createdAtMs: timestampMillis(active?.createdAt),
+      expiresAtMs: timestampMillis(active?.expiresAt),
+      nowMs: Date.now(),
+      maxAgeMs: SESSION_POINT_REQUEST_WINDOW_MS,
+    })
+  ) {
+    return null;
+  }
+  const sessionId = String(active?.sessionId || "");
+  const result = await customerSessionResult(
+    resolution.salonId,
+    customerId,
+    sessionId,
+    `Khách ${principal.phoneLast4}`,
+  );
+  return webAppSessionResult(principal.uid, resolution.salonId, result);
+}
+
+export const getWebCustomerContext = onCall(qrFunctionOptions, async (request) => {
+  const principal = requireWebPhonePrincipal(request.auth);
+  const salonId = requireString(request.data?.salonId, "salonId");
+  await enforceAuthenticatedRateLimit("getWebCustomerContext", principal.uid, salonId);
+  await assertFeatureEnabled(
+    salonId,
+    "checkinEnabled",
+    "Salon đang tạm ngừng nhận lượt check-in mới.",
+    request.data?.appVersion,
+  );
+  const resolution = assertWebCheckinQr(await resolveCustomerQrData(request.data));
+  const profile = await getOrCreateWebCustomer(principal, resolution);
+  const activeSession = await activeWebSessionView(
+    principal,
+    resolution,
+    profile.customerId,
+  );
+  return {
+    qr: webQrView(resolution),
+    customer: webCustomerProfileView(profile.customerId, profile.customer),
+    activeSession,
+  };
+});
+
+export const checkInWebCustomer = onCall(qrFunctionOptions, async (request) => {
+  const principal = requireWebPhonePrincipal(request.auth);
+  const salonId = requireString(request.data?.salonId, "salonId");
+  await enforceAuthenticatedRateLimit("checkInWebCustomer", principal.uid, salonId);
+  await assertFeatureEnabled(
+    salonId,
+    "checkinEnabled",
+    "Salon đang tạm ngừng nhận lượt check-in mới.",
+    request.data?.appVersion,
+  );
+  const resolution = assertWebCheckinQr(await resolveCustomerQrData(request.data));
+  const profile = await getOrCreateWebCustomer(principal, resolution);
+  const customerId = profile.customerId;
+  const customerRef = db.collection("customers").doc(customerId);
+  const activeRef = activeSessionRefFor(salonId, customerId);
+  const newSessionRef = db.collection("chair_sessions").doc();
+  const now = Timestamp.now();
+  const expiresAt = Timestamp.fromMillis(
+    serviceSessionExpiresAtMs(now.toMillis(), SESSION_POINT_REQUEST_WINDOW_MS),
+  );
+  let returnedSessionId = newSessionRef.id;
+
+  await db.runTransaction(async (tx) => {
+    const [customerSnap, activeSnap] = await Promise.all([
+      tx.get(customerRef),
+      tx.get(activeRef),
+    ]);
+    if (
+      !customerSnap.exists ||
+      customerSnap.data()?.salonId !== salonId ||
+      customerSnap.data()?.firebaseUid !== principal.uid
+    ) {
+      throw new HttpsError("permission-denied", "Hồ sơ khách không thuộc tài khoản này");
+    }
+
+    const active = activeSnap.data();
+    const previousSessionId = typeof active?.sessionId === "string" ? active.sessionId : "";
+    const previousRef = previousSessionId
+      ? db.collection("chair_sessions").doc(previousSessionId)
+      : null;
+    const previousSnap = previousRef ? await tx.get(previousRef) : null;
+    const reusable = Boolean(
+      activeSnap.exists &&
+        previousSnap?.exists &&
+        previousSnap.data()?.salonId === salonId &&
+        previousSnap.data()?.customerId === customerId &&
+        shouldReuseActiveSession({
+          status: active?.status,
+          sessionId: active?.sessionId,
+          createdAtMs: timestampMillis(active?.createdAt),
+          expiresAtMs: timestampMillis(active?.expiresAt),
+          nowMs: now.toMillis(),
+          maxAgeMs: SESSION_POINT_REQUEST_WINDOW_MS,
+        }),
+    );
+    if (reusable && active) {
+      if (String(active.branchId || "") !== String(resolution.branchId || "")) {
+        throw new HttpsError(
+          "failed-precondition",
+          "Bạn đang có lượt tại chi nhánh khác. Hãy hoàn tất lượt đó trước.",
+        );
+      }
+      returnedSessionId = previousSessionId;
+      tx.set(activeRef, { updatedAt: now }, { merge: true });
+      return;
+    }
+
+    if (previousRef && previousSnap?.exists && OPEN_SESSION_STATUSES.includes(previousSnap.data()?.status)) {
+      tx.set(
+        previousRef,
+        { status: "cancelled", isOpen: false, cancellationReason: "expired", updatedAt: now },
+        { merge: true },
+      );
+    }
+    const customerSummary = {
+      name: String(customerSnap.data()?.name || `Khách ${principal.phoneLast4}`),
+      phoneLast4: principal.phoneLast4,
+      points: Math.max(0, Number(customerSnap.data()?.points ?? 0)),
+      allowPhoto: true,
+    };
+    tx.create(newSessionRef, {
+      salonId,
+      branchId: resolution.branchId,
+      branchName: resolution.branchName,
+      branchAddress: resolution.branchAddress,
+      qrType: resolution.qrType,
+      customerId,
+      customerSummary,
+      status: "waiting",
+      isOpen: true,
+      photoConsentGranted: true,
+      photoConsentVersion: "web-checkin-v1",
+      photoConsentAt: now,
+      expiresAt,
+      createdAt: now,
+      updatedAt: now,
+    });
+    tx.set(activeRef, {
+      salonId,
+      customerId,
+      sessionId: newSessionRef.id,
+      branchId: resolution.branchId,
+      branchName: resolution.branchName,
+      branchAddress: resolution.branchAddress,
+      qrType: resolution.qrType,
+      status: "waiting",
+      isOpen: true,
+      expiresAt,
+      createdAt: now,
+      updatedAt: now,
+    });
+    tx.set(
+      customerRef,
+      {
+        activeSessionId: newSessionRef.id,
+        allowPhoto: true,
+        lastBranchId: resolution.branchId,
+        lastBranchName: resolution.branchName,
+        updatedAt: now,
+      },
+      { merge: true },
+    );
+  });
+
+  const result = await customerSessionResult(
+    salonId,
+    customerId,
+    returnedSessionId,
+    `Khách ${principal.phoneLast4}`,
+  );
+  return webAppSessionResult(principal.uid, salonId, result);
 });
 
 export const getCustomerCheckinProfileFromZalo = onCall(
@@ -5439,6 +5763,20 @@ export const spinLuckyWheel = onCall(functionOptions, async (request) => {
   );
 });
 
+export const spinWebLuckyWheel = onCall(functionOptions, async (request) => {
+  const principal = requireWebPhonePrincipal(request.auth);
+  const salonId = requireString(request.data?.salonId, "salonId");
+  const idempotencyKey = requireIdempotencyKey(request.data?.idempotencyKey);
+  await enforceAuthenticatedRateLimit("spinWebLuckyWheel", principal.uid, salonId);
+  return spinWheelForCustomer(
+    salonId,
+    customerIdForWeb(salonId, principal.uid),
+    idempotencyKey,
+    request.data?.configVersion,
+    request.data?.appVersion,
+  );
+});
+
 export const spinLuckyWheelFromZalo = onCall(zaloFunctionOptions, async (request) => {
   const salonId = requireString(request.data?.salonId, "salonId");
   const idempotencyKey = requireIdempotencyKey(request.data?.idempotencyKey);
@@ -5460,18 +5798,12 @@ export const spinLuckyWheelFromZalo = onCall(zaloFunctionOptions, async (request
   );
 });
 
-export const getCustomerSessionFromZalo = onCall(zaloFunctionOptions, async (request) => {
-  const salonId = requireString(request.data?.salonId, "salonId");
-  const sessionId = requireString(request.data?.sessionId, "sessionId");
-  await enforcePublicRequestPolicy(
-    "getCustomerSessionFromZalo",
-    request,
-    salonId,
-    request.data?.zaloAccessToken,
-  );
-  const zaloProfile = await verifyZaloAccessToken(request.data?.zaloAccessToken);
-  const customerId = customerIdFor(salonId, zaloProfile.zaloUserId);
-
+async function customerSessionResult(
+  salonId: string,
+  customerId: string,
+  sessionId: string,
+  fallbackName = "Khách hàng",
+) {
   const [customerSnap, sessionSnap, wheelSnap, features] = await Promise.all([
     db.collection("customers").doc(customerId).get(),
     db.collection("chair_sessions").doc(sessionId).get(),
@@ -5523,7 +5855,7 @@ export const getCustomerSessionFromZalo = onCall(zaloFunctionOptions, async (req
     : [];
 
   return {
-    identityBinding: createHash("sha256").update(zaloProfile.zaloUserId).digest("hex"),
+    sessionId,
     sessionStatus:
       session.approvalMode === "staff_confirmation" && session.status === "pending_approval" &&
       (timestampMillis(session.expiresAt) ?? 0) <= Date.now() ? "cancelled" :
@@ -5542,7 +5874,7 @@ export const getCustomerSessionFromZalo = onCall(zaloFunctionOptions, async (req
     mirrorName: String(session.branchName ?? session.mirrorName ?? ""),
     customer: {
       customerId,
-      name: String(customer.name ?? zaloProfile.name ?? "Khách hàng"),
+      name: String(customer.name ?? fallbackName),
       nextPointEligibleAtMs: timestampMillis(customer.nextPointEligibleAt),
       phoneLast4: String(customer.phoneLast4 ?? ""),
       points: Math.max(0, Number(customer.points ?? 0)),
@@ -5560,20 +5892,69 @@ export const getCustomerSessionFromZalo = onCall(zaloFunctionOptions, async (req
     },
     features,
   };
+}
+
+function webAppSessionResult(
+  firebaseUid: string,
+  salonId: string,
+  result: Awaited<ReturnType<typeof customerSessionResult>>,
+) {
+  return {
+    identityProvider: "firebase" as const,
+    firebaseUid,
+    qr: {
+      qrType: "branch" as const,
+      salonId,
+      branchId: result.branchId || "",
+      mirrorId: "",
+    },
+    sessionId: result.sessionId,
+    branchName: result.branchName,
+    branchAddress: result.branchAddress,
+    mirrorName: result.mirrorName,
+    zaloUserId: "",
+    sessionStatus: result.sessionStatus,
+    assignedStaffName: result.assignedStaffName,
+    claimedAtMs: result.claimedAtMs,
+    customer: result.customer,
+    wheelConfig: result.wheelConfig,
+    features: result.features,
+  };
+}
+
+export const getWebCustomerSession = onCall(functionOptions, async (request) => {
+  const principal = requireWebPhonePrincipal(request.auth);
+  const salonId = requireString(request.data?.salonId, "salonId");
+  const sessionId = requireString(request.data?.sessionId, "sessionId");
+  await enforceAuthenticatedRateLimit("getWebCustomerSession", principal.uid, salonId);
+  const customerId = customerIdForWeb(salonId, principal.uid);
+  return customerSessionResult(salonId, customerId, sessionId, `Khách ${principal.phoneLast4}`);
 });
 
-export const getCustomerHistoryFromZalo = onCall(zaloFunctionOptions, async (request) => {
+export const getCustomerSessionFromZalo = onCall(zaloFunctionOptions, async (request) => {
   const salonId = requireString(request.data?.salonId, "salonId");
+  const sessionId = requireString(request.data?.sessionId, "sessionId");
   await enforcePublicRequestPolicy(
-    "getCustomerHistoryFromZalo",
+    "getCustomerSessionFromZalo",
     request,
     salonId,
     request.data?.zaloAccessToken,
   );
   const zaloProfile = await verifyZaloAccessToken(request.data?.zaloAccessToken);
   const customerId = customerIdFor(salonId, zaloProfile.zaloUserId);
-  const limit = boundedQueryLimit(request.data?.limit, 20, 50);
+  const result = await customerSessionResult(
+    salonId,
+    customerId,
+    sessionId,
+    zaloProfile.name ?? "Khách hàng",
+  );
+  return {
+    ...result,
+    identityBinding: createHash("sha256").update(zaloProfile.zaloUserId).digest("hex"),
+  };
+});
 
+async function customerHistoryResult(salonId: string, customerId: string, limit: number) {
   const [recordsSnap, customerSnap, salonSnap] = await Promise.all([
     db
       .collection("haircut_records")
@@ -5639,20 +6020,37 @@ export const getCustomerHistoryFromZalo = onCall(zaloFunctionOptions, async (req
       }),
     ),
   };
+}
+
+export const getWebCustomerHistory = onCall(functionOptions, async (request) => {
+  const principal = requireWebPhonePrincipal(request.auth);
+  const salonId = requireString(request.data?.salonId, "salonId");
+  await enforceAuthenticatedRateLimit("getWebCustomerHistory", principal.uid, salonId);
+  const customerId = customerIdForWeb(salonId, principal.uid);
+  return customerHistoryResult(
+    salonId,
+    customerId,
+    boundedQueryLimit(request.data?.limit, 20, 50),
+  );
 });
 
-export const getCustomerRewardsFromZalo = onCall(zaloFunctionOptions, async (request) => {
+export const getCustomerHistoryFromZalo = onCall(zaloFunctionOptions, async (request) => {
   const salonId = requireString(request.data?.salonId, "salonId");
   await enforcePublicRequestPolicy(
-    "getCustomerRewardsFromZalo",
+    "getCustomerHistoryFromZalo",
     request,
     salonId,
     request.data?.zaloAccessToken,
   );
   const zaloProfile = await verifyZaloAccessToken(request.data?.zaloAccessToken);
-  const customerId = customerIdFor(salonId, zaloProfile.zaloUserId);
-  const limit = boundedQueryLimit(request.data?.limit, 20, 50);
+  return customerHistoryResult(
+    salonId,
+    customerIdFor(salonId, zaloProfile.zaloUserId),
+    boundedQueryLimit(request.data?.limit, 20, 50),
+  );
+});
 
+async function customerRewardsResult(salonId: string, customerId: string, limit: number) {
   const rewardsSnap = await db
     .collection("reward_history")
     .where("salonId", "==", salonId)
@@ -5690,6 +6088,33 @@ export const getCustomerRewardsFromZalo = onCall(zaloFunctionOptions, async (req
       ];
     }),
   };
+}
+
+export const getWebCustomerRewards = onCall(functionOptions, async (request) => {
+  const principal = requireWebPhonePrincipal(request.auth);
+  const salonId = requireString(request.data?.salonId, "salonId");
+  await enforceAuthenticatedRateLimit("getWebCustomerRewards", principal.uid, salonId);
+  return customerRewardsResult(
+    salonId,
+    customerIdForWeb(salonId, principal.uid),
+    boundedQueryLimit(request.data?.limit, 20, 50),
+  );
+});
+
+export const getCustomerRewardsFromZalo = onCall(zaloFunctionOptions, async (request) => {
+  const salonId = requireString(request.data?.salonId, "salonId");
+  await enforcePublicRequestPolicy(
+    "getCustomerRewardsFromZalo",
+    request,
+    salonId,
+    request.data?.zaloAccessToken,
+  );
+  const zaloProfile = await verifyZaloAccessToken(request.data?.zaloAccessToken);
+  return customerRewardsResult(
+    salonId,
+    customerIdFor(salonId, zaloProfile.zaloUserId),
+    boundedQueryLimit(request.data?.limit, 20, 50),
+  );
 });
 
 async function assertManagerHistoryBranch(

@@ -1,4 +1,4 @@
-export type TabKey = "home" | "history" | "wheel" | "rewards";
+export type TabKey = "home" | "history" | "wheel" | "rewards" | "account";
 
 export type QrType = "salon" | "branch" | "legacy-mirror";
 
@@ -20,6 +20,8 @@ export type CustomerProfile = {
 };
 
 export type AppSession = {
+  identityProvider?: "zalo" | "firebase";
+  firebaseUid?: string;
   qr: QrContext;
   sessionId: string;
   branchName?: string;

@@ -47,9 +47,9 @@ describe("hợp đồng xác minh Zalo", () => {
     ["registerCustomerFromZalo", "const qrResolution = assertBranchOnlyCustomerQr"],
     ["getCustomerCheckinProfileFromZalo", "const customerSnap = await customerRef.get()"],
     ["spinLuckyWheelFromZalo", "return spinWheelForCustomer"],
-    ["getCustomerSessionFromZalo", "const [customerSnap"],
-    ["getCustomerHistoryFromZalo", "const [recordsSnap"],
-    ["getCustomerRewardsFromZalo", "const rewardsSnap"],
+    ["getCustomerSessionFromZalo", "const result = await customerSessionResult"],
+    ["getCustomerHistoryFromZalo", "return customerHistoryResult"],
+    ["getCustomerRewardsFromZalo", "return customerRewardsResult"],
   ])("%s xác minh Zalo trước khi đọc hoặc ghi nghiệp vụ khách", (name, businessMarker) => {
     const body = callableBody(name);
     const verificationIndex = body.indexOf("await verifyZaloAccessToken(");
@@ -82,12 +82,19 @@ describe("hợp đồng xác minh Zalo", () => {
 
   it("lịch sử khách chỉ query đúng customer được suy ra từ token Zalo", () => {
     const body = callableBody("getCustomerHistoryFromZalo");
+    const coreStart = functionsSource.indexOf("async function customerHistoryResult");
+    const coreEnd = functionsSource.indexOf("\nexport const getWebCustomerHistory", coreStart);
+    const coreBody = functionsSource.slice(coreStart, coreEnd);
+    const verificationIndex = body.indexOf("await verifyZaloAccessToken(");
     const derivedCustomerIndex = body.indexOf("customerIdFor(salonId, zaloProfile.zaloUserId)");
-    const salonFilterIndex = body.indexOf('.where("salonId", "==", salonId)');
-    const customerFilterIndex = body.indexOf('.where("customerId", "==", customerId)');
+    const delegationIndex = body.indexOf("return customerHistoryResult");
+    const salonFilterIndex = coreBody.indexOf('.where("salonId", "==", salonId)');
+    const customerFilterIndex = coreBody.indexOf('.where("customerId", "==", customerId)');
 
-    expect(derivedCustomerIndex).toBeGreaterThanOrEqual(0);
-    expect(salonFilterIndex).toBeGreaterThan(derivedCustomerIndex);
+    expect(verificationIndex).toBeGreaterThanOrEqual(0);
+    expect(derivedCustomerIndex).toBeGreaterThan(verificationIndex);
+    expect(delegationIndex).toBeGreaterThan(verificationIndex);
+    expect(salonFilterIndex).toBeGreaterThanOrEqual(0);
     expect(customerFilterIndex).toBeGreaterThan(salonFilterIndex);
     expect(body).not.toContain("request.data?.customerId");
   });

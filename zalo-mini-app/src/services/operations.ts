@@ -2397,8 +2397,7 @@ function mockBranchQrSettings(salonId: string): BranchQrSettings {
   const salonToken = "demo-salon-token";
   const branchToken = "demo-branch-token";
   const branchId = "demo-branch-main";
-  const miniAppId = String(import.meta.env.VITE_ZALO_MINI_APP_ID || "");
-  const base = miniAppId ? `https://zalo.me/s/${miniAppId}` : window.location.origin;
+  const base = `${window.location.origin}/checkin`;
   return {
     salonQrUrl: `${base}/?qrType=salon&salonId=${salonId}&qrToken=${salonToken}`,
     branches: [

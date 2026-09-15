@@ -7,6 +7,7 @@ import {
   getWebCustomerHistory,
   getWebCustomerRewards,
   getWebCustomerSession,
+  listBranches,
   spinWebLuckyWheel,
 } from "../src/index";
 import { createSignedQrToken } from "../src/security";
@@ -49,10 +50,22 @@ describe("authenticated web customer platform", () => {
 
     await db.collection("customers").doc(firstA.customer.customerId).update({ points: 15 });
     await db.collection("customers").doc(firstB.customer.customerId).update({ points: 3 });
+    await db.collection("reward_history").doc("reward-salon-a").set({
+      salonId: "salon-a",
+      customerId: firstA.customer.customerId,
+      rewardName: "Quà riêng Salon A",
+      rewardCode: "HC-SALON-A",
+      status: "unused",
+      createdAt: Timestamp.now(),
+    });
     const refreshedA = await getWebCustomerContext.run(phoneRequest("uid-global", qrA));
     const refreshedB = await getWebCustomerContext.run(phoneRequest("uid-global", qrB));
+    const salonBRewards = await getWebCustomerRewards.run(
+      phoneRequest("uid-global", { salonId: "salon-b", limit: 20 }),
+    );
     expect(refreshedA.customer.points).toBe(15);
     expect(refreshedB.customer.points).toBe(3);
+    expect(salonBRewards.rewards).toEqual([]);
   });
 
   it("xác minh QR và Firebase Phone principal trước khi đọc tenant", async () => {
@@ -69,12 +82,43 @@ describe("authenticated web customer platform", () => {
       getWebCustomerContext.run(
         phoneRequest("uid-global", { ...valid, branchId: "branch-tampered" }),
       ),
-    ).rejects.toMatchObject({ code: expect.stringMatching(/permission-denied|failed-precondition/) });
+    ).rejects.toMatchObject({
+      code: expect.stringMatching(/permission-denied|failed-precondition/),
+    });
 
     await db.collection("branches").doc("branch-a").update({ isActive: false });
     await expect(
       getWebCustomerContext.run(phoneRequest("uid-global", valid)),
     ).rejects.toMatchObject({ code: "failed-precondition" });
+  });
+
+  it("QR salon một chi nhánh mở web, còn salon nhiều chi nhánh yêu cầu QR branch", async () => {
+    await seedSalon("salon-a", "branch-a");
+    const salonQr = signedSalonQr("salon-a");
+    const context = await getWebCustomerContext.run(phoneRequest("uid-global", salonQr));
+    expect(context.qr).toMatchObject({ salonId: "salon-a", branchId: "branch-a" });
+
+    await seedBranch("salon-a", "branch-b");
+    await expect(
+      getWebCustomerContext.run(phoneRequest("uid-global", salonQr)),
+    ).rejects.toMatchObject({
+      code: "failed-precondition",
+    });
+  });
+
+  it("QR do owner lấy được trỏ tới customer web HTTPS", async () => {
+    await seedSalon("salon-a", "branch-a");
+    await db.collection("users").doc("owner-a").set({
+      salonId: "salon-a",
+      role: "owner",
+      isActive: true,
+      branchIds: [],
+    });
+
+    const result = await listBranches.run(requestFor("owner-a", { salonId: "salon-a" }, {}));
+    expect(result.salonQrUrl).toMatch(/^https:\/\/app\.chhaircutsalon\.cc\/checkin\?/u);
+    expect(result.branches[0].qrUrl).toMatch(/^https:\/\/app\.chhaircutsalon\.cc\/checkin\?/u);
+    expect(result.salonQrUrl).not.toContain("zalo.me");
   });
 
   it("double click và network retry chỉ tạo một active waiting session", async () => {
@@ -113,9 +157,7 @@ describe("authenticated web customer platform", () => {
     await seedSalon("salon-a", "branch-a");
     const qr = signedBranchQr("salon-a", "branch-a");
     const owner = await getWebCustomerContext.run(phoneRequest("uid-owner", qr));
-    const other = await getWebCustomerContext.run(
-      phoneRequest("uid-other", qr, "+84909999999"),
-    );
+    const other = await getWebCustomerContext.run(phoneRequest("uid-other", qr, "+84909999999"));
     const checkedIn = await checkInWebCustomer.run(phoneRequest("uid-owner", qr));
     await Promise.all([
       db.collection("haircut_records").add({
@@ -172,15 +214,16 @@ describe("authenticated web customer platform", () => {
     const qr = signedBranchQr("salon-a", "branch-a");
     const context = await getWebCustomerContext.run(phoneRequest("uid-owner", qr));
     await db.collection("customers").doc(context.customer.customerId).update({ points: 10 });
-    await db.collection("lucky_wheel").doc("salon-a").set({
-      configVersion: 1,
-      requiredPoints: 5,
-      deductPointsAfterSpin: true,
-      rewardValidityDays: 30,
-      slots: [
-        { slotId: "slot-a", label: "Quà A", active: true, type: "reward", weight: 1 },
-      ],
-    });
+    await db
+      .collection("lucky_wheel")
+      .doc("salon-a")
+      .set({
+        configVersion: 1,
+        requiredPoints: 5,
+        deductPointsAfterSpin: true,
+        rewardValidityDays: 30,
+        slots: [{ slotId: "slot-a", label: "Quà A", active: true, type: "reward", weight: 1 }],
+      });
     const payload = {
       salonId: "salon-a",
       customerId: "customer-forged",
@@ -191,8 +234,9 @@ describe("authenticated web customer platform", () => {
     const first = await spinWebLuckyWheel.run(phoneRequest("uid-owner", payload));
     const retry = await spinWebLuckyWheel.run(phoneRequest("uid-owner", payload));
     expect(retry).toEqual(first);
-    expect((await db.collection("customers").doc(context.customer.customerId).get()).data()?.points)
-      .toBe(5);
+    expect(
+      (await db.collection("customers").doc(context.customer.customerId).get()).data()?.points,
+    ).toBe(5);
     expect((await db.collection("reward_history").get()).size).toBe(1);
     expect((await db.collection("customers").doc("customer-forged").get()).exists).toBe(false);
   });
@@ -200,14 +244,17 @@ describe("authenticated web customer platform", () => {
 
 async function seedSalon(salonId: string, branchId: string) {
   await Promise.all([
-    db.collection("salons").doc(salonId).set({
-      name: `Salon ${salonId}`,
-      plan: "pro",
-      pointPerVisit: 1,
-      customerCount: 0,
-      isActive: true,
-      status: "active",
-    }),
+    db
+      .collection("salons")
+      .doc(salonId)
+      .set({
+        name: `Salon ${salonId}`,
+        plan: "pro",
+        pointPerVisit: 1,
+        customerCount: 0,
+        isActive: true,
+        status: "active",
+      }),
     seedBranch(salonId, branchId),
   ]);
 }
@@ -231,11 +278,16 @@ function signedBranchQr(salonId: string, branchId: string) {
   };
 }
 
-function phoneRequest(
-  uid: string,
-  data: Record<string, unknown>,
-  phone = "+84901234567",
-) {
+function signedSalonQr(salonId: string) {
+  return {
+    qrType: "salon",
+    salonId,
+    branchId: "",
+    qrToken: createSignedQrToken(secret, { kind: "salon", salonId, version: 1 }),
+  };
+}
+
+function phoneRequest(uid: string, data: Record<string, unknown>, phone = "+84901234567") {
   return requestFor(uid, data, {
     phone_number: phone,
     firebase: { sign_in_provider: "phone" },

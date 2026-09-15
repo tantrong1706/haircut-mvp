@@ -15,6 +15,10 @@ const mocks = vi.hoisted(() => ({
   getZaloAccessToken: vi.fn(),
   getZaloIdentity: vi.fn(),
   isFirebaseConfigured: vi.fn(() => false),
+  getWebCustomerHistory: vi.fn(),
+  getWebCustomerRewards: vi.fn(),
+  getWebCustomerSessionState: vi.fn(),
+  spinWebCustomerWheel: vi.fn(),
 }));
 
 vi.mock("./firebase", () => ({
@@ -27,6 +31,13 @@ vi.mock("./firebase", () => ({
 vi.mock("./zalo", () => ({
   getZaloAccessToken: mocks.getZaloAccessToken,
   getZaloIdentity: mocks.getZaloIdentity,
+}));
+
+vi.mock("./webCustomerApi", () => ({
+  getWebCustomerHistory: mocks.getWebCustomerHistory,
+  getWebCustomerRewards: mocks.getWebCustomerRewards,
+  getWebCustomerSessionState: mocks.getWebCustomerSessionState,
+  spinWebCustomerWheel: mocks.spinWebCustomerWheel,
 }));
 
 const candidate: SavedSessionCandidate = {
@@ -81,6 +92,8 @@ beforeEach(() => {
     name: "Khách xem trước",
     avatar: "",
   });
+  mocks.getWebCustomerHistory.mockResolvedValue([]);
+  mocks.getWebCustomerRewards.mockResolvedValue([]);
 });
 
 describe("customerSessionRefreshDelay", () => {
@@ -323,6 +336,25 @@ describe("getHaircutHistory", () => {
       limit: 20,
     });
   });
+
+  it("web customer không yêu cầu Zalo token", async () => {
+    const webSession = {
+      identityProvider: "firebase" as const,
+      firebaseUid: "uid-web",
+      qr: candidate.qr,
+      sessionId: candidate.sessionId,
+      zaloUserId: "",
+      customer: {
+        customerId: "customer-web",
+        name: "Khách Web",
+        points: 3,
+        allowPhoto: true,
+      },
+    };
+    await getHaircutHistory(webSession);
+    expect(mocks.getWebCustomerHistory).toHaveBeenCalledWith(webSession);
+    expect(mocks.getZaloAccessToken).not.toHaveBeenCalled();
+  });
 });
 
 describe("spinWheel", () => {
@@ -386,5 +418,37 @@ describe("spinWheel", () => {
         configVersion: 3,
       }),
     );
+  });
+
+  it("web customer spin bằng callable auth-derived, không dùng Zalo", async () => {
+    mocks.isFirebaseConfigured.mockReturnValue(true);
+    mocks.spinWebCustomerWheel.mockResolvedValue({
+      rewardId: "reward-web",
+      rewardName: "Quà Web",
+      rewardCode: "WEB-CODE",
+      pointsAfter: 5,
+      isWinning: true,
+      selectedIndex: 0,
+      selectedSlotId: "slot-1",
+      configVersion: 1,
+    });
+    const webSession = {
+      identityProvider: "firebase" as const,
+      firebaseUid: "uid-web",
+      qr: candidate.qr,
+      sessionId: candidate.sessionId,
+      zaloUserId: "",
+      customer: {
+        customerId: "customer-web",
+        name: "Khách Web",
+        points: 10,
+        allowPhoto: true,
+      },
+    };
+
+    await spinWheel(webSession, 1);
+
+    expect(mocks.spinWebCustomerWheel).toHaveBeenCalledWith(webSession, 1, expect.any(String));
+    expect(mocks.getZaloAccessToken).not.toHaveBeenCalled();
   });
 });

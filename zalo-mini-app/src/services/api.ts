@@ -31,6 +31,12 @@ import { activeWheelSlots, normalizeLuckyWheelConfig } from "./wheel";
 import { getZaloAccessToken, getZaloIdentity, ZaloIdentity } from "./zalo";
 import { createSessionIdentityBinding, type SavedSessionCandidate } from "./sessionStore";
 import { safeStorageGet, safeStorageRemove, safeStorageSet } from "./safeStorage";
+import {
+  getWebCustomerHistory,
+  getWebCustomerRewards,
+  getWebCustomerSessionState,
+  spinWebCustomerWheel,
+} from "./webCustomerApi";
 export { parseQrContext } from "./qr";
 
 const SESSION_POINT_REQUEST_WINDOW_MS = 12 * 60 * 60 * 1000;
@@ -151,7 +157,7 @@ export function listenSessionLiveUpdates(
   onError?: (message: string) => void,
   onSynced?: (syncedAtMs: number) => void,
 ) {
-  if (getFunctionWriteMode() === "required") {
+  if (session.identityProvider === "firebase" || getFunctionWriteMode() === "required") {
     let stopped = false;
     let refreshing = false;
     let currentSession = session;
@@ -432,6 +438,27 @@ export function customerSessionRefreshDelay(
 async function getCustomerSessionState(
   session: AppSession,
 ): Promise<CustomerSessionFunctionResult> {
+  if (session.identityProvider === "firebase") {
+    const result = await getWebCustomerSessionState(session);
+    return {
+      identityBinding: session.identityBinding || "",
+      sessionStatus: normalizeSessionStatus(result.sessionStatus, result.assignedStaffName),
+      branchId: result.branchId,
+      assignedStaffName: result.assignedStaffName || "",
+      claimedAtMs: result.claimedAtMs ?? null,
+      branchName: result.branchName || session.branchName || "",
+      branchAddress: result.branchAddress || session.branchAddress || "",
+      mirrorName: session.mirrorName || "",
+      customer: mapCustomerProfile(
+        result.customer.customerId || session.customer.customerId,
+        result.customer as unknown as Record<string, unknown>,
+        session.customer,
+      ),
+      wheelConfig: normalizeLuckyWheelConfig(result.wheelConfig),
+      features: result.features,
+    };
+  }
+
   const zaloAccessToken = await getZaloAccessToken();
   const result = await callFunction<
     { salonId: string; sessionId: string; zaloAccessToken: string },
@@ -730,10 +757,16 @@ export async function spinWheel(session: AppSession, configVersion: number): Pro
     return spinWheelDirect(session, configVersion);
   }
 
-  const zaloAccessToken = await getZaloAccessToken();
   const pendingSpin = getOrCreateIdempotencyKey(
     `spin:${session.qr.salonId}:${session.customer.customerId}`,
   );
+  if (session.identityProvider === "firebase") {
+    const result = await spinWebCustomerWheel(session, configVersion, pendingSpin.key);
+    safeStorageRemove(pendingSpin.storageKey);
+    return { ...result, isWinning: result.isWinning ?? Boolean(result.rewardCode) };
+  }
+
+  const zaloAccessToken = await getZaloAccessToken();
   const result = await callFunction<
     {
       salonId: string;
@@ -811,6 +844,10 @@ async function spinWheelDirect(session: AppSession, configVersion: number): Prom
 }
 
 export async function getHaircutHistory(session: AppSession): Promise<HaircutRecord[]> {
+  if (session.identityProvider === "firebase") {
+    return getWebCustomerHistory(session);
+  }
+
   if (!isFirebaseConfigured() || getFunctionWriteMode() === "direct") {
     return getHaircutHistoryDirect(session);
   }
@@ -914,7 +951,7 @@ export async function getCustomerWheelConfig(session: AppSession): Promise<Lucky
     return defaultLuckyWheelConfig;
   }
 
-  if (getFunctionWriteMode() === "required") {
+  if (session.identityProvider === "firebase" || getFunctionWriteMode() === "required") {
     return (await getCustomerSessionState(session)).wheelConfig;
   }
 
@@ -930,6 +967,10 @@ export async function getCustomerWheelConfig(session: AppSession): Promise<Lucky
 }
 
 export async function getRewards(session: AppSession): Promise<Reward[]> {
+  if (session.identityProvider === "firebase") {
+    return getWebCustomerRewards(session);
+  }
+
   if (!isFirebaseConfigured() || getFunctionWriteMode() === "direct") {
     return getRewardsDirect(session);
   }

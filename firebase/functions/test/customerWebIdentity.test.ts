@@ -1,25 +1,16 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import {
-  customerIdForWeb,
-  customerIdForZalo,
-  webPhonePrincipal,
-} from "../src/customerWebIdentity";
+import { customerIdForWeb, customerIdForZalo, webPhonePrincipal } from "../src/customerWebIdentity";
 
 describe("customer identity theo provider", () => {
   it("giữ nguyên document ID của khách Zalo hiện tại", () => {
-    const expected = createHash("sha256")
-      .update("salon-a:zalo-user-a")
-      .digest("hex")
-      .slice(0, 40);
+    const expected = createHash("sha256").update("salon-a:zalo-user-a").digest("hex").slice(0, 40);
 
     expect(customerIdForZalo("salon-a", "zalo-user-a")).toBe(expected);
   });
 
   it("tạo customer khác nhau cho cùng UID ở hai salon", () => {
-    expect(customerIdForWeb("salon-a", "uid-123")).not.toBe(
-      customerIdForWeb("salon-b", "uid-123"),
-    );
+    expect(customerIdForWeb("salon-a", "uid-123")).not.toBe(customerIdForWeb("salon-b", "uid-123"));
   });
 
   it("không trùng identity Zalo ngay cả khi subject giống nhau", () => {

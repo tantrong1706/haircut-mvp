@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+test.use({ userAgent: "Zalo/24.0 MiniApp" });
+
 const qr = {
   qrType: "branch",
   salonId: "salon-e2e",

@@ -29,6 +29,7 @@ vi.mock("./firebase", () => ({
 import {
   beginCustomerPhoneSignIn,
   clearPendingWebQr,
+  confirmCustomerPhoneSignIn,
   configureCustomerWebAuthPersistence,
   customerPhoneAuthErrorMessage,
   loadPendingWebQr,
@@ -84,6 +85,9 @@ describe("pending QR trong phiên đăng nhập", () => {
 describe("Firebase Phone Auth web", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
+    (window as typeof window & { __haircutWebAuthTestMode?: boolean }).__haircutWebAuthTestMode =
+      false;
     mocks.setPersistence.mockResolvedValue(undefined);
     mocks.onAuthStateChanged.mockReturnValue(() => undefined);
     mocks.signOut.mockResolvedValue(undefined);
@@ -92,8 +96,10 @@ describe("Firebase Phone Auth web", () => {
   it("cấu hình browserLocalPersistence trước khi nghe auth state", async () => {
     const onChange = vi.fn();
     const stop = subscribeCustomerWebAuth(onChange, vi.fn());
-    await vi.waitFor(() => expect(mocks.setPersistence).toHaveBeenCalledTimes(1));
-    expect(mocks.onAuthStateChanged).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => {
+      expect(mocks.setPersistence).toHaveBeenCalledTimes(1);
+      expect(mocks.onAuthStateChanged).toHaveBeenCalledTimes(1);
+    });
     expect(mocks.setPersistence.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.onAuthStateChanged.mock.invocationCallOrder[0],
     );
@@ -120,11 +126,47 @@ describe("Firebase Phone Auth web", () => {
     expect(mocks.signOut).toHaveBeenCalledWith(mocks.auth);
   });
 
+  it("xác nhận OTP chỉ chấp nhận 6 chữ số và dọn captcha", async () => {
+    const confirm = vi.fn().mockResolvedValue(undefined);
+    await expect(confirmCustomerPhoneSignIn({ confirm }, "12x")).rejects.toThrow("6 chữ số");
+    await confirmCustomerPhoneSignIn({ confirm }, "123456");
+    expect(confirm).toHaveBeenCalledWith("123456");
+    expect(mocks.recaptchaClear).toHaveBeenCalled();
+  });
+
+  it("dọn captcha khi Firebase từ chối gửi OTP", async () => {
+    mocks.signInWithPhoneNumber.mockRejectedValue(new Error("send failed"));
+    await expect(beginCustomerPhoneSignIn("0901234567", "customer-recaptcha")).rejects.toThrow(
+      "send failed",
+    );
+    expect(mocks.recaptchaClear).toHaveBeenCalled();
+  });
+
+  it("test adapter yêu cầu mã cố định chỉ trong runtime test", async () => {
+    (window as typeof window & { __haircutWebAuthTestMode?: boolean }).__haircutWebAuthTestMode =
+      true;
+    const onChange = vi.fn();
+    const stop = subscribeCustomerWebAuth(onChange, vi.fn());
+    await vi.waitFor(() => expect(onChange).toHaveBeenCalledWith(null));
+    const confirmation = await beginCustomerPhoneSignIn("0901234567", "unused");
+    await expect(confirmation.confirm("000000")).rejects.toMatchObject({
+      code: "auth/invalid-verification-code",
+    });
+    await confirmation.confirm("123456");
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ uid: "web-test-uid" }));
+    await signOutCustomerWeb();
+    expect(onChange).toHaveBeenLastCalledWith(null);
+    stop();
+    expect(mocks.signInWithPhoneNumber).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["auth/invalid-verification-code", "Mã OTP không đúng"],
     ["auth/code-expired", "Mã OTP đã hết hạn"],
     ["auth/too-many-requests", "quá nhiều"],
     ["auth/operation-not-allowed", "chưa bật Phone"],
+    ["auth/invalid-phone-number", "không hợp lệ"],
+    ["auth/captcha-check-failed", "bảo mật"],
   ])("hiển thị lỗi thân thiện cho %s", (code, message) => {
     expect(customerPhoneAuthErrorMessage({ code })).toContain(message);
   });

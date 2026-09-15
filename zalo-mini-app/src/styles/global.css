@@ -930,6 +930,38 @@ small {
   display: none;
 }
 
+.web-customer-auth .auth-card > label {
+  font-weight: 850;
+}
+
+.web-customer-auth .auth-card input {
+  width: 100%;
+  min-height: 52px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #ffffff;
+  color: var(--ink);
+  font-size: 16px;
+}
+
+.web-customer-summary,
+.customer-account-page .panel {
+  align-content: start;
+}
+
+.web-customer-summary > strong,
+.customer-account-page .panel > strong {
+  color: var(--green-strong);
+  font-size: 24px;
+}
+
+.web-customer-summary > p,
+.customer-account-page .panel > p {
+  color: var(--muted);
+  line-height: 1.55;
+}
+
 .status-card {
   display: grid;
   gap: 8px;
@@ -1893,6 +1925,14 @@ small {
 .bottom-nav button.active {
   background: linear-gradient(135deg, #edf7f2, #fff6df), #edf7f2;
   color: var(--green-strong);
+}
+
+.bottom-nav.web-customer-nav {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.bottom-nav.web-customer-nav button {
+  font-size: 11px;
 }
 
 .wheel-hero {

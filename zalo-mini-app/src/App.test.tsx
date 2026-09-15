@@ -74,6 +74,49 @@ vi.mock("./pages/ScanEntryPage", () => ({
   ),
 }));
 
+vi.mock("./pages/WebCustomerEntryPage", () => ({
+  WebCustomerEntryPage: ({ onReady }: { onReady?: (session: unknown) => void }) => (
+    <div>
+      <span>web-customer-entry</span>
+      <button
+        type="button"
+        onClick={() =>
+          onReady?.({
+            identityProvider: "firebase",
+            firebaseUid: "uid-web",
+            qr: {
+              qrType: "branch",
+              salonId: "salon-web",
+              branchId: "branch-web",
+              mirrorId: "",
+            },
+            sessionId: "session-web",
+            zaloUserId: "",
+            sessionStatus: "waiting",
+            customer: {
+              customerId: "customer-web",
+              name: "Khach Web",
+              phoneLast4: "4567",
+              points: 4,
+              allowPhoto: true,
+            },
+          })
+        }
+      >
+        Web check-in
+      </button>
+    </div>
+  ),
+}));
+
+vi.mock("./pages/CustomerAccountPage", () => ({
+  CustomerAccountPage: ({ onLoggedOut }: { onLoggedOut: () => void }) => (
+    <button type="button" onClick={onLoggedOut}>
+      Web logout
+    </button>
+  ),
+}));
+
 vi.mock("./pages/HomePage", () => ({
   HomePage: ({ session }: { session: { customer: { name: string; points: number } } }) => (
     <div>{`home:${session.customer.name}:points:${session.customer.points}`}</div>
@@ -204,6 +247,25 @@ describe("App trong Zalo Mini App", () => {
 
     expect(await screen.findByText("management-auth")).toBeInTheDocument();
     expect(screen.queryByText("customer-entry")).not.toBeInTheDocument();
+  });
+
+  it("dùng customer web entry và tab tài khoản ngoài Zalo", async () => {
+    const user = userEvent.setup();
+    mocks.isZaloMiniAppRuntime.mockReturnValue(false);
+    window.history.replaceState({}, "", "/checkin?salonId=salon-web");
+
+    render(<App />);
+
+    expect(await screen.findByText("web-customer-entry")).toBeVisible();
+    expect(mocks.loadSavedSessionCandidate).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Web check-in" }));
+    expect(await screen.findByText("home:Khach Web:points:4")).toBeVisible();
+    const navigation = screen.getByRole("navigation", { name: "Điều hướng" });
+    expect(within(navigation).getAllByRole("button")).toHaveLength(4);
+    await user.click(within(navigation).getByRole("button", { name: "Tài khoản" }));
+    await user.click(await screen.findByRole("button", { name: "Web logout" }));
+    expect(await screen.findByText("web-customer-entry")).toBeVisible();
+    expect(mocks.saveSession).not.toHaveBeenCalled();
   });
 
   it("mở Chính sách quyền riêng tư bên trong Mini App và quay lại màn yêu cầu QR", async () => {

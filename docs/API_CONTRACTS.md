@@ -12,7 +12,11 @@ Luồng khách Zalo không tin `zaloUserId` do client tự gửi. Client lấy `
 ZALO_MINI_APP_ID=...
 ZALO_APP_SECRET=...
 QR_SIGNING_SECRET=...
+CUSTOMER_WEB_CHECKIN_URL=https://app.chhaircutsalon.cc/checkin
 ```
+
+QR salon/chi nhánh mới do Functions trả về mở customer web HTTPS. QR Gương 1 cũ và các callable
+Zalo vẫn được giữ để tương thích trong giai đoạn chuyển đổi.
 
 ## createSalon
 
@@ -141,6 +145,23 @@ Output:
 
 `name` là tên hiển thị khách xác nhận tại salon. `zaloUserId` trong output là ID đã xác minh từ Zalo.
 Token chỉ dùng trong request này, không được trả về, lưu trong session hay ghi vào Firestore.
+
+## Web customer callables
+
+Các callable `getWebCustomerContext`, `checkInWebCustomer`, `getWebCustomerSession`,
+`getWebCustomerHistory`, `getWebCustomerRewards` và `spinWebLuckyWheel` bắt buộc Firebase Auth với
+provider Phone đã xác minh. Server lấy `uid` và `phone_number` từ `request.auth`; client không gửi
+hoặc chọn `uid`/`customerId`.
+
+`getWebCustomerContext` và `checkInWebCustomer` nhận signed QR hiện tại (`qrType`, `salonId`,
+`branchId` nếu có, `qrToken`). Backend xác minh chữ ký/phiên bản/chi nhánh rồi dẫn xuất customer ID
+theo tenant. QR salon chỉ tự chọn chi nhánh khi salon có đúng một chi nhánh hoạt động; salon nhiều
+chi nhánh phải dùng QR chi nhánh.
+
+`checkInWebCustomer` tạo hoặc trả lại duy nhất một active session ở trạng thái `waiting`. Retry mạng
+và double click không tạo session trùng. Session/history/rewards/spin đều dẫn xuất customer từ UID
+đã xác thực, nên không thể giả `customerId` để đọc hoặc quay thay người khác. Các callable Zalo hiện
+tại tiếp tục dùng chung core business logic và không bị xóa.
 
 ## submitPointRequest
 

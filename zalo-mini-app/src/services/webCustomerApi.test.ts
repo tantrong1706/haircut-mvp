@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("./firebase", () => ({
   callCustomerWebFunction: mocks.callCustomerWebFunction,
+  getCustomerFirebaseAuth: () => ({ currentUser: { uid: "uid-a" } }),
   isFirebaseConfigured: () => true,
 }));
 
@@ -59,7 +60,12 @@ const session: AppSession = {
 };
 
 describe("web customer callable adapter", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    (window as typeof window & { __haircutWebAuthTestMode?: boolean }).__haircutWebAuthTestMode =
+      false;
+  });
 
   it("resolve context chỉ gửi signed QR, không gửi UID từ client", async () => {
     mocks.callCustomerWebFunction.mockResolvedValue(rawContext);
@@ -125,5 +131,103 @@ describe("web customer callable adapter", () => {
       expect(payload).not.toHaveProperty("uid");
       expect(payload).not.toHaveProperty("zaloAccessToken");
     }
+  });
+
+  it("chuẩn hóa đầy đủ lịch sử và quà từ web callables", async () => {
+    const createdAtMs = Date.UTC(2026, 8, 15);
+    mocks.callCustomerWebFunction
+      .mockResolvedValueOnce({
+        records: [
+          {
+            id: "record-a",
+            createdAtMs,
+            salonName: "Salon A",
+            branchId: "branch-a",
+            branchName: "Chi nhánh A",
+            staffName: "Nam",
+            serviceName: "Cắt tóc",
+            rewardName: "Quà A",
+            note: "Fade thấp",
+            photoUrls: ["https://example.com/photo.jpg"],
+            pointsAdded: 2,
+          },
+          { id: "record-empty", createdAtMs: null },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rewards: [
+          {
+            id: "reward-a",
+            rewardName: "Quà A",
+            rewardCode: "HC-TEST",
+            status: "used",
+            sourceBranchId: "branch-a",
+            sourceBranchName: "Chi nhánh A",
+            redemptionScope: "branches",
+            allowedBranchIds: ["branch-a"],
+            createdAtMs,
+            usedAtMs: createdAtMs,
+            usedBranchId: "branch-a",
+            usedBranchName: "Chi nhánh A",
+            expiresAtMs: createdAtMs,
+          },
+          {
+            id: "reward-empty",
+            rewardName: "Quà B",
+            rewardCode: "HC-EMPTY",
+            status: "unused",
+            createdAtMs: null,
+            usedAtMs: null,
+            expiresAtMs: null,
+          },
+        ],
+      });
+
+    const history = await getWebCustomerHistory(session);
+    const rewards = await getWebCustomerRewards(session);
+
+    expect(history[0]).toMatchObject({
+      branchName: "Chi nhánh A",
+      staffName: "Nam",
+      photoUrls: ["https://example.com/photo.jpg"],
+      pointsAdded: 2,
+    });
+    expect(history[1]).toMatchObject({
+      createdAt: "",
+      salonName: "",
+      photoUrls: [],
+      pointsAdded: 0,
+    });
+    expect(rewards[0]).toMatchObject({
+      redemptionScope: "branches",
+      allowedBranchIds: ["branch-a"],
+      usedBranchName: "Chi nhánh A",
+    });
+    expect(rewards[1]).toMatchObject({
+      sourceBranchName: "Chi nhánh phát hành",
+      redemptionScope: "salon",
+      allowedBranchIds: [],
+      createdAt: "",
+    });
+  });
+
+  it("test adapter chỉ hoạt động khi runtime test bật rõ", async () => {
+    (window as typeof window & { __haircutWebAuthTestMode?: boolean }).__haircutWebAuthTestMode =
+      true;
+    localStorage.setItem("haircut_test_web_points:salon-a", "9");
+
+    const context = await resolveWebCustomerContext(qr);
+    const checkedIn = await checkInWebCustomer(qr);
+    const repeated = await checkInWebCustomer(qr);
+
+    expect(context.customer.points).toBe(9);
+    expect(checkedIn.identityProvider).toBe("firebase");
+    expect(repeated.sessionId).toBe(checkedIn.sessionId);
+    await expect(getWebCustomerSessionState(checkedIn)).resolves.toMatchObject({
+      customer: { points: 9 },
+    });
+    await expect(getWebCustomerHistory(checkedIn)).resolves.toEqual([]);
+    await expect(getWebCustomerRewards(checkedIn)).resolves.toEqual([]);
+    expect(mocks.callCustomerWebFunction).not.toHaveBeenCalled();
   });
 });

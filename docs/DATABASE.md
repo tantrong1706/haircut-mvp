@@ -71,6 +71,8 @@ Hồ sơ khách hàng. Trên UI không nên gọi đây là “tài khoản khá
 customers/{customerId}
   salonId: string
   zaloUserId: string?
+  firebaseUid: string?
+  identityProvider: firebase_phone?
   name: string
   phone: string?
   phoneLast4: string?
@@ -81,6 +83,11 @@ customers/{customerId}
   updatedAt: timestamp
   lastVisitAt: timestamp?
 ```
+
+Khách Zalo hiện hữu giữ nguyên ID dẫn xuất từ `salonId + zaloUserId`. Khách web dùng document ID
+dẫn xuất từ `salonId + "web" + firebaseUid`, vì vậy cùng một Firebase UID có hồ sơ, điểm, lịch sử
+và quà tách biệt ở từng salon. Không tự liên kết hai hồ sơ theo số điện thoại; việc liên kết danh
+tính cũ chỉ được thực hiện sau này bằng một flow chứng minh quyền sở hữu tường minh.
 
 ## chair_sessions
 

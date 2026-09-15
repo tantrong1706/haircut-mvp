@@ -1,15 +1,11 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
-import { Gift, History, House, type LucideIcon } from "lucide-react";
+import { CircleUserRound, Gift, History, House, type LucideIcon } from "lucide-react";
 import { InstallAppPrompt } from "./components/InstallAppPrompt";
 import { MINI_APP_NAME } from "./config/branding";
 import { trackEvent } from "./services/monitoring";
 import { parseQrContext } from "./services/qr";
 import { isZaloMiniAppRuntime } from "./services/runtime";
-import {
-  clearSavedSession,
-  loadSavedSessionCandidate,
-  saveSession,
-} from "./services/sessionStore";
+import { clearSavedSession, loadSavedSessionCandidate, saveSession } from "./services/sessionStore";
 import type { SavedSessionCandidate } from "./services/sessionStore";
 import type { AppSession, TabKey } from "./services/types";
 
@@ -18,6 +14,11 @@ const AuthGate = lazy(() =>
 );
 const HistoryPage = lazy(() =>
   import("./pages/HistoryPage").then((module) => ({ default: module.HistoryPage })),
+);
+const CustomerAccountPage = lazy(() =>
+  import("./pages/CustomerAccountPage").then((module) => ({
+    default: module.CustomerAccountPage,
+  })),
 );
 const HomePage = lazy(() =>
   import("./pages/HomePage").then((module) => ({ default: module.HomePage })),
@@ -46,11 +47,21 @@ const StaffPage = lazy(() =>
 const WheelPage = lazy(() =>
   import("./pages/WheelPage").then((module) => ({ default: module.WheelPage })),
 );
+const WebCustomerEntryPage = lazy(() =>
+  import("./pages/WebCustomerEntryPage").then((module) => ({
+    default: module.WebCustomerEntryPage,
+  })),
+);
 
 const tabs: Array<{ key: TabKey; label: string; Icon: LucideIcon }> = [
   { key: "home", label: "Điểm", Icon: House },
   { key: "history", label: "Lịch sử", Icon: History },
   { key: "rewards", label: "Quà và quay", Icon: Gift },
+];
+
+const webTabs: Array<{ key: TabKey; label: string; Icon: LucideIcon }> = [
+  ...tabs,
+  { key: "account", label: "Tài khoản", Icon: CircleUserRound },
 ];
 
 const managementRoutes = ["/staff", "/owner", "/admin", "/delete-account"];
@@ -94,7 +105,9 @@ function SessionRestorePanel({
   return (
     <section className="panel empty-state" role="alert">
       <h1>Chưa xác minh được phiên khách</h1>
-      <p>{message || "Kết nối đang chậm. Dữ liệu đã lưu sẽ không được hiển thị khi chưa xác minh."}</p>
+      <p>
+        {message || "Kết nối đang chậm. Dữ liệu đã lưu sẽ không được hiển thị khi chưa xác minh."}
+      </p>
       <div className="inline-actions">
         <button type="button" onClick={onRetry}>
           Thử lại
@@ -144,10 +157,9 @@ export default function App() {
     "/delete-account",
   ].some((route) => path.startsWith(route));
   const currentQr = useMemo(() => parseQrContext(), []);
-  const [savedSessionCandidate, setSavedSessionCandidate] =
-    useState<SavedSessionCandidate | null>(() =>
-      isCustomerRoute ? loadSavedSessionCandidate(currentQr) : null,
-    );
+  const [savedSessionCandidate, setSavedSessionCandidate] = useState<SavedSessionCandidate | null>(
+    () => (isCustomerRoute && isZaloRuntime ? loadSavedSessionCandidate(currentQr) : null),
+  );
   const [session, setSession] = useState<AppSession | null>(null);
   const [restoreAttempt, setRestoreAttempt] = useState(0);
   const [sessionRestore, setSessionRestore] = useState<{
@@ -212,13 +224,13 @@ export default function App() {
       return;
     }
 
-    if (session) {
+    if (session && session.identityProvider !== "firebase") {
       void saveSession(session);
     }
   }, [isCustomerRoute, session]);
 
   useEffect(() => {
-    if (!isCustomerRoute || !savedSessionCandidate) {
+    if (!isCustomerRoute || !isZaloRuntime || !savedSessionCandidate) {
       setSessionRestore({ status: "idle", message: "" });
       return undefined;
     }
@@ -227,9 +239,7 @@ export default function App() {
     setSessionRestore({ status: "verifying", message: "" });
 
     void import("./services/api")
-      .then(({ restoreSavedCustomerSession }) =>
-        restoreSavedCustomerSession(savedSessionCandidate),
-      )
+      .then(({ restoreSavedCustomerSession }) => restoreSavedCustomerSession(savedSessionCandidate))
       .then((result) => {
         if (!isActive) {
           return;
@@ -258,7 +268,7 @@ export default function App() {
     return () => {
       isActive = false;
     };
-  }, [isCustomerRoute, restoreAttempt, savedSessionCandidate]);
+  }, [isCustomerRoute, isZaloRuntime, restoreAttempt, savedSessionCandidate]);
 
   useEffect(() => {
     if (!isCustomerRoute || !session) {
@@ -300,6 +310,12 @@ export default function App() {
     setSession(null);
     setSavedSessionCandidate(null);
     clearSavedSession();
+    setActiveTab("home");
+    setSessionSync({ status: "idle", message: "", syncedAtMs: null });
+  }
+
+  function finishWebLogout() {
+    setSession(null);
     setActiveTab("home");
     setSessionSync({ status: "idle", message: "", syncedAtMs: null });
   }
@@ -477,9 +493,13 @@ export default function App() {
     );
   }
 
-  let content = <ScanEntryPage onReady={setSession} onOpenLegalPage={openLegalPage} />;
+  let content = isZaloRuntime ? (
+    <ScanEntryPage onReady={setSession} onOpenLegalPage={openLegalPage} />
+  ) : (
+    <WebCustomerEntryPage onReady={setSession} />
+  );
 
-  if (!session && sessionRestore.status !== "idle") {
+  if (isZaloRuntime && !session && sessionRestore.status !== "idle") {
     content = (
       <SessionRestorePanel
         status={sessionRestore.status}
@@ -490,7 +510,9 @@ export default function App() {
     );
   }
 
-  if (session && activeTab === "history") {
+  if (session && activeTab === "account" && session.identityProvider === "firebase") {
+    content = <CustomerAccountPage session={session} onLoggedOut={finishWebLogout} />;
+  } else if (session && activeTab === "history") {
     content = <HistoryPage session={session} />;
   } else if (session && activeTab === "wheel") {
     content = (
@@ -528,19 +550,24 @@ export default function App() {
       </main>
       <InstallAppPrompt />
       {session ? (
-        <nav className="bottom-nav" aria-label="Điều hướng">
-          {tabs.map(({ key, label, Icon }) => (
-            <button
-              key={key}
-              className={
-                activeTab === key || (key === "rewards" && activeTab === "wheel") ? "active" : ""
-              }
-              onClick={() => changeCustomerTab(key)}
-            >
-              <Icon size={20} strokeWidth={2.3} aria-hidden="true" />
-              <span>{label}</span>
-            </button>
-          ))}
+        <nav
+          className={`bottom-nav${session.identityProvider === "firebase" ? " web-customer-nav" : ""}`}
+          aria-label="Điều hướng"
+        >
+          {(session.identityProvider === "firebase" ? webTabs : tabs).map(
+            ({ key, label, Icon }) => (
+              <button
+                key={key}
+                className={
+                  activeTab === key || (key === "rewards" && activeTab === "wheel") ? "active" : ""
+                }
+                onClick={() => changeCustomerTab(key)}
+              >
+                <Icon size={20} strokeWidth={2.3} aria-hidden="true" />
+                <span>{label}</span>
+              </button>
+            ),
+          )}
         </nav>
       ) : null}
     </div>

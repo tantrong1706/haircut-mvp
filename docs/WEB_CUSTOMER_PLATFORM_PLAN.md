@@ -71,3 +71,16 @@ All session, history, reward and point documents continue to reference the tenan
 4. Regression: Functions, emulator rules/integration, web unit/build/E2E, Manager and Zalo tests.
 5. Stop with local commits only. No push, merge, Firebase deployment, Zalo deployment, review action
    or Gateway change.
+
+## Deployment and rollback gate
+
+- Before rollout, enable Firebase Authentication → Phone and keep
+  `app.chhaircutsalon.cc` in Authorized Domains. Production currently has the domain but Phone is
+  disabled, so rollout remains blocked until that Console action is completed.
+- Deploy additive Functions before Hosting so the web client never calls a missing authenticated
+  callable. The existing Zalo callables remain available during and after this rollout.
+- Generate/print replacement salon and branch QR only after the web Hosting smoke test passes.
+  Existing QR signatures remain valid; only newly returned QR URLs switch to the web entry point.
+- Rollback Hosting through Firebase Hosting release history and redeploy the prior Functions release.
+  Do not delete `firebaseUid` or `identityProvider` fields: they are additive and harmless to the prior
+  release. Keep previously printed QR available until the rollback smoke test completes.

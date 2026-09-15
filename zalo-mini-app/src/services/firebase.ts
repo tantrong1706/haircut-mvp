@@ -14,6 +14,10 @@ let auth: Auth | null = null;
 let db: Firestore | null = null;
 let functions: Functions | null = null;
 let storage: FirebaseStorage | null = null;
+let customerApp: FirebaseApp | null = null;
+let customerAuth: Auth | null = null;
+let customerFunctions: Functions | null = null;
+const CUSTOMER_APP_NAME = "haircut-customer-web";
 
 export type FunctionWriteMode = "direct" | "auto" | "required";
 
@@ -41,34 +45,26 @@ export function getFirebaseApp() {
   }
 
   if (!app) {
-    app =
-      getApps().length > 0
-        ? getApp()
-        : initializeApp({
-            apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-            authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-            projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-            storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-            messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-            appId: import.meta.env.VITE_FIREBASE_APP_ID,
-            measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
-          });
-
-    const appCheckSiteKey = String(import.meta.env.VITE_FIREBASE_APP_CHECK_SITE_KEY || "").trim();
-    const appCheckRegistry = globalThis as AppCheckRegistry;
-    const appCheckAlreadyInitialized =
-      appCheckRegistry.__haircutAppCheckApps?.has(app.name) === true;
-    if (appCheckSiteKey && !isNativeRuntime() && !appCheckAlreadyInitialized) {
-      initializeAppCheck(app, {
-        provider: new ReCaptchaEnterpriseProvider(appCheckSiteKey),
-        isTokenAutoRefreshEnabled: true,
-      });
-      appCheckRegistry.__haircutAppCheckApps ??= new Set<string>();
-      appCheckRegistry.__haircutAppCheckApps.add(app.name);
-    }
+    app = getApps().some((candidate) => candidate.name === "[DEFAULT]")
+      ? getApp()
+      : initializeApp(firebaseConfig());
+    initializeHaircutAppCheck(app);
   }
 
   return app;
+}
+
+export function getCustomerFirebaseApp() {
+  if (!isFirebaseConfigured()) {
+    return null;
+  }
+  if (!customerApp) {
+    customerApp = getApps().some((candidate) => candidate.name === CUSTOMER_APP_NAME)
+      ? getApp(CUSTOMER_APP_NAME)
+      : initializeApp(firebaseConfig(), CUSTOMER_APP_NAME);
+    initializeHaircutAppCheck(customerApp);
+  }
+  return customerApp;
 }
 
 export function getFirebaseDb() {
@@ -99,6 +95,13 @@ export function getFirebaseAuth() {
   return auth;
 }
 
+export function getCustomerFirebaseAuth() {
+  const firebaseApp = getCustomerFirebaseApp();
+  if (!firebaseApp) return null;
+  if (!customerAuth) customerAuth = getAuth(firebaseApp);
+  return customerAuth;
+}
+
 export function getFirebaseFunctions() {
   const firebaseApp = getFirebaseApp();
 
@@ -114,6 +117,18 @@ export function getFirebaseFunctions() {
   }
 
   return functions;
+}
+
+export function getCustomerFirebaseFunctions() {
+  const firebaseApp = getCustomerFirebaseApp();
+  if (!firebaseApp) return null;
+  if (!customerFunctions) {
+    customerFunctions = getFunctions(
+      firebaseApp,
+      import.meta.env.VITE_FIREBASE_REGION || "asia-southeast1",
+    );
+  }
+  return customerFunctions;
 }
 
 export function getFirebaseStorage() {
@@ -147,6 +162,51 @@ export async function callFunction<TInput, TOutput>(
   } catch (error) {
     throw new Error(friendlyFirebaseFunctionError(error, name));
   }
+}
+
+export async function callCustomerWebFunction<TInput, TOutput>(
+  name: string,
+  payload: TInput,
+): Promise<TOutput> {
+  const fns = getCustomerFirebaseFunctions();
+  if (!fns) throw new Error("Firebase chưa được cấu hình");
+  const fn = httpsCallable<TInput, TOutput>(fns, name);
+  try {
+    const result = await fn(withRuntimeMetadata(payload));
+    return result.data;
+  } catch (error) {
+    throw new Error(friendlyFirebaseFunctionError(error, name));
+  }
+}
+
+function firebaseConfig() {
+  return {
+    apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+    appId: import.meta.env.VITE_FIREBASE_APP_ID,
+    measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
+  };
+}
+
+function initializeHaircutAppCheck(firebaseApp: FirebaseApp) {
+  const appCheckSiteKey = String(import.meta.env.VITE_FIREBASE_APP_CHECK_SITE_KEY || "").trim();
+  const appCheckRegistry = globalThis as AppCheckRegistry;
+  if (
+    !appCheckSiteKey ||
+    isNativeRuntime() ||
+    appCheckRegistry.__haircutAppCheckApps?.has(firebaseApp.name) === true
+  ) {
+    return;
+  }
+  initializeAppCheck(firebaseApp, {
+    provider: new ReCaptchaEnterpriseProvider(appCheckSiteKey),
+    isTokenAutoRefreshEnabled: true,
+  });
+  appCheckRegistry.__haircutAppCheckApps ??= new Set<string>();
+  appCheckRegistry.__haircutAppCheckApps.add(firebaseApp.name);
 }
 
 function withRuntimeMetadata<TInput>(payload: TInput): TInput {
