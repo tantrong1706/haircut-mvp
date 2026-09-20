@@ -2917,7 +2917,9 @@ export const resolveCustomerQr = onCall(qrFunctionOptions, async (request) => {
 });
 
 function assertWebCheckinQr(resolution: CustomerQrResolution) {
-  if (resolution.branchId) {
+  if (resolution.branchId &&
+      (resolution.qrType === "branch" ||
+       (resolution.qrType === "salon" && resolution.branches.length === 1))) {
     return resolution;
   }
   throw new HttpsError(
@@ -3093,15 +3095,19 @@ export const checkInWebCustomer = onCall(qrFunctionOptions, async (request) => {
   const newSessionRef = db.collection("chair_sessions").doc();
   const now = Timestamp.now();
   const expiresAt = Timestamp.fromMillis(
-    serviceSessionExpiresAtMs(now.toMillis(), SESSION_POINT_REQUEST_WINDOW_MS),
+    serviceSessionExpiresAtMs(now.toMillis(), POINT_REQUEST_CONFIRMATION_WINDOW_MS),
   );
   let returnedSessionId = newSessionRef.id;
 
   await db.runTransaction(async (tx) => {
-    const [customerSnap, activeSnap] = await Promise.all([
+    const [customerSnap, activeSnap, salonSnap, branchSnap] = await Promise.all([
       tx.get(customerRef),
       tx.get(activeRef),
+      tx.get(db.collection("salons").doc(salonId)),
+      tx.get(db.collection("branches").doc(String(resolution.branchId))),
     ]);
+    assertSalonIsOperational(salonSnap.data());
+    assertBranchIsOperational(branchSnap.data(), salonId, String(resolution.branchId));
     if (
       !customerSnap.exists ||
       customerSnap.data()?.salonId !== salonId ||
@@ -3116,11 +3122,15 @@ export const checkInWebCustomer = onCall(qrFunctionOptions, async (request) => {
       ? db.collection("chair_sessions").doc(previousSessionId)
       : null;
     const previousSnap = previousRef ? await tx.get(previousRef) : null;
+    const previousRequestSnap = previousSessionId
+      ? await tx.get(db.collection("point_requests").doc(previousSessionId)) : null;
     const reusable = Boolean(
       activeSnap.exists &&
         previousSnap?.exists &&
         previousSnap.data()?.salonId === salonId &&
         previousSnap.data()?.customerId === customerId &&
+        OPEN_SESSION_STATUSES.includes(previousSnap.data()?.status) &&
+        (timestampMillis(previousSnap.data()?.expiresAt) ?? 0) > now.toMillis() &&
         shouldReuseActiveSession({
           status: active?.status,
           sessionId: active?.sessionId,
@@ -3142,6 +3152,17 @@ export const checkInWebCustomer = onCall(qrFunctionOptions, async (request) => {
       return;
     }
 
+    const remainingMs = pointCooldownRemainingMs({
+      nowMs: now.toMillis(),
+      lastVisitAtMs: timestampMillis(customerSnap.data()?.lastVisitAt),
+      nextEligibleAtMs: timestampMillis(customerSnap.data()?.nextPointEligibleAt),
+      cooldownMs: POINT_AWARD_COOLDOWN_MS,
+    });
+    if (remainingMs > 0) {
+      throw new HttpsError("failed-precondition", "Bạn vừa được cộng điểm. Vui lòng chờ đủ 2 giờ.", {
+        errorCode: "POINT_COOLDOWN", retryAfterMs: remainingMs,
+      });
+    }
     if (previousRef && previousSnap?.exists && OPEN_SESSION_STATUSES.includes(previousSnap.data()?.status)) {
       tx.set(
         previousRef,
@@ -3149,6 +3170,13 @@ export const checkInWebCustomer = onCall(qrFunctionOptions, async (request) => {
         { merge: true },
       );
     }
+    if (previousRequestSnap?.data()?.status === "pending") {
+      tx.set(previousRequestSnap.ref, {
+        status: "rejected", rejectionReason: "Yêu cầu hết hạn",
+        processedBy: "system", processedAt: now, updatedAt: now,
+      }, { merge: true });
+    }
+    const pointsRequested = Math.max(1, Math.floor(Number(salonSnap.data()?.pointPerVisit ?? 1)));
     const customerSummary = {
       name: String(customerSnap.data()?.name || `Khách ${principal.phoneLast4}`),
       phoneLast4: principal.phoneLast4,
@@ -3163,7 +3191,9 @@ export const checkInWebCustomer = onCall(qrFunctionOptions, async (request) => {
       qrType: resolution.qrType,
       customerId,
       customerSummary,
-      status: "waiting",
+      status: "pending_approval",
+      approvalMode: "staff_confirmation",
+      pointsRequested,
       isOpen: true,
       photoConsentGranted: true,
       photoConsentVersion: "web-checkin-v1",
@@ -3180,11 +3210,21 @@ export const checkInWebCustomer = onCall(qrFunctionOptions, async (request) => {
       branchName: resolution.branchName,
       branchAddress: resolution.branchAddress,
       qrType: resolution.qrType,
-      status: "waiting",
+      status: "pending_approval",
+      approvalMode: "staff_confirmation",
       isOpen: true,
       expiresAt,
       createdAt: now,
       updatedAt: now,
+    });
+    tx.create(db.collection("point_requests").doc(newSessionRef.id), {
+      salonId, branchId: resolution.branchId, branchName: resolution.branchName,
+      customerId, sessionId: newSessionRef.id, customerSummary,
+      status: "pending", approvalMode: "staff_confirmation",
+      pointsRequested, pointsAdded: pointsRequested,
+      photoConsentGranted: true, photoConsentVersion: "web-checkin-v1", photoConsentAt: now,
+      photoUrls: [], photoPaths: [], note: "", staffId: "", staffName: "",
+      expiresAt, createdAt: now, updatedAt: now,
     });
     tx.set(
       customerRef,
@@ -5806,7 +5846,7 @@ async function customerSessionResult(
 ) {
   const [customerSnap, sessionSnap, wheelSnap, features] = await Promise.all([
     db.collection("customers").doc(customerId).get(),
-    db.collection("chair_sessions").doc(sessionId).get(),
+    sessionId ? db.collection("chair_sessions").doc(sessionId).get() : Promise.resolve(null),
     db.collection("lucky_wheel").doc(salonId).get(),
     getSystemFeatures(salonId),
   ]);
@@ -5814,16 +5854,16 @@ async function customerSessionResult(
   if (!customerSnap.exists || customerSnap.data()?.salonId !== salonId) {
     throw new HttpsError("not-found", "Không tìm thấy hồ sơ khách hàng");
   }
-  if (
-    !sessionSnap.exists ||
+  if (sessionId && (
+    !sessionSnap?.exists ||
     sessionSnap.data()?.salonId !== salonId ||
     sessionSnap.data()?.customerId !== customerId
-  ) {
+  )) {
     throw new HttpsError("permission-denied", "Lượt cắt không thuộc khách hàng này");
   }
 
   const customer = customerSnap.data() ?? {};
-  const session = sessionSnap.data() ?? {};
+  const session = sessionSnap?.data() ?? {};
   const wheel = wheelSnap.data() ?? {};
   const slots = Array.isArray(wheel.slots)
     ? wheel.slots.slice(0, 6).map((slot: unknown, index: number) => {
@@ -5925,10 +5965,14 @@ function webAppSessionResult(
 export const getWebCustomerSession = onCall(functionOptions, async (request) => {
   const principal = requireWebPhonePrincipal(request.auth);
   const salonId = requireString(request.data?.salonId, "salonId");
-  const sessionId = requireString(request.data?.sessionId, "sessionId");
+  const sessionId = optionalLimitedString(request.data?.sessionId, "sessionId", 128) || "";
   await enforceAuthenticatedRateLimit("getWebCustomerSession", principal.uid, salonId);
+  await assertDedicatedWebCustomerUid(principal.uid);
   const customerId = customerIdForWeb(salonId, principal.uid);
-  return customerSessionResult(salonId, customerId, sessionId, `Khách ${principal.phoneLast4}`);
+  const result = await customerSessionResult(salonId, customerId, sessionId, `Khách ${principal.phoneLast4}`);
+  const salon = await db.collection("salons").doc(salonId).get();
+  assertSalonIsOperational(salon.data());
+  return { ...result, firebaseUid: principal.uid, salonName: String(salon.data()?.name || "Salon") };
 });
 
 export const getCustomerSessionFromZalo = onCall(zaloFunctionOptions, async (request) => {
