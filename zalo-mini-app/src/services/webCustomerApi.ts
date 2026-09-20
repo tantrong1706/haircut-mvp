@@ -27,6 +27,7 @@ export type WebCustomerContext = {
 
 type WebSessionResult = {
   firebaseUid?: string;
+  qr?: Pick<QrContext, "salonId" | "branchId">;
   sessionId: string;
   sessionStatus: AppSession["sessionStatus"];
   branchId?: string;
@@ -172,7 +173,7 @@ function appSessionFromWebResult(qr: QrContext, result: WebSessionResult): AppSe
     qr: {
       qrType: "branch",
       salonId: qr.salonId,
-      branchId: result.branchId || qr.branchId,
+      branchId: result.qr?.branchId || result.branchId || qr.branchId,
       mirrorId: "",
     },
     sessionId: result.sessionId,
