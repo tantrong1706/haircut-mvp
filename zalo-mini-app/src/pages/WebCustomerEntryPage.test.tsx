@@ -41,6 +41,9 @@ const mocks = vi.hoisted(() => ({
   savePendingWebQr: vi.fn(),
   loadPendingWebQr: vi.fn(),
   clearPendingWebQr: vi.fn(),
+  loadWebSalonHint: vi.fn(),
+  saveWebSalonHint: vi.fn(),
+  getWebCustomerAccount: vi.fn(),
   resolveWebCustomerContext: vi.fn(),
   checkInWebCustomer: vi.fn(),
   parseQrContext: vi.fn(),
@@ -55,11 +58,14 @@ vi.mock("../services/customerWebAuth", () => ({
   savePendingWebQr: mocks.savePendingWebQr,
   loadPendingWebQr: mocks.loadPendingWebQr,
   clearPendingWebQr: mocks.clearPendingWebQr,
+  loadWebSalonHint: mocks.loadWebSalonHint,
+  saveWebSalonHint: mocks.saveWebSalonHint,
 }));
 
 vi.mock("../services/webCustomerApi", () => ({
   resolveWebCustomerContext: mocks.resolveWebCustomerContext,
   checkInWebCustomer: mocks.checkInWebCustomer,
+  getWebCustomerAccount: mocks.getWebCustomerAccount,
 }));
 
 vi.mock("../services/qr", () => ({
@@ -77,6 +83,8 @@ describe("WebCustomerEntryPage", () => {
     vi.clearAllMocks();
     mocks.parseQrContext.mockReturnValue(qr);
     mocks.loadPendingWebQr.mockReturnValue(null);
+    mocks.loadWebSalonHint.mockReturnValue("");
+    mocks.getWebCustomerAccount.mockResolvedValue({ ...session, sessionId: "", sessionStatus: undefined });
     mocks.subscribeCustomerWebAuth.mockImplementation(
       (onChange: (user: { uid: string } | null) => void, onError: (error: unknown) => void) => {
         mocks.authListener = onChange;
@@ -106,6 +114,18 @@ describe("WebCustomerEntryPage", () => {
 
     expect(screen.getByText("Đang kiểm tra đăng nhập...")).toBeVisible();
     expect(screen.queryByLabelText("Số điện thoại")).not.toBeInTheDocument();
+  });
+
+  it("khách quay lại mở web không QR vẫn xem tài khoản sau khi Auth xác minh", async () => {
+    mocks.parseQrContext.mockReturnValue({ qrType: "salon", salonId: "", branchId: "", mirrorId: "", qrToken: "" });
+    mocks.loadWebSalonHint.mockReturnValue("salon-a");
+    const onReady = vi.fn();
+    render(<WebCustomerEntryPage onReady={onReady} />);
+    expect(mocks.getWebCustomerAccount).not.toHaveBeenCalled();
+    mocks.authListener?.({ uid: "uid-a" });
+    await waitFor(() => expect(onReady).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "" })));
+    expect(mocks.getWebCustomerAccount).toHaveBeenCalledWith("salon-a");
+    expect(mocks.checkInWebCustomer).not.toHaveBeenCalled();
   });
 
   it("hiện Phone OTP khi Firebase xác nhận chưa đăng nhập", async () => {
