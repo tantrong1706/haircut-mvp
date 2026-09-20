@@ -133,6 +133,24 @@ describe("web customer callable adapter", () => {
     }
   });
 
+  it("giữ chi nhánh backend đã resolve khi check-in từ QR salon", async () => {
+    const salonQr: QrContext = { ...qr, qrType: "salon", branchId: "" };
+    mocks.callCustomerWebFunction.mockResolvedValue({
+      ...session,
+      qr: { qrType: "branch", salonId: "salon-a", branchId: "branch-a", mirrorId: "" },
+    });
+
+    const result = await checkInWebCustomer(salonQr);
+
+    expect(result.qr).toEqual({
+      qrType: "branch",
+      salonId: "salon-a",
+      branchId: "branch-a",
+      mirrorId: "",
+    });
+    expect(mocks.callCustomerWebFunction).toHaveBeenCalledWith("checkInWebCustomer", salonQr);
+  });
+
   it("chuẩn hóa đầy đủ lịch sử và quà từ web callables", async () => {
     const createdAtMs = Date.UTC(2026, 8, 15);
     mocks.callCustomerWebFunction
