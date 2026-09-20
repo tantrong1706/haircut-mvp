@@ -2,6 +2,7 @@ import { deleteApp, getApps } from "firebase-admin/app";
 import { Timestamp, getFirestore } from "firebase-admin/firestore";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  approvePointRequest,
   checkInWebCustomer,
   getWebCustomerContext,
   getWebCustomerHistory,
@@ -121,7 +122,7 @@ describe("authenticated web customer platform", () => {
     expect(result.salonQrUrl).not.toContain("zalo.me");
   });
 
-  it("double click và network retry chỉ tạo một active waiting session", async () => {
+  it("double click và network retry chỉ tạo một yêu cầu chờ nhân viên xác nhận", async () => {
     await seedSalon("salon-a", "branch-a");
     const qr = signedBranchQr("salon-a", "branch-a");
     await getWebCustomerContext.run(phoneRequest("uid-global", qr));
@@ -134,10 +135,94 @@ describe("authenticated web customer platform", () => {
 
     expect(second.sessionId).toBe(first.sessionId);
     expect(retry.sessionId).toBe(first.sessionId);
-    expect(first.sessionStatus).toBe("waiting");
+    expect(first.sessionStatus).toBe("pending_approval");
     expect((await db.collection("chair_sessions").get()).size).toBe(1);
     expect((await db.collection("active_service_sessions").get()).size).toBe(1);
-    expect((await db.collection("point_requests").get()).size).toBe(0);
+    const requests = await db.collection("point_requests").get();
+    expect(requests.size).toBe(1);
+    expect(requests.docs[0].data()).toMatchObject({
+      sessionId: first.sessionId,
+      approvalMode: "staff_confirmation",
+      status: "pending",
+    });
+  });
+
+  it("staff xác nhận web trực tiếp một lần và khóa yêu cầu mới 2 giờ trong salon", async () => {
+    await seedSalon("salon-a", "branch-a");
+    await seedBranch("salon-a", "branch-b");
+    await db
+      .collection("users")
+      .doc("staff-a")
+      .set({
+        salonId: "salon-a",
+        role: "staff",
+        name: "Nhân viên A",
+        isActive: true,
+        branchIds: ["branch-a"],
+        canAwardPointsDirectly: false,
+      });
+    const qr = signedBranchQr("salon-a", "branch-a");
+    const checkedIn = await checkInWebCustomer.run(phoneRequest("uid-global", qr));
+    const confirmation = requestFor(
+      "staff-a",
+      { salonId: "salon-a", requestId: checkedIn.sessionId },
+      {},
+    );
+    await approvePointRequest.run(confirmation);
+    await approvePointRequest.run(confirmation);
+    const state = await getWebCustomerSession.run(
+      phoneRequest("uid-global", {
+        salonId: "salon-a",
+        sessionId: checkedIn.sessionId,
+      }),
+    );
+    expect(state.sessionStatus).toBe("completed");
+    expect(state.customer.points).toBe(1);
+    expect(state.customer.nextPointEligibleAtMs).toBeGreaterThan(Date.now() + 119 * 60_000);
+    await expect(checkInWebCustomer.run(phoneRequest("uid-global", qr))).rejects.toMatchObject({
+      code: "failed-precondition",
+      details: { errorCode: "POINT_COOLDOWN" },
+    });
+    await expect(
+      checkInWebCustomer.run(phoneRequest("uid-global", signedBranchQr("salon-a", "branch-b"))),
+    ).rejects.toMatchObject({
+      code: "failed-precondition",
+      details: { errorCode: "POINT_COOLDOWN" },
+    });
+    expect((await db.collection("haircut_records").get()).size).toBe(1);
+  });
+
+  it("khách đã có hồ sơ xem tài khoản không cần QR và không tạo lượt mới", async () => {
+    await seedSalon("salon-a", "branch-a");
+    const profile = await getWebCustomerContext.run(
+      phoneRequest("uid-global", signedBranchQr("salon-a", "branch-a")),
+    );
+    const account = await getWebCustomerSession.run(
+      phoneRequest("uid-global", { salonId: "salon-a" }),
+    );
+    expect(account.sessionId).toBe("");
+    expect(account.customer.customerId).toBe(profile.customer.customerId);
+    expect((await db.collection("chair_sessions").get()).size).toBe(0);
+    await expect(
+      getWebCustomerSession.run(phoneRequest("uid-other", { salonId: "salon-a" })),
+    ).rejects.toMatchObject({ code: "not-found" });
+    await expect(
+      getWebCustomerSession.run(unauthenticatedRequest({ salonId: "salon-a" })),
+    ).rejects.toMatchObject({ code: "unauthenticated" });
+  });
+
+  it("QR salon không cho chọn branch không nằm trong chữ ký khi có nhiều chi nhánh", async () => {
+    await seedSalon("salon-a", "branch-a");
+    await seedBranch("salon-a", "branch-b");
+    await expect(
+      getWebCustomerContext.run(
+        phoneRequest("uid-global", {
+          ...signedSalonQr("salon-a"),
+          branchId: "branch-b",
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "failed-precondition" });
+    expect((await db.collection("customers").get()).size).toBe(0);
   });
 
   it("không đổi branch khi đang có active session", async () => {
@@ -151,6 +236,48 @@ describe("authenticated web customer platform", () => {
     await expect(checkInWebCustomer.run(phoneRequest("uid-global", qrB))).rejects.toMatchObject({
       code: "failed-precondition",
     });
+  });
+
+  it("từ chối QR đã xoay và thay phiên active đã hết hạn bằng đúng một phiên mới", async () => {
+    await seedSalon("salon-a", "branch-a");
+    const oldQr = signedBranchQr("salon-a", "branch-a");
+    const context = await getWebCustomerContext.run(phoneRequest("uid-global", oldQr));
+    const first = await checkInWebCustomer.run(phoneRequest("uid-global", oldQr));
+
+    await db.collection("branches").doc("branch-a").update({ qrVersion: 2 });
+    await expect(
+      getWebCustomerContext.run(phoneRequest("uid-global", oldQr)),
+    ).rejects.toMatchObject({
+      code: "permission-denied",
+    });
+
+    const activeSnap = await db
+      .collection("active_service_sessions")
+      .where("salonId", "==", "salon-a")
+      .where("customerId", "==", context.customer.customerId)
+      .get();
+    const expiredAt = Timestamp.fromMillis(Date.now() - 60_000);
+    await Promise.all([
+      activeSnap.docs[0].ref.update({ createdAt: expiredAt, expiresAt: expiredAt }),
+      db
+        .collection("chair_sessions")
+        .doc(first.sessionId)
+        .update({ createdAt: expiredAt, expiresAt: expiredAt }),
+    ]);
+
+    const currentQr = signedBranchQr("salon-a", "branch-a", 2);
+    const replacement = await checkInWebCustomer.run(phoneRequest("uid-global", currentQr));
+    expect(replacement.sessionId).not.toBe(first.sessionId);
+    expect((await db.collection("chair_sessions").doc(first.sessionId).get()).data()?.status).toBe(
+      "cancelled",
+    );
+    expect((await activeSnap.docs[0].ref.get()).data()?.sessionId).toBe(replacement.sessionId);
+    const openSessions = await db
+      .collection("chair_sessions")
+      .where("salonId", "==", "salon-a")
+      .where("isOpen", "==", true)
+      .get();
+    expect(openSessions.docs.map((doc) => doc.id)).toEqual([replacement.sessionId]);
   });
 
   it("không cho UID khác đọc session, lịch sử hoặc quà", async () => {
@@ -240,6 +367,84 @@ describe("authenticated web customer platform", () => {
     expect((await db.collection("reward_history").get()).size).toBe(1);
     expect((await db.collection("customers").doc("customer-forged").get()).exists).toBe(false);
   });
+
+  it("spin thiếu điểm ở Salon B không dùng điểm hoặc reward của cùng UID tại Salon A", async () => {
+    await seedSalon("salon-a", "branch-a");
+    await seedSalon("salon-b", "branch-b");
+    const contextA = await getWebCustomerContext.run(
+      phoneRequest("uid-global", signedBranchQr("salon-a", "branch-a")),
+    );
+    const contextB = await getWebCustomerContext.run(
+      phoneRequest("uid-global", signedBranchQr("salon-b", "branch-b")),
+    );
+    await Promise.all([
+      db.collection("customers").doc(contextA.customer.customerId).update({ points: 5 }),
+      db.collection("customers").doc(contextB.customer.customerId).update({ points: 4 }),
+      seedWheel("salon-a"),
+      seedWheel("salon-b"),
+    ]);
+
+    await expect(
+      spinWebLuckyWheel.run(
+        phoneRequest("uid-global", {
+          salonId: "salon-b",
+          idempotencyKey: "web-spin-salon-b-insufficient",
+          configVersion: 1,
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "failed-precondition" });
+
+    await spinWebLuckyWheel.run(
+      phoneRequest("uid-global", {
+        salonId: "salon-a",
+        idempotencyKey: "web-spin-salon-a-success",
+        configVersion: 1,
+      }),
+    );
+    expect(await contextPoints(contextA.customer.customerId)).toBe(0);
+    expect(await contextPoints(contextB.customer.customerId)).toBe(4);
+    const rewards = await db.collection("reward_history").get();
+    expect(rewards.docs.map((doc) => doc.data().salonId)).toEqual(["salon-a"]);
+  });
+
+  it("web customer chỉ nhận reward của mình với đủ trạng thái public", async () => {
+    await seedSalon("salon-a", "branch-a");
+    await seedSalon("salon-b", "branch-b");
+    const contextA = await getWebCustomerContext.run(
+      phoneRequest("uid-global", signedBranchQr("salon-a", "branch-a")),
+    );
+    const contextB = await getWebCustomerContext.run(
+      phoneRequest("uid-global", signedBranchQr("salon-b", "branch-b")),
+    );
+    const now = Date.now();
+    await Promise.all([
+      seedReward("reward-unused", "salon-a", contextA.customer.customerId, "unused", now + 60_000),
+      seedReward("reward-used", "salon-a", contextA.customer.customerId, "used", now - 60_000),
+      seedReward("reward-expired", "salon-a", contextA.customer.customerId, "unused", now - 60_000),
+      seedReward("reward-revoked", "salon-a", contextA.customer.customerId, "revoked", null),
+      seedReward("reward-no-prize", "salon-a", contextA.customer.customerId, "no_prize", null),
+      seedReward("reward-salon-b", "salon-b", contextB.customer.customerId, "unused", null),
+    ]);
+
+    const result = await getWebCustomerRewards.run(
+      phoneRequest("uid-global", { salonId: "salon-a", limit: 20 }),
+    );
+    expect(
+      new Map(
+        result.rewards.map((reward: { id: string; status: string }) => [reward.id, reward.status]),
+      ),
+    ).toEqual(
+      new Map([
+        ["reward-unused", "unused"],
+        ["reward-used", "used"],
+        ["reward-expired", "expired"],
+        ["reward-revoked", "revoked"],
+      ]),
+    );
+    expect(result.rewards.some((reward: { id: string }) => reward.id === "reward-salon-b")).toBe(
+      false,
+    );
+  });
 });
 
 async function seedSalon(salonId: string, branchId: string) {
@@ -269,12 +474,12 @@ async function seedBranch(salonId: string, branchId: string, isActive = true) {
   });
 }
 
-function signedBranchQr(salonId: string, branchId: string) {
+function signedBranchQr(salonId: string, branchId: string, version = 1) {
   return {
     qrType: "branch",
     salonId,
     branchId,
-    qrToken: createSignedQrToken(secret, { kind: "branch", salonId, branchId, version: 1 }),
+    qrToken: createSignedQrToken(secret, { kind: "branch", salonId, branchId, version }),
   };
 }
 
@@ -304,4 +509,43 @@ function requestFor(uid: string, data: Record<string, unknown>, token: Record<st
 
 function unauthenticatedRequest(data: Record<string, unknown>) {
   return { data, rawRequest: { headers: {}, ip: "127.0.0.1" } } as never;
+}
+
+async function seedWheel(salonId: string) {
+  await db
+    .collection("lucky_wheel")
+    .doc(salonId)
+    .set({
+      salonId,
+      configVersion: 1,
+      requiredPoints: 5,
+      deductPointsAfterSpin: true,
+      rewardValidityDays: 30,
+      slots: [{ slotId: "slot-a", label: "Quà A", active: true, type: "reward", weight: 1 }],
+    });
+}
+
+async function contextPoints(customerId: string) {
+  return Number((await db.collection("customers").doc(customerId).get()).data()?.points ?? 0);
+}
+
+async function seedReward(
+  rewardId: string,
+  salonId: string,
+  customerId: string,
+  status: string,
+  expiresAtMs: number | null,
+) {
+  await db
+    .collection("reward_history")
+    .doc(rewardId)
+    .set({
+      salonId,
+      customerId,
+      rewardName: `Quà ${rewardId}`,
+      rewardCode: `HC-${rewardId.toUpperCase()}`,
+      status,
+      createdAt: Timestamp.now(),
+      ...(expiresAtMs === null ? {} : { expiresAt: Timestamp.fromMillis(expiresAtMs) }),
+    });
 }
