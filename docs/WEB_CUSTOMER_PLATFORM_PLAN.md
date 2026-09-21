@@ -98,11 +98,12 @@ All session, history, reward and point documents continue to reference the tenan
 - A real Phone OTP, browser-close/reopen and second-browser smoke test is still mandatory before the
   release can be marked ready for deployment.
 
-Configuration was rechecked on 2026-09-20. Phone remains disabled; the SMS region allowlist is also
-empty and must permit Vietnam before an actual SMS test. Firestore, Storage and Authentication App
-Check services are UNENFORCED. See [release readiness](WEB_CUSTOMER_RELEASE_READINESS.md) for the
-named Functions deployment scope, captured rollback revisions and real-device test plan. The local
-automated browser tests use an explicitly gated mock adapter and do not prove real SMS persistence.
+Configuration was rechecked and updated on 2026-09-21. Phone is enabled and the existing SMS region
+allowlist permits Vietnam; Authorized Domains and unrelated Auth/reCAPTCHA settings were verified
+unchanged. Firestore, Storage and Authentication App Check services remain UNENFORCED. See
+[release readiness](WEB_CUSTOMER_RELEASE_READINESS.md) for the named Functions deployment scope,
+captured rollback revisions and real-device test plan. The local automated browser tests use an
+explicitly gated mock adapter and do not prove real SMS persistence.
 
 ## Local completion status (2026-09-21)
 

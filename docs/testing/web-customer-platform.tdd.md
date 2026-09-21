@@ -30,8 +30,9 @@ tests failed because the Phone Auth adapter, web API adapter and customer pages 
 ## Production configuration evidence
 
 - `app.chhaircutsalon.cc` is already present in Firebase Auth Authorized Domains.
-- Firebase Phone provider is currently disabled. The code intentionally reports a friendly error and
-  production rollout must wait for the project owner to enable Phone in Firebase Console.
+- Firebase Phone provider is enabled and the existing SMS allowlist permits Vietnam. The masked
+  Admin API update was followed by a read-back verifying Authorized Domains, other sign-in methods,
+  test phone numbers and reCAPTCHA configuration were unchanged.
 - The production-local web configuration does not currently contain an App Check site key. Phone Auth
   still uses Firebase's required reCAPTCHA verifier; App Check enforcement is a separate rollout gate.
 - No Firebase, Zalo, Gateway or Cloudflared deployment was executed for this candidate.

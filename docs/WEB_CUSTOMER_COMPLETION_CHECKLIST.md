@@ -20,7 +20,8 @@ Yêu cầu chốt: hoàn thiện luồng đã thảo luận, giữ đơn giản;
 - [x] UI mobile có loading/error/retry rõ; không thêm form dài hoặc đổi toàn bộ giao diện.
 - [x] Rà tools GitHub đã đề xuất; ZXing và axe-core được thêm có kiểm thử, TanStack Query được loại vì chưa cần.
 - [x] Functions, Rules, Web, Manager, Zalo, secret scan và E2E có kết quả thực tế.
-- [ ] Cấu hình Phone/SMS VN được xác minh và OTP thật + đóng/mở browser được người dùng kiểm tra.
+- [x] Cấu hình Phone provider và SMS Việt Nam (`VN`) được bật, hậu kiểm không đổi domain/cấu hình khác.
+- [ ] OTP thật + đóng/mở browser được người dùng kiểm tra trên candidate đã deploy.
 - [x] Có đúng danh sách resource deploy và rollback; chỉ thực hiện khi người dùng nói rõ "deploy".
 
 ## Giới hạn còn hiệu lực
@@ -34,5 +35,6 @@ thì ghi BLOCKED, không báo "hoàn thành tất cả". Libraries là công c�
 Luồng account, QR chi nhánh, yêu cầu điểm, xác nhận nhân viên, cooldown, QR quà và accessibility đã
 được triển khai và kiểm thử. Web pass 214/214 unit, 42 E2E thực thi và 3 ca chụp ảnh review được skip
 có chủ ý. Functions pass 108/108 unit và 77/77 integration; Rules 22/22; Manager 78/78; Zalo
-readiness 34/34. OTP production vẫn chưa được chứng minh vì Phone provider đang tắt và SMS allowlist
-chưa có Việt Nam. Không deploy, push, merge hoặc thay đổi Gateway trong lượt này.
+readiness 34/34. Phone provider và SMS Việt Nam đã được bật bằng update mask và hậu kiểm; OTP thật
+vẫn chưa được chứng minh vì candidate chưa deploy. Không deploy, push, merge hoặc thay đổi Gateway
+trong lượt này.

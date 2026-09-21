@@ -19,21 +19,22 @@ Read using authenticated GET requests; credentials and site-key values were not 
 
 | Check | Result |
 | --- | --- |
-| Firebase Phone provider | Disabled |
+| Firebase Phone provider | Enabled |
 | Authorized Domain `app.chhaircutsalon.cc` | Present |
-| SMS region policy | `allowlistOnly` is empty; Vietnam is not allowed |
+| SMS region policy | `allowlistOnly` includes Vietnam (`VN`) |
 | Web App Check provider | reCAPTCHA Enterprise registration exists |
 | Production-local web App Check site key | Missing |
 | Firestore, Storage and Authentication App Check enforcement | `UNENFORCED` |
 | Existing affected Functions `ENFORCE_APP_CHECK` | `false` |
 | New six web customer callables | Not deployed |
 
-Required owner actions in Firebase Console, project `haircut-c7d12`:
+Completed Firebase Auth configuration in project `haircut-c7d12`:
 
-1. Authentication → Sign-in method → Phone → Enable → Save.
-2. Authentication → Settings → SMS region policy: permit Vietnam (`VN`) for the test.
-3. Leave existing Authorized Domains unchanged.
-4. Leave App Check enforcement off. The registered public site key must be wired into the real
+1. Phone Authentication was enabled through the official Identity Toolkit Admin API.
+2. The existing `allowlistOnly` SMS policy now permits Vietnam (`VN`).
+3. Existing Authorized Domains, other sign-in methods, test phone numbers and reCAPTCHA configuration
+   were verified unchanged after the masked update.
+4. App Check enforcement remains off. The registered public site key must be wired into the real
    deployment build and valid token traffic verified before enforcement is considered separately.
 
 The local ignored Functions environment now explicitly sets
@@ -104,8 +105,8 @@ live settings blindly from a stale local `.env`. None of these secret payloads n
 
 ## Real-device smoke test
 
-Enabling Phone alone does not install this candidate on the public website. Its six web callables
-are also absent in production. A full custom-domain test therefore needs a separately approved test
+Enabling Phone does not install this candidate on the public website. Its six web callables
+remain absent in production. A full custom-domain test therefore needs a separately approved test
 rollout. Until a test environment is agreed and available, do not send the owner a fixture QR or
 claim that the current public domain serves the candidate.
 
@@ -126,8 +127,8 @@ the number and OTP directly in the page; do not send them in chat or record them
 | Logout / browser site-data clear | Login required again; server customer data remains |
 
 Record pass/fail, browser/device, time, masked phone suffix if necessary, and counts/results only.
-Real OTP and close/reopen persistence remain `NOT_RUN`; `READY_FOR_DEPLOY` remains false until they
-are confirmed. Follow the owner's instruction to stop at the Phone-provider gate for this run.
+Real OTP and close/reopen persistence remain `NOT_RUN`; `READY_FOR_DEPLOY` remains false until an
+explicitly approved test deployment makes the candidate available and those checks are confirmed.
 
 ## Rollback evidence
 
