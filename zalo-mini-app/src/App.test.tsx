@@ -10,10 +10,18 @@ const mocks = vi.hoisted(() => ({
   saveSession: vi.fn(),
   restoreSavedCustomerSession: vi.fn(),
   listenSessionLiveUpdates: vi.fn(() => () => undefined),
+  customerAuthListener: null as null | ((user: { uid: string } | null) => void),
 }));
 
 vi.mock("./services/runtime", () => ({
   isZaloMiniAppRuntime: mocks.isZaloMiniAppRuntime,
+}));
+
+vi.mock("./services/customerWebAuth", () => ({
+  subscribeCustomerWebAuth: (onChange: (user: { uid: string } | null) => void) => {
+    mocks.customerAuthListener = onChange;
+    return () => undefined;
+  },
 }));
 
 vi.mock("./services/monitoring", () => ({
@@ -266,6 +274,19 @@ describe("App trong Zalo Mini App", () => {
     await user.click(await screen.findByRole("button", { name: "Web logout" }));
     expect(await screen.findByText("web-customer-entry")).toBeVisible();
     expect(mocks.saveSession).not.toHaveBeenCalled();
+  });
+
+  it("logout hoặc đổi tài khoản ở tab khác ẩn dữ liệu khách đang hiển thị", async () => {
+    const user = userEvent.setup();
+    mocks.isZaloMiniAppRuntime.mockReturnValue(false);
+    window.history.replaceState({}, "", "/");
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Web check-in" }));
+    expect(await screen.findByText("home:Khach Web:points:4")).toBeVisible();
+    mocks.customerAuthListener?.(null);
+    await waitFor(() =>
+      expect(screen.queryByText("home:Khach Web:points:4")).not.toBeInTheDocument(),
+    );
   });
 
   it("mở Chính sách quyền riêng tư bên trong Mini App và quay lại màn yêu cầu QR", async () => {

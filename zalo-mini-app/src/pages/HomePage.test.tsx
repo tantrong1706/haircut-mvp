@@ -28,7 +28,18 @@ const session: AppSession = {
 
 describe("HomePage", () => {
   it("xem tài khoản không QR không hiển thị như một yêu cầu tích điểm đã gửi", () => {
-    render(<HomePage session={{ ...session, identityProvider: "firebase", sessionId: "", sessionStatus: undefined }} onTabChange={vi.fn()} onResetSession={vi.fn()} />);
+    render(
+      <HomePage
+        session={{
+          ...session,
+          identityProvider: "firebase",
+          sessionId: "",
+          sessionStatus: undefined,
+        }}
+        onTabChange={vi.fn()}
+        onResetSession={vi.fn()}
+      />,
+    );
     expect(screen.getByRole("heading", { name: "Anh Tân" })).toBeVisible();
     expect(screen.queryByText("Đã gửi yêu cầu")).not.toBeInTheDocument();
     expect(screen.getByText(/Quét QR tại chi nhánh để yêu cầu tích điểm/)).toBeVisible();

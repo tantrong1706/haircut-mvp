@@ -154,15 +154,22 @@ describe("web customer callable adapter", () => {
 
   it("mở tài khoản chỉ đọc qua auth, không gửi customerId hay tạo check-in", async () => {
     mocks.callCustomerWebFunction.mockResolvedValue({
-      sessionId: "", firebaseUid: "uid-a", salonName: "Salon A",
-      customer: rawContext.customer, wheelConfig: { requiredPoints: 5, slots: [] },
+      sessionId: "",
+      firebaseUid: "uid-a",
+      salonName: "Salon A",
+      customer: rawContext.customer,
+      wheelConfig: { requiredPoints: 5, slots: [] },
     });
     const result = await getWebCustomerAccount("salon-a");
     expect(result).toMatchObject({
-      identityProvider: "firebase", sessionId: "", salonName: "Salon A",
+      identityProvider: "firebase",
+      sessionId: "",
+      salonName: "Salon A",
       qr: { salonId: "salon-a", branchId: "" },
     });
-    expect(mocks.callCustomerWebFunction).toHaveBeenCalledWith("getWebCustomerSession", { salonId: "salon-a" });
+    expect(mocks.callCustomerWebFunction).toHaveBeenCalledWith("getWebCustomerSession", {
+      salonId: "salon-a",
+    });
   });
 
   it("chuẩn hóa đầy đủ lịch sử và quà từ web callables", async () => {

@@ -84,7 +84,11 @@ describe("WebCustomerEntryPage", () => {
     mocks.parseQrContext.mockReturnValue(qr);
     mocks.loadPendingWebQr.mockReturnValue(null);
     mocks.loadWebSalonHint.mockReturnValue("");
-    mocks.getWebCustomerAccount.mockResolvedValue({ ...session, sessionId: "", sessionStatus: undefined });
+    mocks.getWebCustomerAccount.mockResolvedValue({
+      ...session,
+      sessionId: "",
+      sessionStatus: undefined,
+    });
     mocks.subscribeCustomerWebAuth.mockImplementation(
       (onChange: (user: { uid: string } | null) => void, onError: (error: unknown) => void) => {
         mocks.authListener = onChange;
@@ -117,13 +121,21 @@ describe("WebCustomerEntryPage", () => {
   });
 
   it("khách quay lại mở web không QR vẫn xem tài khoản sau khi Auth xác minh", async () => {
-    mocks.parseQrContext.mockReturnValue({ qrType: "salon", salonId: "", branchId: "", mirrorId: "", qrToken: "" });
+    mocks.parseQrContext.mockReturnValue({
+      qrType: "salon",
+      salonId: "",
+      branchId: "",
+      mirrorId: "",
+      qrToken: "",
+    });
     mocks.loadWebSalonHint.mockReturnValue("salon-a");
     const onReady = vi.fn();
     render(<WebCustomerEntryPage onReady={onReady} />);
     expect(mocks.getWebCustomerAccount).not.toHaveBeenCalled();
     mocks.authListener?.({ uid: "uid-a" });
-    await waitFor(() => expect(onReady).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "" })));
+    await waitFor(() =>
+      expect(onReady).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "" })),
+    );
     expect(mocks.getWebCustomerAccount).toHaveBeenCalledWith("salon-a");
     expect(mocks.checkInWebCustomer).not.toHaveBeenCalled();
   });
@@ -179,7 +191,7 @@ describe("WebCustomerEntryPage", () => {
     mocks.authListener?.({ uid: "uid-a" });
     await screen.findByRole("heading", { name: "Salon A" });
 
-    const button = screen.getByRole("button", { name: "Check-in" });
+    const button = screen.getByRole("button", { name: "Yêu cầu tích điểm" });
     await user.dblClick(button);
     expect(mocks.checkInWebCustomer).toHaveBeenCalledTimes(1);
     expect(button).toBeDisabled();
