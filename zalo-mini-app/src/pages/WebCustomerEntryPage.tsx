@@ -6,6 +6,8 @@ import {
   confirmCustomerPhoneSignIn,
   customerPhoneAuthErrorMessage,
   loadPendingWebQr,
+  loadWebSalonHint,
+  saveWebSalonHint,
   savePendingWebQr,
   subscribeCustomerWebAuth,
   type CustomerPhoneConfirmation,
@@ -14,6 +16,7 @@ import { captureError, trackEvent } from "../services/monitoring";
 import { hasQrContext, parseQrContext } from "../services/qr";
 import {
   checkInWebCustomer,
+  getWebCustomerAccount,
   resolveWebCustomerContext,
   type WebCustomerContext,
 } from "../services/webCustomerApi";
@@ -27,6 +30,7 @@ type AuthStatus = "initializing" | "signed_out" | "authenticated" | "error";
 
 export function WebCustomerEntryPage({ onReady }: Props) {
   const qr = useMemo(resolveInitialQr, []);
+  const salonHint = useMemo(() => qr.salonId || loadWebSalonHint(), [qr.salonId]);
   const [authStatus, setAuthStatus] = useState<AuthStatus>("initializing");
   const [context, setContext] = useState<WebCustomerContext | null>(null);
   const [phone, setPhone] = useState("");
@@ -35,6 +39,7 @@ export function WebCustomerEntryPage({ onReady }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [resendSeconds, setResendSeconds] = useState(0);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const checkinStarted = useRef(false);
 
   useEffect(() => {
@@ -67,13 +72,28 @@ export function WebCustomerEntryPage({ onReady }: Props) {
   );
 
   useEffect(() => {
-    if (authStatus !== "authenticated" || !hasQrContext(qr)) return undefined;
+    if (authStatus !== "authenticated" || !salonHint) return undefined;
     let active = true;
     setBusy(true);
     setError("");
-    void resolveWebCustomerContext(qr)
+    const loadContext = hasQrContext(qr)
+      ? resolveWebCustomerContext(qr)
+      : getWebCustomerAccount(salonHint).then((account) => ({
+          qr: {
+            salonId: salonHint,
+            salonName: account.salonName || "Salon",
+            salonAvatarUrl: "",
+            branchId: account.qr.branchId,
+            branchName: account.branchName || "",
+            branchAddress: account.branchAddress || "",
+          },
+          customer: account.customer,
+          activeSession: account,
+        }));
+    void loadContext
       .then((result) => {
         if (!active) return;
+        saveWebSalonHint(result.qr.salonId);
         clearPendingWebQr();
         if (result.activeSession) {
           onReady(result.activeSession);
@@ -90,7 +110,7 @@ export function WebCustomerEntryPage({ onReady }: Props) {
     return () => {
       active = false;
     };
-  }, [authStatus, onReady, qr]);
+  }, [authStatus, onReady, qr, salonHint, loadAttempt]);
 
   useEffect(() => {
     if (resendSeconds <= 0) return undefined;
@@ -152,7 +172,7 @@ export function WebCustomerEntryPage({ onReady }: Props) {
     }
   }
 
-  if (!hasQrContext(qr)) {
+  if (!hasQrContext(qr) && !salonHint) {
     return (
       <section className="panel empty-state" role="alert">
         <BrandLogo />
@@ -257,8 +277,17 @@ export function WebCustomerEntryPage({ onReady }: Props) {
   if (!context) {
     return (
       <section className="panel loading-panel" aria-live="polite">
-        <strong>Đang tải thông tin salon...</strong>
+        <strong>{error ? "Chưa tải được thông tin salon" : "Đang tải thông tin salon..."}</strong>
         {error ? <p role="alert">{error}</p> : null}
+        {error ? (
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => setLoadAttempt((value) => value + 1)}
+          >
+            Thử lại
+          </button>
+        ) : null}
       </section>
     );
   }
@@ -282,7 +311,25 @@ export function WebCustomerEntryPage({ onReady }: Props) {
           onClick={() => void checkIn()}
           disabled={busy}
         >
-          {busy ? "Đang check-in..." : "Check-in"}
+          {busy ? "Đang gửi yêu cầu..." : "Yêu cầu tích điểm"}
+        </button>
+        <button
+          className="secondary-button"
+          type="button"
+          disabled={busy}
+          onClick={() => {
+            setBusy(true);
+            void getWebCustomerAccount(salonHint)
+              .then(onReady)
+              .catch((accountError: unknown) => {
+                setError(
+                  accountError instanceof Error ? accountError.message : "Chưa tải được tài khoản.",
+                );
+              })
+              .finally(() => setBusy(false));
+          }}
+        >
+          Xem điểm, lịch sử và quà
         </button>
         {error ? <p role="alert">{error}</p> : null}
       </div>

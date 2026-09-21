@@ -10,14 +10,26 @@ import {
 } from "firebase/auth";
 import { getCustomerFirebaseAuth } from "./firebase";
 import type { QrContext } from "./types";
+import { safeStorageGet, safeStorageSet } from "./safeStorage";
 
 const PENDING_QR_KEY = "haircut_pending_web_qr";
+const SALON_HINT_KEY = "haircut_web_salon_hint";
 const TEST_AUTH_UID_KEY = "haircut_test_web_auth_uid";
 const PENDING_QR_TTL_MS = 10 * 60_000;
 let persistencePromise: Promise<void> | null = null;
 let recaptchaVerifier: RecaptchaVerifier | null = null;
 
 export type CustomerPhoneConfirmation = Pick<ConfirmationResult, "confirm">;
+
+// Navigation hint only. Every account read is re-authorized by Firebase UID on the server.
+export function saveWebSalonHint(salonId: string) {
+  if (/^[A-Za-z0-9_-]{1,128}$/u.test(salonId)) safeStorageSet(SALON_HINT_KEY, salonId);
+}
+
+export function loadWebSalonHint() {
+  const salonId = safeStorageGet(SALON_HINT_KEY) || "";
+  return /^[A-Za-z0-9_-]{1,128}$/u.test(salonId) ? salonId : "";
+}
 
 export function normalizeVietnamPhone(input: string) {
   const compact = input.trim().replace(/[\s().-]/g, "");

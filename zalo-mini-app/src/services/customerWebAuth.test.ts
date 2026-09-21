@@ -34,7 +34,9 @@ import {
   customerPhoneAuthErrorMessage,
   loadPendingWebQr,
   normalizeVietnamPhone,
+  loadWebSalonHint,
   savePendingWebQr,
+  saveWebSalonHint,
   signOutCustomerWeb,
   subscribeCustomerWebAuth,
 } from "./customerWebAuth";
@@ -79,6 +81,17 @@ describe("pending QR trong phiên đăng nhập", () => {
     expect(loadPendingWebQr(1_000 + 11 * 60_000)).toBeNull();
     sessionStorage.setItem("haircut_pending_web_qr", "not-json");
     expect(loadPendingWebQr(1_000)).toBeNull();
+  });
+});
+
+describe("salon hint không phải identity", () => {
+  beforeEach(() => localStorage.clear());
+
+  it("chỉ giữ salonId hợp lệ để mở lại tài khoản", () => {
+    saveWebSalonHint("salon-a");
+    expect(loadWebSalonHint()).toBe("salon-a");
+    localStorage.setItem("haircut_web_salon_hint", "../../customer-forged");
+    expect(loadWebSalonHint()).toBe("");
   });
 });
 

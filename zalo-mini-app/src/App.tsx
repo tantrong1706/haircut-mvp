@@ -303,6 +303,37 @@ export default function App() {
     };
   }, [isCustomerRoute, session?.sessionId, syncAttempt]);
 
+  useEffect(() => {
+    if (!isCustomerRoute || isZaloRuntime) {
+      return undefined;
+    }
+
+    let unsubscribe: (() => void) | undefined;
+    let active = true;
+    void import("./services/customerWebAuth").then(({ subscribeCustomerWebAuth }) => {
+      if (!active) return;
+      unsubscribe = subscribeCustomerWebAuth(
+        (user) => {
+          setSession((current) => {
+            if (!current || current.identityProvider !== "firebase") return current;
+            if (!user || (current.firebaseUid && current.firebaseUid !== user.uid)) {
+              setActiveTab("home");
+              setSessionSync({ status: "idle", message: "", syncedAtMs: null });
+              return null;
+            }
+            return current;
+          });
+        },
+        () => undefined,
+      );
+    });
+
+    return () => {
+      active = false;
+      unsubscribe?.();
+    };
+  }, [isCustomerRoute, isZaloRuntime, session?.firebaseUid, session?.identityProvider]);
+
   function resetSession() {
     trackEvent("customer_session_reset", {
       salon_id: session?.qr.salonId || currentQr.salonId,

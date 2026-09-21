@@ -43,6 +43,7 @@ export function HomePage({
   onResetSession,
 }: Props) {
   const { customer } = session;
+  const accountOnly = session.identityProvider === "firebase" && !session.sessionId;
   const [clockNow, setClockNow] = useState(Date.now());
   const cooldownMinutes = Math.max(
     0,
@@ -82,11 +83,17 @@ export function HomePage({
       <header className="customer-hero premium-hero visual-hero compact-hero">
         <div className="hero-topline">
           <BrandLogo />
-          <span className="soft-chip">{branchLabel(session)}</span>
+          <span className="soft-chip">
+            {accountOnly ? session.salonName || "Tài khoản salon" : branchLabel(session)}
+          </span>
         </div>
         <p className="eyebrow">Thành viên</p>
         <h1>{customer.name}</h1>
-        <p className="muted">{shortStatusText(status, session.assignedStaffName)}</p>
+        <p className="muted">
+          {accountOnly
+            ? "Điểm, lịch sử và quà của bạn tại salon."
+            : shortStatusText(status, session.assignedStaffName)}
+        </p>
       </header>
 
       {syncStatus === "error" ? (
@@ -165,35 +172,41 @@ export function HomePage({
         </button>
       </section>
 
-      <div className="status-card">
-        <StatusStep
-          done
-          icon={<CheckCircle2 size={20} />}
-          title="Đã gửi yêu cầu"
-          text={
-            session.branchAddress
-              ? `${branchLabel(session)} · ${session.branchAddress}`
-              : branchLabel(session)
-          }
-        />
-        <StatusStep
-          done={
-            status === "serving" ||
-            status === "pending_approval" ||
-            status === "completed" ||
-            status === "cancelled"
-          }
-          icon={<Hourglass size={20} />}
-          title={staffStepTitle(status)}
-          text={staffStepText(status, session.assignedStaffName)}
-        />
-        <StatusStep
-          done={status === "completed"}
-          icon={<Gift size={20} />}
-          title={ownerStepTitle(status)}
-          text={ownerStepText(status)}
-        />
-      </div>
+      {accountOnly ? (
+        <p className="panel">
+          Quét QR tại chi nhánh để yêu cầu tích điểm. Bạn vẫn xem được lịch sử và quà tại đây.
+        </p>
+      ) : (
+        <div className="status-card">
+          <StatusStep
+            done
+            icon={<CheckCircle2 size={20} />}
+            title="Đã gửi yêu cầu"
+            text={
+              session.branchAddress
+                ? `${branchLabel(session)} · ${session.branchAddress}`
+                : branchLabel(session)
+            }
+          />
+          <StatusStep
+            done={
+              status === "serving" ||
+              status === "pending_approval" ||
+              status === "completed" ||
+              status === "cancelled"
+            }
+            icon={<Hourglass size={20} />}
+            title={staffStepTitle(status)}
+            text={staffStepText(status, session.assignedStaffName)}
+          />
+          <StatusStep
+            done={status === "completed"}
+            icon={<Gift size={20} />}
+            title={ownerStepTitle(status)}
+            text={ownerStepText(status)}
+          />
+        </div>
+      )}
 
       <div className="quick-actions compact-actions">
         {actions.map(({ tab, title, Icon }) => (
@@ -206,7 +219,7 @@ export function HomePage({
         ))}
       </div>
 
-      {status === "completed" || status === "cancelled" ? (
+      {!accountOnly && (status === "completed" || status === "cancelled") ? (
         <>
           {cooldownMinutes > 0 ? (
             <p role="status">Có thể yêu cầu tích điểm lại sau {cooldownMinutes} phút.</p>

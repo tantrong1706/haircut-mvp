@@ -24,9 +24,11 @@ test("thiết bị mới: QR web -> Phone OTP -> check-in", async ({ page }) => 
   await page.getByRole("button", { name: "Gửi mã OTP" }).click();
   await page.getByLabel("Mã OTP").fill("123456");
   await page.getByRole("button", { name: "Xác nhận OTP" }).click();
-  await expect(page.getByRole("button", { name: "Check-in" })).toBeVisible();
-  await page.getByRole("button", { name: "Check-in" }).click();
-  await expect(page.getByText("Salon đã nhận khách.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Yêu cầu tích điểm" })).toBeVisible();
+  await page.getByRole("button", { name: "Yêu cầu tích điểm" }).click();
+  await expect(
+    page.getByText("Đã gửi yêu cầu. Nhân viên chi nhánh sẽ xác nhận điểm."),
+  ).toBeVisible();
   await expect(page.getByText("0", { exact: true })).toBeVisible();
   const navButtons = page.getByRole("navigation", { name: "Điều hướng" }).getByRole("button");
   await expect(navButtons).toHaveCount(4);
@@ -41,23 +43,29 @@ test("thiết bị quay lại: Firebase session restore và không hiện OTP", 
   await page.goto(qrA);
 
   await expect(page.getByLabel("Số điện thoại")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Check-in" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Yêu cầu tích điểm" })).toBeVisible();
+
+  await page.goto("/");
+  await expect(page.getByLabel("Số điện thoại")).toHaveCount(0);
+  await expect(page.getByText("Quét QR tại chi nhánh để yêu cầu tích điểm.")).toBeVisible();
 });
 
 test("cùng UID sang salon thứ hai không OTP và có profile tenant riêng", async ({ page }) => {
   await completeTestPhoneLogin(page, qrA);
-  await page.getByRole("button", { name: "Check-in" }).click();
-  await expect(page.getByText("Salon đã nhận khách.")).toBeVisible();
+  await page.getByRole("button", { name: "Yêu cầu tích điểm" }).click();
+  await expect(
+    page.getByText("Đã gửi yêu cầu. Nhân viên chi nhánh sẽ xác nhận điểm."),
+  ).toBeVisible();
 
   await page.goto(qrB);
   await expect(page.getByLabel("Số điện thoại")).toHaveCount(0);
   await expect(page.getByText("0 điểm")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Check-in" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Yêu cầu tích điểm" })).toBeVisible();
 });
 
 test("đăng xuất customer chỉ làm thiết bị yêu cầu OTP lại", async ({ page }) => {
   await completeTestPhoneLogin(page, qrA);
-  await page.getByRole("button", { name: "Check-in" }).click();
+  await page.getByRole("button", { name: "Yêu cầu tích điểm" }).click();
   await page.getByRole("button", { name: "Tài khoản" }).click();
   await page.getByRole("button", { name: "Đăng xuất khỏi thiết bị này" }).click();
 
@@ -71,5 +79,5 @@ async function completeTestPhoneLogin(page: import("@playwright/test").Page, url
   await page.getByRole("button", { name: "Gửi mã OTP" }).click();
   await page.getByLabel("Mã OTP").fill("123456");
   await page.getByRole("button", { name: "Xác nhận OTP" }).click();
-  await expect(page.getByRole("button", { name: "Check-in" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Yêu cầu tích điểm" })).toBeVisible();
 }

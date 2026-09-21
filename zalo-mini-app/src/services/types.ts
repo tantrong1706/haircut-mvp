@@ -20,6 +20,7 @@ export type CustomerProfile = {
 };
 
 export type AppSession = {
+  salonName?: string;
   identityProvider?: "zalo" | "firebase";
   firebaseUid?: string;
   qr: QrContext;

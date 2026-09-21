@@ -26,6 +26,7 @@ export type WebCustomerContext = {
 };
 
 type WebSessionResult = {
+  salonName?: string;
   firebaseUid?: string;
   qr?: Pick<QrContext, "salonId" | "branchId">;
   sessionId: string;
@@ -50,6 +51,29 @@ export async function checkInWebCustomer(qr: QrContext): Promise<AppSession> {
   const result = await callCustomerWebFunction<QrContext, WebSessionResult>(
     "checkInWebCustomer",
     qr,
+  );
+  return appSessionFromWebResult(qr, result);
+}
+
+export async function getWebCustomerAccount(salonId: string): Promise<AppSession> {
+  const qr: QrContext = { qrType: "salon", salonId, branchId: "", mirrorId: "" };
+  if (testAdapterEnabled()) {
+    const context = mockWebCustomerContext(qr);
+    if (context.activeSession) return context.activeSession;
+    return {
+      identityProvider: "firebase",
+      firebaseUid: "web-test-uid",
+      qr,
+      salonName: context.qr.salonName,
+      sessionId: "",
+      zaloUserId: "",
+      customer: context.customer,
+      features: { ...DEFAULT_SYSTEM_FEATURES },
+    };
+  }
+  const result = await callCustomerWebFunction<{ salonId: string }, WebSessionResult>(
+    "getWebCustomerSession",
+    { salonId },
   );
   return appSessionFromWebResult(qr, result);
 }
@@ -169,6 +193,7 @@ export function spinWebCustomerWheel(
 function appSessionFromWebResult(qr: QrContext, result: WebSessionResult): AppSession {
   return {
     identityProvider: "firebase",
+    salonName: result.salonName || "",
     firebaseUid: result.firebaseUid || getCustomerFirebaseAuth()?.currentUser?.uid || "",
     qr: {
       qrType: "branch",
@@ -180,7 +205,7 @@ function appSessionFromWebResult(qr: QrContext, result: WebSessionResult): AppSe
     branchName: result.branchName || "",
     branchAddress: result.branchAddress || "",
     zaloUserId: "",
-    sessionStatus: result.sessionStatus || "waiting",
+    sessionStatus: result.sessionId ? result.sessionStatus || "pending_approval" : undefined,
     assignedStaffName: result.assignedStaffName || "",
     claimedAtMs: result.claimedAtMs ?? null,
     customer: result.customer,
@@ -224,7 +249,7 @@ function mockWebCustomerCheckin(qr: QrContext): AppSession {
     branchName: context.qr.branchName,
     branchAddress: context.qr.branchAddress,
     zaloUserId: "",
-    sessionStatus: "waiting",
+    sessionStatus: "pending_approval",
     customer: { ...context.customer, allowPhoto: true },
     features: { ...DEFAULT_SYSTEM_FEATURES },
   };
