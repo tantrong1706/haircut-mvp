@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RedeemRewardPanel } from "./RedeemRewardPanel";
@@ -81,5 +81,18 @@ describe("RedeemRewardPanel", () => {
     await user.click(screen.getByRole("button", { name: "Xác nhận đã trao quà" }));
 
     expect(await screen.findByText(/Mã quà này đã được xác nhận trước đó/)).toBeInTheDocument();
+  });
+
+  it("nhận mã từ scanner nhưng vẫn bắt nhân viên kiểm tra trước", async () => {
+    render(<RedeemRewardPanel salonId="salon-a" branchId="branch-a1" />);
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent("haircut:reward-code-scanned", { detail: "HC-SCANNED12" }),
+      );
+    });
+    await waitFor(() => expect(screen.getByLabelText("Mã quà")).toHaveValue("HC-SCANNED12"));
+    expect(screen.getByText(/Hãy kiểm tra trước khi xác nhận/)).toBeVisible();
+    expect(mocks.lookupRewardCode).not.toHaveBeenCalled();
+    expect(mocks.redeemRewardCode).not.toHaveBeenCalled();
   });
 });
