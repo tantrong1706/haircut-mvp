@@ -79,7 +79,10 @@ export default defineConfig(({ mode }) => {
             if (id.includes("lucide-react")) {
               return "vendor-icons";
             }
-            if (id.includes("qrcode")) {
+            if (id.includes("@zxing")) {
+              return "vendor-zxing";
+            }
+            if (/[\\/]node_modules[\\/]qrcode[\\/]/.test(id)) {
               return "vendor-qrcode";
             }
             if (id.includes("zmp-sdk")) {

@@ -34,6 +34,7 @@
   "dependencies": {
     "@haircut/contracts": "file:../packages/contracts",
     "@sentry/react": "^10.63.0",
+    "@zxing/browser": "0.2.1",
     "firebase": "^11.10.0",
     "lucide-react": "^1.21.0",
     "qrcode": "^1.5.4",
@@ -42,6 +43,7 @@
     "zmp-sdk": "2.51.8"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
     "@eslint/js": "^9.39.4",
     "@lhci/cli": "^0.15.1",
     "@playwright/test": "^1.61.1",

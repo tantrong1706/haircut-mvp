@@ -9,6 +9,7 @@ import {
   restoreRewardCode,
 } from "../services/operations";
 import { trackEvent, withMonitoringTrace } from "../services/monitoring";
+import { RewardQrScanner } from "./RewardQrScanner";
 
 type Props = {
   salonId: string;
@@ -158,6 +159,13 @@ export function RedeemRewardPanel({
 
       {note ? <p className="notice-banner">{note}</p> : null}
 
+      <RewardQrScanner
+        disabled={disabled || loading || checking}
+        onCode={(code) => {
+          window.dispatchEvent(new CustomEvent("haircut:reward-code-scanned", { detail: code }));
+        }}
+      />
+
       <label className="field">
         <span>
           <ScanLine size={18} aria-hidden="true" />
@@ -206,9 +214,7 @@ export function RedeemRewardPanel({
         </button>
       </div>
 
-      {info ? (
-        <RewardCodeStatus info={info} />
-      ) : null}
+      {info ? <RewardCodeStatus info={info} /> : null}
 
       {result ? (
         <div className="alert success retry-alert">
@@ -275,11 +281,7 @@ export function RedeemRewardPanel({
   );
 }
 
-function RewardCodeStatus({
-  info,
-}: {
-  info: RewardCodeInfo;
-}) {
+function RewardCodeStatus({ info }: { info: RewardCodeInfo }) {
   if (!info.found || info.status === "not_found") {
     return <p className="alert error">Không tìm thấy mã quà trong salon này.</p>;
   }

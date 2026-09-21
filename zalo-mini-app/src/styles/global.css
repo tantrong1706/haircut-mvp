@@ -2713,6 +2713,15 @@ small {
   align-self: start;
 }
 
+.reward-scan-dialog video {
+  width: 100%;
+  min-height: 220px;
+  max-height: min(58vh, 460px);
+  border-radius: 16px;
+  background: #101714;
+  object-fit: cover;
+}
+
 .reward-code-status {
   display: grid;
   gap: 5px;

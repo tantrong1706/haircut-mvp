@@ -1,10 +1,11 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   startRewardQrCamera: vi.fn(),
   stop: vi.fn(),
+  emitCode: null as null | ((code: string) => void),
 }));
 
 vi.mock("../services/rewardQrScanner", () => ({
@@ -16,9 +17,10 @@ import { RewardQrScanner } from "./RewardQrScanner";
 describe("RewardQrScanner", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.emitCode = null;
     mocks.startRewardQrCamera.mockImplementation(
       async (_video: HTMLVideoElement, onCode: (code: string) => void) => {
-        queueMicrotask(() => onCode("HC-TEST12"));
+        mocks.emitCode = onCode;
         return mocks.stop;
       },
     );
@@ -32,6 +34,7 @@ describe("RewardQrScanner", () => {
     await user.click(screen.getByRole("button", { name: "Quét QR quà" }));
 
     expect(await screen.findByRole("dialog", { name: "Quét QR quà" })).toBeVisible();
+    act(() => mocks.emitCode?.("HC-TEST12"));
     await waitFor(() => expect(onCode).toHaveBeenCalledWith("HC-TEST12"));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(mocks.stop).toHaveBeenCalledTimes(1);
