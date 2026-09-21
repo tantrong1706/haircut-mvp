@@ -27,8 +27,9 @@
    salons.
 7. Add authenticated web adapters around shared customer-session, history, rewards and wheel core
    functions. Sensitive collections remain server-only under Firestore Rules.
-8. Use the existing waiting/serving/completed service-session flow for web check-in. Active-session
-   and idempotency documents remain server authoritative.
+8. A web check-in creates one `pending_approval` service session and one `staff_confirmation` point
+   request. The correct branch staff confirms after service; no extra owner handoff is required.
+   Active-request, idempotency and the two-hour post-award cooldown remain server authoritative.
 
 ## Additive data model
 
@@ -84,3 +85,30 @@ All session, history, reward and point documents continue to reference the tenan
 - Rollback Hosting through Firebase Hosting release history and redeploy the prior Functions release.
   Do not delete `firebaseUid` or `identityProvider` fields: they are additive and harmless to the prior
   release. Keep previously printed QR available until the rollback smoke test completes.
+
+## Read-only production configuration audit (2026-09-15)
+
+- Firebase Authentication Phone provider: disabled.
+- Authorized Domains: `app.chhaircutsalon.cc` present; no domain change required.
+- App Check: reCAPTCHA Enterprise provider registered for the web app, but the production-local web
+  build does not yet have `VITE_FIREBASE_APP_CHECK_SITE_KEY` and Functions currently use
+  `ENFORCE_APP_CHECK=false`. Enforcement must remain off until a real web token smoke test passes.
+- Current deploy delta requires Functions and Hosting only. Firestore Rules, Storage Rules and
+  Firestore indexes are unchanged from the base candidate and must not be redeployed for this delta.
+- A real Phone OTP, browser-close/reopen and second-browser smoke test is still mandatory before the
+  release can be marked ready for deployment.
+
+Configuration was rechecked on 2026-09-20. Phone remains disabled; the SMS region allowlist is also
+empty and must permit Vietnam before an actual SMS test. Firestore, Storage and Authentication App
+Check services are UNENFORCED. See [release readiness](WEB_CUSTOMER_RELEASE_READINESS.md) for the
+named Functions deployment scope, captured rollback revisions and real-device test plan. The local
+automated browser tests use an explicitly gated mock adapter and do not prove real SMS persistence.
+
+## Local completion status (2026-09-21)
+
+The authorized source work is complete: account-only reads, server-resolved branch QR, direct staff
+confirmation, two-hour cooldown, reward QR camera scanning and accessibility regression checks are
+implemented. Web passes 214/214 unit and 42 executed E2E tests (3 intentional screenshot skips);
+Functions passes 108/108 unit and 77/77 integration; Rules 22/22; Manager 78/78; Zalo readiness
+34/34. The remaining gate is external configuration and a real OTP persistence test; deployment is
+still prohibited until explicitly authorized.
