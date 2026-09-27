@@ -5,7 +5,7 @@ Yêu cầu chốt: hoàn thiện luồng đã thảo luận, giữ đơn giản;
 
 ## Hành vi phải đạt
 
-- [ ] Khách xác thực Phone OTP lần đầu; Firebase nhớ phiên; đổi trình duyệt/đăng xuất yêu cầu xác thực lại.
+- [x] Khách xác thực Phone OTP lần đầu; Firebase nhớ phiên; đóng/mở lại cùng browser không yêu cầu OTP.
 - [x] Khách đã có hồ sơ xem điểm, lịch sử và quà khi mở web, không phải tạo lượt mới để xem.
 - [x] Chỉ QR đã xác minh mới tạo yêu cầu tại đúng chi nhánh; không cho sửa branch bằng query string.
 - [x] Khách nhấn yêu cầu tích điểm; nhân viên đúng chi nhánh xác nhận sau phục vụ; không bắt nhận khách rồi gửi owner lần nữa.
@@ -21,20 +21,19 @@ Yêu cầu chốt: hoàn thiện luồng đã thảo luận, giữ đơn giản;
 - [x] Rà tools GitHub đã đề xuất; ZXing và axe-core được thêm có kiểm thử, TanStack Query được loại vì chưa cần.
 - [x] Functions, Rules, Web, Manager, Zalo, secret scan và E2E có kết quả thực tế.
 - [x] Cấu hình Phone provider và SMS Việt Nam (`VN`) được bật, hậu kiểm không đổi domain/cấu hình khác.
-- [ ] OTP thật + đóng/mở browser được người dùng kiểm tra trên candidate đã deploy.
+- [x] OTP thật + đóng/mở browser được người dùng kiểm tra trên production custom domain.
 - [x] Có đúng danh sách resource deploy và rollback; chỉ thực hiện khi người dùng nói rõ "deploy".
 
 ## Giới hạn còn hiệu lực
 
-Không push/merge/deploy trong lượt chuẩn bị; không sửa Gateway/Cloudflared, xoay secret, publish Zalo
-hoặc gửi review. Các thao tác Console Phone/SMS và nhập OTP theo yêu cầu chủ dự án; chưa có xác nhận
-thì ghi BLOCKED, không báo "hoàn thành tất cả". Libraries là công cụ, không phải lý do mở rộng phạm vi.
+Không push/merge, không sửa Gateway/Cloudflared, xoay secret, publish Zalo hoặc gửi review. App Check
+enforcement vẫn OFF cho đến khi attestation pilot ổn định; không hạ ngưỡng reCAPTCHA để ép PASS.
 
-## Trạng thái chốt local
+## Trạng thái chốt production
 
 Luồng account, QR chi nhánh, yêu cầu điểm, xác nhận nhân viên, cooldown, QR quà và accessibility đã
 được triển khai và kiểm thử. Web pass 214/214 unit, 42 E2E thực thi và 3 ca chụp ảnh review được skip
 có chủ ý. Functions pass 108/108 unit và 77/77 integration; Rules 22/22; Manager 78/78; Zalo
-readiness 34/34. Phone provider và SMS Việt Nam đã được bật bằng update mask và hậu kiểm; OTP thật
-vẫn chưa được chứng minh vì candidate chưa deploy. Không deploy, push, merge hoặc thay đổi Gateway
-trong lượt này.
+readiness 34/34. Phone provider/SMS Việt Nam, OTP thật, Auth persistence, multi-salon isolation,
+staff confirmation, point award, history và cooldown 2 giờ đã được chứng minh trên production.
+Mười lăm Functions và Hosting đã deploy; Rules/Storage/indexes, Zalo, Gateway và Cloudflared không đổi.

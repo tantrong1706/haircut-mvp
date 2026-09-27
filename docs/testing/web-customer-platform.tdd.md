@@ -35,7 +35,8 @@ tests failed because the Phone Auth adapter, web API adapter and customer pages 
   test phone numbers and reCAPTCHA configuration were unchanged.
 - The production-local web configuration does not currently contain an App Check site key. Phone Auth
   still uses Firebase's required reCAPTCHA verifier; App Check enforcement is a separate rollout gate.
-- No Firebase, Zalo, Gateway or Cloudflared deployment was executed for this candidate.
+- Fifteen named Firebase Functions and customer Hosting were deployed after explicit approval.
+  Rules, Storage, indexes, Zalo, Gateway and Cloudflared were not deployed or changed.
 
 ## Migration and rollback
 
@@ -54,8 +55,9 @@ may remain in Firestore and must not be removed or auto-merged by phone number.
 - GREEN: the adapter prefers the server's nested branch, retaining the existing top-level fallback.
   The same command passed 6/6. Checkpoint `8663840` contains the two-line production fix.
 - Backend point, wheel and reward logic and gateway configuration were untouched by this fix.
-- Real OTP delivery, reCAPTCHA and browser-close/reopen persistence remain unverified on an actual
-  phone. Local fixture E2E must not be represented as evidence that those live flows have passed.
+- Real OTP delivery and browser-close/reopen persistence passed on the production custom domain.
+  App Check Enterprise registration is retained, but runtime initialization/enforcement remain OFF
+  because the attestation pilot returned 403 and throttled Firebase Auth in the in-app browser.
 
 ## 2026-09-21 completion regressions
 
@@ -73,3 +75,16 @@ may remain in Firestore and must not be removed or auto-merged by phone number.
 - Exact additions are `@zxing/browser@0.2.1` and dev-only `@axe-core/playwright@4.13.0`. A production
   audit reports 0 critical, 2 high and 3 moderate transitive advisories; neither new package is named
   in those findings. No force-upgrade or unrelated dependency update was performed.
+
+## 2026-09-27 production evidence
+
+- Full release gate: 27 required checks passed, zero failed; iOS sync remained a non-required Windows
+  limitation. Functions 108/108, integration 77/77, Rules 22/22, web 214/214, Playwright 42 executed
+  with 3 intentional screenshot skips, Manager 78/78 and Zalo readiness 34/34.
+- All six web callables returned HTTP 401 without Firebase Auth. Signed branch QR resolution passed.
+- The owner completed real Phone OTP without sharing the phone or OTP. Closing all tabs and reopening
+  restored the customer account without another OTP.
+- The same Firebase UID entered a second salon without another OTP and produced a separate
+  tenant-scoped request. The first salon's staff could not see the second salon's request.
+- Correct staff confirmation changed points from 0 to 1, completed the session, created exactly one
+  haircut record and stored a two-hour `nextPointEligibleAt` cooldown.

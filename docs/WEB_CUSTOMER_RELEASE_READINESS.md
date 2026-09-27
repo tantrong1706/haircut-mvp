@@ -1,17 +1,18 @@
 # Web customer release readiness
 
-Evidence date: 2026-09-21. Repository: `haircut-mvp`; branch: `feat/web-customer-platform`.
+Evidence date: 2026-09-27. Repository: `haircut-mvp`; branch: `release/web-customer-platform-20260921`.
 Starting candidate: `22be8eebe144bf0482d23180d287ef04196b483b`.
 Release base for the web migration: `5ae0ff21200ae4d32b07e9f588ee6b7797c35d0e`.
 
 ## Decision
 
-`READY_FOR_DEPLOY=false`; `READY_FOR_REAL_PHONE_TEST=false`.
+`READY_FOR_DEPLOY=true`; `REAL_PHONE_TEST=PASS`; `PRODUCTION_DEPLOYED=true`.
 
-The automated suites exercise local UI fixtures and Firebase demo emulators. They do not prove real
-SMS delivery, reCAPTCHA on the custom domain, or Firebase persistence after closing a real browser.
-No production configuration was changed by this audit. No deployment, push, merge or Zalo review
-action was performed. Gateway and Cloudflared were not modified.
+The full release gate passed 27 required checks with zero failures. Real SMS/OTP, authenticated
+check-in, browser close/reopen persistence, a second tenant, staff confirmation, point award,
+history creation and the two-hour cooldown were verified on the custom domain. Fifteen named
+Functions and Firebase Hosting were deployed. Rules, Storage, indexes, Zalo, Gateway and Cloudflared
+were not deployed or modified. No push, merge, Zalo review submission or publish action occurred.
 
 ## Verified production configuration
 
@@ -23,10 +24,10 @@ Read using authenticated GET requests; credentials and site-key values were not 
 | Authorized Domain `app.chhaircutsalon.cc` | Present |
 | SMS region policy | `allowlistOnly` includes Vietnam (`VN`) |
 | Web App Check provider | reCAPTCHA Enterprise registration exists |
-| Production-local web App Check site key | Missing |
+| Web App Check runtime | Registered but intentionally monitor-only/unwired |
 | Firestore, Storage and Authentication App Check enforcement | `UNENFORCED` |
 | Existing affected Functions `ENFORCE_APP_CHECK` | `false` |
-| New six web customer callables | Not deployed |
+| New six web customer callables | Deployed; unauthenticated calls return HTTP 401 |
 
 Completed Firebase Auth configuration in project `haircut-c7d12`:
 
@@ -34,12 +35,14 @@ Completed Firebase Auth configuration in project `haircut-c7d12`:
 2. The existing `allowlistOnly` SMS policy now permits Vietnam (`VN`).
 3. Existing Authorized Domains, other sign-in methods, test phone numbers and reCAPTCHA configuration
    were verified unchanged after the masked update.
-4. App Check enforcement remains off. The registered public site key must be wired into the real
-   deployment build and valid token traffic verified before enforcement is considered separately.
+4. App Check enforcement remains off. A trial build with the registered Enterprise key received
+   attestation 403 and SDK throttling in the in-app browser. The final Hosting build does not
+   initialize App Check. Do not enable enforcement until valid token traffic is proven without
+   blocking Firebase Auth restore.
 
 The local ignored Functions environment now explicitly sets
-`CUSTOMER_WEB_CHECKIN_URL=https://app.chhaircutsalon.cc/checkin`. Secrets, key IDs and the gateway URL
-were not rotated. This local setting has not been deployed.
+`CUSTOMER_WEB_CHECKIN_URL=https://app.chhaircutsalon.cc/checkin`. It was deployed with the named
+Functions. Secrets, key IDs and the gateway URL were preserved and were not printed or rotated.
 
 ## Source and test evidence
 
@@ -70,65 +73,53 @@ were not rotated. This local setting has not been deployed.
   new exact ZXing dependency and dev-only axe Playwright package are not named in those findings; no
   unrelated or forced dependency upgrade was made.
 
-## Exact deployment scope (plan only)
+## Executed deployment scope
 
 | Resource | Required for this migration? | Reason |
 | --- | --- | --- |
-| Customer Firebase Hosting site `haircut-c7d12` | Yes | New Auth/entry/account UI, adapter and reCAPTCHA CSP |
-| Functions | Yes, named subset below | Six new callables, six QR producers and three shared-core Zalo read adapters |
+| Customer Firebase Hosting site `haircut-c7d12` | Deployed | New Auth/entry/account UI and monitor-only App Check behavior |
+| Functions | Deployed, named subset below | Six new callables, six QR producers and three shared-core Zalo read adapters |
 | Firestore Rules | No | No rule-source changes against the migration base |
 | Storage Rules | No | No rule-source changes against the migration base |
 | Firestore indexes | No | No index-source changes; queries reuse existing indexes |
 | Zalo / Gateway / Cloudflared / Manager native / Admin Hosting | No | Outside this release |
 
-After owner deployment approval and fresh release gates, the proposed Functions command from the
-repository root is:
+The approved Functions deployment used:
 
 ```powershell
 firebase deploy --project haircut-c7d12 --config firebase/firebase.json --only "functions:getWebCustomerContext,functions:checkInWebCustomer,functions:getWebCustomerSession,functions:getWebCustomerHistory,functions:getWebCustomerRewards,functions:spinWebLuckyWheel,functions:createSalon,functions:listBranches,functions:createBranch,functions:updateBranch,functions:rotateSalonQr,functions:rotateBranchQr,functions:getCustomerSessionFromZalo,functions:getCustomerHistoryFromZalo,functions:getCustomerRewardsFromZalo"
 ```
 
-Build/package Hosting from the approved SHA, then use the existing guarded Hosting path:
+Hosting was built from the approved release branch and deployed separately:
 
 ```powershell
 .\scripts\deploy-firebase.ps1 -OnlyHosting
 ```
 
-The Hosting script requires a clean approved release branch and full readiness evidence for its SHA.
-No break-glass flags should be used to hide missing evidence. Do not use `-IncludeFunctions`, which
-would deploy every Function instead of the named subset. Do not run either command in this audit.
+No break-glass flags were used. Firestore Rules, Storage Rules and indexes were not deployed.
 
 Immediately before any approved deployment, re-read live environment/secret binding metadata and
 compare it with the candidate. Preserve `ZALO_APP_SECRET`, `ZALO_GATEWAY_HMAC_SECRET`,
 `ZALO_OPEN_API_KEY`, `QR_SIGNING_SECRET`, gateway configuration and App Check flags. Never overwrite
 live settings blindly from a stale local `.env`. None of these secret payloads needs to be printed.
 
-## Real-device smoke test
+## Production smoke test
 
-Enabling Phone does not install this candidate on the public website. Its six web callables
-remain absent in production. A full custom-domain test therefore needs a separately approved test
-rollout. Until a test environment is agreed and available, do not send the owner a fixture QR or
-claim that the current public domain serves the candidate.
+The owner entered the phone number and OTP directly in the production page; neither value was sent
+to chat or logged. Results below are evidence from the real custom-domain flow.
 
-Once an authorized HTTPS test deployment exists, use only the owner's own test phone number. Enter
-the number and OTP directly in the page; do not send them in chat or record them in screenshots.
-
-| Journey | Expected result |
+| Journey | Result |
 | --- | --- |
-| New browser → signed Branch A QR → send OTP → confirm | No auto-send; actual SMS verification; correct salon/branch |
-| Check-in twice / two tabs / retry after connection loss | One active session for the tenant customer |
-| Close all tabs/browser → reopen same browser → scan same QR | Auth restores before UI decision; no phone/OTP prompt and no SMS request |
-| Same browser → signed Salon B QR | Same Firebase UID; separate tenant profile and points/rewards |
-| Another browser on same device | Login required until that browser is authenticated |
-| New device, same phone account | OTP required; existing salon profile reused after verified login |
-| Staff confirmation / retry | Only the correct salon customer's points update once |
-| Spin / insufficient points / retry | Server result, one deduction, no cross-salon balance use |
-| Rewards / QR scan / backup code | Only own tenant rewards; explicit staff confirmation before redemption |
-| Logout / browser site-data clear | Login required again; server customer data remains |
-
-Record pass/fail, browser/device, time, masked phone suffix if necessary, and counts/results only.
-Real OTP and close/reopen persistence remain `NOT_RUN`; `READY_FOR_DEPLOY` remains false until an
-explicitly approved test deployment makes the candidate available and those checks are confirmed.
+| New browser → signed QR → Phone OTP | PASS; correct customer, salon and branch |
+| Close all tabs → reopen same browser | PASS; Firebase Auth restored without another OTP |
+| Same UID enters a second salon | PASS; separate tenant profile, no cross-tenant request visibility |
+| Customer requests point → correct staff confirms | PASS; `pending_approval` → `completed` |
+| Point/history idempotency | PASS; points `0 → 1`, exactly one haircut record for the request |
+| Two-hour cooldown | PASS; server stored `nextPointEligibleAt - approvedAt = 2 hours` and no duplicate open request |
+| History, rewards and insufficient-points wheel | PASS on authenticated production session |
+| Unauthenticated web callables | PASS; all six returned HTTP 401 |
+| Another browser/new device | Not run; expected to require OTP by browser-local persistence |
+| App Check enforcement | Intentionally OFF; attestation pilot must pass first |
 
 ## Rollback evidence
 
@@ -157,6 +148,14 @@ artifacts. Revision metadata alone is not a tested Functions rollback procedure.
 Hosting can return to the captured prior version; Functions rollback needs the corresponding prior
 deployable artifact. Preserve additive web customer fields and profiles; never merge by phone or
 delete new customer data as a rollback shortcut. Rollback is not automatic.
+
+Current deployed release after the monitor-only correction:
+
+- Hosting release: `sites/haircut-c7d12/releases/1790428061756000`.
+- Hosting version: `sites/haircut-c7d12/versions/7c28a6b40e608b94`.
+- Release source commit: `7353259b60bc1b69c51acddd11d184c5d66259f5`.
+- Six web callables are at revision `00001`; the nine updated QR/Zalo functions are at their next
+  recorded revisions (`createSalon` 00012, branch/QR functions 00006, and Zalo readers 00014–00017).
 
 ## GitHub additions decision
 

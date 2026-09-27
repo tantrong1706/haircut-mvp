@@ -70,14 +70,13 @@ All session, history, reward and point documents continue to reference the tenan
 3. GREEN frontend: OTP screen, returning-device restore, customer account/logout, API dispatch and
    mobile web routing.
 4. Regression: Functions, emulator rules/integration, web unit/build/E2E, Manager and Zalo tests.
-5. Stop with local commits only. No push, merge, Firebase deployment, Zalo deployment, review action
-   or Gateway change.
+5. Deploy only after explicit approval. Firebase Functions and Hosting were approved and deployed;
+   no push, merge, Zalo deployment, review action or Gateway change followed.
 
 ## Deployment and rollback gate
 
-- Before rollout, enable Firebase Authentication → Phone and keep
-  `app.chhaircutsalon.cc` in Authorized Domains. Production currently has the domain but Phone is
-  disabled, so rollout remains blocked until that Console action is completed.
+- Firebase Authentication Phone is enabled, Vietnam is permitted by the SMS allowlist and
+  `app.chhaircutsalon.cc` remains in Authorized Domains.
 - Deploy additive Functions before Hosting so the web client never calls a missing authenticated
   callable. The existing Zalo callables remain available during and after this rollout.
 - Generate/print replacement salon and branch QR only after the web Hosting smoke test passes.
@@ -105,11 +104,14 @@ unchanged. Firestore, Storage and Authentication App Check services remain UNENF
 captured rollback revisions and real-device test plan. The local automated browser tests use an
 explicitly gated mock adapter and do not prove real SMS persistence.
 
-## Local completion status (2026-09-21)
+## Production completion status (2026-09-27)
 
 The authorized source work is complete: account-only reads, server-resolved branch QR, direct staff
 confirmation, two-hour cooldown, reward QR camera scanning and accessibility regression checks are
 implemented. Web passes 214/214 unit and 42 executed E2E tests (3 intentional screenshot skips);
 Functions passes 108/108 unit and 77/77 integration; Rules 22/22; Manager 78/78; Zalo readiness
-34/34. The remaining gate is external configuration and a real OTP persistence test; deployment is
-still prohibited until explicitly authorized.
+34/34. Fifteen named Functions and Hosting were deployed after explicit approval. Real OTP,
+browser-close/reopen persistence, multi-salon separation, staff confirmation, point/history writes
+and the two-hour cooldown passed on production. App Check remains registered but monitor-only and is
+not initialized by the final web build after Enterprise attestation caused Auth throttling in the
+in-app browser. Rules, Storage, indexes, Zalo, Gateway and Cloudflared were unchanged.
