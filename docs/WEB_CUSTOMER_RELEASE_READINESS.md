@@ -135,8 +135,12 @@ two-hour rule remains authoritative.
 - Hosting-only deployment served the expected `index.Bpj64Kmg.module.js` on the custom domain.
   `/`, `/checkin`, `/history`, `/wheel`, `/owner` and `/staff` returned HTTP 200. A signed QR opened
   the Phone screen on a mobile-sized browser with no page or App Check errors.
-- The original customer's two-hour window had elapsed by this deployment, so the hidden button was
-  verified by component tests, not by changing production customer records or the device clock.
+- In a subsequent owner-approved production test, customer `****8761` received one point (`1 → 2`),
+  the session completed, exactly one haircut record was created, and the stored cooldown was two
+  hours. While that cooldown was active, the owner reopened the same signed QR in the authenticated
+  customer browser and confirmed that the “Yêu cầu tích điểm” button was absent. Component tests
+  confirm that neither web screen displays a countdown. No customer record or device clock was
+  altered to force the UI state.
 
 ## Rollback evidence
 

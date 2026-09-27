@@ -36,4 +36,6 @@ Luồng account, QR chi nhánh, yêu cầu điểm, xác nhận nhân viên, coo
 có chủ ý. Functions pass 108/108 unit và 77/77 integration; Rules 22/22; Manager 78/78; Zalo
 readiness 34/34. Phone provider/SMS Việt Nam, OTP thật, Auth persistence, multi-salon isolation,
 staff confirmation, point award, history và cooldown 2 giờ đã được chứng minh trên production.
+Lượt test thứ hai tăng điểm từ 1 lên 2; khi quét lại QR trong cooldown, chủ dự án xác nhận nút yêu cầu
+tích điểm đã ẩn. Test UI xác nhận không hiện thời gian đếm ngược.
 Mười lăm Functions và Hosting đã deploy; Rules/Storage/indexes, Zalo, Gateway và Cloudflared không đổi.
