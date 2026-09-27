@@ -121,6 +121,23 @@ to chat or logged. Results below are evidence from the real custom-domain flow.
 | Another browser/new device | Not run; expected to require OTP by browser-local persistence |
 | App Check enforcement | Intentionally OFF; attestation pilot must pass first |
 
+## Silent cooldown web update (2026-09-27)
+
+The customer web QR screen now omits the point-request action while the server-provided
+`nextPointEligibleAtMs` is in the future and reveals it again when that time passes. The account
+view also omits its QR prompt during cooldown. Neither screen displays a countdown. The server's
+two-hour rule remains authoritative.
+
+- Local web checks: 216/216 unit tests, lint, format and production build passed; Playwright passed
+  42 executed tests with 3 intentional screenshot skips.
+- GitHub [Build run #36329650042](https://github.com/tantrong1706/haircut-mvp/actions/runs/36329650042)
+  passed all 8 jobs on commit `cf22618273bf923964bf308c418446c2fc8ab967`.
+- Hosting-only deployment served the expected `index.Bpj64Kmg.module.js` on the custom domain.
+  `/`, `/checkin`, `/history`, `/wheel`, `/owner` and `/staff` returned HTTP 200. A signed QR opened
+  the Phone screen on a mobile-sized browser with no page or App Check errors.
+- The original customer's two-hour window had elapsed by this deployment, so the hidden button was
+  verified by component tests, not by changing production customer records or the device clock.
+
 ## Rollback evidence
 
 `PRE_DEPLOY_HEAD=22be8eebe144bf0482d23180d287ef04196b483b` records the starting local candidate,
@@ -149,11 +166,19 @@ Hosting can return to the captured prior version; Functions rollback needs the c
 deployable artifact. Preserve additive web customer fields and profiles; never merge by phone or
 delete new customer data as a rollback shortcut. Rollback is not automatic.
 
-Current deployed release after the monitor-only correction:
+Previous Hosting release, available as a rollback point:
 
 - Hosting release: `sites/haircut-c7d12/releases/1790428061756000`.
 - Hosting version: `sites/haircut-c7d12/versions/7c28a6b40e608b94`.
 - Release source commit: `7353259b60bc1b69c51acddd11d184c5d66259f5`.
+
+Current Hosting release:
+
+- Hosting release: `sites/haircut-c7d12/releases/1790523451012000`.
+- Hosting version: `sites/haircut-c7d12/versions/1b6aeb3b68649a48`.
+- Web source commit: `cf22618273bf923964bf308c418446c2fc8ab967`.
+- This update deployed Hosting only; existing Functions revisions were not changed.
+
 - Six web callables are at revision `00001`; the nine updated QR/Zalo functions are at their next
   recorded revisions (`createSalon` 00012, branch/QR functions 00006, and Zalo readers 00014–00017).
 
