@@ -27,6 +27,27 @@ const session: AppSession = {
 };
 
 describe("HomePage", () => {
+  it("không mời quét QR hay hiện thời gian cooldown trên tài khoản web", () => {
+    render(
+      <HomePage
+        session={{
+          ...session,
+          identityProvider: "firebase",
+          sessionId: "",
+          sessionStatus: undefined,
+          customer: {
+            ...session.customer,
+            nextPointEligibleAtMs: Date.now() + 60 * 60_000,
+          },
+        }}
+        onTabChange={vi.fn()}
+        onResetSession={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText(/Quét QR tại chi nhánh/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/\d+ (phút|giờ)/)).not.toBeInTheDocument();
+  });
+
   it("xem tài khoản không QR không hiển thị như một yêu cầu tích điểm đã gửi", () => {
     render(
       <HomePage

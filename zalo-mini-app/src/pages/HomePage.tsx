@@ -49,6 +49,7 @@ export function HomePage({
     0,
     Math.ceil(((customer.nextPointEligibleAtMs ?? 0) - clockNow) / 60_000),
   );
+  const webCooldownActive = session.identityProvider === "firebase" && cooldownMinutes > 0;
   useEffect(() => {
     if (!customer.nextPointEligibleAtMs) return;
     const timer = window.setInterval(() => setClockNow(Date.now()), 15_000);
@@ -172,11 +173,11 @@ export function HomePage({
         </button>
       </section>
 
-      {accountOnly ? (
+      {accountOnly && !webCooldownActive ? (
         <p className="panel">
           Quét QR tại chi nhánh để yêu cầu tích điểm. Bạn vẫn xem được lịch sử và quà tại đây.
         </p>
-      ) : (
+      ) : !accountOnly ? (
         <div className="status-card">
           <StatusStep
             done
@@ -206,7 +207,7 @@ export function HomePage({
             text={ownerStepText(status)}
           />
         </div>
-      )}
+      ) : null}
 
       <div className="quick-actions compact-actions">
         {actions.map(({ tab, title, Icon }) => (
@@ -219,7 +220,7 @@ export function HomePage({
         ))}
       </div>
 
-      {!accountOnly && (status === "completed" || status === "cancelled") ? (
+      {!accountOnly && !webCooldownActive && (status === "completed" || status === "cancelled") ? (
         <>
           {cooldownMinutes > 0 ? (
             <p role="status">Có thể yêu cầu tích điểm lại sau {cooldownMinutes} phút.</p>

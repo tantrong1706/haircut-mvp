@@ -178,6 +178,29 @@ describe("WebCustomerEntryPage", () => {
     expect(mocks.clearPendingWebQr).toHaveBeenCalled();
   });
 
+  it("ẩn yêu cầu tích điểm trong cooldown nhưng vẫn cho xem tài khoản, không hiện thời gian", async () => {
+    mocks.resolveWebCustomerContext.mockResolvedValue({
+      qr: {
+        salonId: "salon-a",
+        salonName: "Salon A",
+        salonAvatarUrl: "",
+        branchId: "branch-a",
+        branchName: "Chi nhánh Trung tâm",
+        branchAddress: "123 Nguyễn Huệ",
+      },
+      customer: { ...session.customer, nextPointEligibleAtMs: Date.now() + 60 * 60_000 },
+      activeSession: null,
+    });
+    render(<WebCustomerEntryPage onReady={vi.fn()} />);
+    mocks.authListener?.({ uid: "uid-a" });
+
+    expect(await screen.findByRole("heading", { name: "Salon A" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Yêu cầu tích điểm" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Xem điểm, lịch sử và quà" })).toBeEnabled();
+    expect(screen.queryByText(/\d+ (phút|giờ)/)).not.toBeInTheDocument();
+    expect(mocks.checkInWebCustomer).not.toHaveBeenCalled();
+  });
+
   it("check-in dùng context đã ký và chống double click trên UI", async () => {
     const user = userEvent.setup();
     let finish!: (value: AppSession) => void;

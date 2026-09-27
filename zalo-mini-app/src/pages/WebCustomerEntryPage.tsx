@@ -40,7 +40,19 @@ export function WebCustomerEntryPage({ onReady }: Props) {
   const [error, setError] = useState("");
   const [resendSeconds, setResendSeconds] = useState(0);
   const [loadAttempt, setLoadAttempt] = useState(0);
+  const [clockNow, setClockNow] = useState(Date.now());
   const checkinStarted = useRef(false);
+  const cooldownUntil = context?.customer.nextPointEligibleAtMs ?? 0;
+  const cooldownActive = cooldownUntil > clockNow;
+
+  useEffect(() => {
+    if (!cooldownActive) return undefined;
+    const timer = window.setTimeout(
+      () => setClockNow(Date.now()),
+      Math.max(0, cooldownUntil - Date.now()) + 50,
+    );
+    return () => window.clearTimeout(timer);
+  }, [cooldownActive, cooldownUntil]);
 
   useEffect(() => {
     if (hasQrContext(qr)) {
@@ -153,7 +165,7 @@ export function WebCustomerEntryPage({ onReady }: Props) {
   }
 
   async function checkIn() {
-    if (busy || checkinStarted.current) return;
+    if (busy || cooldownActive || checkinStarted.current) return;
     checkinStarted.current = true;
     setBusy(true);
     setError("");
@@ -304,15 +316,19 @@ export function WebCustomerEntryPage({ onReady }: Props) {
       <div className="panel web-customer-summary">
         <span>{context.customer.name}</span>
         <strong>{context.customer.points} điểm</strong>
-        <p>Khi check-in, nhân viên có thể lưu tối đa 3 ảnh của lần cắt vào lịch sử phục vụ.</p>
-        <button
-          type="button"
-          className="primary-button"
-          onClick={() => void checkIn()}
-          disabled={busy}
-        >
-          {busy ? "Đang gửi yêu cầu..." : "Yêu cầu tích điểm"}
-        </button>
+        {!cooldownActive ? (
+          <>
+            <p>Khi check-in, nhân viên có thể lưu tối đa 3 ảnh của lần cắt vào lịch sử phục vụ.</p>
+            <button
+              type="button"
+              className="primary-button"
+              onClick={() => void checkIn()}
+              disabled={busy}
+            >
+              {busy ? "Đang gửi yêu cầu..." : "Yêu cầu tích điểm"}
+            </button>
+          </>
+        ) : null}
         <button
           className="secondary-button"
           type="button"
