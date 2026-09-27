@@ -22,8 +22,8 @@ tests failed because the Phone Auth adapter, web API adapter and customer pages 
 | Check-in integrity | Concurrent double click and retries create one pending staff confirmation; an active request cannot move to another branch; the two-hour post-award cooldown is server-enforced. |
 | Wheel and rewards | The shared server wheel core remains cryptographically random, transactional and idempotent; the web callable derives customer ID from Auth. |
 | Firestore/Storage rules | 22/22 rule tests pass; web customer documents remain server-only even when `firebaseUid` matches. |
-| Functions | Typecheck, lint, format, build and 108/108 unit tests pass; full emulator integration passes 77/77 after adding direct staff confirmation, cooldown, account-only reads and salon-QR branch integrity. |
-| Customer web | Lint, format, production build and 214/214 unit tests pass. Full Playwright passes 42 executed tests across desktop Chrome, Android Chrome and iPhone Safari; 3 review-screenshot cases remain intentional skips outside capture mode. Nine axe-core scans report no serious/critical violations in the tested entry, OTP and account states. |
+| Functions | Typecheck, lint, format, build and 108/108 unit tests pass; full emulator integration passes 78/78 after adding direct staff confirmation, cooldown, account-only reads, salon-QR branch integrity and three simultaneous customers on one QR. |
+| Customer web | Lint, format, production build and 216/216 unit tests pass. Full Playwright passes 42 executed tests across desktop Chrome, Android Chrome and iPhone Safari; 3 review-screenshot cases remain intentional skips outside capture mode. Nine axe-core scans report no serious/critical violations in the tested entry, OTP and account states. |
 | Manager/Zalo regression | Manager typecheck and 78/78 tests pass. ZMP validation passes and Zalo review readiness remains 34/34. |
 | Secrets | The tracked and untracked working tree scan passes without printing credential contents. |
 
@@ -79,7 +79,8 @@ may remain in Firestore and must not be removed or auto-merged by phone number.
 ## 2026-09-27 production evidence
 
 - Full release gate: 27 required checks passed, zero failed; iOS sync remained a non-required Windows
-  limitation. Functions 108/108, integration 77/77, Rules 22/22, web 214/214, Playwright 42 executed
+  limitation. Functions 108/108, integration 77/77 at the production rollout, Rules 22/22, web
+  216/216, Playwright 42 executed
   with 3 intentional screenshot skips, Manager 78/78 and Zalo readiness 34/34.
 - All six web callables returned HTTP 401 without Firebase Auth. Signed branch QR resolution passed.
 - The owner completed real Phone OTP without sharing the phone or OTP. Closing all tabs and reopening
@@ -88,3 +89,11 @@ may remain in Firestore and must not be removed or auto-merged by phone number.
   tenant-scoped request. The first salon's staff could not see the second salon's request.
 - Correct staff confirmation changed points from 0 to 1, completed the session, created exactly one
   haircut record and stored a two-hour `nextPointEligibleAt` cooldown.
+
+## Shared branch QR concurrency regression
+
+Three different Phone Auth UIDs check in concurrently with the same signed branch QR. The emulator
+asserts three customer profiles, a correct salon customer count of three, three active sessions and
+three pending point requests. A retry from one UID reuses its own session. After staff confirms each
+request, there are three haircut records, each customer has one point and a separate future cooldown.
+This test adds no production customer data.

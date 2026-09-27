@@ -32,8 +32,8 @@ enforcement vẫn OFF cho đến khi attestation pilot ổn định; không hạ
 ## Trạng thái chốt production
 
 Luồng account, QR chi nhánh, yêu cầu điểm, xác nhận nhân viên, cooldown, QR quà và accessibility đã
-được triển khai và kiểm thử. Web pass 214/214 unit, 42 E2E thực thi và 3 ca chụp ảnh review được skip
-có chủ ý. Functions pass 108/108 unit và 77/77 integration; Rules 22/22; Manager 78/78; Zalo
+được triển khai và kiểm thử. Web pass 216/216 unit, 42 E2E thực thi và 3 ca chụp ảnh review được skip
+có chủ ý. Functions pass 108/108 unit và 78/78 integration; Rules 22/22; Manager 78/78; Zalo
 readiness 34/34. Phone provider/SMS Việt Nam, OTP thật, Auth persistence, multi-salon isolation,
 staff confirmation, point award, history và cooldown 2 giờ đã được chứng minh trên production.
 Lượt test thứ hai tăng điểm từ 1 lên 2; khi quét lại QR trong cooldown, chủ dự án xác nhận nút yêu cầu

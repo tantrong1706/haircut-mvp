@@ -147,6 +147,81 @@ describe("authenticated web customer platform", () => {
     });
   });
 
+  it("ba khách quét cùng QR đồng thời có yêu cầu và cooldown riêng", async () => {
+    await seedSalon("salon-a", "branch-a");
+    await db
+      .collection("users")
+      .doc("staff-a")
+      .set({
+        salonId: "salon-a",
+        role: "staff",
+        name: "Nhân viên A",
+        isActive: true,
+        branchIds: ["branch-a"],
+        canAwardPointsDirectly: false,
+      });
+    const qr = signedBranchQr("salon-a", "branch-a");
+    const visitors = [
+      { uid: "uid-visitor-1", phone: "+84901110001" },
+      { uid: "uid-visitor-2", phone: "+84901110002" },
+      { uid: "uid-visitor-3", phone: "+84901110003" },
+    ];
+
+    const sessions = await Promise.all(
+      visitors.map(({ uid, phone }) => checkInWebCustomer.run(phoneRequest(uid, qr, phone))),
+    );
+    expect(new Set(sessions.map((session) => session.sessionId)).size).toBe(3);
+    expect(new Set(sessions.map((session) => session.customer.customerId)).size).toBe(3);
+    expect(sessions.map((session) => session.sessionStatus)).toEqual([
+      "pending_approval",
+      "pending_approval",
+      "pending_approval",
+    ]);
+    expect((await db.collection("customers").get()).size).toBe(3);
+    expect((await db.collection("salons").doc("salon-a").get()).data()?.customerCount).toBe(3);
+    expect((await db.collection("chair_sessions").get()).size).toBe(3);
+    expect((await db.collection("active_service_sessions").get()).size).toBe(3);
+    const requests = await db.collection("point_requests").get();
+    expect(requests.size).toBe(3);
+    for (const session of sessions) {
+      expect(
+        requests.docs.find((request) => request.id === session.sessionId)?.data(),
+      ).toMatchObject({
+        salonId: "salon-a",
+        branchId: "branch-a",
+        customerId: session.customer.customerId,
+        status: "pending",
+        approvalMode: "staff_confirmation",
+      });
+    }
+
+    const firstRetry = await checkInWebCustomer.run(
+      phoneRequest(visitors[0].uid, qr, visitors[0].phone),
+    );
+    expect(firstRetry.sessionId).toBe(sessions[0].sessionId);
+    expect((await db.collection("point_requests").get()).size).toBe(3);
+
+    for (const session of sessions) {
+      await approvePointRequest.run(
+        requestFor("staff-a", { salonId: "salon-a", requestId: session.sessionId }, {}),
+      );
+    }
+    expect((await db.collection("haircut_records").get()).size).toBe(3);
+    for (const session of sessions) {
+      const customer = (
+        await db.collection("customers").doc(session.customer.customerId).get()
+      ).data();
+      expect(customer?.points).toBe(1);
+      expect(customer?.nextPointEligibleAt.toMillis()).toBeGreaterThan(Date.now());
+    }
+    await expect(
+      checkInWebCustomer.run(phoneRequest(visitors[0].uid, qr, visitors[0].phone)),
+    ).rejects.toMatchObject({
+      code: "failed-precondition",
+      details: { errorCode: "POINT_COOLDOWN" },
+    });
+  });
+
   it("staff xác nhận web trực tiếp một lần và khóa yêu cầu mới 2 giờ trong salon", async () => {
     await seedSalon("salon-a", "branch-a");
     await seedBranch("salon-a", "branch-b");

@@ -63,8 +63,13 @@ Functions. Secrets, key IDs and the gateway URL were preserved and were not prin
   regression found during E2E was fixed by isolating ZXing instead of treating its internal QR reader
   as the existing QR generator chunk.
 - Functions typecheck/lint/build/unit passed; unit count 108. Full demo-emulator integration passed
-  77/77. Firestore and Storage Rules passed 22/22. Manager typecheck and tests passed 78/78.
-- Final web lint/format/build passed with 214/214 unit tests. Playwright passed 42 executed tests
+  78/78. Firestore and Storage Rules passed 22/22. Manager typecheck and tests passed 78/78.
+- A three-customer concurrency regression sends three distinct Firebase Phone UIDs through the same
+  signed branch QR at once. It verifies three tenant customers, active sessions and point requests;
+  retry by one UID reuses its request. Staff confirmation creates three separate haircut records and
+  one point plus an individual cooldown for each customer. This is emulator evidence, not a claim
+  that three physical phones were tested in production.
+- Final web lint/format/build passed with 216/216 unit tests. Playwright passed 42 executed tests
   across desktop Chrome, Android Chrome and iPhone Safari; 3 review-screenshot cases were skipped by
   design. Nine axe-core checks found no serious/critical issue in the tested entry, OTP and account
   states.
