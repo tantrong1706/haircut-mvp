@@ -27,6 +27,17 @@ const session: AppSession = {
 };
 
 describe("HomePage", () => {
+  it("hiển thị thẻ thành viên với điểm thật và số điện thoại đã che", () => {
+    render(<HomePage session={session} onTabChange={vi.fn()} onResetSession={vi.fn()} />);
+    const card = screen.getByRole("region", { name: "Thẻ thành viên" });
+    expect(card).toHaveTextContent("7");
+    expect(card).toHaveTextContent("•••• 6789");
+    expect(screen.getByRole("progressbar", { name: "Tiến độ vòng quay" })).toHaveAttribute(
+      "aria-valuemax",
+      "5",
+    );
+  });
+
   it("không mời quét QR hay hiện thời gian cooldown trên tài khoản web", () => {
     render(
       <HomePage
