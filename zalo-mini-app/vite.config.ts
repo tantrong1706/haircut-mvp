@@ -1,7 +1,6 @@
 import { sentryVitePlugin } from "@sentry/vite-plugin";
 import react from "@vitejs/plugin-react";
 import { defineConfig, loadEnv } from "vite";
-import zaloMiniApp from "zmp-vite-plugin";
 import { z } from "zod";
 
 import { getViteBuildOutDir } from "./src/config/buildOutput";
@@ -13,7 +12,6 @@ const productionEnvSchema = z.object({
   VITE_FIREBASE_STORAGE_BUCKET: z.string().min(1),
   VITE_FIREBASE_MESSAGING_SENDER_ID: z.string().min(1),
   VITE_FIREBASE_APP_ID: z.string().min(1),
-  VITE_ZALO_MINI_APP_ID: z.literal("2038116772828167300"),
   VITE_FUNCTION_WRITE_MODE: z.literal("required"),
   VITE_APP_ENV: z.literal("production"),
   VITE_ZALO_PREVIEW: z.literal("false").optional(),
@@ -37,7 +35,6 @@ export default defineConfig(({ mode }) => {
     base: "./",
     plugins: [
       react(),
-      zaloMiniApp(),
       ...(hasSentryUpload
         ? [
             sentryVitePlugin({

@@ -1,8 +1,8 @@
-name: Build
+name: Build Web
 
 on:
   push:
-    branches: [main]
+    branches: [main, codex/web-primary]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -56,8 +56,8 @@ jobs:
         working-directory: firebase
         run: npx --yes firebase-tools@15.22.3 emulators:exec --project demo-haircut --only firestore,storage "npm --prefix functions run test:integration:emulator"
 
-  zalo-mini-app:
-    name: Zalo Mini App
+  customer-web:
+    name: Customer Web
     runs-on: ubuntu-latest
 
     steps:
@@ -87,7 +87,7 @@ jobs:
         working-directory: zalo-mini-app
         run: npm run test:run
 
-      - name: Build and validate Zalo package
+      - name: Build customer Web
         working-directory: zalo-mini-app
         env:
           # Public, non-production Firebase fixture used only to validate the CI bundle.
@@ -97,18 +97,10 @@ jobs:
           VITE_FIREBASE_STORAGE_BUCKET: "haircut-ci.appspot.com"
           VITE_FIREBASE_MESSAGING_SENDER_ID: "100000000000"
           VITE_FIREBASE_APP_ID: "1:100000000000:web:ci"
-          VITE_ZALO_MINI_APP_ID: "2038116772828167300"
           VITE_APP_ENV: production
           VITE_FUNCTION_WRITE_MODE: required
           VITE_MONITORING_DISABLED: "true"
-        run: npm run build:zmp
-
-      - name: Check Zalo review readiness
-        working-directory: zalo-mini-app
-        env:
-          VITE_ZALO_MINI_APP_ID: "2038116772828167300"
-          VITE_APP_ENV: production
-        run: npm run check:zalo-review
+        run: npm run build:web
 
   admin-web:
     name: Admin Web
@@ -134,7 +126,7 @@ jobs:
         run: npm run check
 
   manager-mobile:
-    name: Manager Mobile Web Bundle
+    name: Manager Web Bundle
     runs-on: ubuntu-latest
 
     steps:
@@ -155,79 +147,6 @@ jobs:
       - name: Typecheck, unit test and build
         working-directory: apps/manager-mobile
         run: npm run check
-
-  manager-android:
-    name: Manager Android
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-
-      - name: Setup Node
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: apps/manager-mobile/package-lock.json
-
-      - name: Setup Java
-        uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5
-        with:
-          distribution: temurin
-          java-version: 21
-          cache: gradle
-
-      - name: Install Manager dependencies
-        working-directory: apps/manager-mobile
-        run: npm ci
-
-      - name: Build web and sync Android
-        working-directory: apps/manager-mobile
-        run: npm run build && npx cap sync android
-
-      - name: Test, lint and assemble Android debug
-        working-directory: apps/manager-mobile/android
-        run: |
-          chmod +x ./gradlew
-          ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --stacktrace
-
-  manager-ios:
-    name: Manager iOS Simulator
-    runs-on: macos-15
-    timeout-minutes: 45
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-
-      - name: Setup Node
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: apps/manager-mobile/package-lock.json
-
-      - name: Install Manager dependencies
-        working-directory: apps/manager-mobile
-        run: npm ci
-
-      - name: Build web and sync iOS
-        working-directory: apps/manager-mobile
-        run: npm run build && npx cap sync ios
-
-      - name: Build iOS Simulator without signing
-        working-directory: apps/manager-mobile
-        run: |
-          xcodebuild \
-            -project ios/App/App.xcodeproj \
-            -scheme App \
-            -sdk iphonesimulator \
-            -destination 'generic/platform=iOS Simulator' \
-            -configuration Debug \
-            CODE_SIGNING_ALLOWED=NO \
-            build
 
   browser-tests:
     name: Browser flows

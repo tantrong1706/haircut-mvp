@@ -1,115 +1,58 @@
-# Trạng thái phát hành HAIRCUT
+# Trạng thái CH Hair Web
 
-Cập nhật: 29/07/2026
+## Bản giao diện đang chờ duyệt — 29/09/2026
 
-## Cập nhật remediation 29/07/2026
+Giao diện Web barber tối đã được sửa lại theo phản hồi chủ dự án trên `codex/web-primary`.
+Build production PASS, browser 45 PASS / 3 screenshot lịch sử skipped, kiểm tra 12 bố cục
+và 16 lượt mở tab quản lý không còn tràn ngang hoặc lỗi accessibility nghiêm trọng.
+Chưa deploy bản giao diện này; production bên dưới vẫn là bản cũ. Không triển khai Functions.
+Xem [bằng chứng và giới hạn coverage](testing/web-barber.tdd.md); không coi đây là toàn bộ
+production đã được kiểm toán lại.
 
-Source hiện đã bổ sung các bảo vệ sau, nhưng **chưa production-ready và chưa deploy**:
+Cập nhật định hướng: 28/09/2026. Sản phẩm hiện tại là Web app tại
+<https://app.chhaircutsalon.cc>. Theo yêu cầu chủ dự án, công việc Zalo được lưu trên nhánh riêng
+và không còn thuộc roadmap này.
 
-- Session `waiting`, `serving` và `pending_approval` hết hạn được đóng idempotent; yêu cầu
-  điểm liên quan bị từ chối bởi hệ thống, ảnh tạm được dọn và không phát sinh điểm/lịch sử cắt.
-- Lời mời staff chỉ chuyển sang `accepted` sau thao tác đồng ý rõ ràng; việc đọc hồ sơ không
-  còn âm thầm chấp nhận lời mời.
-- Tìm khách trả danh sách tóm tắt; chi tiết chỉ tải cho một khách qua callable có kiểm tra
-  salon/chi nhánh/quyền, không còn N+1 hoặc fallback Firestore trực tiếp.
-- Job xóa khách dùng phân trang Firestore và Storage, lưu cursor/progress, retry an toàn,
-  xóa customer cuối cùng và không trừ `customerCount` hai lần.
-- Lỗi Zalo phân biệt thiếu quyền với lỗi tạm thời; UI không lặp xin quyền vô hạn.
-- Secret scanner hỗ trợ cả file tracked và working tree; strict release gate fail-closed theo SHA.
+## Nhánh
 
-Các blocker ngoài source vẫn còn:
+- `codex/web-primary`: phát triển Web, bắt đầu từ release `06e7e1a6fb18e66dc59f9b28497f5ab7eca05905`.
+- `codex/zalo-archive`: Zalo Version 24, mốc `5ae0ff21200ae4d32b07e9f588ee6b7797c35d0e`.
+- `release/web-customer-platform-20260921`: giữ nguyên lịch sử release Web đã triển khai.
+- Main chưa được merge. Không coi việc lưu branch là thao tác phát hành hay rollback production.
 
-- GitHub Actions Billing/spending limit: **Deferred/external**, CI chưa xác minh HEAD cuối.
-- Chưa build iOS trên macOS/Xcode.
-- Chưa xác minh App Check trên Android và iPhone thật; chưa có App Check site key.
-- Chưa có Sentry DSN production.
-- Chưa deploy production hoặc chạy migration production.
+## Bằng chứng đã có
 
-Local production-readiness đạt chỉ chứng minh cấu hình/source cục bộ; **không phải production
-release approval**. Strict release phải tiếp tục fail cho tới khi toàn bộ bằng chứng vận hành
-khớp đúng SHA.
+- Phone OTP thật và khôi phục tài khoản khi mở lại cùng browser: PASS.
+- Signed branch QR, staff confirmation, điểm tăng đúng một lần, history và cooldown riêng: PASS.
+- Người dùng đã xác nhận nút yêu cầu được ẩn trong cooldown; test xác nhận không hiển thị đếm ngược.
+- Ba UID quét cùng một QR: ba hồ sơ/yêu cầu riêng, retry không trùng; emulator 78/78 PASS.
+- CI nền tại `06e7e1a`: [8/8 job PASS](https://github.com/tantrong1706/haircut-mvp/actions/runs/36360226421).
+- Web hiện có 216 unit tests; backend 108 unit; Rules 22; browser 42 executed tests và 3 intentional
+  screenshot skips. Kiểm thử bổ sung cho nhánh Web-only phải được báo riêng theo commit mới.
 
-## Ba sản phẩm
+## Deployment được ghi nhận gần nhất
 
-| Sản phẩm         | Đối tượng         | Trạng thái source                                                                                  | Trạng thái phát hành                                                           |
-| ---------------- | ----------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| CH Haircut Salon | Khách hàng        | Luồng QR, check-in, điểm, lịch sử, vòng quay và quà đã có                                          | Zalo Mini App ID `2038116772828167300`; phiên bản thực tế xem trên Zalo Portal |
-| HAIRCUT Manager  | Owner và staff    | React/Capacitor, Android/iOS, FCM, App Check, camera, biometric, secure storage và deep link đã có | Chưa đưa lên TestFlight/Google Play Internal Testing                           |
-| HAIRCUT Admin    | Quản trị hệ thống | Web riêng, chỉ role `system_admin`, tổng quan, salon, feature flags và audit dạng chỉ đọc          | Chưa tạo Firebase Hosting site riêng; thao tác ghi bị khóa mặc định            |
+- Hosting version: `sites/haircut-c7d12/versions/1b6aeb3b68649a48`.
+- Hosting source: `cf22618273bf923964bf308c418446c2fc8ab967`.
+- Sáu callable web và chín hàm dùng chung đã được triển khai ở lượt Web trước.
+- Lượt tách nhánh không tự xóa endpoint/secret/Gateway đang chạy.
+- Các lần deploy tiếp theo phải ghi nhận theo bằng chứng thực tế trong
+  [Web release readiness](WEB_CUSTOMER_RELEASE_READINESS.md).
 
-Mini App ID được giữ nguyên: `2038116772828167300`. Bundle ID Manager: `vn.haircut.manager`.
+## Phạm vi đang dùng
 
-## Trạng thái theo lớp
+Khách dùng Web Phone Auth. Nhân viên và chủ salon dùng `/staff`, `/owner`.
+QR chọn sẵn chi nhánh; khách gửi yêu cầu, nhân viên xác nhận; cooldown hai giờ theo khách/salon.
+Web mở từ trình duyệt tích hợp vẫn phải giữ luồng Web, không chuyển sang xác thực Mini App.
 
-- **Source:** nhánh remediation bắt đầu từ `origin/main`
-  `3e55436ec2228f18f106b0b8ee3c918c18d20dfd`; thay đổi chưa được merge.
-- **GitHub:** CI chỉ được xem là đạt sau khi Draft PR chạy xanh trên HEAD cuối.
-- **Firebase:** chưa xác minh SHA đang deploy; không suy ra từ nhánh hoặc Hosting URL.
-- **Zalo:** trạng thái Testing/Production phải xem trực tiếp trên Zalo Portal.
-- **Manager/Admin:** chưa xác minh phát hành store hoặc Hosting riêng.
-- Tạo tag `vX.Y.Z` chỉ sau khi CI, backup và smoke test đều đạt.
+CI của nhánh Web tập trung Customer Web, backend/Rules, Manager Web, Admin, browser và secret checks.
+Build native và xét duyệt Mini App không thuộc lượt công việc này.
 
-## Đã triển khai trong source
+## Giới hạn cần ghi đúng
 
-- Tenant isolation lấy salon từ `users/{uid}`; staff bị giới hạn theo `branchIds`.
-- Transaction/idempotency cho check-in, nhận khách, gửi/duyệt điểm, quay và đổi quà.
-- Feature flags toàn hệ thống và theo salon, maintenance mode và minimum app version.
-- Error code dùng chung, audit bảo mật, rate limit, App Check và monitoring allowlist.
-- Avatar salon, ảnh kiểu tóc có consent, xóa tài khoản cá nhân và xóa salon có thời gian chờ.
-- Device token nhiều thiết bị, FCM cho Manager và push theo tenant/chi nhánh.
-- Contracts dùng chung tại `packages/contracts`; bản mirror deploy Functions được kiểm tra tự động.
+App Check chưa enforcement và frontend provider hiện chưa được bật lại sau lỗi attestation/throttle.
+Các dependency advisories đã ghi trong báo cáo readiness vẫn cần xử lý theo phạm vi riêng; không
+tự nâng major dependency. Kết quả test automation không thay thế việc kiểm tra thiết bị thật.
 
-## Đang phát triển
-
-- Cổng emulator fail-fast, readiness evidence theo SHA và deploy gate.
-- Lint/format gate Manager; còn baseline 68 file định dạng cũ cần xử lý dần.
-- CSP vẫn ở Report-Only chờ kiểm tra Zalo Testing và thiết bị thật.
-- Kiểm thử Manager trên thiết bị thật sau khi thêm file cấu hình Firebase native.
-- Xác minh hai job CI `Manager Android` và `Manager iOS Simulator` trên SHA phát hành cuối cùng.
-- Android đã `cap sync`, `assembleDebug`, unit test và lint thành công bằng SDK 36/Java 21
-  trong môi trường kiểm tra cục bộ. iOS đã `cap sync`; Simulator vẫn phải chạy trên
-  macOS/Xcode hoặc GitHub Actions.
-- Cấu hình APNs, Play Integrity, App Attest/DeviceCheck và bật enforcement theo rollout.
-- Tạo Hosting site riêng cho Admin và điền `VITE_ADMIN_URL`.
-- Chụp screenshot store, tạo tài khoản demo và hoàn thiện biểu mẫu App Privacy/Data Safety.
-- Diễn tập backup/restore và ghi RTO/RPO thực tế.
-
-## Bằng chứng kiểm tra cục bộ
-
-Các kiểm tra ngày 03/08/2026 được chạy trên source hiện tại, không deploy và không truy cập
-dữ liệu Firebase production:
-
-- Functions: typecheck/lint/build đạt; `63/63` unit test đạt.
-- Firestore/Storage Rules: `19/19` test đạt.
-- Functions integration với Firebase Emulator: `45/45` test đạt.
-- Zalo Mini App: lint/format/build ZMP đạt; `85/85` unit test đạt; readiness Zalo `24/24`.
-- Admin Web: check/build đạt; `8/8` test đạt.
-- Manager: check/build đạt; `73/73` test đạt.
-- Browser E2E: `15` test đạt; `9` test ảnh xét duyệt được bỏ qua có chủ đích vì chỉ chạy
-  khi bật bộ tạo ảnh review.
-- Android: `cap sync android` đạt; Gradle chưa được chạy lại trên HEAD cuối vì máy hiện tại không có Android SDK.
-- iOS: chỉ xác minh `cap sync`; chưa có bằng chứng build Simulator trên macOS.
-
-Readiness production hiện **chưa đạt** vì còn các bước thủ công:
-
-- `firebase/.firebaserc` local đã trỏ `haircut-c7d12`; vẫn phải xác minh quyền và SHA deploy
-  ngay trước release.
-- Cấu hình Functions production, App Check và monitoring bằng secret/biến môi trường thật.
-- Chạy iOS Simulator hoặc thiết bị iOS thật.
-- Chạy CI trên HEAD cuối sau khi GitHub Actions không còn bị chặn bởi billing.
-- `zmp-sdk` đã ghim bản stable `2.51.8`; tiếp tục theo dõi bản upstream loại dependency
-  cũ, không hạ xuống `2.9.4` hoặc dùng `npm audit fix --force`.
-
-## Chưa thực hiện trong giai đoạn này
-
-- Growth/marketing automation, giới thiệu bạn bè, VIP, thanh toán hoặc AI tư vấn tóc.
-- App khách hàng riêng trên App Store/Google Play.
-- Backend staging riêng.
-
-## Cổng phát hành
-
-1. Chạy các lệnh kiểm tra trong [README](../README.md).
-2. Audit tenant ở chế độ dry-run và tạo Firestore export.
-3. Tạo release tag, deploy theo [deployment](deployment.md), rồi smoke test salon demo.
-4. Zalo dùng Testing trước Production; Manager dùng TestFlight và Google Play Internal Testing.
-5. Có lỗi thì dùng feature flag để cô lập tính năng và làm theo [incident runbook](incident-runbook.md).
+Hồ sơ review Zalo trong cây source là lịch sử. Version 24 bị từ chối theo thông tin chủ dự án; trạng
+thái đó không chặn Web và không dẫn tới nhiệm vụ gửi lại Zalo.

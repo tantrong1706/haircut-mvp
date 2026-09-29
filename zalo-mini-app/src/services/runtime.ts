@@ -1,4 +1,10 @@
 export function isZaloMiniAppRuntime() {
+  // Production on this branch is Web, including inside in-app browsers.
+  // Legacy detection below is retained for existing development/test fixtures only.
+  if (import.meta.env.VITE_APP_ENV === "production") {
+    return false;
+  }
+
   if (typeof window === "undefined" || typeof navigator === "undefined") {
     return false;
   }
