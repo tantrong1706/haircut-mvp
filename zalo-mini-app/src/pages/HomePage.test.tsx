@@ -27,6 +27,20 @@ const session: AppSession = {
 };
 
 describe("HomePage", () => {
+  it("sau xác nhận web chỉ hiển thị một kết quả, không lặp ba bước đã xong", () => {
+    render(
+      <HomePage
+        session={{ ...session, identityProvider: "firebase", sessionStatus: "completed",
+          customer: { ...session.customer, nextPointEligibleAtMs: Date.now() + 3_600_000 } }}
+        onTabChange={vi.fn()} onResetSession={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent("Đã cộng điểm");
+    expect(screen.queryByText("Đã gửi yêu cầu")).not.toBeInTheDocument();
+    expect(screen.queryByText("Đã hoàn tất")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Quét QR cho lần tiếp theo" })).not.toBeInTheDocument();
+  });
+
   it("hiển thị thẻ thành viên với điểm thật và số điện thoại đã che", () => {
     render(<HomePage session={session} onTabChange={vi.fn()} onResetSession={vi.fn()} />);
     const card = screen.getByRole("region", { name: "Thẻ thành viên" });
