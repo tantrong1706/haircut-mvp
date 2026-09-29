@@ -99,7 +99,7 @@ export function HistoryPage({ session }: Props) {
           <div className="empty-state">
             <ClipboardList size={30} aria-hidden="true" />
             <strong>Chưa có lịch sử cắt tóc</strong>
-            <p>Sau khi chủ salon duyệt điểm, ghi chú kiểu tóc sẽ xuất hiện tại đây.</p>
+          <p>Sau khi nhân viên xác nhận, ảnh và ghi chú lần cắt sẽ xuất hiện tại đây.</p>
           </div>
         ) : (
           records.map((record) => (

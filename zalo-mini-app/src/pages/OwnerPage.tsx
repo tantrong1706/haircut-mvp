@@ -2033,6 +2033,7 @@ function StaffManagementPanel({
         <select
           value={selectedBranchId}
           onChange={(event) => setSelectedBranchId(event.target.value)}
+          aria-label="Chi nhánh làm việc của nhân viên mới"
         >
           <option value="">Chọn chi nhánh làm việc</option>
           {branches.map((branch) => (
@@ -2143,7 +2144,11 @@ function StaffCard({
           onChange={(event) => setPhone(event.target.value)}
           placeholder="SĐT nội bộ"
         />
-        <select value={branchId} onChange={(event) => setBranchId(event.target.value)}>
+        <select
+          value={branchId}
+          onChange={(event) => setBranchId(event.target.value)}
+          aria-label={`Chi nhánh làm việc của ${staff.name || "nhân viên"}`}
+        >
           {branches.map((branch) => (
             <option key={branch.id} value={branch.id}>
               {branch.name}

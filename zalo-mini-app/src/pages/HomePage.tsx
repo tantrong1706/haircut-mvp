@@ -4,15 +4,14 @@ import {
   Gift,
   Hourglass,
   RefreshCcw,
+  Scissors,
   Sparkles,
   type LucideIcon,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { BrandLogo } from "../components/BrandLogo";
-import { MINI_APP_MARK } from "../config/branding";
 import { getCustomerWheelConfig } from "../services/api";
 import { AppSession, defaultLuckyWheelConfig, TabKey } from "../services/types";
-import { activeWheelSlots } from "../services/wheel";
 
 type Props = {
   session: AppSession;
@@ -57,7 +56,6 @@ export function HomePage({
   }, [customer.nextPointEligibleAtMs]);
   const status = session.sessionStatus || "waiting";
   const [wheelConfig, setWheelConfig] = useState(defaultLuckyWheelConfig);
-  const wheelSlots = useMemo(() => activeWheelSlots(wheelConfig), [wheelConfig]);
   const missingPoints = Math.max(0, wheelConfig.requiredPoints - customer.points);
   const wheelProgress = Math.min(
     100,
@@ -93,7 +91,9 @@ export function HomePage({
         <p className="muted">
           {accountOnly
             ? "Điểm, lịch sử và quà của bạn tại salon."
-            : shortStatusText(status, session.assignedStaffName)}
+            : session.identityProvider === "firebase"
+              ? "Cảm ơn bạn đã ghé salon."
+              : shortStatusText(status, session.assignedStaffName)}
         </p>
       </header>
 
@@ -117,7 +117,11 @@ export function HomePage({
         <span className="last-sync-time">Cập nhật lúc {formatSyncTime(lastSyncedAtMs)}</span>
       ) : null}
 
-      <section className="home-wheel-card" aria-label="Điểm và vòng quay may mắn">
+      <section className="home-wheel-card" aria-label="Thẻ thành viên">
+        <div className="membership-card-top">
+          <span>Thẻ thành viên</span>
+          <Scissors size={20} aria-hidden="true" />
+        </div>
         <div className="home-wheel-copy">
           <span>Điểm hiện có</span>
           <div className="home-points-value">
@@ -131,15 +135,14 @@ export function HomePage({
           </p>
         </div>
 
-        <div
-          className="home-wheel-preview"
-          style={{ background: wheelPreviewBackground(wheelSlots.length) }}
-          aria-hidden="true"
-        >
-          <div>
-            <Sparkles size={25} />
-            <span>{MINI_APP_MARK}</span>
-          </div>
+        <div className="member-insignia" aria-hidden="true">
+          <span>CH</span>
+          <small>HAIRCUT SALON</small>
+        </div>
+
+        <div className="membership-card-owner">
+          <span>{customer.name}</span>
+          {customer.phoneLast4 ? <span>•••• {customer.phoneLast4}</span> : null}
         </div>
 
         <div className="home-wheel-progress">
@@ -161,12 +164,6 @@ export function HomePage({
           </div>
         </div>
 
-        <div className="home-prize-preview" aria-label="Một số phần thưởng">
-          {wheelSlots.slice(0, 3).map((slot) => (
-            <span key={slot.label}>{slot.label}</span>
-          ))}
-        </div>
-
         <button className="home-wheel-button" type="button" onClick={() => onTabChange("wheel")}>
           <Sparkles size={20} aria-hidden="true" />
           {missingPoints === 0 ? "Quay ngay" : "Xem vòng quay"}
@@ -177,6 +174,18 @@ export function HomePage({
         <p className="panel">
           Quét QR tại chi nhánh để yêu cầu tích điểm. Bạn vẫn xem được lịch sử và quà tại đây.
         </p>
+      ) : !accountOnly && session.identityProvider === "firebase" ? (
+        <div className="visit-update" role="status">
+          {status === "completed" ? (
+            <CheckCircle2 size={21} aria-hidden="true" />
+          ) : (
+            <Hourglass size={21} aria-hidden="true" />
+          )}
+          <div>
+            <strong>{ownerStepTitle(status)}</strong>
+            <p>{shortStatusText(status, session.assignedStaffName)}</p>
+          </div>
+        </div>
       ) : !accountOnly ? (
         <div className="status-card">
           <StatusStep
@@ -348,16 +357,4 @@ function formatSyncTime(value: number) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
-}
-
-function wheelPreviewBackground(slotCount: number) {
-  const colors = ["#13815f", "#f4b942", "#ef6c4d", "#4f75d8", "#7357aa", "#2a9aa0"];
-  const safeCount = Math.max(1, slotCount);
-  const slice = 100 / safeCount;
-  const stops = Array.from({ length: safeCount }, (_, index) => {
-    const color = colors[index % colors.length];
-    return `${color} ${index * slice}% ${(index + 1) * slice}%`;
-  });
-
-  return `conic-gradient(${stops.join(", ")})`;
 }

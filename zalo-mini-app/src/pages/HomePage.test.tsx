@@ -27,18 +27,66 @@ const session: AppSession = {
 };
 
 describe("HomePage", () => {
+  it.each([
+    ["waiting", "Salon đã nhận khách."],
+    ["serving", "Nhân viên đang phục vụ bạn."],
+    ["pending_approval", "Đã gửi yêu cầu. Nhân viên chi nhánh sẽ xác nhận điểm."],
+    ["completed", "Điểm đã được cập nhật."],
+    ["cancelled", "Lượt này không cộng điểm."],
+  ] as const)("giữ đúng nội dung trạng thái %s khi đổi giao diện", (sessionStatus, message) => {
+    render(
+      <HomePage
+        session={{
+          ...session,
+          sessionStatus,
+          assignedStaffName: "",
+          branchName: "",
+          mirrorName: "",
+          branchAddress: "Địa chỉ chi nhánh",
+        }}
+        onTabChange={vi.fn()}
+        onResetSession={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(message)).toBeVisible();
+  });
+
+  it("để khách biết trạng thái đồng bộ và giữ thao tác quét lại sau khi hoàn tất", async () => {
+    const onResetSession = vi.fn();
+    const props = {
+      session: { ...session, sessionStatus: "completed" as const },
+      onTabChange: vi.fn(),
+      onResetSession,
+    };
+    const view = render(<HomePage {...props} syncStatus="syncing" />);
+    expect(screen.getByRole("status")).toHaveTextContent("Đang cập nhật trạng thái");
+    view.rerender(<HomePage {...props} syncStatus="synced" lastSyncedAtMs={1_800_000_000_000} />);
+    expect(screen.getByText(/Cập nhật lúc/)).toBeVisible();
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Quét QR cho lần tiếp theo" }));
+    expect(onResetSession).toHaveBeenCalledOnce();
+  });
+
   it("sau xác nhận web chỉ hiển thị một kết quả, không lặp ba bước đã xong", () => {
     render(
       <HomePage
-        session={{ ...session, identityProvider: "firebase", sessionStatus: "completed",
-          customer: { ...session.customer, nextPointEligibleAtMs: Date.now() + 3_600_000 } }}
-        onTabChange={vi.fn()} onResetSession={vi.fn()}
+        session={{
+          ...session,
+          identityProvider: "firebase",
+          sessionStatus: "completed",
+          customer: { ...session.customer, nextPointEligibleAtMs: Date.now() + 3_600_000 },
+        }}
+        onTabChange={vi.fn()}
+        onResetSession={vi.fn()}
       />,
     );
     expect(screen.getByRole("status")).toHaveTextContent("Đã cộng điểm");
     expect(screen.queryByText("Đã gửi yêu cầu")).not.toBeInTheDocument();
     expect(screen.queryByText("Đã hoàn tất")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Quét QR cho lần tiếp theo" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Quét QR cho lần tiếp theo" }),
+    ).not.toBeInTheDocument();
   });
 
   it("hiển thị thẻ thành viên với điểm thật và số điện thoại đã che", () => {

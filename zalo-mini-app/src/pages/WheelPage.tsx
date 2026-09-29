@@ -333,7 +333,7 @@ function wheelBackground(slotCount: number) {
     return "#dbe3dd";
   }
 
-  const colors = ["#13795b", "#f2b84b", "#e66f4d", "#4267c9", "#7a5aa6", "#2f8fa5"];
+  const colors = ["#a43b30", "#333c3f", "#775543", "#324d49", "#62474c", "#424553"];
   const slice = 360 / slotCount;
 
   return `conic-gradient(${Array.from({ length: slotCount }, (_, index) => {

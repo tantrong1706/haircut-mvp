@@ -273,6 +273,10 @@ export function WebCustomerEntryPage({ onReady }: Props) {
           <div id="customer-phone-recaptcha" />
           {error ? <p role="alert">{error}</p> : null}
         </div>
+        <nav className="auth-legal-links" aria-label="Thông tin sử dụng">
+          <a href="/privacy">Quyền riêng tư</a>
+          <a href="/terms">Điều khoản sử dụng</a>
+        </nav>
       </section>
     );
   }
