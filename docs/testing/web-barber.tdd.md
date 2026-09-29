@@ -9,7 +9,7 @@ Web visit-status message. Visual preference still needs owner acceptance before 
 - Preserve Phone Auth, signed branch QR, staff confirmation, tenant isolation and hidden cooldown.
 - Restyle customer, history, reward/wheel, staff and owner screens; keep backend unchanged.
 - Self-host [Be Vietnam Pro from Google Fonts](https://github.com/google/fonts/tree/main/ofl/bevietnampro)
-  as six WOFF2 subsets (about 102 KB total), with OFL in `public/fonts/OFL.txt`.
+  as eight WOFF2 subsets (about 136 KB total), with OFL in `public/fonts/OFL.txt`.
 - Keep the Zalo archive at `5ae0ff21200ae4d32b07e9f588ee6b7797c35d0e`. No Zalo deployment or review.
 
 ## TDD and functional evidence
@@ -52,3 +52,18 @@ The focused HomePage coverage result must not be presented as whole-app coverage
 Visual fixtures and automated browser engines do not replace acceptance on the owner's phone.
 No Hosting/Functions deployment, merge to main, gateway modification or production data mutation
 was performed for this design revision.
+
+## Typography refinement after owner feedback
+
+The owner found text too heavy. This follow-up changes type only: a real locally hosted
+500 Medium face, less compressed heading tracking, gentler label weights, and slightly
+larger small navigation/member labels. Colors, component layout and business logic remain
+unchanged. The CH decorative monogram keeps its stronger weight.
+
+- RED checkpoint `99c19f6`: the new browser check expected heading weight 500, observed 600.
+- GREEN: 15 focused browser checks passed across desktop/mobile Chromium and mobile WebKit.
+  The new check verifies a loaded 500 font face, heading/action weight and relaxed tracking.
+- Repeated 12 page-layout and 16 owner-tab checks: no page overflow or serious/critical axe issues.
+- Preview screenshots now use device scale factor 2 and explicitly await font loading.
+- No new business-code coverage is claimed for a CSS/font-only change. The earlier whole-service
+  coverage limitation above remains unchanged; no thresholds were lowered.
