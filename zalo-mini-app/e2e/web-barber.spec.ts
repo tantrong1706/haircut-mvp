@@ -4,6 +4,44 @@ import { expect, test } from "@playwright/test";
 const qr =
   "/checkin?qrType=branch&salonId=salon-web-a&branchId=demo-branch-main&qrToken=signed-web-a";
 
+test("Medium typography keeps Vietnamese headings and actions light and readable", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    (window as typeof window & { __haircutWebAuthTestMode?: boolean }).__haircutWebAuthTestMode =
+      true;
+  });
+  await page.goto(qr);
+  await expect(page.getByLabel("Số điện thoại")).toBeVisible();
+  await page.evaluate(() => document.fonts.ready);
+  const heading = await page.locator("h1").evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      weight: style.fontWeight,
+      family: style.fontFamily,
+      tracking: parseFloat(style.letterSpacing),
+    };
+  });
+  expect(heading.weight).toBe("500");
+  expect(heading.family).toContain("Be Vietnam Pro");
+  expect(heading.tracking).toBeGreaterThanOrEqual(-0.9);
+  expect(
+    await page
+      .getByRole("button", { name: "Gửi mã OTP" })
+      .evaluate((element) => getComputedStyle(element).fontWeight),
+  ).toBe("500");
+  expect(
+    await page.evaluate(() =>
+      Array.from(document.fonts).some(
+        (font) =>
+          font.family.includes("Be Vietnam Pro") &&
+          font.weight === "500" &&
+          font.status === "loaded",
+      ),
+    ),
+  ).toBe(true);
+});
+
 test("Web barber: Phone login, dark pages, no narrow-screen overflow or serious a11y errors", async ({
   page,
 }, testInfo) => {
