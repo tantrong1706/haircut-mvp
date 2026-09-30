@@ -12,6 +12,7 @@ import "./styles/staff.css";
 import "./styles/owner.css";
 import "./styles/rewards.css";
 import "./styles/barber-web.css";
+import "./styles/customer.css";
 
 initMonitoring();
 

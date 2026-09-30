@@ -1,0 +1,475 @@
+/* Customer presentation only. No staff/owner rules, data loading or business behavior here. */
+@font-face {
+  font-family: "Be Vietnam Pro";
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url("/fonts/be-vietnam-pro-300-latin.woff2") format("woff2");
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Be Vietnam Pro";
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url("/fonts/be-vietnam-pro-300-vietnamese.woff2") format("woff2");
+  unicode-range:
+    U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301,
+    U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+.app-shell .customer-main {
+  --ink: #e8e3d9;
+  --muted: #b3ada3;
+  --line: #34342d;
+  padding-top: calc(24px + env(safe-area-inset-top));
+}
+.app-shell .customer-main .page {
+  gap: 22px;
+}
+.app-shell .customer-main h1 {
+  font-size: clamp(28px, 7vw, 36px);
+  font-weight: 300;
+  line-height: 1.35;
+  letter-spacing: -0.025em;
+}
+.app-shell .customer-main h2 {
+  font-size: 18px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+.app-shell .customer-main .eyebrow {
+  color: #c4aa8a;
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.1em;
+}
+.app-shell .customer-main .brand-mark,
+.app-shell .customer-main .brand-mark span {
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.app-shell .customer-main .lucide,
+.app-shell .web-customer-nav .lucide {
+  stroke-width: 1.5;
+}
+.app-shell
+  .customer-main
+  :is(.primary-button, .secondary-button, .home-wheel-button, .reward-copy-button) {
+  font-weight: 400;
+  font-size: 13px;
+  letter-spacing: 0;
+}
+.app-shell .customer-main :is(.field > span, label) {
+  font-weight: 400;
+}
+.app-shell .customer-main .customer-hero .muted {
+  font-size: 13px;
+  line-height: 1.75;
+}
+.app-shell .customer-main .hero-topline {
+  margin-bottom: 14px;
+  gap: 12px;
+}
+.app-shell .customer-main .hero-topline .soft-chip {
+  font-size: 10px;
+  color: #b3ada3;
+}
+.app-shell .customer-main :is(.page-header, .customer-hero) {
+  padding-bottom: 20px;
+}
+.app-shell .customer-main .customer-home .customer-hero {
+  padding-bottom: 0;
+}
+.app-shell .customer-main .customer-home h1 {
+  font-size: 32px;
+}
+.app-shell .customer-main .customer-home .home-wheel-card {
+  gap: 10px 12px;
+  padding: 20px;
+  border: 1px solid #49463b;
+  border-radius: 12px;
+  background: #21221e;
+}
+.app-shell .customer-main .membership-card-top {
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 0.13em;
+}
+.app-shell .customer-main .membership-card-top svg {
+  width: 17px;
+}
+.app-shell .customer-main .home-wheel-card::before {
+  height: 1px;
+  background: #bb8c69;
+}
+.app-shell .customer-main .home-wheel-copy > span {
+  font-size: 11px;
+  color: #c4bfb1;
+}
+.app-shell .customer-main .home-points-value strong {
+  font-size: 60px;
+  font-weight: 300;
+  line-height: 1;
+  letter-spacing: -0.05em;
+}
+.app-shell .customer-main .home-points-value small {
+  font-size: 12px;
+  font-weight: 300;
+}
+.app-shell .customer-main .home-wheel-copy p {
+  margin-top: 8px;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.app-shell .customer-main .member-insignia > span {
+  font-size: 68px;
+  font-weight: 300;
+  letter-spacing: -0.08em;
+  color: #ae9e81;
+}
+.app-shell .customer-main .member-insignia > small {
+  font-size: 6px;
+  font-weight: 400;
+  letter-spacing: 0.2em;
+}
+.app-shell .customer-main .membership-card-owner {
+  font-size: 10px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid #3d3e34;
+}
+.app-shell .customer-main .home-wheel-progress > div:first-child {
+  font-size: 10px;
+  font-weight: 400;
+  margin-bottom: 10px;
+}
+.app-shell .customer-main .home-wheel-progress strong {
+  font-weight: 400;
+}
+.app-shell .customer-main .home-wheel-progress-track {
+  height: 2px;
+}
+.app-shell .customer-main .home-wheel-button {
+  min-height: 44px;
+  background: #ded1b7;
+  border-radius: 6px;
+  color: #29291f;
+}
+.app-shell .customer-main .visit-update {
+  padding: 14px;
+  align-items: center;
+  gap: 12px;
+  background: #1c211b;
+  border: 1px solid #343e2f;
+  border-radius: 8px;
+}
+.app-shell .customer-main .visit-update strong {
+  font-size: 13px;
+  font-weight: 400;
+}
+.app-shell .customer-main .visit-update p {
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.7;
+}
+.app-shell .customer-main .customer-home .compact-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border-top: 1px solid var(--line);
+}
+.app-shell .customer-main .customer-home .compact-actions button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  min-height: 64px;
+  padding: 10px 4px;
+  gap: 14px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+}
+.app-shell .customer-main .compact-actions button > span {
+  flex: 1;
+  text-align: left;
+}
+.app-shell .customer-main .compact-actions button strong {
+  font-size: 14px;
+  font-weight: 400;
+}
+.app-shell .customer-main .compact-actions button small {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.app-shell .customer-main .compact-actions .shortcut-arrow {
+  width: 16px;
+  color: #b5af9f;
+  flex: 0 0 auto;
+}
+.app-shell .customer-main .last-sync-time {
+  text-align: right;
+  font-size: 10px;
+}
+.app-shell .customer-main .customer-home > .panel {
+  padding: 16px;
+  font-size: 12px;
+  border-radius: 8px;
+}
+
+/* Sparse states get proportion and an illustration made from the existing icon, not fake data. */
+.app-shell .customer-main .empty-state {
+  min-height: 300px;
+  padding: 32px 24px;
+  border: 1px solid #31322b;
+  border-radius: 12px;
+  background: #181a16;
+  align-content: center;
+  gap: 14px;
+}
+.app-shell .customer-main .empty-state > svg {
+  width: 74px;
+  height: 74px;
+  padding: 21px;
+  margin-bottom: 5px;
+  border: 1px solid #484839;
+  border-radius: 50%;
+  color: #c5ac84;
+  stroke-width: 1.3;
+}
+.app-shell .customer-main .empty-state strong {
+  font-size: 18px;
+  font-weight: 300;
+  line-height: 1.5;
+}
+.app-shell .customer-main .empty-state p {
+  max-width: 29ch;
+  font-size: 12px;
+  line-height: 1.9;
+}
+.app-shell .customer-main .history-record-button {
+  padding: 16px 12px;
+  gap: 14px;
+  background: #1b1d18;
+  border-radius: 10px;
+}
+.app-shell .customer-main .history-record-content strong {
+  font-size: 14px;
+  font-weight: 400;
+}
+.app-shell .customer-main .history-record-content > span {
+  font-size: 12px;
+  line-height: 1.7;
+}
+.app-shell .customer-main .history-record-content small {
+  font-size: 10px;
+  font-weight: 400;
+}
+.app-shell .customer-main .history-thumbnail {
+  width: 66px;
+  border-radius: 6px;
+}
+.app-shell .customer-main .history-record-aside .pill {
+  font-weight: 400;
+}
+.app-shell .customer-main .reward-subnav {
+  padding: 4px;
+  border-radius: 8px;
+  background: #1b1d17;
+}
+.app-shell .customer-main .reward-subnav button {
+  font-weight: 400;
+  font-size: 12px;
+  min-height: 44px;
+}
+.app-shell .customer-main .reward-subnav button.active {
+  background: #35372b;
+  color: #e3dbc6;
+}
+.app-shell .customer-main .rewards-page .page-header .muted {
+  font-size: 12px;
+  max-width: 38ch;
+  line-height: 1.85;
+}
+.app-shell .customer-main .reward-card {
+  padding: 18px;
+  border-radius: 10px;
+}
+.app-shell .customer-main .reward-card-content > strong {
+  font-size: 17px;
+  font-weight: 400;
+}
+.app-shell .customer-main .reward-card-content small {
+  font-size: 11px;
+  line-height: 1.7;
+}
+.app-shell .customer-main .reward-qr {
+  padding: 12px;
+  margin-block: 10px;
+}
+.app-shell .customer-main .wheel-hero {
+  gap: 10px;
+}
+.app-shell .customer-main .wheel-stage {
+  border-radius: 12px;
+}
+.app-shell .customer-main .wheel-center {
+  font-weight: 400;
+}
+.app-shell .customer-main .prize-strip span {
+  min-height: 30px;
+  font-size: 10px;
+}
+
+/* Re-group the existing account information; no extra account actions or requests. */
+.app-shell .customer-main .account-balance {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 24px 20px;
+  border: 1px solid #444534;
+  border-radius: 10px;
+  background: #22251c;
+}
+.account-balance > span {
+  font-size: 13px;
+  color: #c0bba9;
+}
+.app-shell .customer-main .account-balance > strong {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  font-size: 46px;
+  font-weight: 300;
+  line-height: 1;
+}
+.account-balance small {
+  font-size: 12px;
+  font-weight: 300;
+}
+.app-shell .customer-main .account-device {
+  display: grid;
+  grid-template-columns: 26px 1fr;
+  align-items: start;
+  padding: 24px 20px;
+  gap: 16px;
+  background: #1b1d17;
+}
+.app-shell .customer-main .account-device > svg {
+  color: #bcba9a;
+  margin-top: 2px;
+}
+.app-shell .customer-main .account-device h2 {
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.6;
+}
+.app-shell .customer-main .account-device p {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.85;
+}
+.account-session-actions {
+  display: grid;
+  gap: 12px;
+}
+.app-shell .customer-main .account-session-actions .secondary-button {
+  background: transparent;
+  min-height: 48px;
+}
+.app-shell .customer-main .web-customer-auth h1 {
+  max-width: 15ch;
+  font-size: 31px;
+  line-height: 1.4;
+}
+.app-shell .customer-main .auth-card {
+  gap: 17px;
+  padding: 24px;
+  border-radius: 10px;
+  background: #1b1c17;
+}
+.app-shell .customer-main .auth-card input {
+  font-weight: 300;
+  font-size: 17px;
+}
+.app-shell .customer-main .auth-legal-links {
+  font-size: 10px;
+}
+.app-shell .customer-main .web-customer-summary > strong {
+  font-weight: 300;
+  font-size: 46px;
+}
+.app-shell .customer-main .web-customer-summary > p {
+  font-size: 12px;
+  line-height: 1.85;
+}
+.app-shell .web-customer-nav {
+  border-radius: 10px;
+  border-color: #3c3d31;
+  background: #1c1e18;
+  box-shadow: 0 6px 20px #0004;
+}
+.app-shell .web-customer-nav button {
+  font-size: 10px;
+  font-weight: 400;
+  border-radius: 6px;
+}
+.app-shell .web-customer-nav button.active {
+  background: #353628;
+  color: #e7d6b6;
+}
+
+@media (min-width: 900px) {
+  .app-shell .customer-main {
+    width: min(100%, 900px);
+    padding-top: 52px;
+    padding-inline: 28px;
+  }
+  .customer-main > :is(.web-customer-auth, .web-checkin-page, .customer-account-page) {
+    width: min(100%, 470px);
+    margin-inline: auto;
+  }
+  .customer-main > :is(.history-page, .rewards-page) {
+    width: min(100%, 650px);
+    margin-inline: auto;
+  }
+  .app-shell .customer-main .customer-home {
+    display: grid;
+    grid-template-columns: 1.1fr 1fr;
+    align-items: start;
+    gap: 24px 32px;
+  }
+  .customer-main .customer-home > .customer-hero,
+  .customer-main .customer-home > .session-sync-banner,
+  .customer-main .customer-home > .last-sync-time {
+    grid-column: 1 / -1;
+  }
+  .app-shell .customer-main .customer-home .home-wheel-card {
+    grid-column: 1;
+    grid-row: span 3;
+  }
+  .customer-main
+    .customer-home
+    > :is(.visit-update, .status-card, .quick-actions, .panel, .secondary-button) {
+    grid-column: 2;
+  }
+}
+@media (max-width: 360px) {
+  .app-shell .customer-main .customer-home .home-wheel-card {
+    padding: 18px;
+    grid-template-columns: minmax(0, 1fr) 82px;
+  }
+  .app-shell .customer-main .member-insignia > span {
+    font-size: 57px;
+  }
+  .app-shell .customer-main .home-points-value strong {
+    font-size: 57px;
+  }
+}

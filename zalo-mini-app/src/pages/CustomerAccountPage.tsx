@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ShieldCheck } from "lucide-react";
 import { BrandLogo } from "../components/BrandLogo";
 import { signOutCustomerWeb } from "../services/customerWebAuth";
 import { captureError, trackEvent } from "../services/monitoring";
@@ -39,9 +40,20 @@ export function CustomerAccountPage({ session, onLoggedOut }: Props) {
           Số điện thoại đã xác thực •••• {session.customer.phoneLast4 || "----"}
         </p>
       </header>
-      <div className="panel">
-        <strong>{session.customer.points} điểm</strong>
-        <p>Phiên đăng nhập được ghi nhớ an toàn trên thiết bị và trình duyệt này.</p>
+      <div className="account-balance">
+        <span>Điểm hiện có</span>
+        <strong>
+          {session.customer.points} <small>điểm</small>
+        </strong>
+      </div>
+      <div className="panel account-device">
+        <ShieldCheck size={26} aria-hidden="true" />
+        <div>
+          <h2>Thiết bị của bạn</h2>
+          <p>Phiên đăng nhập được ghi nhớ an toàn trên thiết bị và trình duyệt này.</p>
+        </div>
+      </div>
+      <div className="account-session-actions">
         <button
           type="button"
           className="secondary-button"

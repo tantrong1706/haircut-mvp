@@ -576,7 +576,7 @@ export default function App() {
           Mất kết nối mạng. Thao tác chưa lưu cần được thử lại sau khi có mạng.
         </p>
       ) : null}
-      <main className="app-main">
+      <main className="app-main customer-main">
         <Suspense fallback={<PageLoading />}>{content}</Suspense>
       </main>
       <InstallAppPrompt />

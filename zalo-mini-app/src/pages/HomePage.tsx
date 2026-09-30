@@ -1,5 +1,6 @@
 import {
   CalendarClock,
+  ChevronRight,
   CheckCircle2,
   Gift,
   Hourglass,
@@ -26,10 +27,11 @@ type Props = {
 const actions: Array<{
   tab: TabKey;
   title: string;
+  description: string;
   Icon: LucideIcon;
 }> = [
-  { tab: "history", title: "Lịch sử", Icon: CalendarClock },
-  { tab: "rewards", title: "Quà", Icon: Gift },
+  { tab: "history", title: "Lịch sử", description: "Ảnh & ghi chú lần cắt", Icon: CalendarClock },
+  { tab: "rewards", title: "Quà", description: "Các mã quà đã nhận", Icon: Gift },
 ];
 
 export function HomePage({
@@ -219,12 +221,19 @@ export function HomePage({
       ) : null}
 
       <div className="quick-actions compact-actions">
-        {actions.map(({ tab, title, Icon }) => (
-          <button key={tab} onClick={() => onTabChange(tab)}>
+        {actions.map(({ tab, title, description, Icon }) => (
+          <button
+            key={tab}
+            aria-label={title}
+            aria-describedby={`shortcut-${tab}`}
+            onClick={() => onTabChange(tab)}
+          >
             <Icon size={22} strokeWidth={2.2} aria-hidden="true" />
             <span>
               <strong>{title}</strong>
+              <small id={`shortcut-${tab}`}>{description}</small>
             </span>
+            <ChevronRight className="shortcut-arrow" size={16} aria-hidden="true" />
           </button>
         ))}
       </div>

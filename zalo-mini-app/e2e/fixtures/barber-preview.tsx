@@ -2,6 +2,7 @@
 import ReactDOM from "react-dom/client";
 import { CalendarClock, Gift, Scissors, UserRound } from "lucide-react";
 import { HomePage } from "../../src/pages/HomePage";
+import { CustomerAccountPage } from "../../src/pages/CustomerAccountPage";
 import { HistoryPage } from "../../src/pages/HistoryPage";
 import { RewardsPage } from "../../src/pages/RewardsPage";
 import { WheelPage } from "../../src/pages/WheelPage";
@@ -16,6 +17,7 @@ import "../../src/styles/staff.css";
 import "../../src/styles/owner.css";
 import "../../src/styles/rewards.css";
 import "../../src/styles/barber-web.css";
+import "../../src/styles/customer.css";
 
 if (import.meta.env.MODE !== "test" || isFirebaseConfigured()) {
   throw new Error("Design fixtures require test mode without Firebase credentials.");
@@ -62,6 +64,8 @@ const screen =
     <RewardsPage session={session} />
   ) : page === "wheel" ? (
     <WheelPage session={session} onSessionChange={() => undefined} />
+  ) : page === "account" ? (
+    <CustomerAccountPage session={session} onLoggedOut={() => undefined} />
   ) : (
     <HomePage
       session={{
@@ -78,7 +82,7 @@ const screen =
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <div className="app-shell">
-    <main className={isOps ? "app-main wide-main" : "app-main"}>{screen}</main>
+    <main className={isOps ? "app-main wide-main" : "app-main customer-main"}>{screen}</main>
     {!isOps ? (
       <nav className="bottom-nav web-customer-nav" aria-label="Điều hướng">
         {[
