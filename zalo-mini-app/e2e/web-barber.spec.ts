@@ -4,7 +4,7 @@ import { expect, test } from "@playwright/test";
 const qr =
   "/checkin?qrType=branch&salonId=salon-web-a&branchId=demo-branch-main&qrToken=signed-web-a";
 
-test("Medium typography keeps Vietnamese headings and actions light and readable", async ({
+test("Light customer typography keeps Vietnamese headings and actions readable", async ({
   page,
 }) => {
   await page.addInitScript(() => {
@@ -22,20 +22,20 @@ test("Medium typography keeps Vietnamese headings and actions light and readable
       tracking: parseFloat(style.letterSpacing),
     };
   });
-  expect(heading.weight).toBe("500");
+  expect(heading.weight).toBe("300");
   expect(heading.family).toContain("Be Vietnam Pro");
   expect(heading.tracking).toBeGreaterThanOrEqual(-0.9);
   expect(
     await page
       .getByRole("button", { name: "Gửi mã OTP" })
       .evaluate((element) => getComputedStyle(element).fontWeight),
-  ).toBe("500");
+  ).toBe("400");
   expect(
     await page.evaluate(() =>
       Array.from(document.fonts).some(
         (font) =>
           font.family.includes("Be Vietnam Pro") &&
-          font.weight === "500" &&
+          font.weight === "300" &&
           font.status === "loaded",
       ),
     ),
