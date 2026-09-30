@@ -67,3 +67,21 @@ unchanged. The CH decorative monogram keeps its stronger weight.
 - Preview screenshots now use device scale factor 2 and explicitly await font loading.
 - No new business-code coverage is claimed for a CSS/font-only change. The earlier whole-service
   coverage limitation above remains unchanged; no thresholds were lowered.
+
+## Customer layout refinement — 30 September 2026
+
+Customer headings use the locally hosted 300 Light face with Regular controls and thin icons.
+The customer stylesheet is scoped to `customer-main`. The member card is shorter; existing
+History/Rewards shortcuts have descriptions; desktop Home uses two columns; Account groups
+its existing points, device information and logout action.
+
+No API, data-loading, authentication or points behavior was added.
+
+- RED checkpoint `3ecf0b8`: expected customer heading weight 300; previous build rendered 500.
+- GREEN: 48 browser tests passed, 3 historical screenshot tests skipped, no failures.
+- Home, Account and Rewards component checks: 15/15 passed.
+- Focused Home/Account coverage: lines/statements 98.88%, branches 92.03%, functions 100%.
+  These figures cover those two pages only; the service-coverage limitation remains unchanged.
+- Fourteen mobile/desktop design renders passed overflow and serious/critical axe checks.
+- Build, lint, formatting and secret scan passed. Hosting deployment is recorded separately
+  in release status after verifying the live result.
