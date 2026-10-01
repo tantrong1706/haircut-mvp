@@ -38,6 +38,12 @@ route isolation from customer session/points logic.
 
 ## Gate before enforcement
 
+The support page was deployed Hosting-only from `e179d754e0ab9869029490d677e5749a1f1f7908`
+on 1 October 2026 at 17:31 Asia/Saigon. Hosting version: `62ea2e1fdaf44d42`.
+[Source CI](https://github.com/tantrong1706/haircut-mvp/actions/runs/36849128252) passed all six jobs.
+Live HTTPS/render smoke passed with no automatic attestation or console/page errors.
+Real-device attestation remains pending; this deployment is not an enforcement rollout.
+
 Obtain a successful result on the browser/device actually used by the customer. Then validate
 normal App Check initialization and Auth restoration in monitor mode, and inspect verified traffic
 before enabling enforcement. Do not lower the risk threshold or use debug tokens to declare

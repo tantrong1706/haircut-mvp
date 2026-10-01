@@ -1,23 +1,35 @@
 # Trạng thái CH Hair Web
 
-Cập nhật ngày 30/09/2026 (Asia/Saigon). Sản phẩm đang vận hành là Web tại
+Cập nhật ngày 01/10/2026 (Asia/Saigon). Sản phẩm đang vận hành là Web tại
 <https://app.chhaircutsalon.cc>.
 
 ## Production hiện tại
 
-- Source đã triển khai: `6868c5742c34af8a08952bad3caca7fe244436ac`.
-- Commit giao diện khách: `3fd0f0f`; commit trên bổ sung bằng chứng kiểm tra.
-- Phát hành: 30/09/2026, 20:22 giờ Việt Nam.
-- Hosting version: `projects/haircut-c7d12/sites/haircut-c7d12/versions/d3e0092ba96eee07`.
-- Hosting release: `projects/haircut-c7d12/sites/haircut-c7d12/channels/live/releases/1790774537525000`.
-- Entry: `assets/index.BYPoUSb5.module.js`; CSS: `assets/index.BVCeo_Y_.css`.
-- Phiên bản trước: `1b6aeb3b68649a48`, release `1790523451012000`.
+- Source đã triển khai: `e179d754e0ab9869029490d677e5749a1f1f7908`.
+- Giữ giao diện khách từ `3fd0f0f`; thêm trang hỗ trợ App Check độc lập.
+- Phát hành: 01/10/2026, 17:31 giờ Việt Nam.
+- Hosting version: `projects/haircut-c7d12/sites/haircut-c7d12/versions/62ea2e1fdaf44d42`.
+- Hosting release: `projects/haircut-c7d12/sites/haircut-c7d12/channels/live/releases/1790850685253000`.
+- Entry: `assets/index.BFlnidUO.module.js`; CSS: `assets/index.BVCeo_Y_.css`.
+- Phiên bản trước: `d3e0092ba96eee07`, release `1790774537525000`.
 - Bản đóng gói local trước được giữ tại
-  `.tmp/hosting-before-customer-20260930-0c0247f2` để phục hồi khi cần.
+  `.tmp/hosting-before-appcheck-20261001-e179d75` để phục hồi khi cần.
 
 Lượt này chỉ deploy Firebase Hosting. Functions, Rules, Auth configuration và Gateway giữ nguyên.
 
-## Kết quả xác minh bản khách
+## Kiểm tra App Check ngày 01/10
+
+- [CI source triển khai: 6/6 PASS](https://github.com/tantrong1706/haircut-mvp/actions/runs/36849128252).
+- 21 unit/component checks và 3 browser checks của trang hỗ trợ PASS;
+  18 browser regression checks PASS. Lint, build production và secret scan 571 file PASS.
+- Live `/app-check`: HTTPS 200, nút kiểm tra sẵn sàng, không tự attestation.
+- Phone entry và các route `/`, `/history`, `/wheel`, `/rewards`, `/account`, `/owner`, `/staff`
+  render được trong browser chưa đăng nhập; không page/console/asset error.
+- Site key công khai chỉ có trong chunk trang hỗ trợ; normal traffic App Check vẫn chưa bật.
+- Chưa có PASS attestation từ điện thoại thật; không bật enforcement và không khai báo hoàn tất
+  App Check. Xem [rollout và các gate](APPCHECK_ROLLOUT.md).
+
+## Bằng chứng giao diện khách ngày 30/09
 
 - [CI source triển khai: 6/6 PASS](https://github.com/tantrong1706/haircut-mvp/actions/runs/36719982588).
 - Browser: 48 PASS, 3 bài chụp ảnh lịch sử skipped, không có failure.
