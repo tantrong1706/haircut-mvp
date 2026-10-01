@@ -47,7 +47,7 @@ This is user-reported real-device evidence, not an independently captured token 
 
 ## Monitor-mode build configuration
 
-After that successful device check, the next Hosting package sets
+After that successful device check, the monitor Hosting package sets
 `VITE_FIREBASE_APP_CHECK_SITE_KEY` to the same existing public Enterprise key already registered
 for this app. Keep `VITE_FIREBASE_APP_CHECK_DIAGNOSTIC_SITE_KEY` for the support route.
 Do not change the app ID, risk threshold, service enforcement, or Functions deployment.
@@ -58,6 +58,18 @@ Tests verify initialization once per default/manager and named customer Firebase
 Auth/Functions services, automatic refresh enabled, and no provider duplication. Customer Auth
 regressions plus these initialization tests passed 27/27. Actual session restoration on a real
 customer browser remains a separate gate after the monitor build is deployed.
+
+Monitor deployment completed at 17:41 Asia/Saigon from
+`a39e3e4e39ecf232ab7fbea2bf6e4b50bcc2036f`, Hosting version `77764f53106be56a`.
+[CI passed all six jobs](https://github.com/tantrong1706/haircut-mvp/actions/runs/36850286343).
+Firestore, Storage and Authentication were rechecked as `UNENFORCED`; no enforcement mutation
+or Functions deployment occurred. The previous diagnostic package is preserved locally.
+
+The fresh headless browser rendered Phone entry without horizontal overflow, but recorded two
+`requestStorageAccess: Permission denied` console errors, two App Check exchange 403 responses
+and two App Check warnings. The zero-console-error smoke failed; do not count this as verified
+automated attestation or suppress these findings. Real-device session/history restoration is
+awaiting the owner's check. Enforcement remains off.
 
 Obtain a successful result on the browser/device actually used by the customer. Then validate
 normal App Check initialization and Auth restoration in monitor mode, and inspect verified traffic

@@ -5,19 +5,32 @@ Cập nhật ngày 01/10/2026 (Asia/Saigon). Sản phẩm đang vận hành là 
 
 ## Production hiện tại
 
-- Source đã triển khai: `e179d754e0ab9869029490d677e5749a1f1f7908`.
+- Source đã triển khai: `a39e3e4e39ecf232ab7fbea2bf6e4b50bcc2036f`.
 - Giữ giao diện khách từ `3fd0f0f`; thêm trang hỗ trợ App Check độc lập.
-- Phát hành: 01/10/2026, 17:31 giờ Việt Nam.
-- Hosting version: `projects/haircut-c7d12/sites/haircut-c7d12/versions/62ea2e1fdaf44d42`.
-- Hosting release: `projects/haircut-c7d12/sites/haircut-c7d12/channels/live/releases/1790850685253000`.
-- Entry: `assets/index.BFlnidUO.module.js`; CSS: `assets/index.BVCeo_Y_.css`.
-- Phiên bản trước: `d3e0092ba96eee07`, release `1790774537525000`.
+- Phát hành: 01/10/2026, 17:41 giờ Việt Nam; App Check ở chế độ theo dõi.
+- Hosting version: `projects/haircut-c7d12/sites/haircut-c7d12/versions/77764f53106be56a`.
+- Hosting release: `projects/haircut-c7d12/sites/haircut-c7d12/channels/live/releases/1790851288216000`.
+- Entry: `assets/index.Deo2WmWZ.module.js`; CSS: `assets/index.BVCeo_Y_.css`.
+- Phiên bản trước: `62ea2e1fdaf44d42`, release `1790850685253000`.
 - Bản đóng gói local trước được giữ tại
-  `.tmp/hosting-before-appcheck-20261001-e179d75` để phục hồi khi cần.
+  `.tmp/hosting-before-appcheck-monitor-20261001-a39e3e4` để phục hồi khi cần.
 
 Lượt này chỉ deploy Firebase Hosting. Functions, Rules, Auth configuration và Gateway giữ nguyên.
 
 ## Kiểm tra App Check ngày 01/10
+
+- [CI bản theo dõi hiện tại: 6/6 PASS](https://github.com/tantrong1706/haircut-mvp/actions/runs/36850286343).
+- Chủ dự án xác nhận điện thoại thật hiển thị "Kiểm tra thành công" trên trang hỗ trợ.
+- Sau đó chỉ deploy Hosting với site key cho traffic Web; không đổi policy backend.
+- Firestore, Storage, Authentication được xác minh `UNENFORCED` trước lượt triển khai này.
+- Kiểm thử khởi tạo App Check và customer Auth: 27/27 PASS; secret scan 572 file PASS.
+- Live bản theo dõi: Phone entry render được, không tràn ngang. Browser tự động nhận hai
+  `requestStorageAccess: Permission denied`, hai exchange HTTP 403 và hai cảnh báo App Check.
+  Vì vậy smoke **không đạt tiêu chí zero-console-error**, không tính attestation tự động là PASS.
+- Chưa xác nhận khôi phục phiên và lịch sử trên điện thoại thật sau bản theo dõi;
+  chưa bật enforcement. Đây là gate còn mở, không tuyên bố App Check hoàn tất.
+
+### Bằng chứng bản diagnostic trước khi bật theo dõi
 
 - [CI source triển khai: 6/6 PASS](https://github.com/tantrong1706/haircut-mvp/actions/runs/36849128252).
 - 21 unit/component checks và 3 browser checks của trang hỗ trợ PASS;
@@ -25,9 +38,8 @@ Lượt này chỉ deploy Firebase Hosting. Functions, Rules, Auth configuration
 - Live `/app-check`: HTTPS 200, nút kiểm tra sẵn sàng, không tự attestation.
 - Phone entry và các route `/`, `/history`, `/wheel`, `/rewards`, `/account`, `/owner`, `/staff`
   render được trong browser chưa đăng nhập; không page/console/asset error.
-- Site key công khai chỉ có trong chunk trang hỗ trợ; normal traffic App Check vẫn chưa bật.
-- Chưa có PASS attestation từ điện thoại thật; không bật enforcement và không khai báo hoàn tất
-  App Check. Xem [rollout và các gate](APPCHECK_ROLLOUT.md).
+- Tại bản diagnostic, site key công khai chỉ có trong chunk trang hỗ trợ; traffic thường chưa bật.
+- Xem [rollout và các gate](APPCHECK_ROLLOUT.md) để phân biệt các giai đoạn.
 
 ## Bằng chứng giao diện khách ngày 30/09
 
