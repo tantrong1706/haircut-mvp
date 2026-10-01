@@ -12,6 +12,11 @@ import type { AppSession, TabKey } from "./services/types";
 const AuthGate = lazy(() =>
   import("./pages/AuthGate").then((module) => ({ default: module.AuthGate })),
 );
+const AppCheckDiagnosticPage = lazy(() =>
+  import("./pages/AppCheckDiagnosticPage").then((module) => ({
+    default: module.AppCheckDiagnosticPage,
+  })),
+);
 const HistoryPage = lazy(() =>
   import("./pages/HistoryPage").then((module) => ({ default: module.HistoryPage })),
 );
@@ -155,6 +160,7 @@ export default function App() {
     "/privacy",
     "/terms",
     "/delete-account",
+    "/app-check",
   ].some((route) => path.startsWith(route));
   const currentQr = useMemo(() => parseQrContext(), []);
   const [savedSessionCandidate, setSavedSessionCandidate] = useState<SavedSessionCandidate | null>(
@@ -431,6 +437,18 @@ export default function App() {
       <div className="app-shell">
         <main className="app-main">
           <Suspense fallback={<PageLoading />}>{legalContent}</Suspense>
+        </main>
+      </div>
+    );
+  }
+
+  if (path === "/app-check") {
+    return (
+      <div className="app-shell">
+        <main className="app-main customer-main">
+          <Suspense fallback={<PageLoading />}>
+            <AppCheckDiagnosticPage />
+          </Suspense>
         </main>
       </div>
     );

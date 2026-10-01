@@ -134,8 +134,20 @@ vi.mock("./pages/HomePage", () => ({
 vi.mock("./pages/AuthGate", () => ({
   AuthGate: () => <div>management-auth</div>,
 }));
+vi.mock("./pages/AppCheckDiagnosticPage", () => ({
+  AppCheckDiagnosticPage: () => <div>app-check-diagnostic</div>,
+}));
 
 describe("App trong Zalo Mini App", () => {
+  it("trang kiểm tra độc lập không khởi động phiên khách hoặc đồng bộ điểm", async () => {
+    mocks.isZaloMiniAppRuntime.mockReturnValue(false);
+    mocks.customerAuthListener = null;
+    window.history.replaceState({}, "", "/app-check");
+    render(<App />);
+    expect(await screen.findByText("app-check-diagnostic")).toBeVisible();
+    expect(mocks.customerAuthListener).toBeNull();
+    expect(mocks.listenSessionLiveUpdates).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.loadSavedSessionCandidate.mockReturnValue(null);
