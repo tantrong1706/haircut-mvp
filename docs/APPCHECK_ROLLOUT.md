@@ -42,7 +42,22 @@ The support page was deployed Hosting-only from `e179d754e0ab9869029490d677e5749
 on 1 October 2026 at 17:31 Asia/Saigon. Hosting version: `62ea2e1fdaf44d42`.
 [Source CI](https://github.com/tantrong1706/haircut-mvp/actions/runs/36849128252) passed all six jobs.
 Live HTTPS/render smoke passed with no automatic attestation or console/page errors.
-Real-device attestation remains pending; this deployment is not an enforcement rollout.
+The project owner reported "Kiểm tra thành công" after the real-phone check on 1 October.
+This is user-reported real-device evidence, not an independently captured token or server trace.
+
+## Monitor-mode build configuration
+
+After that successful device check, the next Hosting package sets
+`VITE_FIREBASE_APP_CHECK_SITE_KEY` to the same existing public Enterprise key already registered
+for this app. Keep `VITE_FIREBASE_APP_CHECK_DIAGNOSTIC_SITE_KEY` for the support route.
+Do not change the app ID, risk threshold, service enforcement, or Functions deployment.
+These are build-time variables: subsequent release builders must retain both values to preserve
+this monitor-mode rollout. Neither site-key variable is a secret.
+
+Tests verify initialization once per default/manager and named customer Firebase app, before
+Auth/Functions services, automatic refresh enabled, and no provider duplication. Customer Auth
+regressions plus these initialization tests passed 27/27. Actual session restoration on a real
+customer browser remains a separate gate after the monitor build is deployed.
 
 Obtain a successful result on the browser/device actually used by the customer. Then validate
 normal App Check initialization and Auth restoration in monitor mode, and inspect verified traffic
