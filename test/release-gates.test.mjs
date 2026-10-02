@@ -6,10 +6,10 @@ const root = new URL("../", import.meta.url);
 const checkScript = readFileSync(new URL("scripts/check.ps1", root), "utf8");
 const gatewayWorkflow = readFileSync(new URL(".github/workflows/zalo-gateway.yml", root), "utf8");
 const screenshotSpec = readFileSync(
-  new URL("zalo-mini-app/e2e/review-screenshots.spec.ts", root),
+  new URL("customer-web/e2e/review-screenshots.spec.ts", root),
   "utf8",
 );
-const miniPackage = JSON.parse(readFileSync(new URL("zalo-mini-app/package.json", root), "utf8"));
+const miniPackage = JSON.parse(readFileSync(new URL("customer-web/package.json", root), "utf8"));
 const secretScanner = readFileSync(new URL("scripts/check-secrets.mjs", root), "utf8");
 
 test("repository check includes the gateway release gates", () => {

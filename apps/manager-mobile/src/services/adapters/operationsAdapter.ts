@@ -34,7 +34,7 @@ import {
   updatePendingPointRequestPhotos as sharedUpdatePendingPointRequestPhotos,
   updateSalonProfile as sharedUpdateSalonProfile,
   updateStaffProfile as sharedUpdateStaffProfile,
-} from "../../../../../zalo-mini-app/src/services/operations";
+} from "../../../../../customer-web/src/services/operations";
 
 export type {
   BranchQrSettings,
@@ -52,7 +52,7 @@ export type {
   SalonProfile,
   StaffProfile,
   StaffSession,
-} from "../../../../../zalo-mini-app/src/services/operations";
+} from "../../../../../customer-web/src/services/operations";
 
 export const approvePointRequest = sharedApprovePointRequest;
 export const cancelServiceSession = sharedCancelServiceSession;

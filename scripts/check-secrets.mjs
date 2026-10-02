@@ -68,14 +68,14 @@ for (const file of trackedFiles) {
   if (
     forbiddenTrackedPaths.some((pattern) => pattern.test(file)) &&
     !file.endsWith(".example") &&
-    file !== "zalo-mini-app/.env.test"
+    file !== "customer-web/.env.test"
   ) {
     findings.push({ file, line: 1, type: "tracked local credential/config file" });
   }
 }
 
 const requiredIgnoredPaths = [
-  "zalo-mini-app/.env.production.local",
+  "customer-web/.env.production.local",
   "firebase/functions/.env",
   "apps/manager-mobile/android/app/google-services.json",
   "apps/manager-mobile/ios/App/App/GoogleService-Info.plist",

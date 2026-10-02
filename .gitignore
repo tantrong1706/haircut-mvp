@@ -37,12 +37,12 @@ pnpm-debug.log*
 *.local
 
 # Zalo Mini App env
-zalo-mini-app/.env
-zalo-mini-app/.env.local
-zalo-mini-app/.env.production
-zalo-mini-app/.env.production.local
+customer-web/.env
+customer-web/.env.local
+customer-web/.env.production
+customer-web/.env.production.local
 firebase/functions/.env
-zalo-mini-app/qr-*-dev.png
+customer-web/qr-*-dev.png
 
 # Editor/agent packages are local tooling, not application source
 .agents/

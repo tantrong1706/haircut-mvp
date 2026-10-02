@@ -10,12 +10,12 @@ import {
   signOutOwnerStaff as sharedSignOutOwnerStaff,
   updateOwnerAvatar as sharedUpdateOwnerAvatar,
   uploadOwnerAvatarFile as sharedUploadOwnerAvatarFile,
-} from "../../../../../zalo-mini-app/src/services/auth";
+} from "../../../../../customer-web/src/services/auth";
 
 export type {
   AppRole,
   AppUser,
-} from "../../../../../zalo-mini-app/src/services/auth";
+} from "../../../../../customer-web/src/services/auth";
 
 export const acceptPendingStaffInvite = sharedAcceptPendingStaffInvite;
 export const completeOwnerSalonProfile = sharedCompleteOwnerSalonProfile;

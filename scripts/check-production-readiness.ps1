@@ -1,4 +1,4 @@
-﻿param(
+param(
   [switch]$RunBuild,
   [switch]$CheckLiveUrls,
   [switch]$StrictRelease,
@@ -137,8 +137,8 @@ if (Test-Path -LiteralPath $firebaserc) {
   Add-Result "Firebase project" "FAIL" "Thiếu firebase\.firebaserc"
 }
 
-$webEnv = Read-EnvFile (Join-Path $root "zalo-mini-app\.env.production")
-$envLocalPath = Join-Path $root "zalo-mini-app\.env.production.local"
+$webEnv = Read-EnvFile (Join-Path $root "customer-web\.env.production")
+$envLocalPath = Join-Path $root "customer-web\.env.production.local"
 $envLocal = Read-EnvFile $envLocalPath
 foreach ($entry in $envLocal.GetEnumerator()) {
   $webEnv[$entry.Key] = $entry.Value
@@ -161,7 +161,7 @@ Merge-ProcessEnvironment $webEnv @(
   "VITE_SUPPORT_PHONE"
 )
 if ($webEnv.Count -eq 0) {
-  Add-Result "Zalo web production env" "FAIL" "Thiếu biến CI hoặc zalo-mini-app\.env.production.local"
+  Add-Result "Zalo web production env" "FAIL" "Thiếu biến CI hoặc customer-web\.env.production.local"
 } else {
   $requiredWebEnv = @(
     "VITE_FIREBASE_API_KEY",
@@ -250,8 +250,8 @@ if (-not $liveRulesText) {
   Add-Result "Firestore rules live" "OK" "Đã khóa public reads và business writes từ client"
 }
 
-$appConfigPath = Join-Path $root "zalo-mini-app\app-config.json"
-$manifestPath = Join-Path $root "zalo-mini-app\www\.vite\manifest.json"
+$appConfigPath = Join-Path $root "customer-web\app-config.json"
+$manifestPath = Join-Path $root "customer-web\www\.vite\manifest.json"
 if (-not (Test-Path -LiteralPath $appConfigPath)) {
   Add-Result "ZMP app-config" "FAIL" "Thiếu app-config.json"
 } elseif (-not (Test-Path -LiteralPath $manifestPath)) {
@@ -266,7 +266,7 @@ if (-not (Test-Path -LiteralPath $appConfigPath)) {
     $assets = @($appConfig.listCSS) + @($appConfig.listSyncJS) + @($appConfig.listAsyncJS)
     $missingAssets = @($assets | Where-Object {
       $relative = ([string]$_) -replace '^\./', ''
-      -not (Test-Path -LiteralPath (Join-Path $root "zalo-mini-app\www\$relative"))
+      -not (Test-Path -LiteralPath (Join-Path $root "customer-web\www\$relative"))
     })
     if ($missingAssets.Count -gt 0) {
       Add-Result "ZMP app-config" "FAIL" "Có asset không tồn tại: $($missingAssets -join ', ')"

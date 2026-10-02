@@ -9,7 +9,7 @@ const env = readEnv(envPath);
 const appId = env.APP_ID || env.VITE_ZALO_MINI_APP_ID;
 
 if (!appId) {
-  throw new Error("Thiếu APP_ID trong zalo-mini-app/.env.");
+  throw new Error("Thiếu APP_ID trong customer-web/.env.");
 }
 
 const loginRequest = await apiGet(

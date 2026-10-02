@@ -3,11 +3,11 @@ import {
   deletePersonalAccount as sharedDeletePersonalAccount,
   getFullSalonDeletionStatus as sharedGetFullSalonDeletionStatus,
   requestFullSalonDeletion as sharedRequestFullSalonDeletion,
-} from "../../../../../zalo-mini-app/src/services/accountDeletion";
+} from "../../../../../customer-web/src/services/accountDeletion";
 
 export type {
   SalonDeletionStatus,
-} from "../../../../../zalo-mini-app/src/services/accountDeletion";
+} from "../../../../../customer-web/src/services/accountDeletion";
 
 export const cancelFullSalonDeletion = sharedCancelFullSalonDeletion;
 export const deletePersonalAccount = sharedDeletePersonalAccount;

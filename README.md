@@ -41,12 +41,13 @@ QR khách phải do backend ký cho đúng chi nhánh. Không thêm `env=TESTING
 
 ## Source và môi trường
 
-- `zalo-mini-app/`: workspace **Customer Web** và UI vận hành. Đây là tên thư mục lịch sử;
-  Manager đang import module dùng chung từ đây, nên việc tách nhánh không đổi đường dẫn.
+- `customer-web/`: workspace **Customer Web** và UI vận hành, đổi tên từ `zalo-mini-app/`.
+  Manager dùng adapter cho các dịch vụ Firebase; kiểu dữ liệu và tiện ích thuần nằm ở package chung.
 - `firebase/functions/`: API có Firebase Auth, phân quyền, ký QR và transaction nghiệp vụ.
 - `apps/manager-mobile/`: source Manager dùng chung; CI hiện kiểm tra web bundle.
 - `apps/admin-web/`: cổng quản trị Web.
 - `packages/contracts/`: contracts chung; `firebase/`: Rules, indexes và cấu hình Hosting.
+- `packages/client-domain/`: kiểu dữ liệu, quy tắc vòng quay và tiện ích lưu trữ dùng chung.
 
 Dùng Node.js 22, Java 21 cho Firebase Emulator và Firebase CLI cho deployment. Cài bằng `npm ci`
 trong từng workspace có thay đổi; giữ lockfile đã commit.
@@ -56,9 +57,9 @@ trong từng workspace có thay đổi; giữ lockfile đã commit.
 Customer Web (build mặc định không gọi ZMP hay gate review):
 
 ```powershell
-npm --prefix zalo-mini-app ci
-npm --prefix zalo-mini-app run check
-npm --prefix zalo-mini-app run test:e2e
+npm --prefix customer-web ci
+npm --prefix customer-web run check
+npm --prefix customer-web run test:e2e
 ```
 
 Backend và Rules:
@@ -80,11 +81,11 @@ Các test tương thích cũ vẫn được giữ để phát hiện tác dụng
 
 ## Build và triển khai Web
 
-`npm --prefix zalo-mini-app run build` xuất bản Web vào `zalo-mini-app/www/`; test build dùng
+`npm --prefix customer-web run build` xuất bản Web vào `customer-web/www/`; test build dùng
 `www-test/`. Không còn yêu cầu Mini App ID hay đồng bộ `app-config.json` cho Web.
 
 Frontend production lấy cấu hình Firebase từ file local bị ignore
-`zalo-mini-app/.env.production.local` hoặc biến môi trường. Bắt buộc
+`customer-web/.env.production.local` hoặc biến môi trường. Bắt buộc
 `VITE_APP_ENV=production`, `VITE_FUNCTION_WRITE_MODE=required` và cấu hình Firebase đúng project.
 Các biến hỗ trợ là `VITE_SUPPORT_EMAIL`, `VITE_SUPPORT_PHONE`; không ghi secret vào build.
 

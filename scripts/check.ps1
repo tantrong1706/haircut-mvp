@@ -114,11 +114,11 @@ Invoke-Step "Gateway Functions compatibility" (Join-Path $root "firebase/functio
   npm exec -- vitest run test/zaloGatewayVerifier.test.ts test/zaloClient.test.ts test/zaloContract.test.ts
 }
 
-Invoke-Step "Zalo npm ci" (Join-Path $root "zalo-mini-app") { npm ci }
-Invoke-Step "Zalo lint" (Join-Path $root "zalo-mini-app") { npm run lint }
-Invoke-Step "Zalo format" (Join-Path $root "zalo-mini-app") { npm run format:check }
-Invoke-Step "Zalo unit tests" (Join-Path $root "zalo-mini-app") { npm run test:run }
-Invoke-Step "Zalo package build" (Join-Path $root "zalo-mini-app") { npm run build:zmp }
+Invoke-Step "Zalo npm ci" (Join-Path $root "customer-web") { npm ci }
+Invoke-Step "Zalo lint" (Join-Path $root "customer-web") { npm run lint }
+Invoke-Step "Zalo format" (Join-Path $root "customer-web") { npm run format:check }
+Invoke-Step "Zalo unit tests" (Join-Path $root "customer-web") { npm run test:run }
+Invoke-Step "Zalo package build" (Join-Path $root "customer-web") { npm run build:zmp }
 
 Invoke-Step "Admin npm ci" (Join-Path $root "apps/admin-web") { npm ci }
 Invoke-Step "Admin checks" (Join-Path $root "apps/admin-web") { npm run check }
@@ -136,11 +136,11 @@ if ($Full) {
   Invoke-Step "Integration emulator tests" (Join-Path $root "firebase/functions") {
     npm run test:integration
   }
-  Invoke-Step "Zalo review readiness" (Join-Path $root "zalo-mini-app") {
+  Invoke-Step "Zalo review readiness" (Join-Path $root "customer-web") {
     npm run check:zalo-review
   }
-  Invoke-Step "Browser E2E" (Join-Path $root "zalo-mini-app") { npm run test:e2e }
-  Invoke-Step "Restore Zalo production package" (Join-Path $root "zalo-mini-app") {
+  Invoke-Step "Browser E2E" (Join-Path $root "customer-web") { npm run test:e2e }
+  Invoke-Step "Restore Zalo production package" (Join-Path $root "customer-web") {
     npm run build:zmp
   }
   Invoke-Step "Manager Android sync" (Join-Path $root "apps/manager-mobile") {

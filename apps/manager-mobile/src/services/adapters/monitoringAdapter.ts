@@ -4,7 +4,7 @@ import {
   setMonitoringUser as sharedSetMonitoringUser,
   trackEvent as sharedTrackEvent,
   withMonitoringTrace as sharedWithMonitoringTrace,
-} from "../../../../../zalo-mini-app/src/services/monitoring";
+} from "../../../../../customer-web/src/services/monitoring";
 
 export const captureError = sharedCaptureError;
 export const clearMonitoringUser = sharedClearMonitoringUser;

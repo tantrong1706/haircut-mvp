@@ -17,7 +17,7 @@ function sourceFiles(directory: string): string[] {
 
 describe("Manager source boundary", () => {
   it("không import page hoặc CSS toàn cục của Zalo Mini App", () => {
-    const forbidden = /zalo-mini-app\/src\/(pages|styles)/;
+    const forbidden = /customer-web\/src\/(pages|styles)/;
     const violations = sourceFiles(sourceRoot)
       .map((path) => ({ path, content: readFileSync(path, "utf8").split("\\").join("/") }))
       .filter(({ content }) => forbidden.test(content))
@@ -29,11 +29,11 @@ describe("Manager source boundary", () => {
   it("entry point chỉ nạp stylesheet thuộc Manager", () => {
     const main = readFileSync(join(sourceRoot, "main.tsx"), "utf8");
     expect(main).toContain('import "./manager.css"');
-    expect(main).not.toContain("zalo-mini-app");
+    expect(main).not.toContain("customer-web");
   });
 
   it("chỉ adapter được phép nhập service dùng chung đang nằm trong Zalo Mini App", () => {
-    const sharedServicePath = ["zalo-mini-app", "src", "services"].join("/");
+    const sharedServicePath = ["customer-web", "src", "services"].join("/");
     const violations = sourceFiles(sourceRoot)
       .filter((path) => !path.split("\\").join("/").includes("/services/adapters/"))
       .map((path) => ({ path, content: readFileSync(path, "utf8").split("\\").join("/") }))

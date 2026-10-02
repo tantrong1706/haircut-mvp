@@ -126,4 +126,4 @@ export const defaultLuckyWheelConfig: LuckyWheelConfig = {
     },
   ],
 };
-import type { SystemFeatures } from "@haircut/contracts";
+import type { SystemFeatures } from "../contracts";

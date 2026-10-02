@@ -3,16 +3,16 @@ import {
   deleteHaircutPhoto as sharedDeleteHaircutPhoto,
   recoverHaircutPhotoUploads as sharedRecoverHaircutPhotoUploads,
   uploadHaircutPhoto as sharedUploadHaircutPhoto,
-} from "../../../../../zalo-mini-app/src/services/customerPhotos";
+} from "../../../../../customer-web/src/services/customerPhotos";
 export {
   cameraPermissionMessage,
   inspectCameraPermission,
   type CameraPermissionState,
-} from "../../../../../zalo-mini-app/src/services/cameraPermission";
+} from "../../../../../customer-web/src/services/cameraPermission";
 
 export type {
   UploadedHaircutPhoto,
-} from "../../../../../zalo-mini-app/src/services/customerPhotos";
+} from "../../../../../customer-web/src/services/customerPhotos";
 
 export const MAX_HAIRCUT_PHOTOS = sharedMaxHaircutPhotos;
 export const deleteHaircutPhoto = sharedDeleteHaircutPhoto;

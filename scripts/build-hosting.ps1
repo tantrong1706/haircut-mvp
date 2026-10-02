@@ -1,6 +1,6 @@
-﻿$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Stop"
 $root = Resolve-Path (Join-Path $PSScriptRoot "..")
-$miniAppDir = Join-Path $root "zalo-mini-app"
+$miniAppDir = Join-Path $root "customer-web"
 $buildDir = Join-Path $miniAppDir "www"
 $publicDir = Join-Path $root "firebase/public"
 

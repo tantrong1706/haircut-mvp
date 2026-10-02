@@ -7,7 +7,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $root = Resolve-Path (Join-Path $PSScriptRoot "..")
-$appDir = Join-Path $root "zalo-mini-app"
+$appDir = Join-Path $root "customer-web"
 $nodeModules = Join-Path $appDir "node_modules"
 
 if (-not $Email) {

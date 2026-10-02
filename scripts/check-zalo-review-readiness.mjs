@@ -3,7 +3,7 @@ import { dirname, extname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const appRoot = resolve(repoRoot, "zalo-mini-app");
+const appRoot = resolve(repoRoot, "customer-web");
 const buildRoot = resolve(appRoot, "www");
 const expectedMiniAppId = "2038116772828167300";
 const expectedMiniAppName = "CH Haircut Salon";

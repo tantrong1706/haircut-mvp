@@ -221,7 +221,7 @@ function requiredEnv(name) {
   const value = process.env[name];
 
   if (!value) {
-    throw new Error(`Thieu bien moi truong ${name} trong zalo-mini-app/.env`);
+    throw new Error(`Thieu bien moi truong ${name} trong customer-web/.env`);
   }
 
   return value;

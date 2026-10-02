@@ -1,4 +1,4 @@
-﻿param(
+param(
   [switch]$InstallFirebaseCli
 )
 
@@ -41,7 +41,7 @@ Run-Step "Cài thư viện Firebase Functions" {
 }
 
 Run-Step "Cài thư viện Zalo Mini App" {
-  Push-Location (Join-Path $root "zalo-mini-app")
+  Push-Location (Join-Path $root "customer-web")
   npm install
   npm run build
   Pop-Location

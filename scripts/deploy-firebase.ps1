@@ -1,4 +1,4 @@
-﻿param(
+param(
   [switch]$OnlyRules,
   [switch]$OnlyHosting,
   [switch]$IncludeFirestore,
@@ -98,7 +98,7 @@ if ($DryRun) {
 $deploysHosting = $OnlyHosting -or (-not $OnlyRules)
 
 if ($deploysHosting) {
-  $appDir = Join-Path $root "zalo-mini-app"
+  $appDir = Join-Path $root "customer-web"
   $publicDir = Join-Path $firebaseDir "public"
 
   Push-Location $appDir

@@ -5,7 +5,7 @@
 ## Chạy Dev
 
 ```bash
-cd haircut/zalo-mini-app
+cd haircut/customer-web
 npm install
 npm run dev
 ```
