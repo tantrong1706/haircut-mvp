@@ -87,6 +87,10 @@ jobs:
         working-directory: customer-web
         run: npm run test:run
 
+      - name: Shared client domain coverage
+        working-directory: customer-web
+        run: npm run test:domain
+
       - name: Build customer Web
         working-directory: customer-web
         env:

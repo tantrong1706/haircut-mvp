@@ -9,6 +9,33 @@ import {
 } from "./wheel";
 
 describe("normalizeLuckyWheelConfig", () => {
+  it("giữ mặc định khi cấu hình thiếu và chuẩn hóa các ô không hợp lệ", () => {
+    expect(normalizeLuckyWheelConfig(null).slots).toHaveLength(6);
+    expect(normalizeLuckyWheelConfig(undefined).requiredPoints).toBe(5);
+    const config = normalizeLuckyWheelConfig({
+      configVersion: 3,
+      deductPointsAfterSpin: false,
+      rewardValidityDays: 999,
+      slots: [
+        null,
+        { label: 42, slotId: 42, weight: -1 },
+        { label: "   ", slotId: "bad id", weight: 1_000_001 },
+        { label: "Quà", slotId: " valid-id ", type: "no_prize", weight: 12 },
+        { label: "may mắn", type: "reward", weight: 1.5 },
+        { label: "x".repeat(80), active: false, weight: "invalid" },
+        { label: "Không được thêm ô thứ bảy" },
+      ],
+    });
+    expect(config.configVersion).toBe(3);
+    expect(config.deductPointsAfterSpin).toBe(false);
+    expect(config.rewardValidityDays).toBe(365);
+    expect(config.slots).toHaveLength(6);
+    expect(config.slots[3]).toMatchObject({ slotId: "valid-id", type: "no_prize", weight: 12 });
+    expect(config.slots[4]).toMatchObject({ type: "reward", weight: 1 });
+    expect(config.slots[5].label).toHaveLength(60);
+    expect(config.slots[5].active).toBe(false);
+    expect(config.slots.slice(0, 3).map((slot) => slot.weight)).toEqual([1, 1, 1]);
+  });
   it("luôn tạo đúng 6 ô và ít nhất 1 điểm", () => {
     const config = normalizeLuckyWheelConfig({
       requiredPoints: 0,
@@ -50,6 +77,13 @@ describe("normalizeLuckyWheelConfig", () => {
 });
 
 describe("targetWheelRotation", () => {
+  it("xử lý số ô rỗng, index không hữu hạn và vòng quay tối thiểu", () => {
+    expect(targetWheelRotation(45, 0, 0)).toBe(45);
+    expect(targetWheelRotation(45, 0, -1)).toBe(45);
+    expect(targetWheelRotation(0, Number.NaN, 6, 0)).toBe(targetWheelRotation(0, 0, 6, 1));
+    expect(targetWheelRotation(0, -1, 6)).toBe(targetWheelRotation(0, 5, 6));
+    expect(createWheelAnimationPlan(90, 0).angles).toEqual([90, 90, 90, 90, 90, 90, 90]);
+  });
   it.each([
     { selectedIndex: 0, slotCount: 6 },
     { selectedIndex: 1, slotCount: 6 },

@@ -1,52 +1,30 @@
-# CH Hair Studio - Web/Zalo Mini App
+# CH Hair — Customer Web
 
-Đây là app web/PWA hiện tại cho khách, nhân viên và chủ salon. Trong Zalo Mini App production, màn khách là luồng chính: khách quét QR có chữ ký của salon hoặc chi nhánh, xác nhận tên hiển thị, rồi salon xử lý điểm, lịch sử và quà.
+Web/PWA tại https://app.chhaircutsalon.cc, chạy trong Safari/Chrome, không cần Zalo.
+Workspace được đổi tên từ `zalo-mini-app/`; hướng dẫn tổng thể nằm ở [README gốc](../README.md).
 
-## Chạy Dev
+## Phát triển và kiểm thử
 
-```bash
-cd haircut/customer-web
-npm install
-npm run dev
+Dùng Node.js 22, giữ nguyên lockfile:
+
+```powershell
+npm ci
+npm run dev -- --host 127.0.0.1
+npm run check
+npm run test:e2e
 ```
 
-Mở trang xem trước cục bộ:
+Production dùng Firebase Phone Auth, phiên trình duyệt và QR chi nhánh có chữ ký.
+`VITE_APP_ENV=production` và `VITE_FUNCTION_WRITE_MODE=required` là bắt buộc.
+Cấu hình local ở `.env.production.local`, không commit; không đưa secret vào biến `VITE_`.
+Build xuất vào `www/`, test build vào `www-test/`. Chỉ deploy Hosting theo quy trình README gốc.
 
-```text
-http://localhost:5173/
-```
+## Ranh giới mã nguồn
 
-Lưu ý: URL cục bộ chỉ dùng để xem giao diện. Luồng reviewer và khách thật phải mở trong Zalo bằng QR salon/chi nhánh có chữ ký và phiên bản do hệ thống quản lý QR tạo. Không dùng QR gương cũ hoặc `qrToken` thô trong tài liệu, ảnh hay deeplink reviewer.
+- `src/`: giao diện và dịch vụ Web; Manager sử dụng các adapter được chỉ định.
+- `../packages/client-domain/`: kiểu dữ liệu, vòng quay và storage dùng chung; không phụ thuộc SDK.
+- Các nhánh tương thích Zalo trong API còn phụ thuộc lẫn nhau, chưa được xóa theo tên file.
+  Không dùng công cụ cũ để triển khai hay gửi review; bản Zalo được lưu ở `codex/zalo-archive`.
 
-## Kết Nối Firebase
-
-```bash
-cp .env.example .env
-```
-
-Điền Firebase web config vào `.env`.
-
-## Chế Độ Cloud Functions
-
-Trong `.env` có biến:
-
-```text
-VITE_FUNCTION_WRITE_MODE=required
-```
-
-Giá trị:
-
-- `direct`: chỉ dùng cho test nội bộ, Firestore phải còn mở cho dev.
-- `auto`: thử gọi Cloud Functions rồi fallback nếu lỗi; không dùng cho pilot thật.
-- `required`: production, bắt buộc gọi Cloud Functions.
-
-Muốn khóa Firestore rules và chạy salon thật thì phải deploy Functions rồi đổi sang `required`.
-
-## Quyền Zalo
-
-- `getAccessToken`: bắt buộc cho luồng khách thật. Token được gửi lên Cloud Functions để server xác minh và suy ra `zaloUserId`.
-- `getUserInfo`: chỉ dùng để điền sẵn tên/avatar cho khách, khách vẫn có thể sửa tên hiển thị tại salon.
-- Không dùng `getPhoneNumber`: số điện thoại là tùy chọn và chỉ được lưu khi khách tự nhập.
-- Không dùng `scanQRCode`, vị trí, notification, theo dõi OA hoặc API chia sẻ trong Version 8.
-
-Không ép khách cung cấp số điện thoại ngay màn đầu nếu salon chưa thật sự cần.
+Điểm, lịch sử, quyền truy cập và cooldown do server quyết định. Không đổi ID khách hoặc gộp dữ liệu
+khi dọn source. Xem [phạm vi cleanup](../docs/WEB_SOURCE_CLEANUP.md).
