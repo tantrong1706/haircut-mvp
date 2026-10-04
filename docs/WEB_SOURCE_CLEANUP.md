@@ -37,3 +37,8 @@ measures the implementations and enforces 80% on all four dimensions in CI.
 
 The cleanup preserves backend source byte-for-byte. No dependency resolution/version change:
 the Web lockfile only changes its root package name. Historical release evidence retains old paths.
+
+Final CI verified on 4 October 2026 (Asia/Saigon): source
+`487016d238cfcb0172b86c01bf8a3d6e7a2dd879`, all six jobs PASS, including browser flows.
+Run: https://github.com/tantrong1706/haircut-mvp/actions/runs/36971231614.
+No production deployment or main merge was performed for this cleanup.
