@@ -2,6 +2,16 @@ import { describe, expect, it } from "vitest";
 import { cleanParams, redactSensitiveText, redactSensitiveUrl } from "./monitoring";
 
 describe("scrub dữ liệu giám sát", () => {
+  it("che credential cả khi URL lỗi cú pháp và khi dùng userinfo", () => {
+    expect(redactSensitiveUrl("http://[invalid]?token=fixture-hidden")).not.toContain("fixture-hidden");
+    const url = new URL(redactSensitiveUrl("https://fixture-user:fixture-password@example.test/path"));
+    expect(decodeURIComponent(url.username)).toBe("[redacted]");
+    expect(decodeURIComponent(url.password)).toBe("[redacted]");
+    expect(redactSensitiveText("password='fixture spaced password' token=fixture-plain"))
+      .not.toContain("fixture");
+    expect(redactSensitiveUrl("/history?tab=photos")).toContain("tab=photos");
+  });
+
   it("che token Firebase Storage và mã xác thực Web, kể cả tên tham số khác kiểu chữ", () => {
     const url = new URL(redactSensitiveUrl(
       "https://example.test/photo?token=storage-fixture&ID_TOKEN=id-fixture&oobCode=action-fixture&route=history#refresh_token=refresh-fixture",

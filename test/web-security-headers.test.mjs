@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const config = JSON.parse(readFileSync(new URL("../firebase/firebase.json", import.meta.url), "utf8"));
+const config = JSON.parse(
+  readFileSync(new URL("../firebase/firebase.json", import.meta.url), "utf8"),
+);
 const headers = config.hosting.headers.find((rule) => rule.source === "**").headers;
 const value = (name) => headers.find((header) => header.key === name)?.value;
 
