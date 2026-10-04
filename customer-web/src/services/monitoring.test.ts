@@ -2,6 +2,31 @@ import { describe, expect, it } from "vitest";
 import { cleanParams, redactSensitiveText, redactSensitiveUrl } from "./monitoring";
 
 describe("scrub dữ liệu giám sát", () => {
+  it("che token Firebase Storage và mã xác thực Web, kể cả tên tham số khác kiểu chữ", () => {
+    const url = new URL(redactSensitiveUrl(
+      "https://example.test/photo?token=storage-fixture&ID_TOKEN=id-fixture&oobCode=action-fixture&route=history#refresh_token=refresh-fixture",
+    ));
+    expect(url.searchParams.get("token")).toBe("[redacted]");
+    expect(url.searchParams.get("ID_TOKEN")).toBe("[redacted]");
+    expect(url.searchParams.get("oobCode")).toBe("[redacted]");
+    expect(url.searchParams.get("route")).toBe("history");
+    expect(decodeURIComponent(url.hash)).not.toContain("refresh-fixture");
+  });
+
+  it("che credential trong lỗi dạng JSON, không chỉ các token Zalo", () => {
+    const raw = JSON.stringify({
+      idToken: "fixture-id-token", refreshToken: "fixture-refresh-token",
+      verificationCode: "fixture-verification", password: "fixture password with spaces",
+      otp: "654321", token: "fixture-storage-token", errorCode: "PERMISSION_DENIED",
+    });
+    const scrubbed = redactSensitiveText(raw);
+    for (const secret of ["fixture-id-token", "fixture-refresh-token", "fixture-verification",
+      "fixture password with spaces", "654321", "fixture-storage-token"]) {
+      expect(scrubbed).not.toContain(secret);
+    }
+    expect(scrubbed).toContain("PERMISSION_DENIED");
+  });
+
   it("loại mọi tham số có tên token, secret hoặc proof", () => {
     expect(
       cleanParams({
