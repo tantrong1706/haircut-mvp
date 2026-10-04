@@ -230,3 +230,6 @@ jobs:
 
       - name: Verify Web workspace boundaries
         run: node --test test/web-workspace-boundary.test.mjs
+
+      - name: Verify Web security headers
+        run: node --test test/web-security-headers.test.mjs
