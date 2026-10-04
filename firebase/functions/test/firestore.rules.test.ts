@@ -160,6 +160,59 @@ afterAll(async () => {
 });
 
 describe("Firestore production rules", () => {
+  it("chặn chủ đã bị khóa đọc hồ sơ nhân viên nhưng vẫn cho đọc trạng thái bản thân", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), "users", "owner-a"), { isActive: false });
+    });
+    const db = testEnv.authenticatedContext("owner-a").firestore();
+    await assertSucceeds(getDoc(doc(db, "users", "owner-a")));
+    await assertFails(getDoc(doc(db, "users", "staff-a")));
+    await assertFails(getDocs(query(collection(db, "users"), where("salonId", "==", salonA))));
+  });
+
+  it("chặn đọc hồ sơ nhân viên khi salon bị đình chỉ", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), "salons", salonA), { status: "suspended" });
+    });
+    const db = testEnv.authenticatedContext("owner-a").firestore();
+    await assertSucceeds(getDoc(doc(db, "users", "owner-a")));
+    await assertFails(getDoc(doc(db, "users", "staff-a")));
+  });
+
+  it("chủ đang hoạt động vẫn đọc được hồ sơ nhân viên cùng salon", async () => {
+    const db = testEnv.authenticatedContext("owner-a").firestore();
+    await assertSucceeds(getDoc(doc(db, "users", "staff-a")));
+    await assertSucceeds(getDocs(query(collection(db, "users"), where("salonId", "==", salonA))));
+    await assertFails(getDoc(doc(db, "users", "owner-b")));
+  });
+
+  it("ràng buộc tên file ảnh với đúng operation đã cấp, không cho tái dùng ở tên khác", async () => {
+    const operationId = `op-${"b".repeat(40)}`;
+    const prefix = `salons/${salonA}/customers/customer-photo/sessions/session-photo/`;
+    const path = `${prefix}${operationId}.jpg`;
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), "photo_upload_operations", operationId), {
+        salonId: salonA, branchId: branchA, customerId: "customer-photo",
+        sessionId: "session-photo", staffUid: "staff-a", requestId: "fixture-bound-path",
+        storagePath: path, status: "pending", expectedMaxBytes: 1024,
+        expiresAt: Timestamp.fromMillis(Date.now() + 60_000),
+      });
+    });
+    const storage = testEnv.authenticatedContext("staff-a").storage();
+    const metadata = {
+      contentType: "image/jpeg",
+      customMetadata: {
+        salonId: salonA, branchId: branchA, customerId: "customer-photo",
+        sessionId: "session-photo", uploaderUid: "staff-a", operationId,
+        requestId: "fixture-bound-path",
+      },
+    };
+    await assertSucceeds(uploadBytes(ref(storage, path), new Uint8Array([1, 2, 3]), metadata));
+    await assertFails(uploadBytes(
+      ref(storage, `${prefix}op-${"c".repeat(40)}.jpg`), new Uint8Array([1, 2, 3]), metadata,
+    ));
+  });
+
   it("nhân viên tải và đọc ảnh yêu cầu QR đúng chi nhánh, hết hạn thì chặn upload", async () => {
     const operationId = `op-${"e".repeat(40)}`;
     const path = `salons/${salonA}/customers/customer-photo/sessions/session-photo/${operationId}.jpg`;
