@@ -233,6 +233,7 @@ service firebase.storage {
     match /salons/{salonId}/customers/{customerId}/sessions/{sessionId}/{fileName} {
       allow read: if signedIn() && sessionExists(sessionId) && canReadOperationPhoto(salonId, customerId, sessionId);
       allow create: if fileName.matches('op-[a-f0-9]{40}\\.jpg')
+        && fileName == request.resource.metadata.operationId + ".jpg"
         && photoUploadEnabled(salonId)
         && customerAllowsPhoto(salonId, customerId)
         && isAllowedOperationPhoto(

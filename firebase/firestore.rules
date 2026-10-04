@@ -3,7 +3,7 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     // Production policy: every business write goes through Cloud Functions.
-    // Customer-facing reads are also served by Zalo-verified Cloud Functions.
+    // Customer-facing reads are served by identity-verified Cloud Functions.
     function signedIn() {
       return request.auth != null;
     }
@@ -78,9 +78,7 @@ service cloud.firestore {
         && (
           request.auth.uid == uid
           || (
-            hasUserProfile()
-            && resource.data.salonId == appUser().salonId
-            && appUser().role == "owner"
+            isOwner(resource.data.salonId)
           )
         );
       allow create, update, delete: if false;
