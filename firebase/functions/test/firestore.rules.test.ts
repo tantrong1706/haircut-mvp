@@ -192,9 +192,15 @@ describe("Firestore production rules", () => {
     const path = `${prefix}${operationId}.jpg`;
     await testEnv.withSecurityRulesDisabled(async (context) => {
       await setDoc(doc(context.firestore(), "photo_upload_operations", operationId), {
-        salonId: salonA, branchId: branchA, customerId: "customer-photo",
-        sessionId: "session-photo", staffUid: "staff-a", requestId: "fixture-bound-path",
-        storagePath: path, status: "pending", expectedMaxBytes: 1024,
+        salonId: salonA,
+        branchId: branchA,
+        customerId: "customer-photo",
+        sessionId: "session-photo",
+        staffUid: "staff-a",
+        requestId: "fixture-bound-path",
+        storagePath: path,
+        status: "pending",
+        expectedMaxBytes: 1024,
         expiresAt: Timestamp.fromMillis(Date.now() + 60_000),
       });
     });
@@ -202,15 +208,23 @@ describe("Firestore production rules", () => {
     const metadata = {
       contentType: "image/jpeg",
       customMetadata: {
-        salonId: salonA, branchId: branchA, customerId: "customer-photo",
-        sessionId: "session-photo", uploaderUid: "staff-a", operationId,
+        salonId: salonA,
+        branchId: branchA,
+        customerId: "customer-photo",
+        sessionId: "session-photo",
+        uploaderUid: "staff-a",
+        operationId,
         requestId: "fixture-bound-path",
       },
     };
     await assertSucceeds(uploadBytes(ref(storage, path), new Uint8Array([1, 2, 3]), metadata));
-    await assertFails(uploadBytes(
-      ref(storage, `${prefix}op-${"c".repeat(40)}.jpg`), new Uint8Array([1, 2, 3]), metadata,
-    ));
+    await assertFails(
+      uploadBytes(
+        ref(storage, `${prefix}op-${"c".repeat(40)}.jpg`),
+        new Uint8Array([1, 2, 3]),
+        metadata,
+      ),
+    );
   });
 
   it("nhân viên tải và đọc ảnh yêu cầu QR đúng chi nhánh, hết hạn thì chặn upload", async () => {
