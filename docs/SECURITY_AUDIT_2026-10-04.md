@@ -1,5 +1,8 @@
 # Web security audit — 4 October 2026
 
+Cập nhật tiếp ngày 08/10: xem [bản vá dependency backend](SECURITY_DEPENDENCIES_2026-10-08.md).
+Số liệu ngày 04/10 bên dưới là ảnh chụp lịch sử, không thay cho kết quả audit mới.
+
 ## Tóm tắt cho chủ dự án
 
 - Đã vá trong source: chủ bị khóa vẫn đọc hồ sơ nhân viên; dùng một quyền upload để tạo ảnh
