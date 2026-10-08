@@ -34,6 +34,10 @@ jobs:
         working-directory: firebase/functions
         run: npm ci
 
+      - name: Backend dependency security regression
+        working-directory: firebase/functions
+        run: node --test ../../test/backend-dependency-security.test.mjs
+
       - name: Check Functions source
         working-directory: firebase/functions
         run: npm run check
