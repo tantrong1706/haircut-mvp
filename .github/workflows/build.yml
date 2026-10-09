@@ -79,6 +79,10 @@ jobs:
         working-directory: customer-web
         run: npm ci
 
+      - name: Web dependency security regression
+        working-directory: customer-web
+        run: node --test ../test/web-dependency-security.test.mjs
+
       - name: Lint
         working-directory: customer-web
         run: npm run lint
