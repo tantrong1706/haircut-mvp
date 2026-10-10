@@ -5,8 +5,9 @@
 CH Hair chạy trên trình duyệt điện thoại và máy tính, dùng **Firebase** cho Hosting, đăng nhập,
 API, dữ liệu và ảnh. Không cần Zalo Mini App, tài khoản tester, VPS hay Botkeep.
 
-Nhánh phát triển hiện tại: **[`codex/web-primary`](https://github.com/tantrong1706/haircut-mvp/tree/codex/web-primary)**.
-Push nhánh này chạy GitHub Actions **Build Web**, không tự deploy production và không merge `main`.
+Nhánh chính: **[`main`](https://github.com/tantrong1706/haircut-mvp/tree/main)** — bản Web/Firebase hiện tại.
+Thay đổi mới dùng nhánh ngắn hạn `codex/<noi-dung>`, kiểm tra CI rồi nhập vào `main` và xóa nhánh đã xong.
+Push `main` chạy GitHub Actions **Build Web** và **CodeQL**, không tự deploy production.
 
 ## Luồng tại salon
 

@@ -2,7 +2,7 @@ name: Build Web
 
 on:
   push:
-    branches: [main, codex/web-primary]
+    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
