@@ -1,12 +1,20 @@
 $ErrorActionPreference = "Stop"
 $root = Resolve-Path (Join-Path $PSScriptRoot "..")
-$miniAppDir = Join-Path $root "customer-web"
-$buildDir = Join-Path $miniAppDir "www"
+$customerAppDir = Join-Path $root "customer-web"
+$buildDir = Join-Path $customerAppDir "www"
 $publicDir = Join-Path $root "firebase/public"
 
-Push-Location $miniAppDir
-npm run build
-Pop-Location
+Push-Location $customerAppDir
+try {
+  npm run build
+  if ($LASTEXITCODE -ne 0) { throw "Customer Web build failed; Hosting output unchanged" }
+} finally {
+  Pop-Location
+}
+
+if (-not (Test-Path -LiteralPath (Join-Path $buildDir "index.html") -PathType Leaf)) {
+  throw "Customer Web build is missing index.html"
+}
 
 $resolvedFirebaseDir = (Resolve-Path -LiteralPath (Join-Path $root "firebase")).Path
 $publicParent = Split-Path -Parent $publicDir
