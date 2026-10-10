@@ -13,8 +13,8 @@
   },
   "dependencies": {
     "@haircut/contracts": "file:../../packages/contracts",
-    "firebase": "^12.10.0",
-    "lucide-react": "^1.21.0",
+    "firebase": "^12.19.0",
+    "lucide-react": "^1.52.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
@@ -25,10 +25,10 @@
     "@vitejs/plugin-react": "^4.7.0",
     "eslint": "^9.39.4",
     "eslint-plugin-react-hooks": "^7.0.1",
-    "eslint-plugin-react-refresh": "^0.5.3",
-    "globals": "^17.7.0",
+    "eslint-plugin-react-refresh": "^0.5.7",
+    "globals": "^17.13.0",
     "typescript": "^5.7.2",
-    "typescript-eslint": "^8.63.0",
+    "typescript-eslint": "^8.71.1",
     "vite": "^5.4.21",
     "vitest": "^4.1.10"
   }
