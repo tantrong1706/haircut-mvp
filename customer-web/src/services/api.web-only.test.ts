@@ -9,20 +9,21 @@ const web = vi.hoisted(() => ({
   spinWebCustomerWheel: vi.fn().mockResolvedValue({}),
 }));
 vi.mock("./webCustomerApi", () => web);
-vi.mock("./firebase", () => ({
-  isFirebaseConfigured: () => false,
-  getFunctionWriteMode: () => "required",
-  getFirebaseDb: () => null,
-  callFunction: vi.fn(),
-}));
-vi.mock("./zalo", () => ({ getZaloAccessToken: vi.fn(), getZaloIdentity: vi.fn() }));
 
 describe("Web customer identity boundary", () => {
   beforeEach(() => vi.clearAllMocks());
   const legacy = {
     qr: { salonId: "salon-test", qrType: "branch", branchId: "branch-test", mirrorId: "" },
-    sessionId: "legacy-session", zaloUserId: "legacy-user", sessionStatus: "completed",
-    customer: { customerId: "legacy-customer", name: "Legacy", phoneLast4: "0000", points: 10, allowPhoto: false },
+    sessionId: "legacy-session",
+    zaloUserId: "legacy-user",
+    sessionStatus: "completed",
+    customer: {
+      customerId: "legacy-customer",
+      name: "Legacy",
+      phoneLast4: "0000",
+      points: 10,
+      allowPhoto: false,
+    },
   } as AppSession;
   it.each([
     ["history", () => getHaircutHistory(legacy)],

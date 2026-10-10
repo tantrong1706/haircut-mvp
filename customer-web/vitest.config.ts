@@ -14,7 +14,7 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "html"],
-      include: ["src/services/{qr,sessionStore,firebase}.ts"],
+      include: ["src/services/{qr,api,firebase}.ts"],
       thresholds: {
         lines: 70,
         functions: 70,

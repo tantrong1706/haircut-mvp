@@ -1,7 +1,5 @@
 import { expect, test } from "@playwright/test";
 
-test.use({ userAgent: "Zalo/24.0 MiniApp" });
-
 const qr = {
   qrType: "branch",
   salonId: "salon-e2e",
@@ -9,40 +7,68 @@ const qr = {
   qrToken: "signed-e2e",
 };
 
-const previewIdentityBinding = "af6043a4c7f067471d233c0e7775b52b302f0acbcb68fe356b7be4a58dc9bbee";
-
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript(
-    ({ identityBinding, sessionQr }) => {
-      const savedAt = Date.now();
-      localStorage.setItem(
-        "haircut_customer_session_v2",
-        JSON.stringify({
-          schemaVersion: 2,
+  await page.addInitScript((sessionQr) => {
+    (window as typeof window & { __haircutWebAuthTestMode?: boolean }).__haircutWebAuthTestMode =
+      true;
+    localStorage.setItem("haircut_test_web_auth_uid", "web-test-uid");
+    localStorage.setItem(
+      `haircut_test_web_session:${sessionQr.salonId}`,
+      JSON.stringify({
+        identityProvider: "firebase",
+        firebaseUid: "web-test-uid",
+        sessionId: "session-e2e",
+        zaloUserId: "",
+        sessionStatus: "completed",
+        customer: {
+          customerId: "web-test-salon-e2e",
+          name: "Khách Web",
+          phoneLast4: "4567",
+          points: 7,
+          allowPhoto: true,
+        },
+        qr: {
+          qrType: sessionQr.qrType,
           salonId: sessionQr.salonId,
-          sessionId: "session-e2e",
-          customerId: "mock-customer",
-          identityBinding,
-          savedAt,
-          expiresAt: savedAt + 12 * 60 * 60 * 1000,
-          qr: {
-            qrType: sessionQr.qrType,
-            salonId: sessionQr.salonId,
-            branchId: sessionQr.branchId,
-            mirrorId: "",
-          },
-        }),
-      );
-      localStorage.setItem("haircut_mock_points", "7");
-    },
-    { identityBinding: previewIdentityBinding, sessionQr: qr },
-  );
+          branchId: sessionQr.branchId,
+          mirrorId: "",
+        },
+      }),
+    );
+    localStorage.setItem(`haircut_test_web_points:${sessionQr.salonId}`, "7");
+    localStorage.setItem(
+      `haircut_test_web_history:${sessionQr.salonId}`,
+      JSON.stringify([
+        {
+          id: "record-e2e",
+          createdAt: "20/06/2026",
+          staffName: "Nam",
+          note: "Fade thấp",
+          photoUrls: [],
+          pointsAdded: 1,
+        },
+      ]),
+    );
+    localStorage.setItem(
+      `haircut_test_web_spin:${sessionQr.salonId}`,
+      JSON.stringify({
+        rewardId: "reward-e2e",
+        rewardName: "Gội đầu miễn phí",
+        rewardCode: "TEST-ONLY",
+        pointsAfter: 2,
+        isWinning: true,
+        selectedIndex: 1,
+        selectedSlotId: "slot-2",
+        configVersion: 1,
+      }),
+    );
+  }, qr);
 });
 
 test("khách chuyển qua điểm, lịch sử, vòng quay và quà", async ({ page }) => {
   await page.goto(`/?${new URLSearchParams(qr)}`);
 
-  await expect(page.getByRole("heading", { name: "Khách xem trước" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Khách Web" })).toBeVisible();
   await page.getByRole("button", { name: "Lịch sử" }).last().click();
   await expect(page.getByRole("heading", { name: "Lịch sử cắt tóc" })).toBeVisible();
   await page.getByRole("button", { name: /20\/06\/2026/ }).click();

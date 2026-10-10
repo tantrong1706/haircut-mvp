@@ -2371,12 +2371,6 @@ function normalizeRewardCode(value: string) {
 
 function buildQrUrl(salonId: string, mirrorId: string, qrToken: string) {
   const params = new URLSearchParams({ salonId, mirrorId, qrToken });
-  const miniAppId = String(import.meta.env.VITE_ZALO_MINI_APP_ID || "");
-
-  if (miniAppId) {
-    return `https://zalo.me/s/${miniAppId}?${params.toString()}`;
-  }
-
   return `${window.location.origin}/?${params.toString()}`;
 }
 

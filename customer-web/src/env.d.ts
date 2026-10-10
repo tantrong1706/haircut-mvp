@@ -22,11 +22,6 @@ interface ImportMetaEnv {
   readonly VITE_SENTRY_REPLAY_ON_ERROR_SAMPLE_RATE?: string;
   readonly VITE_SUPPORT_EMAIL?: string;
   readonly VITE_SUPPORT_PHONE?: string;
-  readonly VITE_ZALO_MINI_APP_ID?: string;
-  readonly VITE_ZALO_PREVIEW?: string;
-  readonly VITE_PREVIEW_SALON_ID?: string;
-  readonly VITE_PREVIEW_MIRROR_ID?: string;
-  readonly VITE_PREVIEW_QR_TOKEN?: string;
 }
 
 interface ImportMeta {
@@ -40,22 +35,4 @@ interface Window {
     getPlatform?: () => string;
     isNativePlatform?: () => boolean;
   };
-}
-
-declare module "zmp-sdk/apis" {
-  export function getAccessToken(): Promise<string>;
-
-  export function openPermissionSetting(): Promise<void>;
-
-  export function getUserInfo(options?: {
-    autoRequestPermission?: boolean;
-    avatarType?: "small" | "normal" | "large";
-  }): Promise<{
-    userInfo: {
-      id: string;
-      name: string;
-      avatar?: string;
-      followedOA?: boolean;
-    };
-  }>;
 }

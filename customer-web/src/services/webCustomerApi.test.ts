@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppSession, QrContext } from "./types";
 
 const mocks = vi.hoisted(() => ({
@@ -61,6 +61,7 @@ const session: AppSession = {
 };
 
 describe("web customer callable adapter", () => {
+  afterEach(() => vi.unstubAllEnvs());
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
@@ -73,6 +74,43 @@ describe("web customer callable adapter", () => {
     await expect(resolveWebCustomerContext(qr)).resolves.toEqual(rawContext);
     expect(mocks.callCustomerWebFunction).toHaveBeenCalledWith("getWebCustomerContext", qr);
     expect(mocks.callCustomerWebFunction.mock.calls[0][1]).not.toHaveProperty("uid");
+  });
+
+  it("production ignores test mode globals and forged local fixtures", async () => {
+    vi.stubEnv("VITE_APP_ENV", "production");
+    (window as typeof window & { __haircutWebAuthTestMode?: boolean }).__haircutWebAuthTestMode =
+      true;
+    localStorage.setItem("haircut_test_web_history:salon-a", JSON.stringify([{ id: "forged" }]));
+    localStorage.setItem("haircut_test_web_rewards:salon-a", JSON.stringify([{ id: "forged" }]));
+    localStorage.setItem("haircut_test_web_spin:salon-a", JSON.stringify({ pointsAfter: 9999 }));
+    mocks.callCustomerWebFunction
+      .mockResolvedValueOnce({ records: [] })
+      .mockResolvedValueOnce({ rewards: [] })
+      .mockRejectedValueOnce(new Error("unauthenticated"));
+    await expect(getWebCustomerHistory(session)).resolves.toEqual([]);
+    await expect(getWebCustomerRewards(session)).resolves.toEqual([]);
+    await expect(spinWebCustomerWheel(session, 1, "test-idempotency-key")).rejects.toThrow(
+      "unauthenticated",
+    );
+    expect(mocks.callCustomerWebFunction).toHaveBeenCalledTimes(3);
+  });
+
+  it("uses explicit E2E spin/history fixtures only in test mode", async () => {
+    vi.stubEnv("VITE_APP_ENV", "test");
+    (window as typeof window & { __haircutWebAuthTestMode?: boolean }).__haircutWebAuthTestMode =
+      true;
+    await expect(spinWebCustomerWheel(session, 1, "test-idempotency-key")).rejects.toThrow(
+      "Missing test spin fixture",
+    );
+    const spin = { pointsAfter: 2, selectedIndex: 1, rewardCode: "TEST-ONLY" };
+    localStorage.setItem("haircut_test_web_spin:salon-a", JSON.stringify(spin));
+    localStorage.setItem(
+      "haircut_test_web_history:salon-a",
+      JSON.stringify([{ id: "test-record" }]),
+    );
+    await expect(spinWebCustomerWheel(session, 1, "test-idempotency-key")).resolves.toEqual(spin);
+    await expect(getWebCustomerHistory(session)).resolves.toEqual([{ id: "test-record" }]);
+    expect(mocks.callCustomerWebFunction).not.toHaveBeenCalled();
   });
 
   it("check-in tạo AppSession Firebase và không cần Zalo token", async () => {

@@ -1,116 +1,109 @@
-# CH Hair — Web
+# CH Hair — Web quản lý khách và tích điểm salon
 
-Sản phẩm đang phát triển là **Web app** tại <https://app.chhaircutsalon.cc>.
-Khách dùng Firebase Phone Auth; chủ salon và nhân viên dùng tài khoản quản lý trên Web.
-Phạm vi này được chủ dự án xác nhận ngày 28/09/2026.
+[Mở ứng dụng](https://app.chhaircutsalon.cc/) · [Chủ salon](https://app.chhaircutsalon.cc/owner) · [Nhân viên](https://app.chhaircutsalon.cc/staff)
 
-## Nhánh làm việc
+CH Hair chạy trên trình duyệt điện thoại và máy tính, dùng **Firebase** cho Hosting, đăng nhập,
+API, dữ liệu và ảnh. Không cần Zalo Mini App, tài khoản tester, VPS hay Botkeep.
 
-| Nhánh                                    | Vai trò                                                                |
-| ---------------------------------------- | ---------------------------------------------------------------------- |
-| `codex/web-primary`                      | Nhánh phát triển Web hiện tại, tạo từ release đã PASS CI tại `06e7e1a` |
-| `codex/zalo-archive`                     | Lưu bản Zalo Version 24 tại `5ae0ff2`; không nằm trong roadmap Web     |
-| `release/web-customer-platform-20260921` | Giữ lịch sử triển khai Web đã kiểm thử để đối chiếu/khôi phục          |
+Nhánh phát triển hiện tại: **[`codex/web-primary`](https://github.com/tantrong1706/haircut-mvp/tree/codex/web-primary)**.
+Push nhánh này chạy GitHub Actions **Build Web**, không tự deploy production và không merge `main`.
 
-Xem [AGENTS.md](AGENTS.md) trước khi tiếp tục công việc. Tài liệu xét duyệt Zalo và các script release
-Zalo cũ là tài liệu lịch sử. Web không cần Testing Version, tài khoản tester hay xét duyệt Mini App.
+## Luồng tại salon
 
-## Luồng sử dụng
+1. Khách quét QR **của chi nhánh**. Không có bước chọn lại chi nhánh.
+2. Lần đầu xác thực số điện thoại bằng OTP. Lần sau, cùng trình duyệt còn phiên hợp lệ sẽ nhớ đăng nhập.
+3. Khách bấm **Yêu cầu tích điểm**; nhân viên đúng chi nhánh xác nhận và có thể chụp/lưu ảnh theo sự đồng ý của khách.
+4. Điểm được cộng một lần. Trong hai giờ sau khi cộng điểm, nút yêu cầu mới được ẩn; không hiện đồng hồ đếm ngược.
+5. Khách xem điểm, lịch sử, ảnh và quà. Khi đủ điều kiện, khách quay thưởng; nhân viên xác nhận dùng quà.
 
-1. Khách quét QR Web của chi nhánh. QR xác định đúng salon và chi nhánh trên server.
-2. Lần đầu khách xác thực số điện thoại bằng OTP; cùng trình duyệt còn phiên hợp lệ sẽ nhớ đăng nhập.
-3. Khách bấm **Yêu cầu tích điểm**. Nhân viên đúng chi nhánh kiểm tra và xác nhận, có thể lưu ảnh của
-   lần cắt theo consent.
-4. Điểm và lịch sử được cập nhật đúng một lần. Trong hai giờ sau khi cộng điểm, Web ẩn nút yêu cầu
-   mới và không hiển thị đếm ngược; khách vẫn xem điểm, lịch sử và quà.
-5. Nhiều khách có thể quét cùng QR đồng thời. Yêu cầu, số điểm và cooldown tách theo khách/salon.
-6. Khách đủ điểm có thể quay và nhận quà. Nhân viên kiểm tra mã hoặc QR quà và xác nhận sử dụng.
+Nhiều khách quét cùng QR vẫn có yêu cầu riêng. Điểm, lịch sử và quà tách theo khách/salon;
+backend quyết định danh tính, quyền truy cập, cooldown và kết quả vòng quay.
+Không tự gộp hồ sơ hoặc đổi ID khách khi dọn mã nguồn.
 
-Identity là Firebase UID đã xác thực. Backend không tự gộp tài khoản theo số điện thoại; profile,
-điểm, lịch sử và quà luôn thuộc đúng salon. Firestore client không được ghi dữ liệu nghiệp vụ trực tiếp.
+Đăng nhập không chuyển theo giữa Safari, Chrome và trình duyệt trong Messenger.
+Đăng xuất, xóa dữ liệu trình duyệt, đổi thiết bị hoặc phiên hết hiệu lực có thể yêu cầu OTP lại.
+QR phải do hệ thống ký; **không thêm `env=TESTING` hoặc số version Zalo** vào QR Web.
 
-## Các trang dùng tại salon
+## Cấu trúc
 
-- Khách: <https://app.chhaircutsalon.cc/>
-- Chủ salon: <https://app.chhaircutsalon.cc/owner>
-- Nhân viên: <https://app.chhaircutsalon.cc/staff>
-- Quyền riêng tư: <https://app.chhaircutsalon.cc/privacy>
-- Điều khoản: <https://app.chhaircutsalon.cc/terms>
+| Thư mục                   | Vai trò                                                   |
+| ------------------------- | --------------------------------------------------------- |
+| `customer-web/`           | Web/PWA khách, trang chủ salon và nhân viên               |
+| `firebase/functions/`     | API xác thực, QR, giao dịch điểm, ảnh, vòng quay và quà   |
+| `firebase/`               | Firestore/Storage Rules, indexes và Hosting               |
+| `apps/admin-web/`         | Cổng quản trị hệ thống                                    |
+| `apps/manager-mobile/`    | Source Manager dùng chung; phạm vi hiện tại là Web bundle |
+| `packages/client-domain/` | Kiểu dữ liệu và tiện ích dùng chung                       |
+| `packages/contracts/`     | Hợp đồng API dùng chung client/backend                    |
 
-QR khách phải do backend ký cho đúng chi nhánh. Không thêm `env=TESTING` hay Zalo version vào QR Web.
+Frontend không còn SDK, đăng nhập, build hoặc công cụ review Zalo. Một số kiểu dữ liệu cũ,
+endpoint/backend và mã Gateway được giữ để bảo toàn tương thích với dịch vụ đã triển khai;
+chúng không phải luồng đăng nhập của khách Web. Không xóa Functions, secrets hay dữ liệu live
+chỉ vì tên chứa “Zalo”. Mã và tài liệu đã gỡ có thể phục hồi từ lịch sử Git.
 
-## Source và môi trường
+## Chạy local
 
-- `customer-web/`: workspace **Customer Web** và UI vận hành, đổi tên từ `zalo-mini-app/`.
-  Manager dùng adapter cho các dịch vụ Firebase; kiểu dữ liệu và tiện ích thuần nằm ở package chung.
-- `firebase/functions/`: API có Firebase Auth, phân quyền, ký QR và transaction nghiệp vụ.
-- `apps/manager-mobile/`: source Manager dùng chung; CI hiện kiểm tra web bundle.
-- `apps/admin-web/`: cổng quản trị Web.
-- `packages/contracts/`: contracts chung; `firebase/`: Rules, indexes và cấu hình Hosting.
-- `packages/client-domain/`: kiểu dữ liệu, quy tắc vòng quay và tiện ích lưu trữ dùng chung.
-
-Dùng Node.js 22, Java 21 cho Firebase Emulator và Firebase CLI cho deployment. Cài bằng `npm ci`
-trong từng workspace có thay đổi; giữ lockfile đã commit.
-
-## Kiểm tra
-
-Customer Web (build mặc định không gọi ZMP hay gate review):
+Dùng **Node.js 22**, npm và **Java 21** khi chạy Firebase Emulator. Không cần nâng dependency
+để cài dự án; dùng lockfile đã commit.
 
 ```powershell
-npm --prefix customer-web ci
-npm --prefix customer-web run check
-npm --prefix customer-web run test:e2e
+cd customer-web
+npm ci
+npm run dev -- --host 127.0.0.1
 ```
 
-Backend và Rules:
+Tham khảo `.env.example` và `.env.production.example`; cấu hình riêng ở `.env.local` hoặc
+`.env.production.local` được Git ignore. Mọi biến `VITE_*` đều công khai trong bundle:
+**không đặt mật khẩu, service-account key, HMAC secret hoặc token bí mật vào đó**.
+
+Production bắt buộc `VITE_APP_ENV=production`, `VITE_FUNCTION_WRITE_MODE=required` và cấu hình
+Firebase đúng project. Build production xuất `customer-web/www/`; build test xuất `www-test/`.
+Fixture OTP/dữ liệu tự động chỉ hoạt động trong môi trường test được bật rõ ràng.
+
+## Kiểm tra trước khi push
 
 ```powershell
-npm --prefix firebase/functions ci
+# Trong customer-web/
+npm run check
+npm run test:domain
+npm run test:e2e
+
+# Từ thư mục gốc
+node --test test/*.test.mjs
+node scripts/check-secrets.mjs
+node scripts/sync-csp.mjs --check
+
 npm --prefix firebase/functions run check
-npm --prefix firebase/functions run build
 npm --prefix firebase/functions run test:rules
 npm --prefix firebase/functions run test:integration
+npm --prefix apps/admin-web run check
+npm --prefix apps/manager-mobile run check
 ```
 
-Các test emulator dùng project `demo-haircut`. Trên Windows, Java 21 có thể cần thư mục socket tạm
-ngắn; hướng dẫn kiểm thử thực tế nằm trong [release evidence](docs/WEB_CUSTOMER_RELEASE_READINESS.md).
+Rules/integration chạy bằng Emulator project `demo-haircut`, không dùng dữ liệu thật.
+GitHub Actions kiểm tra Customer Web, Firebase Functions/Rules, Admin, Manager Web,
+luồng trình duyệt và an toàn repository. Test xanh không thay thế kiểm tra thiết bị thật.
 
-GitHub workflow **Build Web** chạy trên push `codex/web-primary`, PR vào main hoặc manual dispatch.
-Nó kiểm tra Customer Web, Functions/Rules, Manager Web, Admin, browser và repository/secret scan.
-Các test tương thích cũ vẫn được giữ để phát hiện tác dụng phụ của module dùng chung.
+## Firebase và triển khai
 
-## Build và triển khai Web
+Project hiện tại: `haircut-c7d12`. Domain khách: `app.chhaircutsalon.cc`.
+Firebase vẫn là nền tảng vận hành; không chuyển DNS hoặc tải source lên Botkeep.
 
-`npm --prefix customer-web run build` xuất bản Web vào `customer-web/www/`; test build dùng
-`www-test/`. Không còn yêu cầu Mini App ID hay đồng bộ `app-config.json` cho Web.
+**Source trên GitHub và phiên bản đang phục vụ có thể khác nhau.** Dọn source/push không đồng
+nghĩa đã deploy. Xem [trạng thái phát hành](docs/RELEASE_STATUS.md) và kiểm tra Hosting version
+trước từng lần phát hành. Thay đổi frontend chỉ triển khai Hosting sau khi được phép;
+không triển khai Functions kèm theo nếu không cần.
 
-Frontend production lấy cấu hình Firebase từ file local bị ignore
-`customer-web/.env.production.local` hoặc biến môi trường. Bắt buộc
-`VITE_APP_ENV=production`, `VITE_FUNCTION_WRITE_MODE=required` và cấu hình Firebase đúng project.
-Các biến hỗ trợ là `VITE_SUPPORT_EMAIL`, `VITE_SUPPORT_PHONE`; không ghi secret vào build.
+App Check Web đã có provider và được bật ở chế độ giám sát trong lần kiểm tra vận hành gần nhất;
+enforcement chưa được xác nhận bật. Không tự bật enforcement trong một lần dọn repository.
 
-Sau khi kiểm tra đúng commit và có quyền triển khai, đóng gói output vào `firebase/public`, chụp
-Hosting version trước deployment và deploy riêng Hosting nếu chỉ frontend thay đổi:
+## Tài liệu
 
-```powershell
-firebase deploy --project haircut-c7d12 --config firebase/firebase.json --only hosting
-```
-
-Nếu backend thay đổi, xác định đúng danh sách Functions cần triển khai. Giữ runtime env/secret
-bindings và kế hoạch rollback. Các script tổng hợp có gate Zalo cũ không phải lệnh release mặc định
-của nhánh Web. Không tự merge main, xoay secret hoặc xóa dịch vụ production khi dọn source.
-
-App Check đang đăng ký nhưng enforcement OFF; frontend production hiện chưa khởi tạo provider
-sau lỗi attestation/throttle đã quan sát. Đây là hạng mục Web riêng cần xác minh token thực trước khi
-bật enforcement, không phải điều kiện để quay lại làm Mini App.
-
-## Bằng chứng và vận hành
-
-- [Trạng thái phát hành hiện tại](docs/RELEASE_STATUS.md)
-- [Web release readiness](docs/WEB_CUSTOMER_RELEASE_READINESS.md)
-- [Checklist luồng Web](docs/WEB_CUSTOMER_COMPLETION_CHECKLIST.md)
-- [Bằng chứng kiểm thử](docs/testing/web-customer-platform.tdd.md)
+- [Hướng dẫn làm việc và giới hạn an toàn](AGENTS.md)
+- [Customer Web](customer-web/README.md)
+- [Checklist vận hành Web](docs/WEB_CUSTOMER_COMPLETION_CHECKLIST.md)
+- [Bằng chứng và điều kiện phát hành](docs/WEB_CUSTOMER_RELEASE_READINESS.md)
 - [Xử lý sự cố](docs/incident-runbook.md)
 
-Token, OTP, số điện thoại đầy đủ, mật khẩu và QR signing secret không được đưa vào Git, log,
-screenshot hoặc monitoring. Generated output cũng không được commit.
+Không commit OTP, token, mật khẩu, QR signing secret, dữ liệu khách hoặc output build.
+Tài liệu kiểm thử cũ phản ánh thời điểm ghi nhận, không phải cam kết rằng mọi gate hiện tại đã PASS.

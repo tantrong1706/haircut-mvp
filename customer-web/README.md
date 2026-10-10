@@ -23,8 +23,10 @@ Build xuất vào `www/`, test build vào `www-test/`. Chỉ deploy Hosting theo
 
 - `src/`: giao diện và dịch vụ Web; Manager sử dụng các adapter được chỉ định.
 - `../packages/client-domain/`: kiểu dữ liệu, vòng quay và storage dùng chung; không phụ thuộc SDK.
-- Các nhánh tương thích Zalo trong API còn phụ thuộc lẫn nhau, chưa được xóa theo tên file.
-  Không dùng công cụ cũ để triển khai hay gửi review; bản Zalo được lưu ở `codex/zalo-archive`.
+- Frontend chỉ dùng Firebase Web Auth và Web callables. SDK, màn hình đăng nhập, cache phiên,
+  công cụ build/review và QR Testing Zalo đã được gỡ. Không khôi phục chúng vào luồng Web.
+- Các tên trường legacy còn trong kiểu dữ liệu dùng chung không phải cơ chế xác thực.
+  Backend đã triển khai và dữ liệu live không bị xóa trong lần dọn frontend này.
 
 Điểm, lịch sử, quyền truy cập và cooldown do server quyết định. Không đổi ID khách hoặc gộp dữ liệu
 khi dọn source. Xem [phạm vi cleanup](../docs/WEB_SOURCE_CLEANUP.md).

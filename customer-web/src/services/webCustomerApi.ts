@@ -102,7 +102,7 @@ export async function getWebCustomerSessionState(session: AppSession) {
 }
 
 export async function getWebCustomerHistory(session: AppSession): Promise<HaircutRecord[]> {
-  if (testAdapterEnabled()) return [];
+  if (testAdapterEnabled()) return testFixture<HaircutRecord[]>("history", session, []);
   const result = await callCustomerWebFunction<
     { salonId: string; limit: number },
     {
@@ -137,7 +137,7 @@ export async function getWebCustomerHistory(session: AppSession): Promise<Haircu
 }
 
 export async function getWebCustomerRewards(session: AppSession): Promise<Reward[]> {
-  if (testAdapterEnabled()) return [];
+  if (testAdapterEnabled()) return testFixture<Reward[]>("rewards", session, []);
   const result = await callCustomerWebFunction<
     { salonId: string; limit: number },
     {
@@ -180,6 +180,12 @@ export function spinWebCustomerWheel(
   configVersion: number,
   idempotencyKey: string,
 ) {
+  if (testAdapterEnabled()) {
+    const result = testFixture<SpinResult | null>("spin", session, null);
+    return result
+      ? Promise.resolve(result)
+      : Promise.reject(new Error("Missing test spin fixture"));
+  }
   return callCustomerWebFunction<
     { salonId: string; configVersion: number; idempotencyKey: string },
     SpinResult
@@ -272,4 +278,10 @@ function testAdapterEnabled() {
     (window as typeof window & { __haircutWebAuthTestMode?: boolean }).__haircutWebAuthTestMode ===
       true
   );
+}
+
+// Only consumed behind the compile-time test gate above, never by a production build.
+function testFixture<T>(kind: string, session: AppSession, fallback: T): T {
+  const raw = localStorage.getItem(`haircut_test_web_${kind}:${session.qr.salonId}`);
+  return raw ? (JSON.parse(raw) as T) : fallback;
 }

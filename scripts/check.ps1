@@ -106,19 +106,9 @@ Invoke-Step "Functions npm ci" (Join-Path $root "firebase/functions") { npm ci }
 Invoke-Step "Functions source checks" (Join-Path $root "firebase/functions") { npm run check }
 Invoke-Step "Functions build" (Join-Path $root "firebase/functions") { npm run build }
 
-$gatewayDirectory = Join-Path $root "services/zalo-verification-gateway"
-Invoke-Step "Gateway npm ci" $gatewayDirectory { npm ci }
-Invoke-Step "Gateway source checks" $gatewayDirectory { npm run check }
-Invoke-Step "Gateway dependency audit" $gatewayDirectory { npm audit --omit=dev --audit-level=high }
-Invoke-Step "Gateway Functions compatibility" (Join-Path $root "firebase/functions") {
-  npm exec -- vitest run test/zaloGatewayVerifier.test.ts test/zaloClient.test.ts test/zaloContract.test.ts
-}
-
-Invoke-Step "Zalo npm ci" (Join-Path $root "customer-web") { npm ci }
-Invoke-Step "Zalo lint" (Join-Path $root "customer-web") { npm run lint }
-Invoke-Step "Zalo format" (Join-Path $root "customer-web") { npm run format:check }
-Invoke-Step "Zalo unit tests" (Join-Path $root "customer-web") { npm run test:run }
-Invoke-Step "Zalo package build" (Join-Path $root "customer-web") { npm run build:zmp }
+Invoke-Step "Customer Web npm ci" (Join-Path $root "customer-web") { npm ci }
+Invoke-Step "Customer Web checks" (Join-Path $root "customer-web") { npm run check }
+Invoke-Step "Web-only boundaries" $root { node --test test/web-only-retirement.test.mjs test/web-workspace-boundary.test.mjs test/web-security-headers.test.mjs test/release-gates.test.mjs }
 
 Invoke-Step "Admin npm ci" (Join-Path $root "apps/admin-web") { npm ci }
 Invoke-Step "Admin checks" (Join-Path $root "apps/admin-web") { npm run check }
@@ -136,24 +126,7 @@ if ($Full) {
   Invoke-Step "Integration emulator tests" (Join-Path $root "firebase/functions") {
     npm run test:integration
   }
-  Invoke-Step "Zalo review readiness" (Join-Path $root "customer-web") {
-    npm run check:zalo-review
-  }
   Invoke-Step "Browser E2E" (Join-Path $root "customer-web") { npm run test:e2e }
-  Invoke-Step "Restore Zalo production package" (Join-Path $root "customer-web") {
-    npm run build:zmp
-  }
-  Invoke-Step "Manager Android sync" (Join-Path $root "apps/manager-mobile") {
-    npx cap sync android
-  } $false
-
-  if ($IsMacOS) {
-    Invoke-Step "Manager iOS sync" (Join-Path $root "apps/manager-mobile") {
-      npx cap sync ios
-    } $false
-  } else {
-    Add-Result "Manager iOS sync" "BLOCKED" "Yêu cầu macOS/Xcode" $false
-  }
 
   Invoke-Step "Production configuration readiness" $root {
     powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "check-production-readiness.ps1")

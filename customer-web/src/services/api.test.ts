@@ -1,454 +1,159 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  buildRegisterInput,
   customerSessionRefreshDelay,
-  getCustomerCheckinProfile,
+  getCustomerWheelConfig,
   getHaircutHistory,
-  resolveCustomerQr,
-  restoreSavedCustomerSession,
+  getRewards,
+  listenSessionLiveUpdates,
   spinWheel,
 } from "./api";
-import { createSessionIdentityBinding, type SavedSessionCandidate } from "./sessionStore";
+import { defaultLuckyWheelConfig, type AppSession } from "./types";
 
-const mocks = vi.hoisted(() => ({
-  callFunction: vi.fn(),
-  getZaloAccessToken: vi.fn(),
-  getZaloIdentity: vi.fn(),
-  isFirebaseConfigured: vi.fn(() => false),
+const web = vi.hoisted(() => ({
   getWebCustomerHistory: vi.fn(),
   getWebCustomerRewards: vi.fn(),
   getWebCustomerSessionState: vi.fn(),
   spinWebCustomerWheel: vi.fn(),
 }));
-
-vi.mock("./firebase", () => ({
-  callFunction: mocks.callFunction,
-  getFirebaseDb: vi.fn(() => null),
-  getFunctionWriteMode: vi.fn(() => "required"),
-  isFirebaseConfigured: mocks.isFirebaseConfigured,
-}));
-
-vi.mock("./zalo", () => ({
-  getZaloAccessToken: mocks.getZaloAccessToken,
-  getZaloIdentity: mocks.getZaloIdentity,
-}));
-
-vi.mock("./webCustomerApi", () => ({
-  getWebCustomerHistory: mocks.getWebCustomerHistory,
-  getWebCustomerRewards: mocks.getWebCustomerRewards,
-  getWebCustomerSessionState: mocks.getWebCustomerSessionState,
-  spinWebCustomerWheel: mocks.spinWebCustomerWheel,
-}));
-
-const candidate: SavedSessionCandidate = {
-  schemaVersion: 2,
-  salonId: "salon-a",
+vi.mock("./webCustomerApi", () => web);
+const session: AppSession = {
+  identityProvider: "firebase",
+  firebaseUid: "uid-test",
+  zaloUserId: "",
+  qr: { qrType: "branch", salonId: "salon-a", branchId: "branch-a", mirrorId: "" },
   sessionId: "session-a",
-  customerId: "customer-a",
-  identityBinding: "a".repeat(64),
-  savedAt: 1,
-  expiresAt: 2,
-  qr: {
-    qrType: "branch",
-    salonId: "salon-a",
-    branchId: "branch-a",
-    mirrorId: "",
+  sessionStatus: "pending_approval",
+  customer: {
+    customerId: "customer-a",
+    name: "Khách Web",
+    phoneLast4: "4567",
+    points: 7,
+    allowPhoto: true,
   },
 };
+const result = {
+  rewardId: "reward-test",
+  rewardName: "Gội đầu",
+  rewardCode: "TEST-ONLY",
+  pointsAfter: 2,
+  isWinning: true,
+  selectedIndex: 1,
+  selectedSlotId: "slot-2",
+  configVersion: 1,
+};
+const pendingKey = "haircut_pending_operation:spin:salon-a:customer-a";
 
-function backendSession(overrides: Record<string, unknown> = {}) {
-  return {
-    identityBinding: "a".repeat(64),
-    sessionStatus: "waiting",
-    branchId: "branch-a",
-    branchName: "Chi nhánh A",
-    branchAddress: "Địa chỉ A",
-    assignedStaffName: "",
-    claimedAtMs: null,
-    customer: {
-      customerId: "customer-a",
-      name: "Khách A",
-      phoneLast4: "1234",
-      points: 3,
-      allowPhoto: false,
-    },
-    wheelConfig: {
-      requiredPoints: 5,
-      deductPointsAfterSpin: true,
-      slots: [],
-    },
-    ...overrides,
-  };
-}
-
-beforeEach(() => {
-  mocks.callFunction.mockReset();
-  vi.clearAllMocks();
-  mocks.isFirebaseConfigured.mockReturnValue(false);
-  mocks.getZaloAccessToken.mockResolvedValue("fresh-zalo-token");
-  mocks.getZaloIdentity.mockResolvedValue({
-    zaloUserId: "preview-zalo-user",
-    accessToken: "preview-zalo-token",
-    name: "Khách xem trước",
-    avatar: "",
+describe("Firebase Web customer adapter", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    web.getWebCustomerSessionState.mockResolvedValue({
+      ...session,
+      wheelConfig: defaultLuckyWheelConfig,
+    });
+    web.spinWebCustomerWheel.mockResolvedValue(result);
   });
-  mocks.getWebCustomerHistory.mockResolvedValue([]);
-  mocks.getWebCustomerRewards.mockResolvedValue([]);
-});
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
 
-describe("customerSessionRefreshDelay", () => {
-  it("dừng polling khi lượt đã kết thúc", () => {
+  it("passes Web history and rewards through without tokens or direct database fallback", async () => {
+    const records = [{ id: "record-a", photoUrls: ["https://example.com/photo.jpg"] }];
+    web.getWebCustomerHistory.mockResolvedValue(records);
+    web.getWebCustomerRewards.mockResolvedValue([result]);
+    expect(await getHaircutHistory(session)).toBe(records);
+    expect(await getRewards(session)).toEqual([result]);
+    expect(web.getWebCustomerHistory).toHaveBeenCalledWith(session);
+    expect(web.getWebCustomerRewards).toHaveBeenCalledWith(session);
+  });
+  it("propagates backend failure without inventing history or points", async () => {
+    web.getWebCustomerHistory.mockRejectedValue(new Error("unavailable"));
+    web.getWebCustomerSessionState.mockRejectedValue(new Error("unavailable"));
+    await expect(getHaircutHistory(session)).rejects.toThrow("unavailable");
+    await expect(getCustomerWheelConfig(session)).rejects.toThrow("unavailable");
+  });
+  it("normalizes wheel config from authenticated backend", async () => {
+    expect(await getCustomerWheelConfig(session)).toEqual(defaultLuckyWheelConfig);
+    expect(web.getWebCustomerSessionState).toHaveBeenCalledWith(session);
+  });
+  it("retries failed spins with the same key, clearing it only after success", async () => {
+    web.spinWebCustomerWheel.mockRejectedValueOnce(new Error("timeout"));
+    await expect(spinWheel(session, 1)).rejects.toThrow("timeout");
+    const key = localStorage.getItem(pendingKey);
+    expect(key).toMatch(/^[A-Za-z0-9_-]{16,128}$/);
+    expect(await spinWheel(session, 1)).toEqual(result);
+    expect(web.spinWebCustomerWheel.mock.calls.map((call) => call[2])).toEqual([key, key]);
+    expect(localStorage.getItem(pendingKey)).toBeNull();
+  });
+  it("rejects malformed stored operation keys and preserves server win classification", async () => {
+    localStorage.setItem(pendingKey, "invalid");
+    web.spinWebCustomerWheel.mockResolvedValue({ ...result, isWinning: false });
+    expect((await spinWheel(session, 1)).isWinning).toBe(false);
+    expect(web.spinWebCustomerWheel.mock.calls[0][2]).not.toBe("invalid");
+    web.spinWebCustomerWheel.mockResolvedValue({ ...result, isWinning: undefined, rewardCode: "" });
+    expect((await spinWheel(session, 1)).isWinning).toBe(false);
+  });
+  it("uses bounded status-specific delay, jitter and backoff", () => {
     expect(customerSessionRefreshDelay("completed", 0, 0)).toBeNull();
     expect(customerSessionRefreshDelay("cancelled", 0, 0)).toBeNull();
+    expect(customerSessionRefreshDelay("pending_approval", 0, 0.5)).toBe(32500);
+    expect(customerSessionRefreshDelay("serving", 0, 0)).toBe(24000);
+    expect(customerSessionRefreshDelay(undefined, 0, NaN)).toBe(20000);
+    expect(customerSessionRefreshDelay("waiting", 0, -1)).toBe(20000);
+    expect(customerSessionRefreshDelay("waiting", 1, 0)).toBe(40000);
+    expect(customerSessionRefreshDelay("waiting", 8, 2)).toBe(94999);
   });
-
-  it("giảm tần suất khi chờ duyệt và backoff sau lỗi", () => {
-    expect(customerSessionRefreshDelay("waiting", 0, 0)).toBe(20_000);
-    expect(customerSessionRefreshDelay("pending_approval", 0, 0)).toBe(30_000);
-    expect(customerSessionRefreshDelay("waiting", 2, 0)).toBe(80_000);
-  });
-});
-
-describe("resolveCustomerQr ở chế độ xem trước", () => {
-  it("từ chối QR salon chung", async () => {
-    await expect(
-      resolveCustomerQr({
-        qrType: "salon",
-        salonId: "demo-salon",
-        branchId: "",
-        mirrorId: "",
-        qrToken: "demo-token",
-      }),
-    ).rejects.toThrow("QR riêng tại chi nhánh");
-  });
-
-  it("QR chi nhánh mở thẳng đúng tên và địa chỉ", async () => {
-    const result = await resolveCustomerQr({
-      qrType: "branch",
-      salonId: "demo-salon",
-      branchId: "demo-branch-main",
-      mirrorId: "",
-      qrToken: "demo-token",
+  it("polls server-authoritative points then stops after completion and cleanup", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    const onChange = vi.fn();
+    const onSynced = vi.fn();
+    const stop = listenSessionLiveUpdates(session, onChange, vi.fn(), onSynced);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(onSynced).toHaveBeenCalledTimes(1);
+    web.getWebCustomerSessionState.mockResolvedValue({
+      ...session,
+      sessionStatus: "completed",
+      customer: { ...session.customer, points: 8 },
     });
-
-    expect(result.selectionRequired).toBe(false);
-    expect(result.branchName).toBe("Chi nhánh Trung tâm");
-    expect(result.branchAddress).toContain("Nguyễn Huệ");
-  });
-});
-
-describe("buildRegisterInput", () => {
-  it("không gửi các trường tùy chọn undefined qua Firebase callable", () => {
-    const input = buildRegisterInput(
-      {
-        qrType: "salon",
-        salonId: "salon-a",
-        branchId: "branch-a",
-        mirrorId: "",
-        qrToken: "signed-qr-token",
-      },
-      {
-        accessToken: "zalo-access-token",
-        name: "Khach A",
-      },
-      true,
-    );
-
-    expect(input).not.toHaveProperty("zaloUserId");
-    expect(input).not.toHaveProperty("phoneToken");
-    expect(input).not.toHaveProperty("phone");
-  });
-});
-
-describe("getCustomerCheckinProfile", () => {
-  it("gửi token Zalo và QR đã ký, chỉ nhận trạng thái số điện thoại đã che", async () => {
-    mocks.isFirebaseConfigured.mockReturnValue(true);
-    mocks.callFunction.mockResolvedValue({
-      exists: true,
-      hasPhone: true,
-      phoneLast4: "5678",
-      allowPhoto: true,
-    });
-
-    const signedQr = { ...candidate.qr, qrToken: "signed-qr-token" };
-    const result = await getCustomerCheckinProfile(signedQr, {
-      accessToken: "fresh-profile-token",
-      name: "Khách A",
-    });
-
-    expect(result).toEqual({
-      exists: true,
-      hasPhone: true,
-      phoneLast4: "5678",
-      allowPhoto: true,
-    });
-    expect(mocks.callFunction).toHaveBeenCalledWith("getCustomerCheckinProfileFromZalo", {
-      ...signedQr,
-      zaloAccessToken: "fresh-profile-token",
-    });
-    expect(result).not.toHaveProperty("phone");
-    expect(result).not.toHaveProperty("zaloUserId");
-  });
-});
-
-describe("restoreSavedCustomerSession", () => {
-  beforeEach(() => {
-    mocks.isFirebaseConfigured.mockReturnValue(true);
-  });
-
-  it("chỉ khôi phục dữ liệu backend sau khi identity binding khớp", async () => {
-    mocks.callFunction.mockResolvedValue(backendSession());
-
-    const result = await restoreSavedCustomerSession(candidate);
-
-    expect(result).toMatchObject({
-      status: "restored",
-      session: {
-        sessionId: "session-a",
-        identityBinding: "a".repeat(64),
-        customer: { customerId: "customer-a", name: "Khách A", points: 3 },
-      },
-    });
-    expect(mocks.callFunction).toHaveBeenCalledWith("getCustomerSessionFromZalo", {
-      salonId: "salon-a",
-      sessionId: "session-a",
-      zaloAccessToken: "fresh-zalo-token",
-    });
-  });
-
-  it("loại cache khi Zalo hiện tại không khớp identity binding", async () => {
-    mocks.callFunction.mockResolvedValue(backendSession({ identityBinding: "b".repeat(64) }));
-
-    await expect(restoreSavedCustomerSession(candidate)).resolves.toEqual({
-      status: "discarded",
-      reason: "identity_mismatch",
-    });
-  });
-
-  it.each(["completed", "cancelled"])("loại session terminal %s", async (sessionStatus) => {
-    mocks.callFunction.mockResolvedValue(backendSession({ sessionStatus }));
-
-    await expect(restoreSavedCustomerSession(candidate)).resolves.toEqual({
-      status: "discarded",
-      reason: "terminal_session",
-    });
-  });
-
-  it("loại cache khi backend xác nhận session không còn tồn tại", async () => {
-    mocks.callFunction.mockRejectedValue(new Error("Không tìm thấy dữ liệu cần xử lý."));
-
-    await expect(restoreSavedCustomerSession(candidate)).resolves.toEqual({
-      status: "discarded",
-      reason: "session_missing",
-    });
-  });
-
-  it("giữ lỗi mạng để UI cho retry mà không dùng dữ liệu cache", async () => {
-    mocks.callFunction.mockRejectedValue(new Error("Kết nối hệ thống đang chậm."));
-
-    await expect(restoreSavedCustomerSession(candidate)).rejects.toThrow(
-      "Kết nối hệ thống đang chậm.",
-    );
-  });
-});
-
-describe("restoreSavedCustomerSession ở chế độ kiểm thử", () => {
-  it("chỉ khôi phục fixture tối thiểu khi danh tính xem trước khớp", async () => {
-    const identityBinding = await createSessionIdentityBinding("preview-zalo-user");
-    const previewCandidate: SavedSessionCandidate = {
-      ...candidate,
-      customerId: "mock-customer",
-      identityBinding: identityBinding!,
-    };
-
-    const result = await restoreSavedCustomerSession(previewCandidate);
-
-    expect(result).toMatchObject({
-      status: "restored",
-      session: {
-        sessionId: "session-a",
-        identityBinding,
-        customer: {
-          customerId: "mock-customer",
-          name: "Khách xem trước",
-        },
-      },
-    });
-    expect(mocks.callFunction).not.toHaveBeenCalled();
-  });
-
-  it("loại fixture xem trước thuộc tài khoản khác", async () => {
-    await expect(
-      restoreSavedCustomerSession({
-        ...candidate,
-        customerId: "mock-customer",
-        identityBinding: "b".repeat(64),
-      }),
-    ).resolves.toEqual({ status: "discarded", reason: "identity_mismatch" });
-  });
-});
-
-describe("getHaircutHistory", () => {
-  it("giữ metadata và ảnh mà callable trả về cho đúng record", async () => {
-    mocks.isFirebaseConfigured.mockReturnValue(true);
-    mocks.callFunction.mockResolvedValue({
-      records: [
-        {
-          id: "record-a",
-          createdAtMs: new Date("2026-07-12T07:30:00.000Z").getTime(),
-          salonName: "CH Haircut Salon",
-          branchId: "branch-a",
-          branchName: "Chi nhánh Quận 1",
-          staffName: "Nam",
-          serviceName: "Cắt tạo kiểu",
-          rewardName: "",
-          note: "Fade thấp",
-          photoUrls: ["https://firebasestorage.googleapis.com/photo-a.jpg"],
-          pointsAdded: 2,
-        },
-      ],
-    });
-
-    const result = await getHaircutHistory({
-      qr: candidate.qr,
-      sessionId: candidate.sessionId,
-      zaloUserId: "zalo-a",
-      customer: {
-        customerId: candidate.customerId,
-        name: "Khách A",
-        points: 3,
-        allowPhoto: true,
-      },
-    });
-
-    expect(result[0]).toMatchObject({
-      id: "record-a",
-      salonName: "CH Haircut Salon",
-      branchId: "branch-a",
-      branchName: "Chi nhánh Quận 1",
-      staffName: "Nam",
-      serviceName: "Cắt tạo kiểu",
-      photoUrls: ["https://firebasestorage.googleapis.com/photo-a.jpg"],
-    });
-    expect(mocks.callFunction).toHaveBeenCalledWith("getCustomerHistoryFromZalo", {
-      salonId: "salon-a",
-      zaloAccessToken: "fresh-zalo-token",
-      limit: 20,
-    });
-  });
-
-  it("web customer không yêu cầu Zalo token", async () => {
-    const webSession = {
-      identityProvider: "firebase" as const,
-      firebaseUid: "uid-web",
-      qr: candidate.qr,
-      sessionId: candidate.sessionId,
-      zaloUserId: "",
-      customer: {
-        customerId: "customer-web",
-        name: "Khách Web",
-        points: 3,
-        allowPhoto: true,
-      },
-    };
-    await getHaircutHistory(webSession);
-    expect(mocks.getWebCustomerHistory).toHaveBeenCalledWith(webSession);
-    expect(mocks.getZaloAccessToken).not.toHaveBeenCalled();
-  });
-});
-
-describe("spinWheel", () => {
-  it("dùng fixture xác định trong preview khi không có backend", async () => {
-    mocks.isFirebaseConfigured.mockReturnValue(false);
-
-    await expect(
-      spinWheel(
-        {
-          qr: candidate.qr,
-          sessionId: candidate.sessionId,
-          zaloUserId: "zalo-a",
-          customer: {
-            customerId: candidate.customerId,
-            name: "Khách A",
-            points: 10,
-            allowPhoto: false,
-          },
-        },
-        3,
-      ),
-    ).resolves.toMatchObject({ selectedIndex: 1 });
-    expect(mocks.callFunction).not.toHaveBeenCalled();
-  });
-
-  it("chỉ dùng kết quả callable backend khi Firebase được cấu hình", async () => {
-    mocks.isFirebaseConfigured.mockReturnValue(true);
-    mocks.callFunction.mockResolvedValue({
-      rewardId: "reward-a",
-      rewardName: "Quà backend",
-      rewardCode: "BACKEND-CODE",
-      pointsAfter: 5,
-      isWinning: true,
-      selectedIndex: 3,
-      selectedSlotId: "slot-4",
-      configVersion: 3,
-    });
-
-    const result = await spinWheel(
-      {
-        qr: candidate.qr,
-        sessionId: candidate.sessionId,
-        zaloUserId: "zalo-a",
-        customer: {
-          customerId: candidate.customerId,
-          name: "Khách A",
-          points: 10,
-          allowPhoto: false,
-        },
-      },
-      3,
-    );
-
-    expect(result).toMatchObject({ rewardName: "Quà backend", selectedIndex: 3 });
-    expect(mocks.callFunction).toHaveBeenCalledWith(
-      "spinLuckyWheelFromZalo",
+    await vi.advanceTimersByTimeAsync(30000);
+    expect(onChange).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        salonId: "salon-a",
-        zaloAccessToken: "fresh-zalo-token",
-        idempotencyKey: expect.any(String),
-        configVersion: 3,
+        sessionStatus: "completed",
+        customer: expect.objectContaining({ points: 8 }),
       }),
     );
+    expect(vi.getTimerCount()).toBe(0);
+    stop();
+    window.dispatchEvent(new Event("focus"));
+    await vi.advanceTimersByTimeAsync(90000);
+    expect(web.getWebCustomerSessionState).toHaveBeenCalledTimes(2);
   });
-
-  it("web customer spin bằng callable auth-derived, không dùng Zalo", async () => {
-    mocks.isFirebaseConfigured.mockReturnValue(true);
-    mocks.spinWebCustomerWheel.mockResolvedValue({
-      rewardId: "reward-web",
-      rewardName: "Quà Web",
-      rewardCode: "WEB-CODE",
-      pointsAfter: 5,
-      isWinning: true,
-      selectedIndex: 0,
-      selectedSlotId: "slot-1",
-      configVersion: 1,
-    });
-    const webSession = {
-      identityProvider: "firebase" as const,
-      firebaseUid: "uid-web",
-      qr: candidate.qr,
-      sessionId: candidate.sessionId,
-      zaloUserId: "",
-      customer: {
-        customerId: "customer-web",
-        name: "Khách Web",
-        points: 10,
-        allowPhoto: true,
-      },
-    };
-
-    await spinWheel(webSession, 1);
-
-    expect(mocks.spinWebCustomerWheel).toHaveBeenCalledWith(webSession, 1, expect.any(String));
-    expect(mocks.getZaloAccessToken).not.toHaveBeenCalled();
+  it("backs off on error and pauses calls while offline or hidden", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    const onError = vi.fn();
+    web.getWebCustomerSessionState.mockRejectedValueOnce(new Error("unavailable"));
+    const stop = listenSessionLiveUpdates(session, vi.fn(), onError);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(onError).toHaveBeenCalledWith("unavailable");
+    await vi.advanceTimersByTimeAsync(39999);
+    expect(web.getWebCustomerSessionState).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(web.getWebCustomerSessionState).toHaveBeenCalledTimes(2);
+    const online = vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+    await vi.advanceTimersByTimeAsync(30000);
+    expect(web.getWebCustomerSessionState).toHaveBeenCalledTimes(2);
+    online.mockReturnValue(true);
+    const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    window.dispatchEvent(new Event("focus"));
+    await vi.advanceTimersByTimeAsync(30000);
+    expect(web.getWebCustomerSessionState).toHaveBeenCalledTimes(2);
+    visibility.mockReturnValue("visible");
+    document.dispatchEvent(new Event("visibilitychange"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(web.getWebCustomerSessionState).toHaveBeenCalledTimes(3);
+    stop();
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

@@ -17,7 +17,7 @@ for (const [name, minimum] of [
     const copies = Object.entries(lock.packages).filter(
       ([path, entry]) => path.endsWith(`node_modules/${name}`) && entry.dev !== true,
     );
-    assert.ok(copies.length > 0, `Missing production ${name}`);
+    // A retired SDK may remove the entire production chain. Any remaining copy must stay patched.
     for (const [path, entry] of copies) {
       assert.match(entry.version, /^\d+\.\d+\.\d+$/);
       const parts = entry.version.split(".").map(Number);

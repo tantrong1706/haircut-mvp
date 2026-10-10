@@ -1,355 +1,171 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
+import type { AppSession } from "./services/types";
 
 const mocks = vi.hoisted(() => ({
-  isZaloMiniAppRuntime: vi.fn(),
-  loadSavedSessionCandidate: vi.fn(),
-  clearSavedSession: vi.fn(),
-  saveSession: vi.fn(),
-  restoreSavedCustomerSession: vi.fn(),
-  listenSessionLiveUpdates: vi.fn(() => () => undefined),
-  customerAuthListener: null as null | ((user: { uid: string } | null) => void),
+  stopSync: vi.fn(),
+  stopAuth: vi.fn(),
+  listenSessionLiveUpdates: vi.fn(),
+  authListener: null as null | ((user: { uid: string } | null) => void),
 }));
-
-vi.mock("./services/runtime", () => ({
-  isZaloMiniAppRuntime: mocks.isZaloMiniAppRuntime,
-}));
-
 vi.mock("./services/customerWebAuth", () => ({
-  subscribeCustomerWebAuth: (onChange: (user: { uid: string } | null) => void) => {
-    mocks.customerAuthListener = onChange;
-    return () => undefined;
+  subscribeCustomerWebAuth: (listener: (user: { uid: string } | null) => void) => {
+    mocks.authListener = listener;
+    return mocks.stopAuth;
   },
 }));
-
-vi.mock("./services/monitoring", () => ({
-  trackEvent: vi.fn(),
-}));
-
-vi.mock("./services/sessionStore", () => ({
-  clearSavedSession: mocks.clearSavedSession,
-  loadSavedSessionCandidate: mocks.loadSavedSessionCandidate,
-  saveSession: mocks.saveSession,
-}));
-
-vi.mock("./services/api", () => ({
-  listenSessionLiveUpdates: mocks.listenSessionLiveUpdates,
-  restoreSavedCustomerSession: mocks.restoreSavedCustomerSession,
-}));
-
-vi.mock("./components/InstallAppPrompt", () => ({
-  InstallAppPrompt: () => null,
-}));
-
-vi.mock("./pages/ScanEntryPage", () => ({
-  ScanEntryPage: ({
-    onReady,
-    onOpenLegalPage,
-  }: {
-    onReady?: (session: unknown) => void;
-    onOpenLegalPage?: (page: "privacy" | "terms") => void;
-  }) => (
-    <div>
-      <span>customer-entry</span>
-      <button
-        type="button"
-        onClick={() =>
-          onReady?.({
-            qr: { qrType: "branch", salonId: "salon-a", branchId: "branch-a", mirrorId: "" },
-            sessionId: "session-b",
-            zaloUserId: "zalo-b",
-            sessionStatus: "waiting",
-            customer: {
-              customerId: "customer-b",
-              name: "Khach B",
-              points: 8,
-              allowPhoto: false,
-            },
-          })
-        }
-      >
-        Tao luot cho B
-      </button>
-      <button type="button" onClick={() => onOpenLegalPage?.("privacy")}>
-        Chính sách quyền riêng tư
-      </button>
-      <button type="button" onClick={() => onOpenLegalPage?.("terms")}>
-        Điều khoản sử dụng
-      </button>
-    </div>
-  ),
-}));
-
+vi.mock("./services/monitoring", () => ({ trackEvent: vi.fn() }));
+vi.mock("./services/api", () => ({ listenSessionLiveUpdates: mocks.listenSessionLiveUpdates }));
+vi.mock("./components/InstallAppPrompt", () => ({ InstallAppPrompt: () => null }));
 vi.mock("./pages/WebCustomerEntryPage", () => ({
-  WebCustomerEntryPage: ({ onReady }: { onReady?: (session: unknown) => void }) => (
-    <div>
-      <span>web-customer-entry</span>
-      <button
-        type="button"
-        onClick={() =>
-          onReady?.({
-            identityProvider: "firebase",
-            firebaseUid: "uid-web",
-            qr: {
-              qrType: "branch",
-              salonId: "salon-web",
-              branchId: "branch-web",
-              mirrorId: "",
-            },
-            sessionId: "session-web",
-            zaloUserId: "",
-            sessionStatus: "waiting",
-            customer: {
-              customerId: "customer-web",
-              name: "Khach Web",
-              phoneLast4: "4567",
-              points: 4,
-              allowPhoto: true,
-            },
-          })
-        }
-      >
-        Web check-in
-      </button>
-    </div>
-  ),
-}));
-
-vi.mock("./pages/CustomerAccountPage", () => ({
-  CustomerAccountPage: ({ onLoggedOut }: { onLoggedOut: () => void }) => (
-    <button type="button" onClick={onLoggedOut}>
-      Web logout
+  WebCustomerEntryPage: ({ onReady }: { onReady: (session: AppSession) => void }) => (
+    <button
+      onClick={() =>
+        onReady({
+          identityProvider: "firebase",
+          firebaseUid: "uid-web",
+          zaloUserId: "",
+          qr: { qrType: "branch", salonId: "salon-web", branchId: "branch-web", mirrorId: "" },
+          sessionId: "session-web",
+          sessionStatus: "pending_approval",
+          customer: {
+            customerId: "customer-web",
+            name: "Khách Web",
+            phoneLast4: "4567",
+            points: 4,
+            allowPhoto: true,
+          },
+        })
+      }
+    >
+      Web check-in
     </button>
   ),
 }));
-
 vi.mock("./pages/HomePage", () => ({
-  HomePage: ({ session }: { session: { customer: { name: string; points: number } } }) => (
-    <div>{`home:${session.customer.name}:points:${session.customer.points}`}</div>
+  HomePage: ({
+    session,
+    onResetSession,
+    onRetrySync,
+  }: {
+    session: AppSession;
+    onResetSession: () => void;
+    onRetrySync: () => void;
+  }) => (
+    <div>
+      <h1>{session.customer.name}</h1>
+      <span>{session.customer.points} điểm</span>
+      <button onClick={onResetSession}>Quét lại QR</button>
+      <button onClick={onRetrySync}>Đồng bộ lại</button>
+    </div>
   ),
 }));
-
-vi.mock("./pages/AuthGate", () => ({
-  AuthGate: () => <div>management-auth</div>,
+vi.mock("./pages/CustomerAccountPage", () => ({
+  CustomerAccountPage: ({ onLoggedOut }: { onLoggedOut: () => void }) => (
+    <button onClick={onLoggedOut}>Web logout</button>
+  ),
 }));
+vi.mock("./pages/AuthGate", () => ({ AuthGate: () => <div>management-auth</div> }));
 vi.mock("./pages/AppCheckDiagnosticPage", () => ({
   AppCheckDiagnosticPage: () => <div>app-check-diagnostic</div>,
 }));
+vi.mock("./pages/HistoryPage", () => ({ HistoryPage: () => <h1>Lịch sử cắt tóc</h1> }));
+vi.mock("./pages/RewardsPage", () => ({ RewardsPage: () => <h1>Quà của tôi</h1> }));
+vi.mock("./pages/PrivacyPage", () => ({ PrivacyPage: () => <h1>Chính sách quyền riêng tư</h1> }));
+vi.mock("./pages/TermsPage", () => ({ TermsPage: () => <h1>Điều khoản sử dụng</h1> }));
 
-describe("App trong Zalo Mini App", () => {
-  it("trang kiểm tra độc lập không khởi động phiên khách hoặc đồng bộ điểm", async () => {
-    mocks.isZaloMiniAppRuntime.mockReturnValue(false);
-    mocks.customerAuthListener = null;
+describe("Web-only routing and Firebase session isolation", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.authListener = null;
+    mocks.listenSessionLiveUpdates.mockReturnValue(mocks.stopSync);
+    window.history.replaceState({}, "", "/checkin");
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("opens Web even in an in-app browser and ignores cached legacy identity", async () => {
+    vi.stubGlobal("ZJSBridge", {});
+    localStorage.setItem(
+      "haircut_customer_session_v2",
+      JSON.stringify({ customerId: "legacy-customer", name: "Legacy customer" }),
+    );
+    render(<App />);
+    expect(await screen.findByRole("button", { name: "Web check-in" })).toBeVisible();
+    expect(screen.queryByText("Legacy customer")).toBeNull();
+    expect(mocks.listenSessionLiveUpdates).not.toHaveBeenCalled();
+  });
+
+  it.each(["/staff", "/owner", "/delete-account"])(
+    "keeps %s behind management authentication in any browser",
+    async (path) => {
+      vi.stubGlobal("ZJSBridge", {});
+      window.history.replaceState({}, "", path);
+      render(<App />);
+      expect(await screen.findByText("management-auth")).toBeVisible();
+      expect(mocks.authListener).toBeNull();
+    },
+  );
+
+  it.each([
+    ["/privacy", "Chính sách quyền riêng tư"],
+    ["/terms", "Điều khoản sử dụng"],
+  ])("opens public %s independently", async (path, heading) => {
+    window.history.replaceState({}, "", path);
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: heading })).toBeVisible();
+    expect(mocks.authListener).toBeNull();
+  });
+
+  it("diagnostic does not start customer authentication or points polling", async () => {
     window.history.replaceState({}, "", "/app-check");
     render(<App />);
     expect(await screen.findByText("app-check-diagnostic")).toBeVisible();
-    expect(mocks.customerAuthListener).toBeNull();
+    expect(mocks.authListener).toBeNull();
     expect(mocks.listenSessionLiveUpdates).not.toHaveBeenCalled();
   });
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mocks.loadSavedSessionCandidate.mockReturnValue(null);
-    mocks.restoreSavedCustomerSession.mockReset();
-    mocks.listenSessionLiveUpdates.mockReturnValue(() => undefined);
-    window.history.replaceState({}, "", "/owner");
-  });
 
-  it("khong render du lieu cache cu truoc khi backend xac minh danh tinh", async () => {
-    let resolveRestore!: (value: unknown) => void;
-    mocks.isZaloMiniAppRuntime.mockReturnValue(true);
-    mocks.loadSavedSessionCandidate.mockReturnValue({
-      schemaVersion: 2,
-      salonId: "salon-a",
-      sessionId: "session-a",
-      customerId: "customer-a",
-      identityBinding: "a".repeat(64),
-      savedAt: Date.now(),
-      expiresAt: Date.now() + 60_000,
-      qr: { qrType: "branch", salonId: "salon-a", branchId: "branch-a", mirrorId: "" },
-    });
-    mocks.restoreSavedCustomerSession.mockReturnValue(
-      new Promise((resolve) => {
-        resolveRestore = resolve;
-      }),
-    );
-    window.history.replaceState({}, "", "/");
-
-    render(<App />);
-
-    expect(await screen.findByText("Đang xác minh phiên khách...")).toBeVisible();
-    expect(screen.queryByText(/Khach A|points:3/)).not.toBeInTheDocument();
-
-    resolveRestore({
-      status: "restored",
-      session: {
-        qr: { qrType: "branch", salonId: "salon-a", branchId: "branch-a", mirrorId: "" },
-        sessionId: "session-a",
-        zaloUserId: "",
-        identityBinding: "a".repeat(64),
-        sessionStatus: "waiting",
-        customer: { customerId: "customer-a", name: "Khach A", points: 3, allowPhoto: false },
-      },
-    });
-
-    expect(await screen.findByText("home:Khach A:points:3")).toBeVisible();
-  });
-
-  it("xoa cache A khi Zalo hien tai la B va khong de lo du lieu A", async () => {
+  it("shows four Web tabs and clears customer data on logout", async () => {
     const user = userEvent.setup();
-    mocks.isZaloMiniAppRuntime.mockReturnValue(true);
-    mocks.loadSavedSessionCandidate.mockReturnValue({
-      schemaVersion: 2,
-      salonId: "salon-a",
-      sessionId: "session-a",
-      customerId: "customer-a",
-      identityBinding: "a".repeat(64),
-      savedAt: Date.now(),
-      expiresAt: Date.now() + 60_000,
-      qr: { qrType: "branch", salonId: "salon-a", branchId: "branch-a", mirrorId: "" },
-    });
-    mocks.restoreSavedCustomerSession.mockResolvedValue({
-      status: "discarded",
-      reason: "identity_mismatch",
-    });
-    window.history.replaceState({}, "", "/");
-
-    render(<App />);
-
-    expect(await screen.findByText("customer-entry")).toBeVisible();
-    expect(mocks.clearSavedSession).toHaveBeenCalledTimes(1);
-    expect(screen.queryByText(/Khach A|points:3/)).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Tao luot cho B" }));
-    expect(await screen.findByText("home:Khach B:points:8")).toBeVisible();
-    const navigation = screen.getByRole("navigation", { name: "Điều hướng" });
-    expect(within(navigation).getAllByRole("button")).toHaveLength(3);
-    expect(within(navigation).getByRole("button", { name: "Quà và quay" })).toBeVisible();
-    expect(within(navigation).queryByRole("button", { name: "Vòng quay" })).toBeNull();
-  });
-
-  it("giu candidate nhung khong hien du lieu cu khi backend timeout", async () => {
-    mocks.isZaloMiniAppRuntime.mockReturnValue(true);
-    mocks.loadSavedSessionCandidate.mockReturnValue({
-      schemaVersion: 2,
-      salonId: "salon-a",
-      sessionId: "session-a",
-      customerId: "customer-a",
-      identityBinding: "a".repeat(64),
-      savedAt: Date.now(),
-      expiresAt: Date.now() + 60_000,
-      qr: { qrType: "branch", salonId: "salon-a", branchId: "branch-a", mirrorId: "" },
-    });
-    mocks.restoreSavedCustomerSession.mockRejectedValue(new Error("Ket noi dang cham"));
-    window.history.replaceState({}, "", "/");
-
-    render(<App />);
-
-    expect(await screen.findByText("Chưa xác minh được phiên khách")).toBeVisible();
-    expect(screen.queryByText(/Khach A|points:3/)).not.toBeInTheDocument();
-    expect(mocks.clearSavedSession).not.toHaveBeenCalled();
-  });
-
-  it("không mở route quản lý trong runtime khách hàng Zalo", async () => {
-    mocks.isZaloMiniAppRuntime.mockReturnValue(true);
-
-    render(<App />);
-
-    expect(await screen.findByText("customer-entry")).toBeInTheDocument();
-    expect(screen.queryByText("management-auth")).not.toBeInTheDocument();
-  });
-
-  it("giữ route quản lý trên trình duyệt web thông thường", async () => {
-    mocks.isZaloMiniAppRuntime.mockReturnValue(false);
-
-    render(<App />);
-
-    expect(await screen.findByText("management-auth")).toBeInTheDocument();
-    expect(screen.queryByText("customer-entry")).not.toBeInTheDocument();
-  });
-
-  it("dùng customer web entry và tab tài khoản ngoài Zalo", async () => {
-    const user = userEvent.setup();
-    mocks.isZaloMiniAppRuntime.mockReturnValue(false);
-    window.history.replaceState({}, "", "/checkin?salonId=salon-web");
-
-    render(<App />);
-
-    expect(await screen.findByText("web-customer-entry")).toBeVisible();
-    expect(mocks.loadSavedSessionCandidate).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("button", { name: "Web check-in" }));
-    expect(await screen.findByText("home:Khach Web:points:4")).toBeVisible();
-    const navigation = screen.getByRole("navigation", { name: "Điều hướng" });
-    expect(within(navigation).getAllByRole("button")).toHaveLength(4);
-    await user.click(within(navigation).getByRole("button", { name: "Tài khoản" }));
-    await user.click(await screen.findByRole("button", { name: "Web logout" }));
-    expect(await screen.findByText("web-customer-entry")).toBeVisible();
-    expect(mocks.saveSession).not.toHaveBeenCalled();
-  });
-
-  it("logout hoặc đổi tài khoản ở tab khác ẩn dữ liệu khách đang hiển thị", async () => {
-    const user = userEvent.setup();
-    mocks.isZaloMiniAppRuntime.mockReturnValue(false);
-    window.history.replaceState({}, "", "/");
     render(<App />);
     await user.click(await screen.findByRole("button", { name: "Web check-in" }));
-    expect(await screen.findByText("home:Khach Web:points:4")).toBeVisible();
-    mocks.customerAuthListener?.(null);
-    await waitFor(() =>
-      expect(screen.queryByText("home:Khach Web:points:4")).not.toBeInTheDocument(),
-    );
+    expect(await screen.findByRole("heading", { name: "Khách Web" })).toBeVisible();
+    const nav = screen.getByRole("navigation", { name: "Điều hướng" });
+    expect(within(nav).getAllByRole("button")).toHaveLength(4);
+    await user.click(within(nav).getByRole("button", { name: "Lịch sử" }));
+    expect(await screen.findByRole("heading", { name: "Lịch sử cắt tóc" })).toBeVisible();
+    await user.click(within(nav).getByRole("button", { name: "Quà và quay" }));
+    expect(await screen.findByRole("heading", { name: "Quà của tôi" })).toBeVisible();
+    await user.click(within(nav).getByRole("button", { name: "Tài khoản" }));
+    await user.click(await screen.findByRole("button", { name: "Web logout" }));
+    expect(await screen.findByRole("button", { name: "Web check-in" })).toBeVisible();
+    expect(screen.queryByRole("navigation")).toBeNull();
+    expect(mocks.stopSync).toHaveBeenCalled();
   });
 
-  it("mở Chính sách quyền riêng tư bên trong Mini App và quay lại màn yêu cầu QR", async () => {
-    const user = userEvent.setup();
-    const initialDocument = window.document;
-    window.history.replaceState({}, "", "/");
-    mocks.isZaloMiniAppRuntime.mockReturnValue(true);
+  it.each([null, { uid: "another-uid" }])(
+    "clears visible customer data when Firebase user changes to %j",
+    async (user) => {
+      render(<App />);
+      await userEvent.click(await screen.findByRole("button", { name: "Web check-in" }));
+      await screen.findByRole("heading", { name: "Khách Web" });
+      await waitFor(() => expect(mocks.authListener).not.toBeNull());
+      act(() => mocks.authListener?.(user));
+      expect(await screen.findByRole("button", { name: "Web check-in" })).toBeVisible();
+      expect(screen.queryByText("4 điểm")).toBeNull();
+    },
+  );
 
-    render(<App />);
-    await user.click(screen.getByRole("button", { name: "Chính sách quyền riêng tư" }));
-
-    expect(await screen.findByRole("heading", { name: "Chính sách quyền riêng tư" })).toBeVisible();
-    expect(screen.getByText("1. Đơn vị quản lý dữ liệu")).toBeVisible();
-    expect(window.location.pathname).toBe("/");
-    expect(window.location.hash).toBe("#privacy");
-    expect(window.document).toBe(initialDocument);
-    expect(screen.queryByText("management-auth")).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Quay lại" }));
-    await waitFor(() => expect(screen.getByText("customer-entry")).toBeVisible());
-    expect(window.location.pathname).toBe("/");
-    expect(window.location.hash).toBe("");
-  });
-
-  it("mở Điều khoản sử dụng bên trong Mini App mà không reload document", async () => {
-    const user = userEvent.setup();
-    const initialDocument = window.document;
-    window.history.replaceState({}, "", "/");
-    mocks.isZaloMiniAppRuntime.mockReturnValue(true);
-
-    render(<App />);
-    await user.click(screen.getByRole("button", { name: "Điều khoản sử dụng" }));
-
-    expect(await screen.findByRole("heading", { name: "Điều khoản sử dụng" })).toBeVisible();
-    expect(screen.getByText("1. Phạm vi dịch vụ")).toBeVisible();
-    expect(window.location.pathname).toBe("/");
-    expect(window.location.hash).toBe("#terms");
-    expect(window.document).toBe(initialDocument);
-
-    await user.click(screen.getByRole("button", { name: "Quay lại" }));
-    await waitFor(() => expect(screen.getByText("customer-entry")).toBeVisible());
-  });
-
-  it("mở trực tiếp hash pháp lý khi chưa quét QR hoặc đăng nhập", async () => {
-    window.history.replaceState({}, "", "/#privacy");
-    mocks.isZaloMiniAppRuntime.mockReturnValue(true);
-
-    render(<App />);
-
-    expect(await screen.findByRole("heading", { name: "Chính sách quyền riêng tư" })).toBeVisible();
-    expect(screen.queryByText("customer-entry")).not.toBeInTheDocument();
-    expect(screen.queryByText("management-auth")).not.toBeInTheDocument();
+  it("keeps the same Firebase user and disposes listeners when unmounted", async () => {
+    const { unmount } = render(<App />);
+    await userEvent.click(await screen.findByRole("button", { name: "Web check-in" }));
+    await screen.findByRole("heading", { name: "Khách Web" });
+    await waitFor(() => expect(mocks.authListener).not.toBeNull());
+    act(() => mocks.authListener?.({ uid: "uid-web" }));
+    expect(screen.getByText("4 điểm")).toBeVisible();
+    unmount();
+    expect(mocks.stopSync).toHaveBeenCalled();
+    expect(mocks.stopAuth).toHaveBeenCalled();
   });
 });

@@ -150,9 +150,7 @@ Merge-ProcessEnvironment $webEnv @(
   "VITE_FIREBASE_STORAGE_BUCKET",
   "VITE_FIREBASE_MESSAGING_SENDER_ID",
   "VITE_FIREBASE_APP_ID",
-  "VITE_ZALO_MINI_APP_ID",
   "VITE_APP_ENV",
-  "VITE_ZALO_PREVIEW",
   "VITE_FUNCTION_WRITE_MODE",
   "VITE_FIREBASE_APP_CHECK_SITE_KEY",
   "VITE_MONITORING_DISABLED",
@@ -161,7 +159,7 @@ Merge-ProcessEnvironment $webEnv @(
   "VITE_SUPPORT_PHONE"
 )
 if ($webEnv.Count -eq 0) {
-  Add-Result "Zalo web production env" "FAIL" "Thiếu biến CI hoặc customer-web\.env.production.local"
+  Add-Result "Customer Web production env" "FAIL" "Thiếu biến CI hoặc customer-web\.env.production.local"
 } else {
   $requiredWebEnv = @(
     "VITE_FIREBASE_API_KEY",
@@ -169,8 +167,7 @@ if ($webEnv.Count -eq 0) {
     "VITE_FIREBASE_PROJECT_ID",
     "VITE_FIREBASE_STORAGE_BUCKET",
     "VITE_FIREBASE_MESSAGING_SENDER_ID",
-    "VITE_FIREBASE_APP_ID",
-    "VITE_ZALO_MINI_APP_ID"
+    "VITE_FIREBASE_APP_ID"
   )
   $missingWebEnv = @(
     $requiredWebEnv | Where-Object { Test-PlaceholderValue $webEnv[$_] }
@@ -181,11 +178,6 @@ if ($webEnv.Count -eq 0) {
     Add-Result "Firebase web production config" "OK" "Đã cấu hình đủ biến bắt buộc"
   }
 
-  if ($webEnv["VITE_ZALO_MINI_APP_ID"] -eq "2038116772828167300") {
-    Add-Result "Zalo Mini App ID production" "OK" "Đúng ứng dụng CH Haircut Salon"
-  } else {
-    Add-Result "Zalo Mini App ID production" "FAIL" "Phải là 2038116772828167300"
-  }
 
   if (
     $webEnv["VITE_FIREBASE_PROJECT_ID"] -eq "haircut-c7d12" -and
@@ -196,13 +188,10 @@ if ($webEnv.Count -eq 0) {
     Add-Result "Firebase project mapping" "FAIL" "Frontend và firebase/.firebaserc phải cùng trỏ haircut-c7d12"
   }
 
-  if (
-    $webEnv["VITE_APP_ENV"] -eq "production" -and
-    $webEnv["VITE_ZALO_PREVIEW"] -ne "true"
-  ) {
-    Add-Result "Zalo production mode" "OK" "Production env, preview identity đã tắt"
+  if ($webEnv["VITE_APP_ENV"] -eq "production") {
+    Add-Result "Web production mode" "OK" "Production env; no test identity adapter"
   } else {
-    Add-Result "Zalo production mode" "FAIL" "Cần VITE_APP_ENV=production và không bật VITE_ZALO_PREVIEW"
+    Add-Result "Web production mode" "FAIL" "Requires VITE_APP_ENV=production"
   }
 
   $mode = $webEnv["VITE_FUNCTION_WRITE_MODE"]
@@ -250,60 +239,20 @@ if (-not $liveRulesText) {
   Add-Result "Firestore rules live" "OK" "Đã khóa public reads và business writes từ client"
 }
 
-$appConfigPath = Join-Path $root "customer-web\app-config.json"
-$manifestPath = Join-Path $root "customer-web\www\.vite\manifest.json"
-if (-not (Test-Path -LiteralPath $appConfigPath)) {
-  Add-Result "ZMP app-config" "FAIL" "Thiếu app-config.json"
-} elseif (-not (Test-Path -LiteralPath $manifestPath)) {
-  if ($StrictRelease) {
-    Add-Result "ZMP app-config" "FAIL" "Strict release yêu cầu www manifest từ build:zmp"
-  } else {
-    Add-Result "ZMP app-config" "WARN" "Chưa có www manifest; chạy npm run build:zmp để kiểm tra asset"
-  }
+$webBuildPath = Join-Path $root "customer-web\www\index.html"
+if (Test-Path -LiteralPath $webBuildPath) {
+  Add-Result "Web build entry" "OK" "www/index.html exists; CI verifies build and browser flows"
+} elseif ($StrictRelease) {
+  Add-Result "Web build entry" "FAIL" "Run npm run build:web in customer-web"
 } else {
-  try {
-    $appConfig = Get-Content -Raw -LiteralPath $appConfigPath | ConvertFrom-Json
-    $assets = @($appConfig.listCSS) + @($appConfig.listSyncJS) + @($appConfig.listAsyncJS)
-    $missingAssets = @($assets | Where-Object {
-      $relative = ([string]$_) -replace '^\./', ''
-      -not (Test-Path -LiteralPath (Join-Path $root "customer-web\www\$relative"))
-    })
-    if ($missingAssets.Count -gt 0) {
-      Add-Result "ZMP app-config" "FAIL" "Có asset không tồn tại: $($missingAssets -join ', ')"
-    } elseif (
-      $StrictRelease -and
-      (
-        [string]$appConfig.app.title -ne "CH Haircut Salon" -or
-        [string]$appConfig.app.headerTitle -ne "CH Haircut Salon"
-      )
-    ) {
-      Add-Result "ZMP app-config" "FAIL" "title và headerTitle phải là CH Haircut Salon"
-    } else {
-      Add-Result "ZMP app-config" "OK" "Mọi JS/CSS trong app-config đều tồn tại"
-    }
-  } catch {
-    Add-Result "ZMP app-config" "FAIL" $_.Exception.Message
-  }
-}
-
-if (Test-CommandExists "zmp") {
-  Add-Result "ZMP CLI" "OK" "Đã cài đặt"
-} else {
-  Add-Result "ZMP CLI" "WARN" "Chưa cài ZMP CLI trên máy này"
+  Add-Result "Web build entry" "WARN" "Web production build has not been created"
 }
 
 $functionsEnv = Read-EnvFile (Join-Path $root "firebase\functions\.env")
 Merge-ProcessEnvironment $functionsEnv @(
-  "ZALO_MINI_APP_ID",
   "ENFORCE_APP_CHECK",
-  "REQUIRE_ZALO_APP_CHECK",
   "ADMIN_WRITE_OPERATIONS_ENABLED"
 )
-if ($functionsEnv["ZALO_MINI_APP_ID"]) {
-  Add-Result "Functions Zalo App ID" "OK" "Đã cấu hình"
-} else {
-  Add-Result "Functions Zalo App ID" "FAIL" "Thiếu ZALO_MINI_APP_ID trong firebase/functions/.env"
-}
 
 if ($functionsEnv["ENFORCE_APP_CHECK"] -eq "true") {
   Add-Result "Functions App Check chung" "OK" "Callable options đang enforcement"
@@ -315,25 +264,6 @@ if ($functionsEnv["ENFORCE_APP_CHECK"] -eq "true") {
   }
 }
 
-if ($functionsEnv["REQUIRE_ZALO_APP_CHECK"] -eq "true") {
-  if ($webEnv["VITE_FIREBASE_APP_CHECK_SITE_KEY"]) {
-    Add-Result "Zalo App Check" "OK" "Public Zalo endpoint enforcement và frontend provider đã cấu hình"
-  } else {
-    Add-Result "Zalo App Check" "FAIL" "REQUIRE_ZALO_APP_CHECK=true nhưng frontend thiếu site key"
-  }
-} elseif ($webEnv["VITE_FIREBASE_APP_CHECK_SITE_KEY"]) {
-  if ($StrictRelease) {
-    Add-Result "Zalo App Check" "FAIL" "Strict release yêu cầu REQUIRE_ZALO_APP_CHECK=true"
-  } else {
-    Add-Result "Zalo App Check" "WARN" "Frontend provider đã cấu hình; public endpoint vẫn ở monitor mode"
-  }
-} else {
-  if ($StrictRelease) {
-    Add-Result "Zalo App Check" "FAIL" "Thiếu site key và bằng chứng enforcement production"
-  } else {
-    Add-Result "Zalo App Check" "WARN" "Source hỗ trợ; provider và enforcement production chưa được xác minh"
-  }
-}
 
 $managerFirebaseSource = Get-Content -Raw -LiteralPath (Join-Path $root "apps\manager-mobile\src\services\firebase.ts")
 $managerNativeSource = Get-Content -Raw -LiteralPath (Join-Path $root "apps\manager-mobile\src\nativeRuntime.ts")
@@ -394,7 +324,7 @@ if ($RunBuild) {
     if ($LASTEXITCODE -ne 0) {
       throw "Quick repository checks trả mã $LASTEXITCODE"
     }
-    Add-Result "Kiểm tra repository nhanh" "OK" "Functions, Zalo, Admin, Manager và repository gates đạt"
+    Add-Result "Kiểm tra repository nhanh" "OK" "Functions, Customer Web, Admin, Manager và repository gates đạt"
   } catch {
     Add-Result "Kiểm tra repository nhanh" "FAIL" $_.Exception.Message
   }
@@ -484,7 +414,6 @@ Write-Host "- Firebase Blaze đã bật nếu deploy Functions/Storage."
 Write-Host "- Email owner, email staff và UID tương ứng trong Firebase Auth."
 Write-Host "- Tên salon, số gương/ghế, tên từng gương/ghế."
 Write-Host "- Email hoặc số điện thoại hỗ trợ để đưa vào Privacy Policy."
-Write-Host "- Zalo Mini App ID production và quyền truy cập Zalo Developer."
 
 $failCount = @($results | Where-Object { $_.Status -eq "FAIL" }).Count
 if ($failCount -gt 0) {

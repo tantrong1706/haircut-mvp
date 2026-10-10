@@ -22,7 +22,7 @@ export function PrivacyPage({ onBack, onNavigate }: Props = {}) {
         <BrandLogo />
         <p className="eyebrow">CH Haircut Salon</p>
         <h1>Chính sách quyền riêng tư</h1>
-        <p className="muted">Cập nhật: 18/07/2026</p>
+        <p className="muted">Cập nhật: 10/10/2026</p>
       </header>
 
       <div className="panel privacy-content">
@@ -35,12 +35,13 @@ export function PrivacyPage({ onBack, onNavigate }: Props = {}) {
 
         <h2>2. Dữ liệu được thu thập</h2>
         <p>
-          CH Haircut Salon xử lý mã định danh và tên hiển thị Zalo sau khi khách cho phép. Ảnh đại
-          diện Zalo chỉ được hiển thị tạm trên màn hình xác nhận và không được lưu vào hồ sơ phục
-          vụ. Số điện thoại chỉ được lưu khi khách tự nhập; ứng dụng không yêu cầu quyền lấy số điện
-          thoại Zalo. Hệ thống còn xử lý salon, chi nhánh và thời điểm check-in; điểm, lịch sử cắt
-          tóc, ghi chú dịch vụ, lượt quay và mã quà. Với chủ salon và nhân viên, hệ thống lưu email
-          đăng nhập, tên, vai trò và chi nhánh được phân công.
+          CH Haircut Salon dùng số điện thoại do khách nhập và xác thực bằng OTP qua Firebase
+          Authentication để đăng nhập. Mã tài khoản Firebase giúp khách xem lại dữ liệu của mình;
+          phiên đăng nhập được lưu trên trình duyệt cho đến khi đăng xuất hoặc phiên không còn hợp
+          lệ. Ứng dụng Web không yêu cầu tài khoản hoặc quyền truy cập Zalo. Hệ thống còn xử lý
+          salon, chi nhánh và thời điểm check-in; điểm, lịch sử cắt tóc, ghi chú dịch vụ, lượt quay
+          và mã quà. Với chủ salon và nhân viên, hệ thống lưu email đăng nhập, tên, vai trò và chi
+          nhánh được phân công.
         </p>
 
         <h2>3. Ảnh kiểu tóc và sự đồng ý</h2>
@@ -67,10 +68,10 @@ export function PrivacyPage({ onBack, onNavigate }: Props = {}) {
 
         <h2>6. Dịch vụ kỹ thuật</h2>
         <p>
-          Ứng dụng dùng Zalo Mini App để xác minh khách và dùng Firebase Authentication, Firestore,
-          Storage, Functions và Hosting để đăng nhập, xử lý và lưu dữ liệu. Google Analytics và
-          Sentry chỉ xử lý sự kiện kỹ thuật đã loại dữ liệu nhạy cảm khi các dịch vụ này được bật;
-          CH Haircut Salon không gửi QR token, access token hay mã xác minh bí mật vào telemetry.
+          Ứng dụng dùng Firebase Authentication, Firestore, Storage, Functions và Hosting để đăng
+          nhập, xử lý và lưu dữ liệu. Google Analytics và Sentry chỉ xử lý sự kiện kỹ thuật đã loại
+          dữ liệu nhạy cảm khi các dịch vụ này được bật; CH Haircut Salon không gửi QR token, access
+          token hay mã xác minh bí mật vào telemetry.
         </p>
 
         <h2>7. Thời hạn lưu và bảo vệ dữ liệu</h2>

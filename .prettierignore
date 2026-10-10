@@ -5,11 +5,11 @@ www-test
 coverage
 firebase/public
 firebase/functions/lib
-customer-web/app-config.json
 playwright-report
 test-results
 customer-web/.lighthouseci
 .firebase
+.tmp
 .agents
 .augment
 .claude
@@ -28,11 +28,10 @@ customer-web/.lighthouseci
 .warp
 .windsurf
 
-# Zalo Mini App formatting baseline inherited from origin/main (2026-07-27).
+# Legacy formatting baseline inherited from origin/main (2026-07-27).
 # New files remain checked; remove entries incrementally when legacy files are formatted.
 customer-web/e2e/customer-navigation.spec.ts
 customer-web/e2e/ops-auth.spec.ts
-customer-web/e2e/review-screenshots.spec.ts
 customer-web/eslint.config.js
 customer-web/index.html
 customer-web/lighthouserc.cjs
@@ -43,7 +42,6 @@ customer-web/public/health.json
 customer-web/public/manifest.webmanifest
 customer-web/public/sw.js
 customer-web/README.md
-customer-web/scripts/sync-zmp-config.mjs
 customer-web/src/App.test.tsx
 customer-web/src/App.tsx
 customer-web/src/components/AccountDeletionPanel.tsx
@@ -69,8 +67,6 @@ customer-web/src/pages/OwnerPage.tsx
 customer-web/src/pages/PrivacyPage.tsx
 customer-web/src/pages/RewardsPage.test.tsx
 customer-web/src/pages/RewardsPage.tsx
-customer-web/src/pages/ScanEntryPage.test.tsx
-customer-web/src/pages/ScanEntryPage.tsx
 customer-web/src/pages/StaffPage.test.tsx
 customer-web/src/pages/StaffPage.tsx
 customer-web/src/pages/TermsPage.test.tsx
@@ -94,17 +90,11 @@ customer-web/src/services/operations.ts
 customer-web/src/services/pwa.ts
 customer-web/src/services/qr.test.ts
 customer-web/src/services/qr.ts
-customer-web/src/services/runtime.test.ts
-customer-web/src/services/runtime.ts
 customer-web/src/services/salonBranding.test.ts
 customer-web/src/services/salonBranding.ts
-customer-web/src/services/sessionStore.test.ts
-customer-web/src/services/sessionStore.ts
 customer-web/src/services/types.ts
 customer-web/src/services/wheel.test.ts
 customer-web/src/services/wheel.ts
-customer-web/src/services/zalo.test.ts
-customer-web/src/services/zalo.ts
 customer-web/src/styles/global.css
 customer-web/src/styles/home.css
 customer-web/src/styles/owner.css
@@ -113,7 +103,6 @@ customer-web/src/styles/scan-entry.css
 customer-web/src/styles/staff.css
 customer-web/src/test/setup.ts
 customer-web/tools/create-owner-profile.mjs
-customer-web/tools/zmp-qr-login.mjs
 customer-web/tsconfig.json
 customer-web/vite.config.ts
 customer-web/vitest.config.ts

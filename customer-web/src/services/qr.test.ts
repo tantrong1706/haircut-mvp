@@ -49,7 +49,6 @@ describe("parseQrContext", () => {
 
   it("không tự gắn salon hoặc QR demo trong môi trường production", () => {
     const productionQr = resolveQrContext("", {
-      previewEnabled: false,
       demoEnabled: false,
     });
 

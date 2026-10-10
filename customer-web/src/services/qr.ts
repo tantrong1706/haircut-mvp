@@ -3,11 +3,7 @@ import type { QrContext } from "./types";
 let cachedQr: { url: string; context: QrContext } | null = null;
 
 type QrEnvironment = {
-  previewEnabled: boolean;
   demoEnabled: boolean;
-  previewSalonId?: string;
-  previewMirrorId?: string;
-  previewQrToken?: string;
 };
 
 export function parseQrContext(): QrContext {
@@ -16,13 +12,8 @@ export function parseQrContext(): QrContext {
     return cachedQr.context;
   }
 
-  const previewEnabled = import.meta.env.VITE_ZALO_PREVIEW === "true";
   const context = resolveQrContext(window.location.search, {
-    previewEnabled,
     demoEnabled: import.meta.env.DEV,
-    previewSalonId: import.meta.env.VITE_PREVIEW_SALON_ID,
-    previewMirrorId: import.meta.env.VITE_PREVIEW_MIRROR_ID,
-    previewQrToken: import.meta.env.VITE_PREVIEW_QR_TOKEN,
   });
 
   removeQrTokenFromUrl();
@@ -32,10 +23,7 @@ export function parseQrContext(): QrContext {
 
 export function resolveQrContext(search: string, environment: QrEnvironment): QrContext {
   const params = new URLSearchParams(search);
-  const mirrorId =
-    params.get("mirrorId") ||
-    (environment.previewEnabled ? environment.previewMirrorId || "" : "") ||
-    (environment.demoEnabled ? "demo-mirror-1" : "");
+  const mirrorId = params.get("mirrorId") || (environment.demoEnabled ? "demo-mirror-1" : "");
   const branchId = params.get("branchId") || "";
   const requestedType = params.get("qrType");
   const qrType =
@@ -49,16 +37,10 @@ export function resolveQrContext(search: string, environment: QrEnvironment): Qr
 
   const context: QrContext = {
     qrType,
-    salonId:
-      params.get("salonId") ||
-      (environment.previewEnabled ? environment.previewSalonId || "" : "") ||
-      (environment.demoEnabled ? "demo-salon" : ""),
+    salonId: params.get("salonId") || (environment.demoEnabled ? "demo-salon" : ""),
     branchId,
     mirrorId,
-    qrToken:
-      params.get("qrToken") ||
-      (environment.previewEnabled ? environment.previewQrToken || "" : "") ||
-      (environment.demoEnabled ? "demo-token" : ""),
+    qrToken: params.get("qrToken") || (environment.demoEnabled ? "demo-token" : ""),
   };
   return context;
 }

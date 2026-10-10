@@ -14,7 +14,6 @@ const productionEnvSchema = z.object({
   VITE_FIREBASE_APP_ID: z.string().min(1),
   VITE_FUNCTION_WRITE_MODE: z.literal("required"),
   VITE_APP_ENV: z.literal("production"),
-  VITE_ZALO_PREVIEW: z.literal("false").optional(),
 });
 
 export default defineConfig(({ mode }) => {
@@ -81,9 +80,6 @@ export default defineConfig(({ mode }) => {
             }
             if (/[\\/]node_modules[\\/]qrcode[\\/]/.test(id)) {
               return "vendor-qrcode";
-            }
-            if (id.includes("zmp-sdk")) {
-              return "vendor-zalo";
             }
             if (id.includes("@firebase/auth") || id.includes("firebase/auth")) {
               return "firebase-auth";

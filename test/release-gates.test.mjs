@@ -1,65 +1,25 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+const read = (file) => readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
 
-const root = new URL("../", import.meta.url);
-const checkScript = readFileSync(new URL("scripts/check.ps1", root), "utf8");
-const gatewayWorkflow = readFileSync(new URL(".github/workflows/zalo-gateway.yml", root), "utf8");
-const screenshotSpec = readFileSync(
-  new URL("customer-web/e2e/review-screenshots.spec.ts", root),
-  "utf8",
-);
-const miniPackage = JSON.parse(readFileSync(new URL("customer-web/package.json", root), "utf8"));
-const secretScanner = readFileSync(new URL("scripts/check-secrets.mjs", root), "utf8");
-
-test("repository check includes the gateway release gates", () => {
-  assert.match(checkScript, /Gateway npm ci/u);
-  assert.match(checkScript, /Gateway source checks/u);
-  assert.match(checkScript, /Gateway dependency audit/u);
-  assert.match(checkScript, /Gateway Functions compatibility/u);
-  assert.match(checkScript, /services\/zalo-verification-gateway/u);
-  assert.match(checkScript, /npm audit --omit=dev --audit-level=high/u);
+test("active Web CI checks clients, Firebase and browser flows without Mini App deployment", () => {
+  const workflow = read(".github/workflows/build.yml");
+  for (const job of [
+    "firebase-functions:",
+    "customer-web:",
+    "admin-web:",
+    "manager-mobile:",
+    "browser-tests:",
+    "repository-checks:",
+  ])
+    assert.ok(workflow.includes(job), job);
+  assert.doesNotMatch(workflow, /build:zmp|check:zalo|firebase deploy|zmp deploy/);
+  assert.match(workflow, /web-only-retirement\.test\.mjs/);
 });
 
-test("gateway CI validates both integration and main PRs", () => {
-  assert.match(
-    gatewayWorkflow,
-    /pull_request:\s*\n\s*branches:\s*\[release\/zalo-version-8-readiness, main\]/u,
-  );
-  assert.match(gatewayWorkflow, /npm audit --omit=dev --audit-level=high/u);
-  assert.doesNotMatch(gatewayWorkflow, /run:\s*npm audit --audit-level=high/u);
-});
-
-test("secret scanner covers both gateway HMAC representations", () => {
-  assert.match(secretScanner, /GATEWAY_HMAC_SECRET/u);
-  assert.match(secretScanner, /GATEWAY_HMAC_KEYS/u);
-});
-
-test("review capture tooling uses exactly the current 16-name checklist", () => {
-  assert.equal(
-    miniPackage.scripts["check:zalo-submission"],
-    "node ../scripts/check-zalo-submission-readiness.mjs",
-  );
-  const names = [
-    "01-open",
-    "02-salon-qr",
-    "03-branch-selector",
-    "04-branch",
-    "05-profile-explanation",
-    "06-zalo-permission",
-    "07-checkin",
-    "08-waiting",
-    "09-serving",
-    "10-points",
-    "11-history",
-    "12-wheel-before",
-    "13-wheel-result",
-    "14-reward",
-    "15-privacy",
-    "16-terms",
-  ];
-  for (const name of names) {
-    assert.match(screenshotSpec, new RegExp(`${name}\\.png`, "u"));
-  }
-  assert.doesNotMatch(screenshotSpec, /chu-salon|nhan-vien|khach-trang-chu/u);
+test("secret scanner still protects retained backend credentials", () => {
+  const scanner = read("scripts/check-secrets.mjs");
+  assert.match(scanner, /GATEWAY_HMAC_SECRET/);
+  assert.match(scanner, /GATEWAY_HMAC_KEYS/);
 });

@@ -1,5 +1,9 @@
 # Web source cleanup — 2 October 2026
 
+> Historical first-stage report. The 10 October Web-only retirement removes the frontend
+> compatibility paths described as retained below. See `testing/web-only-retirement.tdd.md`
+> and the root README for current scope. Backend production resources remain unchanged.
+
 ## Completed source boundaries
 
 - Renamed `zalo-mini-app/` to `customer-web/`, preserving local ignored configuration and builds.
