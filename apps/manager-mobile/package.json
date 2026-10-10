@@ -25,7 +25,7 @@
     "@capacitor-firebase/app-check": "^8.2.0",
     "@capacitor-firebase/messaging": "^8.2.0",
     "@capacitor/android": "^8.0.0",
-    "@capacitor/app": "^8.0.0",
+    "@capacitor/app": "^8.1.2",
     "@capacitor/barcode-scanner": "^3.1.0",
     "@capacitor/core": "^8.0.0",
     "@capacitor/haptics": "^8.0.0",
