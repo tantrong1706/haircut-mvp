@@ -44,6 +44,22 @@ const result = {
 const pendingKey = "haircut_pending_operation:spin:salon-a:customer-a";
 
 describe("Firebase Web customer adapter", () => {
+  it.each(["resolve", "reject"])("ignores a late %s after session subscription stops", async (outcome) => {
+    vi.useFakeTimers();
+    let resolve!: (value: unknown) => void;
+    let reject!: (reason: unknown) => void;
+    web.getWebCustomerSessionState.mockReturnValue(new Promise((yes, no) => { resolve = yes; reject = no; }));
+    const onChange = vi.fn(); const onError = vi.fn(); const onSynced = vi.fn();
+    const stop = listenSessionLiveUpdates(session, onChange, onError, onSynced);
+    stop();
+    if (outcome === "resolve") resolve({ ...session, customer: { ...session.customer, points: 99 } });
+    else reject(new Error("old account request"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(onError).not.toHaveBeenCalled();
+    expect(onSynced).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
   beforeEach(() => {
     vi.resetAllMocks();
     web.getWebCustomerSessionState.mockResolvedValue({
