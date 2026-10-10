@@ -39,7 +39,7 @@ export function WheelPage({ session, onSessionChange, onOpenRewards }: Props) {
   const animationResolveRef = useRef<(() => void) | null>(null);
   const animationTimeoutRef = useRef<number | null>(null);
   const wheelRef = useRef<HTMLDivElement | null>(null);
-  const sessionKey = `${session.qr.salonId}:${session.customer.customerId}:${session.sessionId}`;
+  const sessionKey = `${session.firebaseUid || ""}:${session.qr.salonId}:${session.customer.customerId}:${session.sessionId}`;
   const activeSessionKeyRef = useRef(sessionKey);
   const slots = useMemo(() => activeWheelSlots(wheelConfig), [wheelConfig]);
   const missingPoints = Math.max(0, wheelConfig.requiredPoints - session.customer.points);
@@ -89,6 +89,11 @@ export function WheelPage({ session, onSessionChange, onOpenRewards }: Props) {
     setAnimationPlan(null);
     setError(null);
     setStaleNotice(null);
+    return () => {
+      // Invalidate the owner before resolving an unfinished animation/request.
+      activeSessionKeyRef.current = "";
+      finishWheelAnimation();
+    };
   }, [finishWheelAnimation, sessionKey]);
 
   useEffect(() => {
@@ -136,11 +141,7 @@ export function WheelPage({ session, onSessionChange, onOpenRewards }: Props) {
         },
       );
       if (activeSessionKeyRef.current !== spinSessionKey) return;
-      const selectedIndex = selectedIndexFromResult(
-        spinResult,
-        slots,
-        wheelConfig.configVersion,
-      );
+      const selectedIndex = selectedIndexFromResult(spinResult, slots, wheelConfig.configVersion);
       const targetRotation = targetWheelRotation(rotationDeg, selectedIndex, slots.length);
       await playWheelAnimation(createWheelAnimationPlan(rotationDeg, targetRotation));
       if (activeSessionKeyRef.current !== spinSessionKey) return;
@@ -159,6 +160,7 @@ export function WheelPage({ session, onSessionChange, onOpenRewards }: Props) {
         points_after: spinResult.pointsAfter,
       });
     } catch (err) {
+      if (activeSessionKeyRef.current !== spinSessionKey) return;
       const message = err instanceof Error ? err.message : "Bạn chưa đủ điểm để quay";
       if (message.includes("Vòng quay vừa được cập nhật")) {
         setStaleNotice("Vòng quay vừa được cập nhật. Vui lòng quay lại.");
@@ -167,8 +169,10 @@ export function WheelPage({ session, onSessionChange, onOpenRewards }: Props) {
         setError(message);
       }
     } finally {
-      spinLockRef.current = false;
-      setSpinning(false);
+      if (activeSessionKeyRef.current === spinSessionKey) {
+        spinLockRef.current = false;
+        setSpinning(false);
+      }
     }
   }
 

@@ -64,13 +64,18 @@ describe("WheelPage", () => {
   it("does not publish an old spin response after leaving the wheel", async () => {
     vi.spyOn(window, "matchMedia").mockReturnValue({ matches: true } as MediaQueryList);
     let finish!: (value: SpinResult) => void;
-    const pending = new Promise<SpinResult>((resolve) => { finish = resolve; });
+    const pending = new Promise<SpinResult>((resolve) => {
+      finish = resolve;
+    });
     mocks.spinWheel.mockReturnValue(pending);
     const onSessionChange = vi.fn();
     const view = render(<WheelPage session={session} onSessionChange={onSessionChange} />);
     await userEvent.click(await screen.findByRole("button", { name: "Quay ngay" }));
     view.unmount();
-    await act(async () => { finish(spinResult(1)); await pending; });
+    await act(async () => {
+      finish(spinResult(1));
+      await pending;
+    });
     expect(onSessionChange).not.toHaveBeenCalled();
   });
 
@@ -83,7 +88,9 @@ describe("WheelPage", () => {
     await waitFor(() => expect(screen.getByTestId("lucky-wheel")).toHaveClass("animating"));
     clearTimer.mockClear();
     view.unmount();
-    await act(async () => { await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+    });
     expect(clearTimer).toHaveBeenCalled();
     expect(onSessionChange).not.toHaveBeenCalled();
   });

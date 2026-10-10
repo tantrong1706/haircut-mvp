@@ -64,6 +64,7 @@ export function listenSessionLiveUpdates(
     refreshing = true;
     try {
       const state = await getCustomerSessionState(currentSession);
+      if (stopped) return;
       const nextSession = {
         ...currentSession,
         sessionStatus: state.sessionStatus,
@@ -83,6 +84,7 @@ export function listenSessionLiveUpdates(
       retryCount = 0;
       onSynced?.(Date.now());
     } catch (error) {
+      if (stopped) return;
       retryCount = Math.min(retryCount + 1, 2);
       onError?.(error instanceof Error ? error.message : "Không đồng bộ được lượt cắt");
     } finally {

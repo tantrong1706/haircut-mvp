@@ -96,45 +96,68 @@ describe("WebCustomerEntryPage", () => {
     expect(onReady).not.toHaveBeenCalled();
   });
 
-  it.each(["checkin", "account"])("does not restore an old %s result after logout", async (operation) => {
-    let finish!: (value: AppSession) => void;
-    const pending = new Promise<AppSession>((resolve) => { finish = resolve; });
-    if (operation === "checkin") mocks.checkInWebCustomer.mockReturnValue(pending);
-    else mocks.getWebCustomerAccount.mockReturnValue(pending);
-    const onReady = vi.fn();
-    render(<WebCustomerEntryPage onReady={onReady} />);
-    act(() => mocks.authListener?.({ uid: "uid-a" }));
-    await userEvent.click(await screen.findByRole("button", { name: operation === "checkin" ? "Yêu cầu tích điểm" : "Xem điểm, lịch sử và quà" }));
-    act(() => mocks.authListener?.(null));
-    await screen.findByLabelText("Số điện thoại");
-    await act(async () => { finish(session); await pending; });
-    expect(onReady).not.toHaveBeenCalled();
-    expect(screen.getByLabelText("Số điện thoại")).toBeEnabled();
-  });
+  it.each(["checkin", "account"])(
+    "does not restore an old %s result after logout",
+    async (operation) => {
+      let finish!: (value: AppSession) => void;
+      const pending = new Promise<AppSession>((resolve) => {
+        finish = resolve;
+      });
+      if (operation === "checkin") mocks.checkInWebCustomer.mockReturnValue(pending);
+      else mocks.getWebCustomerAccount.mockReturnValue(pending);
+      const onReady = vi.fn();
+      render(<WebCustomerEntryPage onReady={onReady} />);
+      act(() => mocks.authListener?.({ uid: "uid-a" }));
+      await userEvent.click(
+        await screen.findByRole("button", {
+          name: operation === "checkin" ? "Yêu cầu tích điểm" : "Xem điểm, lịch sử và quà",
+        }),
+      );
+      act(() => mocks.authListener?.(null));
+      await screen.findByLabelText("Số điện thoại");
+      await act(async () => {
+        finish(session);
+        await pending;
+      });
+      expect(onReady).not.toHaveBeenCalled();
+      expect(screen.getByLabelText("Số điện thoại")).toBeEnabled();
+    },
+  );
 
   it("ignores old context that resolves after switching directly to another UID", async () => {
     let finish!: (value: unknown) => void;
-    mocks.resolveWebCustomerContext.mockReturnValueOnce(new Promise((resolve) => { finish = resolve; }));
+    mocks.resolveWebCustomerContext.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
     const onReady = vi.fn();
     render(<WebCustomerEntryPage onReady={onReady} />);
     act(() => mocks.authListener?.({ uid: "uid-a" }));
     await waitFor(() => expect(mocks.resolveWebCustomerContext).toHaveBeenCalledTimes(1));
     act(() => mocks.authListener?.({ uid: "uid-b" }));
-    await act(async () => { finish({ qr, customer: session.customer, activeSession: session }); });
+    await act(async () => {
+      finish({ qr, customer: session.customer, activeSession: session });
+    });
     expect(onReady).not.toHaveBeenCalled();
     expect(mocks.resolveWebCustomerContext).toHaveBeenCalledTimes(2);
   });
 
   it("ignores check-in completion after the entry screen unmounts", async () => {
     let finish!: (value: AppSession) => void;
-    const pending = new Promise<AppSession>((resolve) => { finish = resolve; });
+    const pending = new Promise<AppSession>((resolve) => {
+      finish = resolve;
+    });
     mocks.checkInWebCustomer.mockReturnValue(pending);
     const onReady = vi.fn();
     const view = render(<WebCustomerEntryPage onReady={onReady} />);
     act(() => mocks.authListener?.({ uid: "uid-a" }));
     await userEvent.click(await screen.findByRole("button", { name: "Yêu cầu tích điểm" }));
     view.unmount();
-    await act(async () => { finish(session); await pending; });
+    await act(async () => {
+      finish(session);
+      await pending;
+    });
     expect(onReady).not.toHaveBeenCalled();
   });
   beforeEach(() => {
