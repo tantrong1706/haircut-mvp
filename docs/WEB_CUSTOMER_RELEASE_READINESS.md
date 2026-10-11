@@ -1,5 +1,9 @@
 # Web customer release readiness
 
+> Historical evidence for the September release. Some configuration and test counts below have
+> since changed. The canonical branch is now `main`; see [current release status](RELEASE_STATUS.md)
+> and [current checklist](WEB_CUSTOMER_COMPLETION_CHECKLIST.md) before any new deployment.
+
 Evidence date: 2026-09-27. Repository: `haircut-mvp`; branch: `release/web-customer-platform-20260921`.
 Starting candidate: `22be8eebe144bf0482d23180d287ef04196b483b`.
 Release base for the web migration: `5ae0ff21200ae4d32b07e9f588ee6b7797c35d0e`.
@@ -18,16 +22,16 @@ were not deployed or modified. No push, merge, Zalo review submission or publish
 
 Read using authenticated GET requests; credentials and site-key values were not printed.
 
-| Check | Result |
-| --- | --- |
-| Firebase Phone provider | Enabled |
-| Authorized Domain `app.chhaircutsalon.cc` | Present |
-| SMS region policy | `allowlistOnly` includes Vietnam (`VN`) |
-| Web App Check provider | reCAPTCHA Enterprise registration exists |
-| Web App Check runtime | Registered but intentionally monitor-only/unwired |
-| Firestore, Storage and Authentication App Check enforcement | `UNENFORCED` |
-| Existing affected Functions `ENFORCE_APP_CHECK` | `false` |
-| New six web customer callables | Deployed; unauthenticated calls return HTTP 401 |
+| Check                                                       | Result                                            |
+| ----------------------------------------------------------- | ------------------------------------------------- |
+| Firebase Phone provider                                     | Enabled                                           |
+| Authorized Domain `app.chhaircutsalon.cc`                   | Present                                           |
+| SMS region policy                                           | `allowlistOnly` includes Vietnam (`VN`)           |
+| Web App Check provider                                      | reCAPTCHA Enterprise registration exists          |
+| Web App Check runtime                                       | Registered but intentionally monitor-only/unwired |
+| Firestore, Storage and Authentication App Check enforcement | `UNENFORCED`                                      |
+| Existing affected Functions `ENFORCE_APP_CHECK`             | `false`                                           |
+| New six web customer callables                              | Deployed; unauthenticated calls return HTTP 401   |
 
 Completed Firebase Auth configuration in project `haircut-c7d12`:
 
@@ -80,14 +84,14 @@ Functions. Secrets, key IDs and the gateway URL were preserved and were not prin
 
 ## Executed deployment scope
 
-| Resource | Required for this migration? | Reason |
-| --- | --- | --- |
-| Customer Firebase Hosting site `haircut-c7d12` | Deployed | New Auth/entry/account UI and monitor-only App Check behavior |
-| Functions | Deployed, named subset below | Six new callables, six QR producers and three shared-core Zalo read adapters |
-| Firestore Rules | No | No rule-source changes against the migration base |
-| Storage Rules | No | No rule-source changes against the migration base |
-| Firestore indexes | No | No index-source changes; queries reuse existing indexes |
-| Zalo / Gateway / Cloudflared / Manager native / Admin Hosting | No | Outside this release |
+| Resource                                                      | Required for this migration? | Reason                                                                       |
+| ------------------------------------------------------------- | ---------------------------- | ---------------------------------------------------------------------------- |
+| Customer Firebase Hosting site `haircut-c7d12`                | Deployed                     | New Auth/entry/account UI and monitor-only App Check behavior                |
+| Functions                                                     | Deployed, named subset below | Six new callables, six QR producers and three shared-core Zalo read adapters |
+| Firestore Rules                                               | No                           | No rule-source changes against the migration base                            |
+| Storage Rules                                                 | No                           | No rule-source changes against the migration base                            |
+| Firestore indexes                                             | No                           | No index-source changes; queries reuse existing indexes                      |
+| Zalo / Gateway / Cloudflared / Manager native / Admin Hosting | No                           | Outside this release                                                         |
 
 The approved Functions deployment used:
 
@@ -113,18 +117,18 @@ live settings blindly from a stale local `.env`. None of these secret payloads n
 The owner entered the phone number and OTP directly in the production page; neither value was sent
 to chat or logged. Results below are evidence from the real custom-domain flow.
 
-| Journey | Result |
-| --- | --- |
-| New browser → signed QR → Phone OTP | PASS; correct customer, salon and branch |
-| Close all tabs → reopen same browser | PASS; Firebase Auth restored without another OTP |
-| Same UID enters a second salon | PASS; separate tenant profile, no cross-tenant request visibility |
-| Customer requests point → correct staff confirms | PASS; `pending_approval` → `completed` |
-| Point/history idempotency | PASS; points `0 → 1`, exactly one haircut record for the request |
-| Two-hour cooldown | PASS; server stored `nextPointEligibleAt - approvedAt = 2 hours` and no duplicate open request |
-| History, rewards and insufficient-points wheel | PASS on authenticated production session |
-| Unauthenticated web callables | PASS; all six returned HTTP 401 |
-| Another browser/new device | Not run; expected to require OTP by browser-local persistence |
-| App Check enforcement | Intentionally OFF; attestation pilot must pass first |
+| Journey                                          | Result                                                                                         |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| New browser → signed QR → Phone OTP              | PASS; correct customer, salon and branch                                                       |
+| Close all tabs → reopen same browser             | PASS; Firebase Auth restored without another OTP                                               |
+| Same UID enters a second salon                   | PASS; separate tenant profile, no cross-tenant request visibility                              |
+| Customer requests point → correct staff confirms | PASS; `pending_approval` → `completed`                                                         |
+| Point/history idempotency                        | PASS; points `0 → 1`, exactly one haircut record for the request                               |
+| Two-hour cooldown                                | PASS; server stored `nextPointEligibleAt - approvedAt = 2 hours` and no duplicate open request |
+| History, rewards and insufficient-points wheel   | PASS on authenticated production session                                                       |
+| Unauthenticated web callables                    | PASS; all six returned HTTP 401                                                                |
+| Another browser/new device                       | Not run; expected to require OTP by browser-local persistence                                  |
+| App Check enforcement                            | Intentionally OFF; attestation pilot must pass first                                           |
 
 ## Silent cooldown web update (2026-09-27)
 
@@ -157,14 +161,14 @@ there is no verified single deployed Git SHA.
 - Hosting version: `sites/haircut-c7d12/versions/ba577db2a642b262`.
 - Live Functions inventory: 70 Functions; selected existing revisions below were ACTIVE.
 
-| Existing Function | Observed revision |
-| --- | --- |
-| createSalon | createsalon-00011-mom |
-| listBranches | listbranches-00005-xah |
-| createBranch | createbranch-00005-bat |
-| updateBranch | updatebranch-00005-quw |
-| rotateSalonQr | rotatesalonqr-00005-vik |
-| rotateBranchQr | rotatebranchqr-00005-fej |
+| Existing Function          | Observed revision                    |
+| -------------------------- | ------------------------------------ |
+| createSalon                | createsalon-00011-mom                |
+| listBranches               | listbranches-00005-xah               |
+| createBranch               | createbranch-00005-bat               |
+| updateBranch               | updatebranch-00005-quw               |
+| rotateSalonQr              | rotatesalonqr-00005-vik              |
+| rotateBranchQr             | rotatebranchqr-00005-fej             |
 | getCustomerSessionFromZalo | getcustomersessionfromzalo-00013-bes |
 | getCustomerHistoryFromZalo | getcustomerhistoryfromzalo-00016-vib |
 | getCustomerRewardsFromZalo | getcustomerrewardsfromzalo-00015-fal |
@@ -196,11 +200,11 @@ Current Hosting release:
 Upstream metadata was checked 2026-09-20. Only additions that directly close this checklist were
 accepted; no state-management rewrite was introduced.
 
-| Priority | Repository | Application here | Constraint |
-| --- | --- | --- | --- |
-| Integrated | [zxing-js/browser](https://github.com/zxing-js/browser) (MIT) | Staff scans a customer's existing reward QR from the web camera | Exact `0.2.1`, lazy-loaded, strict `haircut-reward:v1:` parser, manual fallback and explicit redemption confirmation |
-| Integrated in tests | [dequelabs/axe-core](https://github.com/dequelabs/axe-core) (MPL-2.0) | Accessibility checks for entry, OTP and account states | Exact Playwright adapter `4.13.0`; manual mobile usability testing remains necessary |
-| Not integrated | [TanStack/query](https://github.com/TanStack/query) (MIT) | Could centralize client cache behavior | Current adapters are small and tested; a state-management migration would add complexity without closing a remaining release gate |
+| Priority            | Repository                                                            | Application here                                                | Constraint                                                                                                                        |
+| ------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Integrated          | [zxing-js/browser](https://github.com/zxing-js/browser) (MIT)         | Staff scans a customer's existing reward QR from the web camera | Exact `0.2.1`, lazy-loaded, strict `haircut-reward:v1:` parser, manual fallback and explicit redemption confirmation              |
+| Integrated in tests | [dequelabs/axe-core](https://github.com/dequelabs/axe-core) (MPL-2.0) | Accessibility checks for entry, OTP and account states          | Exact Playwright adapter `4.13.0`; manual mobile usability testing remains necessary                                              |
+| Not integrated      | [TanStack/query](https://github.com/TanStack/query) (MIT)             | Could centralize client cache behavior                          | Current adapters are small and tested; a state-management migration would add complexity without closing a remaining release gate |
 
 References: [ZXing browser usage](https://github.com/zxing-js/browser#usage-how-to-use),
 [Playwright accessibility testing](https://playwright.dev/docs/accessibility-testing),
