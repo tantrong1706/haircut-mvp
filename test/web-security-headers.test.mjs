@@ -8,6 +8,11 @@ const config = JSON.parse(
 const headers = config.hosting.headers.find((rule) => rule.source === "**").headers;
 const value = (name) => headers.find((header) => header.key === name)?.value;
 
+test("baseline CSP is enforced without restricting unverified Auth/network sources", () => {
+  assert.equal(value("Content-Security-Policy"), "base-uri 'self'; object-src 'none'; frame-ancestors 'none'");
+  assert.equal(value("Content-Security-Policy-Report-Only"), undefined);
+});
+
 test("Web pages cannot be embedded to trick staff into unintended clicks", () => {
   assert.equal(value("X-Frame-Options"), "DENY");
 });
