@@ -32,6 +32,9 @@ export function WebCustomerEntryPage({ onReady }: Props) {
   const qr = useMemo(resolveInitialQr, []);
   const salonHint = useMemo(() => qr.salonId || loadWebSalonHint(), [qr.salonId]);
   const [authStatus, setAuthStatus] = useState<AuthStatus>("initializing");
+  const [authUid, setAuthUid] = useState<string | null>(null);
+  const activeUid = useRef<string | null>(null);
+  const authGeneration = useRef(0);
   const [context, setContext] = useState<WebCustomerContext | null>(null);
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
@@ -61,31 +64,57 @@ export function WebCustomerEntryPage({ onReady }: Props) {
     }
   }, [qr]);
 
-  useEffect(
-    () =>
-      subscribeCustomerWebAuth(
-        (user) => {
-          if (user) {
-            setAuthStatus("authenticated");
-            trackEvent("web_auth_restored", { salon_id: qr.salonId });
-          } else {
-            setAuthStatus("signed_out");
-            setContext(null);
-            trackEvent("web_auth_required", { salon_id: qr.salonId });
-          }
-        },
-        (authError) => {
-          setAuthStatus("error");
-          setError(customerPhoneAuthErrorMessage(authError));
-          captureError(authError, { flow: "web_customer_auth_restore" });
-        },
-      ),
-    [qr.salonId],
-  );
+  useEffect(() => {
+    let active = true;
+    const unsubscribe = subscribeCustomerWebAuth(
+      (user) => {
+        if (!active) return;
+        const nextUid = user?.uid ?? null;
+        if (activeUid.current !== nextUid) {
+          authGeneration.current += 1;
+          activeUid.current = nextUid;
+          setAuthUid(nextUid);
+          setContext(null);
+          setBusy(false);
+          setError("");
+          setPhone("");
+          setOtp("");
+          setConfirmation(null);
+          checkinStarted.current = false;
+        }
+        if (user) {
+          setAuthStatus("authenticated");
+          trackEvent("web_auth_restored", { salon_id: qr.salonId });
+        } else {
+          setAuthStatus("signed_out");
+          setContext(null);
+          trackEvent("web_auth_required", { salon_id: qr.salonId });
+        }
+      },
+      (authError) => {
+        if (!active) return;
+        authGeneration.current += 1;
+        activeUid.current = null;
+        setAuthUid(null);
+        setContext(null);
+        setBusy(false);
+        setAuthStatus("error");
+        setError(customerPhoneAuthErrorMessage(authError));
+        captureError(authError, { flow: "web_customer_auth_restore" });
+      },
+    );
+    return () => {
+      active = false;
+      authGeneration.current += 1;
+      activeUid.current = null;
+      unsubscribe();
+    };
+  }, [qr.salonId]);
 
   useEffect(() => {
-    if (authStatus !== "authenticated" || !salonHint) return undefined;
+    if (authStatus !== "authenticated" || !authUid || !salonHint) return undefined;
     let active = true;
+    const generation = authGeneration.current;
     setBusy(true);
     setError("");
     const loadContext = hasQrContext(qr)
@@ -104,7 +133,7 @@ export function WebCustomerEntryPage({ onReady }: Props) {
         }));
     void loadContext
       .then((result) => {
-        if (!active) return;
+        if (!active || generation !== authGeneration.current) return;
         saveWebSalonHint(result.qr.salonId);
         clearPendingWebQr();
         if (result.activeSession) {
@@ -114,15 +143,15 @@ export function WebCustomerEntryPage({ onReady }: Props) {
         setContext(result);
       })
       .catch((resolveError) => {
-        if (!active) return;
+        if (!active || generation !== authGeneration.current) return;
         setError(resolveError instanceof Error ? resolveError.message : "Không tải được salon.");
         captureError(resolveError, { flow: "web_customer_context" });
       })
-      .finally(() => active && setBusy(false));
+      .finally(() => active && generation === authGeneration.current && setBusy(false));
     return () => {
       active = false;
     };
-  }, [authStatus, onReady, qr, salonHint, loadAttempt]);
+  }, [authStatus, authUid, onReady, qr, salonHint, loadAttempt]);
 
   useEffect(() => {
     if (resendSeconds <= 0) return undefined;
@@ -165,22 +194,41 @@ export function WebCustomerEntryPage({ onReady }: Props) {
   }
 
   async function checkIn() {
-    if (busy || cooldownActive || checkinStarted.current) return;
+    if (!activeUid.current || busy || cooldownActive || checkinStarted.current) return;
+    const generation = authGeneration.current;
     checkinStarted.current = true;
     setBusy(true);
     setError("");
     trackEvent("web_checkin_started", { salon_id: qr.salonId, branch_id: qr.branchId });
     try {
       const session = await checkInWebCustomer(qr);
+      if (generation !== authGeneration.current) return;
       trackEvent("web_checkin_success", { salon_id: qr.salonId, branch_id: qr.branchId });
       onReady(session);
     } catch (checkinError) {
+      if (generation !== authGeneration.current) return;
       checkinStarted.current = false;
       setError(checkinError instanceof Error ? checkinError.message : "Không thể check-in.");
       trackEvent("web_checkin_failed", { salon_id: qr.salonId, branch_id: qr.branchId });
       captureError(checkinError, { flow: "web_customer_checkin" });
     } finally {
-      setBusy(false);
+      if (generation === authGeneration.current) setBusy(false);
+    }
+  }
+
+  async function openAccount() {
+    if (!activeUid.current || busy) return;
+    const generation = authGeneration.current;
+    setBusy(true);
+    setError("");
+    try {
+      const account = await getWebCustomerAccount(salonHint);
+      if (generation === authGeneration.current) onReady(account);
+    } catch (accountError) {
+      if (generation !== authGeneration.current) return;
+      setError(accountError instanceof Error ? accountError.message : "Chưa tải được tài khoản.");
+    } finally {
+      if (generation === authGeneration.current) setBusy(false);
     }
   }
 
@@ -337,17 +385,7 @@ export function WebCustomerEntryPage({ onReady }: Props) {
           className="secondary-button"
           type="button"
           disabled={busy}
-          onClick={() => {
-            setBusy(true);
-            void getWebCustomerAccount(salonHint)
-              .then(onReady)
-              .catch((accountError: unknown) => {
-                setError(
-                  accountError instanceof Error ? accountError.message : "Chưa tải được tài khoản.",
-                );
-              })
-              .finally(() => setBusy(false));
-          }}
+          onClick={() => void openAccount()}
         >
           Xem điểm, lịch sử và quà
         </button>

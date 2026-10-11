@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppSession, LuckyWheelConfig, SpinResult } from "../services/types";
@@ -61,6 +61,39 @@ async function finishCurrentSpin() {
 }
 
 describe("WheelPage", () => {
+  it("does not publish an old spin response after leaving the wheel", async () => {
+    vi.spyOn(window, "matchMedia").mockReturnValue({ matches: true } as MediaQueryList);
+    let finish!: (value: SpinResult) => void;
+    const pending = new Promise<SpinResult>((resolve) => {
+      finish = resolve;
+    });
+    mocks.spinWheel.mockReturnValue(pending);
+    const onSessionChange = vi.fn();
+    const view = render(<WheelPage session={session} onSessionChange={onSessionChange} />);
+    await userEvent.click(await screen.findByRole("button", { name: "Quay ngay" }));
+    view.unmount();
+    await act(async () => {
+      finish(spinResult(1));
+      await pending;
+    });
+    expect(onSessionChange).not.toHaveBeenCalled();
+  });
+
+  it("cancels the animation timer when the wheel unmounts", async () => {
+    mocks.spinWheel.mockResolvedValue(spinResult(1));
+    const clearTimer = vi.spyOn(window, "clearTimeout");
+    const onSessionChange = vi.fn();
+    const view = render(<WheelPage session={session} onSessionChange={onSessionChange} />);
+    await userEvent.click(await screen.findByRole("button", { name: "Quay ngay" }));
+    await waitFor(() => expect(screen.getByTestId("lucky-wheel")).toHaveClass("animating"));
+    clearTimer.mockClear();
+    view.unmount();
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(clearTimer).toHaveBeenCalled();
+    expect(onSessionChange).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();

@@ -242,5 +242,11 @@ jobs:
       - name: Verify retired SDK and deployment paths stay removed
         run: node --test test/web-only-retirement.test.mjs
 
+      - name: Verify bounded version-update policy
+        run: node --test test/dependabot-policy.test.mjs
+
+      - name: Verify Hosting helper failure guards
+        run: node --test test/hosting-script-safety.test.mjs
+
       - name: Verify Web security headers
         run: node --test test/web-security-headers.test.mjs

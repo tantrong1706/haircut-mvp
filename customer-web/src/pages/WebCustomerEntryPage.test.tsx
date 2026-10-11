@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppSession, QrContext } from "../services/types";
@@ -79,6 +79,87 @@ vi.mock("../services/monitoring", () => ({
 }));
 
 describe("WebCustomerEntryPage", () => {
+  it("reloads context and hides old points when UID changes without an intermediate logout", async () => {
+    const onReady = vi.fn();
+    render(<WebCustomerEntryPage onReady={onReady} />);
+    act(() => mocks.authListener?.({ uid: "uid-a" }));
+    await screen.findByText("7 điểm");
+    mocks.resolveWebCustomerContext.mockResolvedValue({
+      qr: { ...qr, salonName: "Salon A", branchName: "Chi nhánh Trung tâm", branchAddress: "" },
+      customer: { ...session.customer, customerId: "customer-b", name: "Khách B", points: 2 },
+      activeSession: null,
+    });
+    act(() => mocks.authListener?.({ uid: "uid-b" }));
+    expect(await screen.findByText("2 điểm")).toBeVisible();
+    expect(screen.queryByText("7 điểm")).toBeNull();
+    expect(mocks.resolveWebCustomerContext).toHaveBeenCalledTimes(2);
+    expect(onReady).not.toHaveBeenCalled();
+  });
+
+  it.each(["checkin", "account"])(
+    "does not restore an old %s result after logout",
+    async (operation) => {
+      let finish!: (value: AppSession) => void;
+      const pending = new Promise<AppSession>((resolve) => {
+        finish = resolve;
+      });
+      if (operation === "checkin") mocks.checkInWebCustomer.mockReturnValue(pending);
+      else mocks.getWebCustomerAccount.mockReturnValue(pending);
+      const onReady = vi.fn();
+      render(<WebCustomerEntryPage onReady={onReady} />);
+      act(() => mocks.authListener?.({ uid: "uid-a" }));
+      await userEvent.click(
+        await screen.findByRole("button", {
+          name: operation === "checkin" ? "Yêu cầu tích điểm" : "Xem điểm, lịch sử và quà",
+        }),
+      );
+      act(() => mocks.authListener?.(null));
+      await screen.findByLabelText("Số điện thoại");
+      await act(async () => {
+        finish(session);
+        await pending;
+      });
+      expect(onReady).not.toHaveBeenCalled();
+      expect(screen.getByLabelText("Số điện thoại")).toBeEnabled();
+    },
+  );
+
+  it("ignores old context that resolves after switching directly to another UID", async () => {
+    let finish!: (value: unknown) => void;
+    mocks.resolveWebCustomerContext.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const onReady = vi.fn();
+    render(<WebCustomerEntryPage onReady={onReady} />);
+    act(() => mocks.authListener?.({ uid: "uid-a" }));
+    await waitFor(() => expect(mocks.resolveWebCustomerContext).toHaveBeenCalledTimes(1));
+    act(() => mocks.authListener?.({ uid: "uid-b" }));
+    await act(async () => {
+      finish({ qr, customer: session.customer, activeSession: session });
+    });
+    expect(onReady).not.toHaveBeenCalled();
+    expect(mocks.resolveWebCustomerContext).toHaveBeenCalledTimes(2);
+  });
+
+  it("ignores check-in completion after the entry screen unmounts", async () => {
+    let finish!: (value: AppSession) => void;
+    const pending = new Promise<AppSession>((resolve) => {
+      finish = resolve;
+    });
+    mocks.checkInWebCustomer.mockReturnValue(pending);
+    const onReady = vi.fn();
+    const view = render(<WebCustomerEntryPage onReady={onReady} />);
+    act(() => mocks.authListener?.({ uid: "uid-a" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Yêu cầu tích điểm" }));
+    view.unmount();
+    await act(async () => {
+      finish(session);
+      await pending;
+    });
+    expect(onReady).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.parseQrContext.mockReturnValue(qr);
