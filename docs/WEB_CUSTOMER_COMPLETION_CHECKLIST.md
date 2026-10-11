@@ -17,11 +17,11 @@ Xem [trạng thái phát hành](RELEASE_STATUS.md) để phân biệt source đ�
 
 ## Gate trước và sau deploy
 
-- [ ] CI của đúng commit ứng viên PASS; không dùng kết quả của commit cũ.
-- [ ] Lưu Hosting version đang chạy và bản đóng gói trước deploy để rollback.
-- [ ] Chỉ deploy Hosting sau quyền cho phép của chủ dự án.
-- [ ] HTML live khớp bundle mới; asset, route khách và trang đăng nhập quản lý tải được.
-- [ ] Ghi rõ console/network lỗi quan sát được; không gọi HTTP 200 là bằng chứng đăng nhập thật.
+- [x] CI của đúng commit ứng viên PASS; không dùng kết quả của commit cũ.
+- [x] Lưu Hosting version đang chạy và bản đóng gói trước deploy để rollback.
+- [x] Chỉ deploy Hosting sau quyền cho phép của chủ dự án.
+- [x] HTML live khớp bundle mới; asset, route khách và trang đăng nhập quản lý tải được.
+- [x] Ghi rõ console/network lỗi quan sát được; không gọi HTTP 200 là bằng chứng đăng nhập thật.
 
 Chủ dự án đã cho phép main + Hosting khi kiểm thử/CI PASS trong chat ngày 11/10/2026.
 Trạng thái từng gate sau thực thi được ghi tại `RELEASE_STATUS.md`, không suy ra từ checklist này.

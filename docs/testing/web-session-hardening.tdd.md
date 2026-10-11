@@ -48,3 +48,18 @@ Remaining dependency advisories and App Check monitor mode are not disguised as 
 The Dependabot version-PR limit does not limit security update PRs: see the
 [official options reference](https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference#open-pull-requests-limit).
 Existing open PRs are not claimed closed merely because the configuration changed.
+
+## Released evidence
+
+PR #62 merged as `7e5fd7d85151c533f90ef261a7286b1d844ba166`; main CI 38116239348 and
+CodeQL 38116239347 passed. PR Lighthouse 38116012430 passed. Only Hosting was deployed as
+version `9f05728017a1be5c`; exact artifact/live hash and rollback evidence are in release status.
+Chromium public-route smoke passed without console/page/asset faults. WebKit rendered all ten
+routes, but report-only CSP warnings persist; an earlier pair of uncategorized console messages
+was not reproduced on rerun. Zero-warning WebKit and a fresh real-phone OTP/business transaction
+test are not claimed. Automated live smoke made no OTP or business-write requests.
+
+Scoped production audit: 78/100, launchable with caveats rather than zero-risk. Evidence supports
+the session fixes, tested Web flows and rollback path. Remaining work is CSP report-only policy,
+Firebase dependency advisories and renewed authenticated-device smoke; do not turn green CI into
+a claim that those gaps are complete. No external audit service received source or customer data.
