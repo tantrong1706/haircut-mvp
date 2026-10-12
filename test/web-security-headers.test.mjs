@@ -9,7 +9,10 @@ const headers = config.hosting.headers.find((rule) => rule.source === "**").head
 const value = (name) => headers.find((header) => header.key === name)?.value;
 
 test("baseline CSP is enforced without restricting unverified Auth/network sources", () => {
-  assert.equal(value("Content-Security-Policy"), "base-uri 'self'; object-src 'none'; frame-ancestors 'none'");
+  assert.equal(
+    value("Content-Security-Policy"),
+    "base-uri 'self'; object-src 'none'; frame-ancestors 'none'",
+  );
   assert.equal(value("Content-Security-Policy-Report-Only"), undefined);
 });
 
