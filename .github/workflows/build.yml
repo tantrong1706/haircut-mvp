@@ -81,7 +81,17 @@ jobs:
 
       - name: Web dependency security regression
         working-directory: customer-web
-        run: node --test ../test/web-dependency-security.test.mjs
+        run: node --test ../test/web-dependency-security.test.mjs ../test/firebase-grpc-security.test.mjs
+
+      - name: Setup Java for client transport compatibility
+        uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Verify patched Firestore transport in isolated emulator
+        working-directory: customer-web
+        run: npx --yes firebase-tools@15.22.3 emulators:exec --project demo-haircut-grpc-compat --config firebase.grpc-test.json --only firestore "node scripts/test-firestore-grpc.mjs"
 
       - name: Lint
         working-directory: customer-web
