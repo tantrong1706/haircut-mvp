@@ -76,6 +76,14 @@ CI repeats the emulator test and dependency/header guards. CI and deploy results
 [release status](../RELEASE_STATUS.md) only when completed. Local checks do not prove a fresh
 real-phone SMS verification or customer business transaction.
 
+## Release follow-through
+
+Release completed after both PR and main CI passed: merge `9ccdbb7`, Hosting-only version
+`eab0acb4bfd1081a` on 12 October. All 10 live routes rendered with exact artifact hashes and enforced
+headers in Chromium/WebKit. The first rapid-navigation WebKit run had Firebase Installations network
+errors; these did not recur when awaiting network idle between navigations. Telemetry cancellations
+remain recorded, not suppressed or claimed as zero network errors. See release status for full evidence.
+
 ## Primary sources
 
 - [gRPC authentication advisory](https://github.com/grpc/grpc-node/security/advisories/GHSA-m9gg-hp2v-232j).
