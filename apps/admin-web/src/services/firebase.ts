@@ -1,7 +1,6 @@
 import { getApp, getApps, initializeApp } from "firebase/app";
 import { ReCaptchaEnterpriseProvider, initializeAppCheck } from "firebase/app-check";
 import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { adminAppCheckErrorMessage, initializeAdminAppCheck } from "./appCheck";
 
@@ -42,7 +41,6 @@ if (!adminAppCheckStatus.enabled) {
 
 export const auth = getAuth(app);
 auth.languageCode = "vi";
-export const db = getFirestore(app);
 const functions = getFunctions(app, "asia-southeast1");
 
 export async function callAdminFunction<TInput, TOutput>(name: string, input: TInput) {
