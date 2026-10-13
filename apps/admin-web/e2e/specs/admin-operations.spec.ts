@@ -33,6 +33,10 @@ test("read-only server capability and accessible layout", async ({ page }, testI
   await page.getByRole("button", { name: "Salon", exact: true }).click();
   await page.getByRole("button", { name: "Kiểm tra Salon A" }).click();
   await expect(page.getByRole("button", { name: "Đồng bộ bộ đếm khách" })).toBeDisabled();
+  if (testInfo.project.name.startsWith("mobile")) {
+    await expect(page.getByText("Salon A", { exact: true })).toBeInViewport();
+    await expect(page.getByRole("button", { name: "Đăng xuất", exact: true })).toBeVisible();
+  }
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1)).toBe(false);
   const result = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze();
   expect(result.violations).toEqual([]);
