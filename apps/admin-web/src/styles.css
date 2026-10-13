@@ -79,13 +79,13 @@ h3 { margin-bottom: 0; }
 
 .content-section { min-width: 0; }
 .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
-.section-heading > span { color: #66766f; font-size: 13px; }
+.section-heading > span { color: #52665b; font-size: 13px; }
 .table-wrap { overflow: auto; border: 1px solid #dbe3df; border-radius: 8px; background: #fff; }
 table { width: 100%; min-width: 720px; border-collapse: collapse; }
 th, td { padding: 14px 16px; border-bottom: 1px solid #edf1ef; text-align: left; }
 th { color: #617069; background: #f8faf9; font-size: 12px; text-transform: uppercase; }
 td strong, td small { display: block; }
-td small { margin-top: 3px; max-width: 260px; overflow: hidden; color: #75837d; text-overflow: ellipsis; }
+td small { margin-top: 3px; max-width: 260px; overflow: hidden; color: #596b62; text-overflow: ellipsis; }
 .status { display: inline-flex; padding: 5px 9px; border-radius: 999px; font-size: 12px; font-weight: 700; }
 .status.active { color: #126448; background: #e0f4eb; }
 .status.suspended { color: #a7382f; background: #ffebe8; }
