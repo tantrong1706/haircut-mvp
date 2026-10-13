@@ -347,7 +347,7 @@ function SalonTable({
         </label>
       </div>
       <div className="table-wrap">
-        <table>
+        <table className="salon-table" role="table">
           <thead>
             <tr>
               <th>Salon</th>
@@ -360,16 +360,16 @@ function SalonTable({
           <tbody>
             {filtered.map((salon) => (
               <tr key={salon.id}>
-                <td>
+                <td data-label="Salon">
                   <strong>{salon.name}</strong>
                   <small>{salon.id}</small>
                 </td>
-                <td>
+                <td data-label="Trạng thái">
                   <StatusBadge status={salon.status} />
                 </td>
-                <td>{salon.plan}</td>
-                <td>{salon.customerCount}</td>
-                <td>
+                <td data-label="Gói">{salon.plan}</td>
+                <td data-label="Khách">{salon.customerCount}</td>
+                <td data-label="Kiểm tra">
                   <button
                     className="secondary compact"
                     aria-label={`Kiểm tra ${salon.name}`}

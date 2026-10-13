@@ -149,7 +149,19 @@ button.compact { min-height: 34px; padding: 6px 10px; font-size: 12px; }
   .sidebar { position: static; width: 100%; height: auto; padding: 14px; }
   .sidebar nav { margin-top: 16px; display: flex; overflow-x: auto; }
   .sidebar nav button { width: auto; white-space: nowrap; }
-  .sidebar-user { display: none; }
+  .sidebar-user { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; padding-top: 10px; }
+  .sidebar-user small { display: none; }
+  .sidebar-user strong { margin: 0; max-width: 60%; }
+  .sidebar-user button { width: auto; }
+  .salon-table { min-width: 0; width: 100%; }
+  .salon-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .salon-table tbody { display: block; }
+  .salon-table tr { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; padding: 16px; border-bottom: 1px solid #dce5e1; }
+  .salon-table tr:last-child { border-bottom: 0; }
+  .salon-table td { display: block; min-width: 0; padding: 0; border: 0; }
+  .salon-table td:first-child, .salon-table td:last-child { grid-column: 1 / -1; }
+  .salon-table td:not(:first-child)::before { content: attr(data-label); display: block; margin-bottom: 6px; color: #52665b; font-size: 12px; }
+  .salon-table td:last-child button { width: 100%; }
   .workspace { padding: 20px 14px 40px; }
   .metric-grid, .operation-grid, .version-grid { grid-template-columns: 1fr; }
   .workspace-header { min-height: 60px; }
