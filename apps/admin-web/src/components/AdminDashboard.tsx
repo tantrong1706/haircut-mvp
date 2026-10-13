@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { signOut, type User } from "firebase/auth";
 import type { SystemFeatures } from "@haircut/contracts";
 import {
@@ -13,9 +13,12 @@ import {
   Settings2,
   ShieldCheck,
   Users,
+  Wrench,
 } from "lucide-react";
-import { auth } from "../services/firebase";
-import { READ_ONLY_ADMIN_TABS, type AdminTab } from "../adminCapabilities";
+import { auth, firebaseProjectId } from "../services/firebase";
+import { ADMIN_TABS, type AdminTab } from "../adminCapabilities";
+import { adminErrorMessage, supportLinks } from "../services/adminSupport";
+import { SalonSupportPanel } from "./SalonSupportPanel";
 import {
   adminApi,
   type AdminAuditEvent,
@@ -23,28 +26,12 @@ import {
   type AdminSalon,
 } from "../services/adminApi";
 
-type DashboardData = Awaited<ReturnType<typeof loadDashboardData>>;
-
-async function loadDashboardData() {
-  const [overview, salonPage, featureResult, auditResult] = await Promise.all([
-    adminApi.overview(),
-    adminApi.salons(),
-    adminApi.features(),
-    adminApi.auditEvents(),
-  ]);
-  return {
-    overview,
-    salons: salonPage.salons,
-    features: featureResult.features,
-    auditEvents: auditResult.events,
-  };
-}
-
 const tabIcons: Record<AdminTab, typeof Gauge> = {
   overview: Gauge,
   salons: Building2,
   features: Settings2,
   audit: History,
+  support: Wrench,
 };
 
 const featureLabels: Record<
@@ -70,47 +57,111 @@ const featureLabels: Record<
 export function AdminDashboard({ user }: { user: User }) {
   const [tab, setTab] = useState<AdminTab>("overview");
   const [overview, setOverview] = useState<AdminOverview | null>(null);
-  const [salons, setSalons] = useState<AdminSalon[]>([]);
+  const [salons, setSalons] = useState<AdminSalon[] | null>(null);
   const [features, setFeatures] = useState<SystemFeatures | null>(null);
-  const [auditEvents, setAuditEvents] = useState<AdminAuditEvent[]>([]);
+  const [auditEvents, setAuditEvents] = useState<AdminAuditEvent[] | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  const applyDashboardData = useCallback((data: DashboardData) => {
-    setOverview(data.overview);
-    setSalons(data.salons);
-    setFeatures(data.features);
-    setAuditEvents(data.auditEvents);
+  const [errors, setErrors] = useState<Partial<Record<AdminTab, string>>>({});
+  const [revision, setRevision] = useState(0);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [selected, setSelected] = useState<AdminSalon | null>(null);
+  const alive = useRef(true);
+  const pageGeneration = useRef(0);
+  const paging = useRef(false);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
   }, []);
-
-  const refresh = useCallback(async () => {
+  const refresh = () => {
+    pageGeneration.current++;
+    paging.current = false;
+    setLoadingMore(false);
+    setErrors({});
     setLoading(true);
-    setError("");
-    try {
-      applyDashboardData(await loadDashboardData());
-    } catch (caught) {
-      setError(errorMessage(caught));
-    } finally {
-      setLoading(false);
-    }
-  }, [applyDashboardData]);
+    setOverview(null);
+    setSalons(null);
+    setFeatures(null);
+    setAuditEvents(null);
+    setNextCursor(null);
+    setRevision((value) => value + 1);
+  };
 
   useEffect(() => {
     let cancelled = false;
-    void loadDashboardData()
-      .then((data) => {
-        if (!cancelled) applyDashboardData(data);
-      })
-      .catch((caught: unknown) => {
-        if (!cancelled) setError(errorMessage(caught));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+    const failure = (section: AdminTab, prefix: string) => (caught: unknown) => {
+      if (!cancelled)
+        setErrors((previous) => ({
+          ...previous,
+          [section]: `${prefix}. ${adminErrorMessage(caught)}`,
+        }));
+    };
+    void Promise.all([
+      adminApi
+        .overview()
+        .then((result) => {
+          if (!cancelled) setOverview(result);
+        })
+        .catch(failure("overview", "Chưa tải được tổng quan")),
+      adminApi
+        .salons()
+        .then((result) => {
+          if (!cancelled) {
+            setSalons(result.salons);
+            setNextCursor(result.nextCursor);
+          }
+        })
+        .catch(failure("salons", "Chưa tải được danh sách salon")),
+      adminApi
+        .features()
+        .then((result) => {
+          if (!cancelled) setFeatures(result.features);
+        })
+        .catch(failure("features", "Chưa tải được cấu hình")),
+      adminApi
+        .auditEvents()
+        .then((result) => {
+          if (!cancelled) setAuditEvents(result.events);
+        })
+        .catch(failure("audit", "Chưa tải được nhật ký")),
+    ]).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
     return () => {
       cancelled = true;
     };
-  }, [applyDashboardData]);
+  }, [revision]);
+
+  async function loadMore() {
+    if (!nextCursor || paging.current) return;
+    const generation = pageGeneration.current;
+    paging.current = true;
+    setLoadingMore(true);
+    try {
+      const result = await adminApi.salons(nextCursor);
+      if (!alive.current || generation !== pageGeneration.current) return;
+      setSalons((previous) => [
+        ...new Map(
+          [...(previous || []), ...result.salons].map((salon) => [salon.id, salon]),
+        ).values(),
+      ]);
+      setNextCursor(result.nextCursor === nextCursor ? null : result.nextCursor);
+      setErrors((previous) => ({ ...previous, salons: undefined }));
+    } catch (caught) {
+      if (alive.current && generation === pageGeneration.current)
+        setErrors((previous) => ({
+          ...previous,
+          salons: `Chưa tải được trang salon tiếp theo. ${adminErrorMessage(caught)}`,
+        }));
+    } finally {
+      if (alive.current && generation === pageGeneration.current) {
+        paging.current = false;
+        setLoadingMore(false);
+      }
+    }
+  }
 
   return (
     <div className="admin-shell">
@@ -125,7 +176,7 @@ export function AdminDashboard({ user }: { user: User }) {
           </div>
         </div>
         <nav aria-label="Điều hướng quản trị">
-          {READ_ONLY_ADMIN_TABS.map((item) => {
+          {ADMIN_TABS.map((item) => {
             const Icon = tabIcons[item.id];
             return (
               <button
@@ -152,24 +203,20 @@ export function AdminDashboard({ user }: { user: User }) {
       <main className="workspace">
         <header className="workspace-header">
           <div>
-            <p className="eyebrow">Theo dõi nền tảng</p>
-            <h1>{READ_ONLY_ADMIN_TABS.find((item) => item.id === tab)?.label}</h1>
+            <p className="eyebrow">Trung tâm quản trị salon</p>
+            <h1>{ADMIN_TABS.find((item) => item.id === tab)?.label}</h1>
           </div>
-          <button
-            className="icon-button"
-            title="Làm mới"
-            onClick={() => void refresh()}
-            disabled={loading}
-          >
+          <button className="icon-button" title="Làm mới" onClick={refresh} disabled={loading}>
             <RefreshCcw className={loading ? "spin" : ""} />
           </button>
         </header>
         <p className="notice">
-          Admin đang ở chế độ chỉ đọc. Mọi thay đổi production phải qua quy trình vận hành riêng.
+          Xem tất cả salon, kiểm tra từng salon và chỉ sửa đúng lỗi đã đối chiếu. Mọi thao tác sửa
+          đều cần xác nhận và được ghi nhật ký.
         </p>
-        {error ? (
+        {errors[tab] ? (
           <p className="notice error" role="alert">
-            {error}
+            {errors[tab]}
           </p>
         ) : null}
         {loading ? (
@@ -179,10 +226,56 @@ export function AdminDashboard({ user }: { user: User }) {
           </div>
         ) : null}
 
-        {!loading && tab === "overview" && overview ? <Overview overview={overview} /> : null}
-        {!loading && tab === "salons" ? <SalonTable salons={salons} /> : null}
-        {!loading && tab === "features" && features ? <FeaturePanel features={features} /> : null}
-        {!loading && tab === "audit" ? <AuditPanel events={auditEvents} /> : null}
+        {tab === "overview" && overview ? <Overview overview={overview} /> : null}
+        {tab === "salons" ? (
+          <>
+            {salons ? <SalonTable salons={salons} onSelect={setSelected} /> : null}
+            {nextCursor ? (
+              <button
+                className="secondary load-more"
+                disabled={loadingMore || loading}
+                onClick={() => void loadMore()}
+              >
+                {loadingMore ? "Đang tải thêm…" : "Tải thêm salon"}
+              </button>
+            ) : null}
+            {selected ? (
+              <SalonSupportPanel
+                key={selected.id}
+                salon={selected}
+                onClose={() => setSelected(null)}
+                onRepaired={refresh}
+              />
+            ) : null}
+          </>
+        ) : null}
+        {tab === "features" && features ? <FeaturePanel features={features} /> : null}
+        {tab === "audit" && auditEvents ? <AuditPanel events={auditEvents} /> : null}
+        {tab === "support" ? (
+          <section className="content-section">
+            <h2>Xử lý đúng loại sự cố</h2>
+            <p>
+              Kiểm tra salon ở mục Salon trước. Lỗi phần mềm cần bản vá đã kiểm thử; lỗi hạ tầng cần
+              xử lý tại Google Cloud. Không có nút tự sửa mọi lỗi.
+            </p>
+            <div className="support-links">
+              {supportLinks(firebaseProjectId).map((link) => (
+                <article key={link.href}>
+                  <h3>{link.label}</h3>
+                  <p>{link.description}</p>
+                  <a
+                    className="text-button"
+                    href={link.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Mở công cụ Google
+                  </a>
+                </article>
+              ))}
+            </div>
+          </section>
+        ) : null}
       </main>
     </div>
   );
@@ -209,7 +302,22 @@ function Overview({ overview }: { overview: AdminOverview }) {
   );
 }
 
-function SalonTable({ salons }: { salons: AdminSalon[] }) {
+function SalonTable({
+  salons,
+  onSelect,
+}: {
+  salons: AdminSalon[];
+  onSelect: (salon: AdminSalon) => void;
+}) {
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("all");
+  const filtered = salons.filter(
+    (salon) =>
+      `${salon.name} ${salon.id}`
+        .toLocaleLowerCase("vi")
+        .includes(search.trim().toLocaleLowerCase("vi")) &&
+      (status === "all" || salon.status === status),
+  );
   return (
     <section className="content-section">
       <div className="section-heading">
@@ -217,7 +325,26 @@ function SalonTable({ salons }: { salons: AdminSalon[] }) {
           <p className="eyebrow">Tenant</p>
           <h2>Danh sách salon</h2>
         </div>
-        <span>{salons.length} salon trên trang này</span>
+        <span>Đã tải {salons.length} salon</span>
+      </div>
+      <div className="salon-filters">
+        <label>
+          Tìm trong salon đã tải
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Tên hoặc mã salon"
+          />
+        </label>
+        <label>
+          Trạng thái
+          <select value={status} onChange={(event) => setStatus(event.target.value)}>
+            <option value="all">Tất cả</option>
+            <option value="active">Hoạt động</option>
+            <option value="suspended">Đang khóa</option>
+            <option value="pending_deletion">Chờ xóa</option>
+          </select>
+        </label>
       </div>
       <div className="table-wrap">
         <table>
@@ -227,10 +354,11 @@ function SalonTable({ salons }: { salons: AdminSalon[] }) {
               <th>Trạng thái</th>
               <th>Gói</th>
               <th>Khách</th>
+              <th>Kiểm tra</th>
             </tr>
           </thead>
           <tbody>
-            {salons.map((salon) => (
+            {filtered.map((salon) => (
               <tr key={salon.id}>
                 <td>
                   <strong>{salon.name}</strong>
@@ -241,10 +369,24 @@ function SalonTable({ salons }: { salons: AdminSalon[] }) {
                 </td>
                 <td>{salon.plan}</td>
                 <td>{salon.customerCount}</td>
+                <td>
+                  <button
+                    className="secondary compact"
+                    aria-label={`Kiểm tra ${salon.name}`}
+                    onClick={() => onSelect(salon)}
+                  >
+                    Kiểm tra
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
+        {filtered.length === 0 ? (
+          <p className="empty">
+            {salons.length ? "Không có salon khớp bộ lọc trong dữ liệu đã tải." : "Chưa có salon"}
+          </p>
+        ) : null}
       </div>
     </section>
   );
@@ -325,11 +467,4 @@ function formatDate(value: number | null) {
   return value
     ? new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" }).format(value)
     : "Chưa rõ";
-}
-
-function errorMessage(value: unknown) {
-  const candidate = value as { message?: unknown };
-  return typeof candidate?.message === "string"
-    ? candidate.message.replace(/^Firebase:\s*/i, "")
-    : "Chưa tải được dữ liệu. Vui lòng thử lại.";
 }
