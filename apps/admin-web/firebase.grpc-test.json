@@ -1,0 +1,10 @@
+{
+  "firestore": { "rules": "../../customer-web/test/firestore-compat.rules" },
+  "emulators": {
+    "firestore": { "host": "127.0.0.1", "port": 8786 },
+    "hub": { "host": "127.0.0.1", "port": 8787 },
+    "logging": { "host": "127.0.0.1", "port": 8788 },
+    "ui": { "enabled": false },
+    "singleProjectMode": true
+  }
+}
