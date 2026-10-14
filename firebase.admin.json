@@ -1,7 +1,7 @@
 {
   "hosting": {
     "site": "haircut-c7d12-admin",
-    "public": "../apps/admin-web/dist",
+    "public": "apps/admin-web/dist",
     "ignore": ["**/.*", "**/node_modules/**", "**/*.map"],
     "headers": [
       { "source": "**", "headers": [
