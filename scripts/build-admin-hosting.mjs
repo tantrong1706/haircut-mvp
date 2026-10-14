@@ -22,13 +22,19 @@ export function selectAdminPublicEnv(primary, fallback, version) {
   return { ...selected, VITE_APP_VERSION: version };
 }
 
+export function resolveViteEntry(metadata) {
+  const entry = metadata.exports?.["."]?.import?.default || metadata.main;
+  if (typeof entry !== "string" || !entry.startsWith("./")) throw new Error("Không xác định được ESM entry của Vite");
+  return entry;
+}
+
 async function buildAdmin() {
   const root = fileURLToPath(new URL("../", import.meta.url));
   const adminDir = join(root, "apps/admin-web");
   const require = createRequire(join(adminDir, "package.json"));
   const vitePackage = require.resolve("vite/package.json");
   const metadata = JSON.parse(readFileSync(vitePackage, "utf8"));
-  const { loadEnv } = await import(pathToFileURL(resolve(dirname(vitePackage), metadata.module)).href);
+  const { loadEnv } = await import(pathToFileURL(resolve(dirname(vitePackage), resolveViteEntry(metadata))).href);
   const version = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
   const dirty = execFileSync("git", ["status", "--porcelain"], { cwd: root, encoding: "utf8" }).trim();
   if (dirty) throw new Error("Commit các thay đổi đã kiểm thử trước khi đóng gói production Admin");
