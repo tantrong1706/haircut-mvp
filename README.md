@@ -90,6 +90,10 @@ luồng trình duyệt và an toàn repository. Test xanh không thay thế ki�
 Project hiện tại: `haircut-c7d12`. Domain khách: `app.chhaircutsalon.cc`.
 Firebase vẫn là nền tảng vận hành; không chuyển DNS hoặc tải source lên Botkeep.
 
+Cổng quản trị riêng: [HAIRCUT Admin](https://haircut-c7d12-admin.web.app).
+Chỉ tài khoản được cấp quyền quản trị mới truy cập được; giữ nguyên quyền chủ salon.
+Xem [phạm vi quản trị](docs/ADMIN_OPERATIONS.md) và [bản phát hành Admin](docs/ADMIN_RELEASE_STATUS.md).
+
 **Source trên GitHub và phiên bản đang phục vụ có thể khác nhau.** Dọn source/push không đồng
 nghĩa đã deploy. Xem [trạng thái phát hành](docs/RELEASE_STATUS.md) và kiểm tra Hosting version
 trước từng lần phát hành. Thay đổi frontend chỉ triển khai Hosting sau khi được phép;
