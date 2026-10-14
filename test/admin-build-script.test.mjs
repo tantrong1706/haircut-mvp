@@ -11,6 +11,12 @@ const publicConfig = {
   VITE_FIREBASE_APP_ID: "public-fixture-app-id",
   VITE_FIREBASE_APP_CHECK_SITE_KEY: "public-fixture-site-key",
 };
+test("Admin build resolves Vite's actual conditional ESM export, not a nonexistent module field", () => {
+  assert.equal(typeof module?.resolveViteEntry, "function", "Missing Vite export resolver");
+  assert.equal(module.resolveViteEntry({ main: "./index.cjs", exports: { ".": { import: { default: "./dist/node/index.js" } } } }), "./dist/node/index.js");
+  assert.equal(module.resolveViteEntry({ main: "./dist/node/index.js" }), "./dist/node/index.js");
+  assert.throws(() => module.resolveViteEntry({}), /Vite/);
+});
 function select(...args) {
   assert.equal(typeof module?.selectAdminPublicEnv, "function", "Missing safe Admin build helper");
   return module.selectAdminPublicEnv(...args);
