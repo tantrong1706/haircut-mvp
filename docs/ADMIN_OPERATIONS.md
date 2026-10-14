@@ -44,7 +44,8 @@ hiển thị như dữ liệu rỗng hoặc số 0.
 2. `node scripts/build-admin-hosting.mjs` lấy duy nhất các trường Firebase Web công khai
    từ cấu hình Admin, hoặc tái dùng cấu hình public của Customer Web cùng project.
    Không sao chép file dotenv, không nhận debug token production, không in credential.
-3. Chỉ dùng `firebase/admin-hosting.json` cho site Admin. Không thay site khách
+3. Chỉ dùng `firebase.admin.json` tại root repo cho site Admin. Firebase yêu cầu thư mục
+   artifact nằm trong project root (thư mục chứa config). Không thay site khách
    `haircut-c7d12`, không copy vào `firebase/public`.
 4. API mới: `getSystemAdminAccess`, `getSystemAdminSalonDiagnostics`, `repairSystemAdminSalon`.
    Bốn API Admin đọc hiện có cần được cập nhật để nhận grant riêng: `getSystemAdminOverview`,
@@ -58,6 +59,18 @@ hiển thị như dữ liệu rỗng hoặc số 0.
    một repair thật trên dữ liệu khách chỉ để lấy bằng chứng PASS.
 
 ## Rollback
+
+Lệnh Hosting riêng, chạy từ root repo sau khi CI PASS và đã đóng gói:
+
+```powershell
+firebase deploy --project haircut-c7d12 --config firebase.admin.json --only hosting:haircut-c7d12-admin --non-interactive
+```
+
+Trên Windows, trước khi phát hành đúng danh sách 7 API Admin ở trên, chạy
+`npm --prefix firebase/functions run sync:contracts` để đồng nhất bản sao generated (kể cả
+CRLF/LF); xác minh `git diff --exit-code` không có thay đổi nội dung. Dùng
+`$env:FUNCTIONS_DISCOVERY_TIMEOUT = "60"` như script phát hành hiện có để tránh timeout
+nhận diện code trên laptop. Không bỏ qua predeploy build hoặc mở rộng danh sách API.
 
 Tắt cờ repair mới hoặc vô hiệu hóa grant riêng để đóng khả năng sửa; không thay hồ sơ owner.
 Hosting Admin có thể trả về release trước. API Admin đọc có thể triển khai lại source trước

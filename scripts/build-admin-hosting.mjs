@@ -38,9 +38,9 @@ async function buildAdmin() {
   const version = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
   const dirty = execFileSync("git", ["status", "--porcelain"], { cwd: root, encoding: "utf8" }).trim();
   if (dirty) throw new Error("Commit các thay đổi đã kiểm thử trước khi đóng gói production Admin");
-  const config = JSON.parse(readFileSync(join(root, "firebase/admin-hosting.json"), "utf8"));
+  const config = JSON.parse(readFileSync(join(root, "firebase.admin.json"), "utf8"));
   assert.equal(config.hosting.site, "haircut-c7d12-admin");
-  assert.equal(config.hosting.public, "../apps/admin-web/dist");
+  assert.equal(config.hosting.public, "apps/admin-web/dist");
   assert.deepEqual(Object.keys(config), ["hosting"]);
   // Reuse only the existing project's public Web configuration. Never copy dotenv files or secrets.
   const publicEnv = selectAdminPublicEnv(loadEnv("production", adminDir, "VITE_"), loadEnv("production", join(root, "customer-web"), "VITE_"), version);
