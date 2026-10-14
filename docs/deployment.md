@@ -104,7 +104,9 @@ Android cần `google-services.json`; iOS cần `GoogleService-Info.plist`, APNs
 
 ## HAIRCUT Admin
 
-Build bằng `npm run build` trong `apps/admin-web`. Trước deploy phải tạo Firebase Hosting site riêng, cấu hình URL vào `VITE_ADMIN_URL` và smoke test tài khoản `system_admin`; không dùng site `haircut-c7d12` của khách. Giao diện và API client bản đầu chỉ đọc; backend vẫn khóa callable ghi khi flag server chưa bật.
+Admin có quy trình phát hành riêng tại [ADMIN_OPERATIONS.md](ADMIN_OPERATIONS.md). Dùng site riêng,
+không dùng site `haircut-c7d12` của khách. Quyền quản trị riêng không thay role owner; hai thao tác
+sửa hỗ trợ được giới hạn, xác nhận và audit. Các callable quản trị ghi cũ vẫn bị khóa.
 
 ## Kiểm tra sau deploy
 

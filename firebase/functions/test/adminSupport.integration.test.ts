@@ -301,14 +301,12 @@ describe("safe repair transactions", () => {
 });
 
 async function seedPointer(status: string, isOpen: boolean) {
-  await db
-    .doc(`active_service_sessions/${pointerId()}`)
-    .set({
-      salonId: SALON,
-      customerId: "customer-a",
-      sessionId: "session-a",
-      privateToken: "PRIVATE_TOKEN_FIXTURE",
-    });
+  await db.doc(`active_service_sessions/${pointerId()}`).set({
+    salonId: SALON,
+    customerId: "customer-a",
+    sessionId: "session-a",
+    privateToken: "PRIVATE_TOKEN_FIXTURE",
+  });
   await db
     .doc("chair_sessions/session-a")
     .set({ salonId: SALON, customerId: "customer-a", status, isOpen });

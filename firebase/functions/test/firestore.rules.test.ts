@@ -757,6 +757,36 @@ describe("Firestore production rules", () => {
   });
 });
 
+describe("admin support grants and receipts are server-only", () => {
+  it("does not let a client grant itself system access or forge a repair receipt", async () => {
+    for (const uid of ["owner-a", "staff-a", "unknown-user"]) {
+      const db = testEnv.authenticatedContext(uid, { role: "system_admin" }).firestore();
+      await assertFails(
+        setDoc(doc(db, "system_admin_access", uid), { role: "system_admin", isActive: true }),
+      );
+      await assertFails(
+        setDoc(doc(db, "admin_support_operations", "forged"), {
+          actorId: uid,
+          result: { changed: true },
+        }),
+      );
+    }
+  });
+  it("does not expose the privilege registry to client reads", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), "system_admin_access", "owner-a"), {
+        role: "system_admin",
+        isActive: true,
+      });
+    });
+    await assertFails(
+      getDoc(
+        doc(testEnv.authenticatedContext("owner-a").firestore(), "system_admin_access", "owner-a"),
+      ),
+    );
+  });
+});
+
 function member(salonId: string, role: "owner" | "staff", branchIds: string[] = []) {
   return { salonId, role, name: role, isActive: true, branchIds };
 }
