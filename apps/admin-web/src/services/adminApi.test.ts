@@ -20,7 +20,15 @@ describe("adminApi", () => {
     });
   });
 
-  it("không xuất bất kỳ thao tác ghi nào trong bản read-only", () => {
-    expect(Object.keys(adminApi)).toEqual(["overview", "salons", "features", "auditEvents"]);
+  it("chỉ bổ sung kiểm tra và sửa có giới hạn, không mở các thao tác ghi quản trị cũ", () => {
+    expect(Object.keys(adminApi)).toEqual([
+      "access",
+      "overview",
+      "salons",
+      "features",
+      "auditEvents",
+      "diagnostics",
+      "repair",
+    ]);
   });
 });

@@ -76,9 +76,15 @@ export function createAuthorization(db: Firestore) {
   }
 
   async function assertSystemAdmin(uid: string): Promise<SystemAdminUser> {
-    const snap = await db.collection("users").doc(uid).get();
+    const [snap, access] = await Promise.all([
+      db.collection("users").doc(uid).get(),
+      db.collection("system_admin_access").doc(uid).get(),
+    ]);
     const user = snap.data() as Partial<SystemAdminUser> | undefined;
-    if (!snap.exists || user?.role !== "system_admin" || user.isActive !== true) {
+    const grant = access.data();
+    const legacyAdmin = snap.exists && user?.role === "system_admin" && user.isActive === true;
+    const separateAdmin = access.exists && grant?.role === "system_admin" && grant.isActive === true;
+    if (!legacyAdmin && !separateAdmin) {
       throw apiError(
         "permission-denied",
         ApiErrorCode.FORBIDDEN,
@@ -87,7 +93,7 @@ export function createAuthorization(db: Firestore) {
     }
     return {
       uid,
-      name: String(user.name || "Quản trị viên"),
+      name: String(user?.name || "Quản trị viên"),
       role: "system_admin",
       isActive: true,
     };

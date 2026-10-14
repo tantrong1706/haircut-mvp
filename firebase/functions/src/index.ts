@@ -112,6 +112,7 @@ import {
   type UserRole,
 } from "./authz/authorization";
 import { auditEventData } from "./domains/audit/auditEvent";
+import { createAdminSupport } from "./domains/admin/support";
 import {
   PHOTO_UPLOAD_MAX_BYTES,
   PHOTO_UPLOAD_OPERATION_TTL_MS,
@@ -201,6 +202,8 @@ const AUTHENTICATED_RATE_LIMITS = {
   spinWebLuckyWheel: 4,
   claimServiceSession: 60,
   adminMutation: 40,
+  adminSupportRead: 20,
+  adminSupportRepair: 6,
 } as const;
 
 type PublicEndpoint = keyof typeof PUBLIC_RATE_LIMITS;
@@ -8092,6 +8095,13 @@ export const unregisterManagerDeviceToken = onCall(functionOptions, async (reque
   }
   return { unregistered: true };
 });
+
+const adminSupport = createAdminSupport(db, (uid, mode) =>
+  enforceAuthenticatedRateLimit(mode === "read" ? "adminSupportRead" : "adminSupportRepair", uid, "__system__"),
+);
+export const getSystemAdminAccess = onCall({ ...functionOptions, maxInstances: 3 }, adminSupport.access);
+export const getSystemAdminSalonDiagnostics = onCall({ ...functionOptions, maxInstances: 3 }, adminSupport.diagnose);
+export const repairSystemAdminSalon = onCall({ ...functionOptions, maxInstances: 3 }, adminSupport.repair);
 
 export const getSystemAdminOverview = onCall(functionOptions, async (request) => {
   const uid = currentUid(request.auth);

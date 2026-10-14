@@ -18,7 +18,8 @@
     "test:rules": "cd .. && npx --yes firebase-tools@15.22.3 emulators:exec --project demo-haircut --only firestore,storage \"npm --prefix functions run test:rules:emulator\"",
     "test:rules:emulator": "vitest run --hookTimeout=30000 --testTimeout=20000 test/firestore.rules.test.ts",
     "test:integration": "cd .. && npx --yes firebase-tools@15.22.3 emulators:exec --project demo-haircut --only firestore,storage \"npm --prefix functions run test:integration:emulator\"",
-    "test:integration:emulator": "vitest run --no-file-parallelism --testTimeout=20000 test/callables.integration.test.ts test/webCustomer.integration.test.ts test/salonBranding.integration.test.ts test/photoUploadOperations.integration.test.ts test/adversarial.audit.test.ts",
+    "test:integration:emulator": "vitest run --no-file-parallelism --testTimeout=20000 test/callables.integration.test.ts test/webCustomer.integration.test.ts test/salonBranding.integration.test.ts test/photoUploadOperations.integration.test.ts test/adversarial.audit.test.ts test/adminSupport.integration.test.ts",
+    "test:admin:coverage": "vitest run --config vitest.admin.config.ts --coverage",
     "test:salon-branding:integration": "cd .. && npx --yes firebase-tools@15.22.3 emulators:exec --project demo-haircut --only firestore \"npm --prefix functions run test:salon-branding:integration:emulator\"",
     "test:salon-branding:integration:emulator": "vitest run test/salonBranding.integration.test.ts",
     "seed:demo": "npm run build && node lib/seedDemo.js",
@@ -36,8 +37,9 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@firebase/rules-unit-testing": "^5.0.1",
     "@eslint/js": "^9.39.2",
+    "@firebase/rules-unit-testing": "^5.0.1",
+    "@vitest/coverage-v8": "4.1.10",
     "eslint": "^9.39.2",
     "eslint-plugin-promise": "^7.2.1",
     "firebase": "^12.10.0",

@@ -27,7 +27,43 @@ export type AdminAuditEvent = {
   createdAtMs: number | null;
 };
 
+export type RepairAction = "reconcile_customer_count" | "clear_stale_session_pointer";
+export type AdminDiagnostics = {
+  salonId: string;
+  salonName: string;
+  status: SalonStatus;
+  checkedAtMs: number;
+  repairsEnabled: boolean;
+  customerCount: { stored: number | null; actual: number };
+  activeBranches: number;
+  features: SystemFeatures;
+  issues: Array<{
+    code: string;
+    severity: "warning" | "error";
+    message: string;
+    action: RepairAction | null;
+  }>;
+  stalePointers: Array<{ pointerId: string; sessionId: string; customerId: string }>;
+  pointerScan: { checked: number; hasMore: boolean };
+};
+export type AdminRepairInput = {
+  salonId: string;
+  action: RepairAction;
+  operationId: string;
+  reason: string;
+  confirmedSalonName: string;
+  expectedStoredCount?: number | null;
+  expectedActualCount?: number;
+  pointerId?: string;
+  expectedSessionId?: string;
+};
+
 export const adminApi = {
+  access: () =>
+    callAdminFunction<Record<string, never>, { authorized: boolean; repairsEnabled: boolean }>(
+      "getSystemAdminAccess",
+      {},
+    ),
   overview: () =>
     callAdminFunction<Record<string, never>, AdminOverview>("getSystemAdminOverview", {}),
   salons: (cursor?: string) =>
@@ -45,4 +81,13 @@ export const adminApi = {
       "listSystemAdminAuditEvents",
       { salonId, pageSize: 50 },
     ),
+  diagnostics: (salonId: string) =>
+    callAdminFunction<{ salonId: string }, AdminDiagnostics>("getSystemAdminSalonDiagnostics", {
+      salonId,
+    }),
+  repair: (input: AdminRepairInput) =>
+    callAdminFunction<
+      AdminRepairInput,
+      { changed: boolean; salonId: string; action: RepairAction; operationId: string }
+    >("repairSystemAdminSalon", input),
 };

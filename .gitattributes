@@ -1,5 +1,7 @@
 *.sh text eol=lf
 customer-web/** text=auto eol=lf
+apps/admin-web/** text=auto eol=lf
+firebase/functions/** text=auto eol=lf
 *.service text eol=lf
 Caddyfile text eol=lf
 services/zalo-verification-gateway/**/*.ts text eol=lf
