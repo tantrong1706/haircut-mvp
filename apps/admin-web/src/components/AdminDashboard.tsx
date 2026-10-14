@@ -164,7 +164,7 @@ export function AdminDashboard({ user }: { user: User }) {
   }
 
   return (
-    <div className="admin-shell">
+    <div className="admin-shell" data-release={import.meta.env.VITE_APP_VERSION || "local"}>
       <aside className="sidebar">
         <div className="brand-lockup">
           <span className="brand-symbol">
