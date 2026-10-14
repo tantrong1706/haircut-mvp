@@ -63,5 +63,7 @@ RTL role-query typing and optional legacy-profile access were corrected during i
 
 ## Release status
 
-Prepared locally. CI, production deployment, grant provisioning and live authenticated smoke checks
-are pending; see the final task report for the subsequently verified state.
+PR #68 and deployment-path correction #70 were merged after all CI checks passed.
+Admin Hosting, the seven scoped Admin APIs and the operator grant were released on 2026-10-14.
+See [ADMIN_RELEASE_STATUS.md](../ADMIN_RELEASE_STATUS.md) for exact source, CI and live evidence.
+Authenticated operator smoke checks are still pending user login; fixture tests are not a substitute.

@@ -19,7 +19,7 @@
 - Chỉ đặt `REQUIRE_ZALO_APP_CHECK=true` sau khi App Check đã chạy ổn trong cả Zalo Android và iPhone; để trống trong giai đoạn tương thích.
 - Chỉ đặt `ENFORCE_APP_CHECK=true` sau khi web/Zalo và Manager native đều gửi token hợp lệ. Manager dùng Play Integrity và App Attest/DeviceCheck; không dùng reCAPTCHA web trong native runtime.
 - Admin Web cần `VITE_FIREBASE_APP_CHECK_SITE_KEY` của reCAPTCHA Enterprise. `VITE_APP_CHECK_DEBUG_TOKEN` chỉ dùng local và tuyệt đối không đặt trong production.
-- `ADMIN_WRITE_OPERATIONS_ENABLED` mặc định tắt. Không bật trong bản Admin read-only; mọi callable ghi Admin sẽ trả `ADMIN_WRITE_DISABLED` dù được gọi trực tiếp.
+- `ADMIN_WRITE_OPERATIONS_ENABLED` giữ tắt; các callable quản trị ghi cũ vẫn trả `ADMIN_WRITE_DISABLED`. Hai sửa chữa hỗ trợ mới có cờ riêng và phạm vi tại [ADMIN_OPERATIONS.md](ADMIN_OPERATIONS.md).
 - `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT` chỉ đặt ở môi trường deploy/GitHub Secrets.
 - Khi đủ ba biến Sentry, Vite tạo source map ẩn, upload rồi xóa file map khỏi `dist`.
 
@@ -107,6 +107,7 @@ Android cần `google-services.json`; iOS cần `GoogleService-Info.plist`, APNs
 Admin có quy trình phát hành riêng tại [ADMIN_OPERATIONS.md](ADMIN_OPERATIONS.md). Dùng site riêng,
 không dùng site `haircut-c7d12` của khách. Quyền quản trị riêng không thay role owner; hai thao tác
 sửa hỗ trợ được giới hạn, xác nhận và audit. Các callable quản trị ghi cũ vẫn bị khóa.
+Trạng thái phát hành Admin tách riêng tại [ADMIN_RELEASE_STATUS.md](ADMIN_RELEASE_STATUS.md).
 
 ## Kiểm tra sau deploy
 

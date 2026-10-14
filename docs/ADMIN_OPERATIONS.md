@@ -1,7 +1,8 @@
 # Trung tâm quản trị salon
 
-Ứng dụng riêng tại `apps/admin-web`, tách khỏi website khách. Site dự kiến:
-`haircut-c7d12-admin`. Không coi URL này đã hoạt động cho đến khi báo cáo phát hành xác nhận.
+Ứng dụng riêng tại `apps/admin-web`, tách khỏi website khách. Đã phát hành tại
+https://haircut-c7d12-admin.web.app ngày 2026-10-14. Xem bằng chứng và giới hạn hậu kiểm
+trong [ADMIN_RELEASE_STATUS.md](ADMIN_RELEASE_STATUS.md).
 
 ## Phạm vi
 
@@ -27,6 +28,9 @@ hoàn toàn bình thường. Lỗi không có trong bộ quy tắc phải đư�
   Chỉ operator đã được chủ dự án chỉ định và xác minh danh tính mới được cấp grant.
 - `ADMIN_SUPPORT_REPAIRS_ENABLED=true` chỉ mở hai thao tác mới. Mặc định là tắt.
   **Không bật** `ADMIN_WRITE_OPERATIONS_ENABLED`; các thao tác quản trị cũ vẫn bị khóa.
+- Cờ repair phải được kiểm tra trên cả ba API mới (access, diagnostics, repair) sau mỗi
+  lần phát hành. Thay env chỉ cập nhật đúng `serviceConfig.environmentVariables`, giữ
+  nguyên mọi giá trị khác; không sửa App Check enforcement hoặc các API nghiệp vụ khách.
 - Diagnostic giới hạn 20 lần/phút, repair 6 lần/phút cho mỗi tài khoản; không quét tự động
   tất cả salon trong nền. API mới giới hạn tối đa 3 instances.
 - Counter được đối chiếu trong transaction; bản xem trước lỗi thời bị từ chối. Không có
