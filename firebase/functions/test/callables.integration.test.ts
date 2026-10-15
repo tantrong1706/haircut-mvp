@@ -57,6 +57,20 @@ const db = getFirestore();
 const originalAdminWriteFlag = process.env.ADMIN_WRITE_OPERATIONS_ENABLED;
 
 describe("callable transactions", () => {
+  it("does not reset the public quota by forging forwarded headers or Express ip", async () => {
+    const peer = "203.0.113.10";
+    const window = Math.floor(Date.now() / 60_000) * 60_000;
+    const hash = (value: string) => createHash("sha256").update(value).digest("hex");
+    for (const start of [window - 60_000, window, window + 60_000]) {
+      await db.collection("_public_rate_limits").doc(hash(`resolveCustomerQr:ip:${hash(peer)}:${start}`)).set({ count: 180 });
+    }
+    for (const supplied of ["198.51.100.71", "198.51.100.72, 198.51.100.73"]) {
+      await expect(resolveCustomerQr.run({
+        data: { salonId: "missing-audit-salon", qrToken: "invalid-audit-token" },
+        rawRequest: { ip: supplied, socket: { remoteAddress: peer }, get: () => supplied },
+      } as never)).rejects.toMatchObject({ code: "resource-exhausted" });
+    }
+  });
   beforeEach(async () => {
     delete process.env.ADMIN_WRITE_OPERATIONS_ENABLED;
     const response = await fetch(
