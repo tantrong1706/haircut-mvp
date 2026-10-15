@@ -10,6 +10,14 @@ import {
 import { createHash } from "node:crypto";
 
 describe("photo upload operations", () => {
+  it("rejects a non-image wrapped in JPEG markers even with a matching checksum", async () => {
+    const fake = Buffer.concat([
+      Buffer.from([0xff, 0xd8, 0xff]),
+      Buffer.from("AUDIT_NOT_AN_IMAGE"),
+      Buffer.from([0xff, 0xd9]),
+    ]);
+    expect(await validatePhotoUploadBytes(fake, createHash("sha256").update(fake).digest("hex"))).toBe(false);
+  });
   const context = {
     salonId: "salon-a",
     customerId: "customer-a",
