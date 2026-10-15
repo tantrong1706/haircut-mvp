@@ -12,11 +12,11 @@ import {
   approvePointRequest,
 } from "../src/index";
 import { requireFirestoreEmulator } from "./emulatorEnvironment";
+import { TEST_JPEG } from "./fixtures/jpeg";
 
 const { emulatorHost, projectId } = requireFirestoreEmulator();
 const db = getFirestore();
 const bucket = getStorage().bucket();
-const TEST_JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
 const TEST_JPEG_CHECKSUM = createHash("sha256").update(TEST_JPEG).digest("hex");
 
 describe("photo upload operation callables", () => {
@@ -296,7 +296,7 @@ function beginData(requestId: string) {
     sessionId: "session-photo",
     requestId,
     expectedContentType: "image/jpeg",
-    expectedBytes: 4,
+    expectedBytes: TEST_JPEG.length,
     checksum: TEST_JPEG_CHECKSUM,
   };
 }

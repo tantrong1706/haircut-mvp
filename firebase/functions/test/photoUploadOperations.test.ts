@@ -8,6 +8,7 @@ import {
   validatePhotoUploadBytes,
 } from "../src/domains/photos/photoUploadOperations";
 import { createHash } from "node:crypto";
+import { TEST_JPEG } from "./fixtures/jpeg";
 
 describe("photo upload operations", () => {
   it("rejects a non-image wrapped in JPEG markers even with a matching checksum", async () => {
@@ -16,7 +17,9 @@ describe("photo upload operations", () => {
       Buffer.from("AUDIT_NOT_AN_IMAGE"),
       Buffer.from([0xff, 0xd9]),
     ]);
-    expect(await validatePhotoUploadBytes(fake, createHash("sha256").update(fake).digest("hex"))).toBe(false);
+    expect(
+      await validatePhotoUploadBytes(fake, createHash("sha256").update(fake).digest("hex")),
+    ).toBe(false);
   });
   const context = {
     salonId: "salon-a",
@@ -102,12 +105,27 @@ describe("photo upload operations", () => {
     ).toBe(false);
   });
 
-  it("xác minh chữ ký JPEG và checksum trên byte thật", () => {
-    const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x01, 0x02, 0xff, 0xd9]);
+  it("xác minh ảnh JPEG giải mã được và checksum trên byte thật", async () => {
+    const jpeg = TEST_JPEG;
     const checksum = createHash("sha256").update(jpeg).digest("hex");
 
-    expect(validatePhotoUploadBytes(jpeg, checksum)).toBe(true);
-    expect(validatePhotoUploadBytes(jpeg, "0".repeat(64))).toBe(false);
-    expect(validatePhotoUploadBytes(Buffer.from("not-an-image"), checksum)).toBe(false);
+    expect(await validatePhotoUploadBytes(jpeg, checksum)).toBe(true);
+    expect(await validatePhotoUploadBytes(jpeg, "0".repeat(64))).toBe(false);
+    expect(await validatePhotoUploadBytes(Buffer.from("not-an-image"), checksum)).toBe(false);
+  });
+
+  it("rejects oversized bodies, oversized dimensions and truncated JPEG scans", async () => {
+    const huge = Buffer.alloc(PHOTO_UPLOAD_MAX_BYTES + 1);
+    const dimensions = Buffer.from(TEST_JPEG);
+    const sof = dimensions.indexOf(Buffer.from([0xff, 0xc0]));
+    expect(sof).toBeGreaterThan(0);
+    dimensions.writeUInt16BE(65535, sof + 5);
+    dimensions.writeUInt16BE(65535, sof + 7);
+    const truncated = Buffer.concat([TEST_JPEG.subarray(0, -9), Buffer.from([0xff, 0xd9])]);
+    for (const bytes of [huge, dimensions, truncated]) {
+      expect(
+        await validatePhotoUploadBytes(bytes, createHash("sha256").update(bytes).digest("hex")),
+      ).toBe(false);
+    }
   });
 });

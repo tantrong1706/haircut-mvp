@@ -3817,7 +3817,8 @@ export const beginHaircutPhotoUpload = onCall(functionOptions, async (request) =
   };
 });
 
-export const finalizeHaircutPhotoUpload = onCall(functionOptions, async (request) => {
+export const finalizeHaircutPhotoUpload = onCall(
+  { ...functionOptions, concurrency: 2, maxInstances: 5, memory: "512MiB" }, async (request) => {
   const uid = currentUid(request.auth);
   const salonId = requireString(request.data?.salonId, "salonId");
   const operationId = requireString(request.data?.operationId, "operationId");
@@ -3899,7 +3900,7 @@ export const finalizeHaircutPhotoUpload = onCall(functionOptions, async (request
     }) ||
     Number(metadata.size ?? 0) !== Number(operation.expectedBytes ?? 0) ||
     String(metadata.metadata?.checksum || "") !== String(operation.checksum || "") ||
-    !validatePhotoUploadBytes(photoBytes, String(operation.checksum || ""))
+    !(await validatePhotoUploadBytes(photoBytes, String(operation.checksum || "")))
   ) {
     await operationRef.set(
       {
