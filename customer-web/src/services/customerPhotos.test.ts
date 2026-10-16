@@ -67,6 +67,17 @@ function successfulTask() {
 }
 
 describe("customer photo upload lifecycle", () => {
+  it("uses the authorized reader instead of creating a permanent download URL", async () => {
+    mocks.uploadBytesResumable.mockReturnValue(successfulTask());
+    await uploadHaircutPhoto({
+      salonId: "salon-a", branchId: "branch-a", customerId: "customer-a", sessionId: "session-a",
+      requestId: "photo-request-a", file: new File([processed.blob], "haircut.jpg", { type: "image/jpeg" }),
+    });
+    expect(mocks.getDownloadURL).not.toHaveBeenCalled();
+    expect(mocks.callFunction).toHaveBeenCalledWith("getHaircutPhotoReadUrls", {
+      salonId: "salon-a", customerId: "customer-a", sessionId: "session-a", photoPaths: [storagePath],
+    });
+  });
   beforeEach(() => {
     vi.useRealTimers();
     vi.clearAllMocks();
@@ -77,6 +88,7 @@ describe("customer photo upload lifecycle", () => {
       if (name === "finalizeHaircutPhotoUpload") {
         return Promise.resolve({ ...beginResult("finalized"), alreadyFinalized: false });
       }
+      if (name === "getHaircutPhotoReadUrls") return Promise.resolve({ photos: [{ path: storagePath, url: "https://storage.googleapis.com/test/temporary.jpg" }], expiresAtMs: Date.now() + 60_000 });
       throw new Error(`Unexpected function ${name}`);
     });
   });
