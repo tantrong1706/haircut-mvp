@@ -125,6 +125,7 @@ import {
   validatePhotoUploadBytes,
 } from "./domains/photos/photoUploadOperations";
 import { apiError } from "./shared/errors";
+import { publicRequestPeer } from "./security";
 
 initializeApp();
 
@@ -980,7 +981,7 @@ async function enforcePublicRequestPolicy(
   endpoint: PublicEndpoint,
   request: {
     app?: unknown;
-    rawRequest: { ip?: string; get(name: string): string | undefined };
+    rawRequest: { ip?: string; socket?: { remoteAddress?: string }; get(name: string): string | undefined };
   },
   salonId: string,
   accessTokenInput: unknown,
@@ -990,8 +991,7 @@ async function enforcePublicRequestPolicy(
   }
 
   const accessToken = requireString(accessTokenInput, "zaloAccessToken");
-  const forwardedIp = request.rawRequest.get("x-forwarded-for")?.split(",")[0]?.trim();
-  const clientIp = forwardedIp || request.rawRequest.ip || "unknown";
+  const transportPeer = publicRequestPeer(request.rawRequest);
   const policy = PUBLIC_RATE_LIMITS[endpoint];
   const nowMs = Date.now();
   const windowStart = Math.floor(nowMs / policy.windowMs) * policy.windowMs;
@@ -1004,7 +1004,7 @@ async function enforcePublicRequestPolicy(
     },
     {
       kind: "ip",
-      value: createHash("sha256").update(clientIp).digest("hex"),
+      value: createHash("sha256").update(transportPeer).digest("hex"),
       limit: policy.ipLimit,
     },
   ];
