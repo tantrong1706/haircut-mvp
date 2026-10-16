@@ -20,6 +20,23 @@ const bucket = getStorage().bucket();
 const TEST_JPEG_CHECKSUM = createHash("sha256").update(TEST_JPEG).digest("hex");
 
 describe("photo upload operation callables", () => {
+  it("revokes long-lived photo URLs before a successful finalization returns", async () => {
+    const begin = await beginOperation("photo-request-revoke-token");
+    await saveUploadedObject(begin);
+    const file = bucket.file(begin.storagePath);
+    const token = "local-fixture-download-token";
+    await file.setMetadata({ metadata: { firebaseStorageDownloadTokens: token } });
+    const host = process.env.FIREBASE_STORAGE_EMULATOR_HOST;
+    expect(host).toMatch(/^(127\.0\.0\.1|localhost):\d+$/);
+    const url = `http://${host}/v0/b/${bucket.name}/o/${encodeURIComponent(begin.storagePath)}?alt=media&token=${token}`;
+    expect((await fetch(url)).status).toBe(200);
+    await finalizeHaircutPhotoUpload.run(requestFor("staff-photo", { salonId: "salon-photo", operationId: begin.operationId }));
+    const [metadata] = await file.getMetadata();
+    expect(metadata.metadata?.firebaseStorageDownloadTokens).toBeFalsy();
+    expect((await fetch(url)).status).toBe(403);
+    const [bytes] = await file.download();
+    expect(bytes).toEqual(TEST_JPEG);
+  });
   beforeEach(async () => {
     const response = await fetch(
       `http://${emulatorHost}/emulator/v1/projects/${projectId}/databases/(default)/documents`,

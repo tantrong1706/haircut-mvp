@@ -18,7 +18,7 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
-import { deleteObject, getBytes, ref, uploadBytes } from "firebase/storage";
+import { deleteObject, getBytes, getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { afterAll, beforeAll, beforeEach, describe, it } from "vitest";
 import { requireRulesEmulators } from "./emulatorEnvironment";
 
@@ -160,6 +160,16 @@ afterAll(async () => {
 });
 
 describe("Firestore production rules", () => {
+  it("prevents minting long-lived haircut URLs through client metadata reads", async () => {
+    const storage = testEnv.authenticatedContext("staff-a").storage();
+    const photo = ref(storage, `salons/${salonA}/customers/customer-photo/haircuts/session-photo/photo-private12345.jpg`);
+    await uploadBytes(photo, new Uint8Array([1, 2, 3]), {
+      contentType: "image/jpeg",
+      customMetadata: { salonId: salonA, customerId: "customer-photo", sessionId: "session-photo", branchId: branchA, uploaderUid: "staff-a" },
+    });
+    await assertFails(getDownloadURL(photo));
+    await assertFails(getBytes(photo));
+  });
   it("chặn chủ đã bị khóa đọc hồ sơ nhân viên nhưng vẫn cho đọc trạng thái bản thân", async () => {
     await testEnv.withSecurityRulesDisabled(async (context) => {
       await updateDoc(doc(context.firestore(), "users", "owner-a"), { isActive: false });
