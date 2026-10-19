@@ -160,6 +160,12 @@ afterAll(async () => {
 });
 
 describe("Firestore production rules", () => {
+  it("legacy_upload_requires_operation", async () => {
+    const photo = ref(testEnv.authenticatedContext("staff-a").storage(), `salons/${salonA}/customers/customer-photo/haircuts/session-photo/photo-legacy123456.jpg`);
+    await assertFails(uploadBytes(photo, new Uint8Array([1, 2, 3]), {
+      contentType: "image/jpeg", customMetadata: { salonId: salonA, customerId: "customer-photo", sessionId: "session-photo", branchId: branchA, uploaderUid: "staff-a" },
+    }));
+  });
   it("prevents minting long-lived haircut URLs through client metadata reads", async () => {
     const storage = testEnv.authenticatedContext("staff-a").storage();
     const photo = ref(storage, `salons/${salonA}/customers/customer-photo/haircuts/session-photo/photo-private12345.jpg`);
