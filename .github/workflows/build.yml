@@ -64,6 +64,10 @@ jobs:
         working-directory: firebase
         run: npx --yes firebase-tools@15.22.3 emulators:exec --project demo-haircut --only firestore "npm --prefix functions run test:admin:coverage"
 
+      - name: Returning customer point transaction coverage
+        working-directory: firebase
+        run: npx --yes firebase-tools@15.22.3 emulators:exec --project demo-haircut --only firestore "npm --prefix functions run test:returning:coverage"
+
   customer-web:
     name: Customer Web
     runs-on: ubuntu-latest
@@ -112,6 +116,10 @@ jobs:
       - name: Shared client domain coverage
         working-directory: customer-web
         run: npm run test:domain
+
+      - name: Returning customer staff flow coverage
+        working-directory: customer-web
+        run: npm run test:returning:coverage
 
       - name: Build customer Web
         working-directory: customer-web
@@ -217,6 +225,10 @@ jobs:
       - name: Run browser tests
         working-directory: customer-web
         run: npm run test:e2e
+
+      - name: Returning customer browser interaction and accessibility
+        working-directory: customer-web
+        run: npm run test:returning:browser
 
       - name: Install Admin browser test dependencies
         working-directory: apps/admin-web

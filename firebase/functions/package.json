@@ -20,6 +20,7 @@
     "test:integration": "cd .. && npx --yes firebase-tools@15.22.3 emulators:exec --project demo-haircut --only firestore,storage \"npm --prefix functions run test:integration:emulator\"",
     "test:integration:emulator": "vitest run --no-file-parallelism --testTimeout=20000 test/callables.integration.test.ts test/webCustomer.integration.test.ts test/salonBranding.integration.test.ts test/photoUploadOperations.integration.test.ts test/adversarial.audit.test.ts test/adminSupport.integration.test.ts",
     "test:admin:coverage": "vitest run --config vitest.admin.config.ts --coverage",
+    "test:returning:coverage": "vitest run --config vitest.returning.config.ts --coverage",
     "test:salon-branding:integration": "cd .. && npx --yes firebase-tools@15.22.3 emulators:exec --project demo-haircut --only firestore \"npm --prefix functions run test:salon-branding:integration:emulator\"",
     "test:salon-branding:integration:emulator": "vitest run test/salonBranding.integration.test.ts",
     "seed:demo": "npm run build && node lib/seedDemo.js",

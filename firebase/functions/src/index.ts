@@ -112,6 +112,7 @@ import {
   type UserRole,
 } from "./authz/authorization";
 import { auditEventData } from "./domains/audit/auditEvent";
+import { createReturningCustomerPointAward } from "./domains/points/returningCustomerPoints";
 import { createAdminSupport } from "./domains/admin/support";
 import {
   PHOTO_UPLOAD_MAX_BYTES,
@@ -190,6 +191,8 @@ const AUTHENTICATED_RATE_LIMITS = {
   getRecoverableHaircutPhotoUploads: 60,
   cancelHaircutPhotoUpload: 30,
   submitPointRequest: 20,
+  awardReturningCustomerPoints: 20,
+  searchSalonCustomers: 30,
   approvePointRequest: 60,
   rejectPointRequest: 60,
   lookupRewardCode: 60,
@@ -4128,6 +4131,13 @@ export const cancelHaircutPhotoUpload = onCall(functionOptions, async (request) 
   return { operationId, status: "cancelled", alreadyCancelled: false };
 });
 
+export const awardReturningCustomerPoints = onCall(functionOptions,
+  createReturningCustomerPointAward(db, {
+    rateLimit: (uid, salonId) => enforceAuthenticatedRateLimit("awardReturningCustomerPoints", uid, salonId),
+    featureCheck: (salonId, appVersion) => assertFeatureEnabled(salonId, "pointApprovalEnabled", "Tính năng cộng điểm đang tạm ngừng.", appVersion),
+  }),
+);
+
 export const submitPointRequest = onCall(functionOptions, async (request) => {
   const uid = currentUid(request.auth);
   const salonId = requireString(request.data?.salonId, "salonId");
@@ -6550,6 +6560,7 @@ export const searchSalonCustomers = onCall(functionOptions, async (request) => {
     : 10;
   const user = await assertSalonRole(uid, salonId, ["owner", "staff"]);
   await resolveAuthorizedBranchScope(user, salonId, request.data?.branchId);
+  await enforceAuthenticatedRateLimit("searchSalonCustomers", uid, salonId);
 
   const normalizedTerm = normalizeSearchText(term);
   if (normalizedTerm.length < 2) {
