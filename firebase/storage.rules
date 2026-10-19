@@ -215,13 +215,12 @@ service firebase.storage {
     }
 
     match /salons/{salonId}/customers/{customerId}/haircuts/{sessionId}/{fileName} {
-      allow read: if customerAllowsPhoto(salonId, customerId)
-        && (isOwner(salonId) || isAssignedSessionMember(salonId, customerId, sessionId));
-      allow create: if (isAssignedServingMember(salonId, customerId, sessionId)
-          || isOwnerPendingApprovalSession(salonId, customerId, sessionId))
-        && customerAllowsPhoto(salonId, customerId)
-        && photoUploadEnabled(salonId)
-        && isAllowedHaircutPhoto(salonId, customerId, sessionId);
+      // Metadata GET can mint a permanent download token. Photo reads must use
+      // the server-authorized short-lived URL API, not the Firebase client API.
+      allow read: if false;
+      // Legacy uploads bypass the operation validator/finalizer. New uploads
+      // must use the /sessions operation path below; existing objects are kept.
+      allow create: if false;
       allow update: if false;
       allow delete: if isOwner(salonId)
         || (
@@ -231,7 +230,7 @@ service firebase.storage {
     }
 
     match /salons/{salonId}/customers/{customerId}/sessions/{sessionId}/{fileName} {
-      allow read: if signedIn() && sessionExists(sessionId) && canReadOperationPhoto(salonId, customerId, sessionId);
+      allow read: if false;
       allow create: if fileName.matches('op-[a-f0-9]{40}\\.jpg')
         && fileName == request.resource.metadata.operationId + ".jpg"
         && photoUploadEnabled(salonId)

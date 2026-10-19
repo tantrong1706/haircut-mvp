@@ -169,9 +169,11 @@ describe("Firestore production rules", () => {
   it("prevents minting long-lived haircut URLs through client metadata reads", async () => {
     const storage = testEnv.authenticatedContext("staff-a").storage();
     const photo = ref(storage, `salons/${salonA}/customers/customer-photo/haircuts/session-photo/photo-private12345.jpg`);
-    await uploadBytes(photo, new Uint8Array([1, 2, 3]), {
-      contentType: "image/jpeg",
-      customMetadata: { salonId: salonA, customerId: "customer-photo", sessionId: "session-photo", branchId: branchA, uploaderUid: "staff-a" },
+    await testEnv.withSecurityRulesDisabled(async context => {
+      await uploadBytes(ref(context.storage(), photo.fullPath), new Uint8Array([1, 2, 3]), {
+        contentType: "image/jpeg",
+        customMetadata: { salonId: salonA, customerId: "customer-photo", sessionId: "session-photo", branchId: branchA, uploaderUid: "staff-a" },
+      });
     });
     await assertFails(getDownloadURL(photo));
     await assertFails(getBytes(photo));
@@ -243,7 +245,7 @@ describe("Firestore production rules", () => {
     );
   });
 
-  it("nhân viên tải và đọc ảnh yêu cầu QR đúng chi nhánh, hết hạn thì chặn upload", async () => {
+  it("nhân viên tải ảnh QR qua operation nhưng không đọc trực tiếp; hết hạn chặn upload", async () => {
     const operationId = `op-${"e".repeat(40)}`;
     const path = `salons/${salonA}/customers/customer-photo/sessions/session-photo/${operationId}.jpg`;
     await testEnv.withSecurityRulesDisabled(async (context) => {
@@ -281,7 +283,8 @@ describe("Firestore production rules", () => {
     };
     const staff = testEnv.authenticatedContext("staff-a").storage();
     await assertSucceeds(uploadBytes(ref(staff, path), new Uint8Array([1, 2, 3]), metadata));
-    await assertSucceeds(getBytes(ref(staff, path)));
+    await assertFails(getBytes(ref(staff, path)));
+    await assertFails(getDownloadURL(ref(staff, path)));
     await assertFails(getBytes(ref(testEnv.authenticatedContext("staff-other-a").storage(), path)));
     await testEnv.withSecurityRulesDisabled(async (context) => {
       await updateDoc(doc(context.firestore(), "chair_sessions", "session-photo"), {
@@ -464,7 +467,7 @@ describe("Firestore production rules", () => {
     }
   });
 
-  it("chỉ cho nhân viên phụ trách tải ảnh vào đúng lượt khách đã đồng ý", async () => {
+  it("đóng upload/read ảnh legacy nhưng giữ quyền xóa đúng người phụ trách", async () => {
     const staffStorage = testEnv.authenticatedContext("staff-a").storage();
     const otherStaffStorage = testEnv.authenticatedContext("staff-other-a").storage();
     const allowedPath =
@@ -487,8 +490,11 @@ describe("Firestore production rules", () => {
       },
     };
 
-    await assertSucceeds(uploadBytes(allowed, bytes, validMetadata));
-    await assertSucceeds(getBytes(allowed));
+    await assertFails(uploadBytes(allowed, bytes, validMetadata));
+    await testEnv.withSecurityRulesDisabled(async context => {
+      await uploadBytes(ref(context.storage(), allowedPath), bytes, validMetadata);
+    });
+    await assertFails(getBytes(allowed));
     await assertFails(uploadBytes(wrongStaff, bytes, validMetadata));
     await assertFails(deleteObject(wrongStaff));
     await assertFails(
@@ -604,7 +610,7 @@ describe("Firestore production rules", () => {
     await assertFails(deleteObject(ref(ownerContext.storage(), path)));
   });
 
-  it("cho owner bổ sung ảnh ở lượt chờ duyệt nhưng vẫn bắt buộc khách đồng ý", async () => {
+  it("đóng upload/read legacy cho owner, giữ ảnh cũ và quyền xóa đúng salon", async () => {
     const ownerStorage = testEnv.authenticatedContext("owner-a").storage();
     const staffStorage = testEnv.authenticatedContext("staff-a").storage();
     const otherOwnerStorage = testEnv.authenticatedContext("owner-b").storage();
@@ -626,8 +632,12 @@ describe("Firestore production rules", () => {
       },
     };
 
-    await assertSucceeds(uploadBytes(ref(ownerStorage, path), bytes, metadata));
-    await assertSucceeds(getBytes(ref(ownerStorage, path)));
+    await assertFails(uploadBytes(ref(ownerStorage, path), bytes, metadata));
+    await testEnv.withSecurityRulesDisabled(async context => {
+      await uploadBytes(ref(context.storage(), path), bytes, metadata);
+    });
+    await assertFails(getBytes(ref(ownerStorage, path)));
+    await assertFails(deleteObject(ref(otherOwnerStorage, path)));
     await assertFails(
       uploadBytes(ref(staffStorage, path), bytes, {
         ...metadata,
