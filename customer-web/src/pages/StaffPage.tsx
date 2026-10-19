@@ -12,6 +12,7 @@ import { HaircutPhotoCapture } from "../components/HaircutPhotoCapture";
 import { RedeemRewardPanel } from "../components/RedeemRewardPanel";
 import { AccountDeletionPanel } from "../components/AccountDeletionPanel";
 import { BrandLogo } from "../components/BrandLogo";
+import { ReturningCustomerPoints } from "../components/ReturningCustomerPoints";
 import {
   StaffSession,
   cancelServiceSession,
@@ -557,6 +558,14 @@ export function StaffPage({ currentUser }: Props) {
           </select>
         </label>
       ) : null}
+
+      <ReturningCustomerPoints
+        salonId={salonId}
+        branchId={branchFilter === "all" ? "" : branchFilter}
+        branchName={currentBranchName}
+        pointPerVisit={pointPerVisit}
+        canAward={canAwardPointsDirectly}
+      />
 
       <div className="metrics-row compact-metrics">
         {waitingCount > 0 ? (
