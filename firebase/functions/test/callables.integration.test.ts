@@ -4,6 +4,18 @@ import { Timestamp, getFirestore } from "firebase-admin/firestore";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSignedQrToken } from "../src/security";
 
+// This suite verifies tenant/phone/history behavior. No signing credentials are
+// available in the emulator. Real metadata/signing policy is tested separately.
+vi.mock("../src/domains/photos/privatePhotoAccess", async (importOriginal) => {
+  const original =
+    await importOriginal<typeof import("../src/domains/photos/privatePhotoAccess")>();
+  return {
+    ...original,
+    privatePhotoUrl: async (_bucket: unknown, path: string, expires: number) =>
+      `https://storage.googleapis.com/demo-haircut.appspot.com/${path}?fixtureExpires=${expires}`,
+  };
+});
+
 vi.mock("../src/zaloIdentityVerifier", async (importOriginal) => {
   const original = await importOriginal<typeof import("../src/zaloIdentityVerifier")>();
   return {
@@ -62,13 +74,18 @@ describe("callable transactions", () => {
     const window = Math.floor(Date.now() / 60_000) * 60_000;
     const hash = (value: string) => createHash("sha256").update(value).digest("hex");
     for (const start of [window - 60_000, window, window + 60_000]) {
-      await db.collection("_public_rate_limits").doc(hash(`resolveCustomerQr:ip:${hash(peer)}:${start}`)).set({ count: 180 });
+      await db
+        .collection("_public_rate_limits")
+        .doc(hash(`resolveCustomerQr:ip:${hash(peer)}:${start}`))
+        .set({ count: 180 });
     }
     for (const supplied of ["198.51.100.71", "198.51.100.72, 198.51.100.73"]) {
-      await expect(resolveCustomerQr.run({
-        data: { salonId: "missing-audit-salon", qrToken: "invalid-audit-token" },
-        rawRequest: { ip: supplied, socket: { remoteAddress: peer }, get: () => supplied },
-      } as never)).rejects.toMatchObject({ code: "resource-exhausted" });
+      await expect(
+        resolveCustomerQr.run({
+          data: { salonId: "missing-audit-salon", qrToken: "invalid-audit-token" },
+          rawRequest: { ip: supplied, socket: { remoteAddress: peer }, get: () => supplied },
+        } as never),
+      ).rejects.toMatchObject({ code: "resource-exhausted" });
     }
   });
   beforeEach(async () => {
@@ -837,6 +854,12 @@ describe("callable transactions", () => {
     });
     expect(ownerDetails.customer.recentRecords).toHaveLength(2);
     expect(ownerDetails.customer.recentRecords[0].photoUrls).toHaveLength(1);
+    expect(ownerDetails.customer.recentRecords[0].photoUrls[0]).toMatch(
+      /^https:\/\/storage\.googleapis\.com\//,
+    );
+    expect(ownerDetails.customer.recentRecords[0].photoUrls[0]).not.toContain(
+      "firebasestorage.googleapis.com",
+    );
     expect(ownerDetails.customer.branchVisits).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ branchId, branchName: "Chi nhánh kiểm thử" }),

@@ -52,9 +52,10 @@ rerunning the full suite from `customer-web` passed all 231. No tests were disab
 
 ## Release status
 
-Local implementation only. No push, merge or Firebase deployment performed for this feature.
-CI lanes are prepared but have not run remotely. No live customers, points, sessions or rewards
-were mutated. Before release, finish/review the separate in-progress photo security work on this
-branch, run the full integration/Rules suite and obtain scoped merge/deployment approval.
+Local implementation complete. On 2026-10-20 the owner authorized push, PR creation and CI only.
+Merge and Firebase deployment remain unauthorized. No live customers, points, sessions or rewards
+were mutated. The combined branch subsequently passed 30 Rules and 120 integration cases;
+photo-security evidence and outstanding rollout gates are in `photo-security.tdd.md`.
+Before release, pass remote CI and obtain scoped merge/deployment approval.
 Required callable: `awardReturningCustomerPoints`; existing `searchSalonCustomers` also gains
 an authenticated lookup limit. Release backend before the staff UI. Do not deploy all Functions.

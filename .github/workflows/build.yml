@@ -68,6 +68,10 @@ jobs:
         working-directory: firebase
         run: npx --yes firebase-tools@15.22.3 emulators:exec --project demo-haircut --only firestore "npm --prefix functions run test:returning:coverage"
 
+      - name: Private photo security coverage
+        working-directory: firebase
+        run: npx --yes firebase-tools@15.22.3 emulators:exec --project demo-haircut --only firestore,storage "npm --prefix functions run test:photo-security:coverage"
+
   customer-web:
     name: Customer Web
     runs-on: ubuntu-latest
@@ -120,6 +124,10 @@ jobs:
       - name: Returning customer staff flow coverage
         working-directory: customer-web
         run: npm run test:returning:coverage
+
+      - name: Private photo client coverage
+        working-directory: customer-web
+        run: npm run test:photo-security:coverage
 
       - name: Build customer Web
         working-directory: customer-web

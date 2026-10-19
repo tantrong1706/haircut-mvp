@@ -6,6 +6,7 @@ import {
   isExpectedPhotoUploadPath,
   validatePhotoUploadObject,
   validatePhotoUploadBytes,
+  isPhotoUploadOperationExpired,
 } from "../src/domains/photos/photoUploadOperations";
 import { createHash } from "node:crypto";
 import { TEST_JPEG } from "./fixtures/jpeg";
@@ -45,6 +46,15 @@ describe("photo upload operations", () => {
     expect(isExpectedPhotoUploadPath(path, context)).toBe(true);
     expect(isExpectedPhotoUploadPath(path.replace("salon-a", "salon-b"), context)).toBe(false);
     expect(isExpectedPhotoUploadPath(`${path}/extra`, context)).toBe(false);
+    expect(isExpectedPhotoUploadPath(path, { ...context, salonId: "a/b" })).toBe(false);
+    expect(() => buildPhotoUploadOperationId("a/b", "session", "staff", "request")).toThrow();
+  });
+
+  it("treats invalid expiry as expired and honors the boundary", () => {
+    expect(isPhotoUploadOperationExpired(Number.NaN, 100)).toBe(true);
+    expect(isPhotoUploadOperationExpired(99, 100)).toBe(true);
+    expect(isPhotoUploadOperationExpired(100, 100)).toBe(true);
+    expect(isPhotoUploadOperationExpired(101, 100)).toBe(false);
   });
 
   it("từ chối object sai MIME, quá kích thước hoặc sai metadata", () => {

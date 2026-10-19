@@ -29,6 +29,7 @@ import { recoverHaircutPhotoUploads, uploadHaircutPhoto } from "./customerPhotos
 
 const operationId = `op-${"a".repeat(40)}`;
 const storagePath = `salons/salon-a/customers/customer-a/sessions/session-a/${operationId}.jpg`;
+const temporaryUrl = `https://storage.googleapis.com/demo-bucket/${storagePath}?X-Goog-Expires=900`;
 const processed = {
   blob: new Blob([new Uint8Array([0xff, 0xd8, 0xff, 0xd9])], { type: "image/jpeg" }),
   width: 800,
@@ -70,12 +71,19 @@ describe("customer photo upload lifecycle", () => {
   it("uses the authorized reader instead of creating a permanent download URL", async () => {
     mocks.uploadBytesResumable.mockReturnValue(successfulTask());
     await uploadHaircutPhoto({
-      salonId: "salon-a", branchId: "branch-a", customerId: "customer-a", sessionId: "session-a",
-      requestId: "photo-request-a", file: new File([processed.blob], "haircut.jpg", { type: "image/jpeg" }),
+      salonId: "salon-a",
+      branchId: "branch-a",
+      customerId: "customer-a",
+      sessionId: "session-a",
+      requestId: "photo-request-a",
+      file: new File([processed.blob], "haircut.jpg", { type: "image/jpeg" }),
     });
     expect(mocks.getDownloadURL).not.toHaveBeenCalled();
     expect(mocks.callFunction).toHaveBeenCalledWith("getHaircutPhotoReadUrls", {
-      salonId: "salon-a", customerId: "customer-a", sessionId: "session-a", photoPaths: [storagePath],
+      salonId: "salon-a",
+      customerId: "customer-a",
+      sessionId: "session-a",
+      photoPaths: [storagePath],
     });
   });
   beforeEach(() => {
@@ -88,7 +96,11 @@ describe("customer photo upload lifecycle", () => {
       if (name === "finalizeHaircutPhotoUpload") {
         return Promise.resolve({ ...beginResult("finalized"), alreadyFinalized: false });
       }
-      if (name === "getHaircutPhotoReadUrls") return Promise.resolve({ photos: [{ path: storagePath, url: "https://storage.googleapis.com/test/temporary.jpg" }], expiresAtMs: Date.now() + 60_000 });
+      if (name === "getHaircutPhotoReadUrls")
+        return Promise.resolve({
+          photos: [{ path: storagePath, url: temporaryUrl }],
+          expiresAtMs: Date.now() + 60_000,
+        });
       throw new Error(`Unexpected function ${name}`);
     });
   });
@@ -112,6 +124,7 @@ describe("customer photo upload lifecycle", () => {
     expect(mocks.callFunction.mock.calls.map(([name]) => name)).toEqual([
       "beginHaircutPhotoUpload",
       "finalizeHaircutPhotoUpload",
+      "getHaircutPhotoReadUrls",
     ]);
     expect(mocks.uploadBytesResumable).toHaveBeenCalledOnce();
   });
@@ -183,8 +196,8 @@ describe("customer photo upload lifecycle", () => {
     ]);
   });
 
-  it("khôi phục operation theo session rồi lấy URL bằng Storage Rules", async () => {
-    mocks.callFunction.mockResolvedValue({
+  it("khôi phục operation theo session rồi lấy URL từ API có quyền", async () => {
+    mocks.callFunction.mockResolvedValueOnce({
       photos: [
         {
           id: operationId,
@@ -204,7 +217,7 @@ describe("customer photo upload lifecycle", () => {
         operationId,
         requestId: "photo-request-a",
         path: storagePath,
-        url: "https://storage.test/photo-a",
+        url: temporaryUrl,
       },
     ]);
   });
@@ -227,6 +240,11 @@ describe("customer photo upload lifecycle", () => {
       if (name === "finalizeHaircutPhotoUpload") {
         return Promise.resolve({ ...beginResult("finalized"), alreadyFinalized: false });
       }
+      if (name === "getHaircutPhotoReadUrls")
+        return Promise.resolve({
+          photos: [{ path: storagePath, url: temporaryUrl }],
+          expiresAtMs: Date.now() + 60_000,
+        });
       throw new Error(`Unexpected function ${name}`);
     });
 
@@ -236,6 +254,7 @@ describe("customer photo upload lifecycle", () => {
     expect(mocks.callFunction.mock.calls.map(([name]) => name)).toEqual([
       "getRecoverableHaircutPhotoUploads",
       "finalizeHaircutPhotoUpload",
+      "getHaircutPhotoReadUrls",
     ]);
   });
 });

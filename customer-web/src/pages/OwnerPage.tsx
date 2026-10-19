@@ -73,6 +73,7 @@ import {
 import { trackEvent, withMonitoringTrace } from "../services/monitoring";
 import { removeSalonAvatar, uploadSalonAvatarFile } from "../services/salonBranding";
 import { LuckyWheelConfig, defaultLuckyWheelConfig } from "../services/types";
+import { legacyPhotoUrlsFor, photoItemsFor, storedPhotoCount } from "../services/pointRequestPhotos";
 
 type OwnerTab =
   "overview" | "approvals" | "branches" | "staff" | "customers" | "wheel" | "redeem" | "settings";
@@ -89,24 +90,6 @@ type ConfirmRequest = {
 type Props = {
   currentUser: AppUser;
 };
-
-function legacyPhotoUrlsFor(request: PointRequest): string[] {
-  if (request.legacyPhotoUrls) return request.legacyPhotoUrls;
-  const pathCount = request.photoPaths?.length ?? 0;
-  return request.photoUrls.slice(0, Math.max(0, request.photoUrls.length - pathCount));
-}
-
-function photoItemsFor(request: PointRequest): HaircutPhotoItem[] {
-  const legacyUrls = legacyPhotoUrlsFor(request);
-  const pathUrls = request.photoUrls.slice(legacyUrls.length);
-  return [
-    ...legacyUrls.map((url) => ({ id: url, url })),
-    ...(request.photoPaths ?? []).flatMap((path, index) => {
-      const url = pathUrls[index];
-      return url ? [{ id: path, url }] : [];
-    }),
-  ];
-}
 
 export function OwnerPage({ currentUser }: Props) {
   const salonId = useMemo(() => {
@@ -356,7 +339,7 @@ export function OwnerPage({ currentUser }: Props) {
       return;
     }
 
-    const availableSlots = MAX_HAIRCUT_PHOTOS - request.photoUrls.length;
+    const availableSlots = MAX_HAIRCUT_PHOTOS - storedPhotoCount(request);
     if (availableSlots <= 0) {
       setError(`Mỗi lượt chỉ lưu tối đa ${MAX_HAIRCUT_PHOTOS} ảnh.`);
       return;
@@ -413,6 +396,10 @@ export function OwnerPage({ currentUser }: Props) {
                 photoUrls: nextPhotoUrls,
                 legacyPhotoUrls: nextLegacyPhotoUrls,
                 photoPaths: nextPhotoPaths,
+                photoReadUrls: Object.fromEntries([
+                  ...photoItemsFor(item).map(photo => [photo.id, photo.url]),
+                  ...uploadedPhotos.map(photo => [photo.path, photo.url]),
+                ]),
               }
             : item,
         ),
@@ -462,6 +449,7 @@ export function OwnerPage({ currentUser }: Props) {
                 photoUrls: nextPhotoUrls,
                 legacyPhotoUrls: nextLegacyPhotoUrls,
                 photoPaths: nextPhotoPaths,
+                photoReadUrls: Object.fromEntries(photoItemsFor(item).filter(currentPhoto => currentPhoto.id !== photo.id).map(currentPhoto => [currentPhoto.id, currentPhoto.url])),
               }
             : item,
         ),
@@ -1374,6 +1362,7 @@ function ApprovalsPanel({
             <span>Thợ: {request.staffName || "Nhân viên"}</span>
             <span>Chi nhánh: {request.branchName || "Chi nhánh"}</span>
             <p>{request.note || "Không có ghi chú"}</p>
+            {request.photoReadError ? <p role="status">Ảnh tạm thời chưa tải được. Các ảnh đã lưu vẫn được giữ; hãy làm mới trang để thử lại.</p> : null}
             <HaircutPhotoCapture
               title="Ảnh khách sau cắt"
               photos={photoItemsFor(request)}

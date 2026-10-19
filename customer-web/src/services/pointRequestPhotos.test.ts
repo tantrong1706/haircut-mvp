@@ -9,17 +9,30 @@ describe("point request photo identity and display", () => {
     expect(photoItemsFor(request)).toEqual([{ id: legacy, url: signed }]);
   });
   it("uses stable source IDs when one image is missing or reordered", () => {
-    const request = { legacyPhotoUrls: [legacy], photoPaths: ["path-a", "path-b"], photoUrls: ["url-b"], photoReadUrls: { "path-b": "url-b" } };
+    const request = {
+      legacyPhotoUrls: [legacy],
+      photoPaths: ["path-a", "path-b"],
+      photoUrls: ["url-b"],
+      photoReadUrls: { "path-b": "url-b" },
+    };
     expect(photoItemsFor(request)).toEqual([{ id: "path-b", url: "url-b" }]);
     expect(storedPhotoCount(request)).toBe(3);
   });
   it("does not resurrect a permanent URL after a read failure", () => {
-    const request = { legacyPhotoUrls: [legacy], photoPaths: ["path-a"], photoUrls: [], photoReadUrls: {} };
+    const request = {
+      legacyPhotoUrls: [legacy],
+      photoPaths: ["path-a"],
+      photoUrls: [],
+      photoReadUrls: {},
+    };
     expect(photoItemsFor(request)).toEqual([]);
     expect(storedPhotoCount(request)).toBe(2);
   });
   it("retains the existing fallback shape for entries without separate legacy metadata", () => {
     const request = { photoUrls: [signed, "url-a"], photoPaths: ["path-a"] };
-    expect(photoItemsFor(request)).toEqual([{ id: signed, url: signed }, { id: "path-a", url: "url-a" }]);
+    expect(photoItemsFor(request)).toEqual([
+      { id: signed, url: signed },
+      { id: "path-a", url: "url-a" },
+    ]);
   });
 });

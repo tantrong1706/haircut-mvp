@@ -36,6 +36,7 @@ const CloudFunctionNames = Object.freeze([
   "submitPointRequest",
   "awardReturningCustomerPoints",
   "updatePendingPointRequestPhotos",
+  "getHaircutPhotoReadUrls",
   "claimServiceSession",
   "cancelServiceSession",
   "approvePointRequest",

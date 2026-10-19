@@ -33,25 +33,21 @@ describe("returning customer points without QR", () => {
       db.doc("salons/salon-test").set({ name: "Test salon", status: "active", pointPerVisit: 2 }),
       db.doc("branches/branch-a").set({ salonId: "salon-test", name: "Branch A", isActive: true }),
       db.doc("branches/branch-b").set({ salonId: "salon-test", name: "Branch B", isActive: true }),
-      db
-        .doc("users/staff-a")
-        .set({
-          salonId: "salon-test",
-          role: "staff",
-          name: "Staff A",
-          isActive: true,
-          branchIds: ["branch-a"],
-          canAwardPointsDirectly: true,
-        }),
-      db
-        .doc("customers/customer-a")
-        .set({
-          salonId: "salon-test",
-          name: "An",
-          phoneLast4: "5678",
-          points: 4,
-          allowPhoto: false,
-        }),
+      db.doc("users/staff-a").set({
+        salonId: "salon-test",
+        role: "staff",
+        name: "Staff A",
+        isActive: true,
+        branchIds: ["branch-a"],
+        canAwardPointsDirectly: true,
+      }),
+      db.doc("customers/customer-a").set({
+        salonId: "salon-test",
+        name: "An",
+        phoneLast4: "5678",
+        points: 4,
+        allowPhoto: false,
+      }),
       db
         .doc("customers/customer-b")
         .set({ salonId: "salon-test", name: "Binh", phoneLast4: "5678", points: 7 }),
@@ -89,12 +85,10 @@ describe("returning customer points without QR", () => {
 
   it("deduplicates the same operation, including retries after the cooldown expires", async () => {
     await award(request());
-    await db
-      .doc("customers/customer-a")
-      .update({
-        lastVisitAt: Timestamp.fromMillis(1),
-        nextPointEligibleAt: Timestamp.fromMillis(1),
-      });
+    await db.doc("customers/customer-a").update({
+      lastVisitAt: Timestamp.fromMillis(1),
+      nextPointEligibleAt: Timestamp.fromMillis(1),
+    });
     expect(await award(request())).toMatchObject({ alreadyProcessed: true, pointsAfter: 6 });
     expect((await db.collection("haircut_records").get()).size).toBe(1);
     await expect(award(request({ ...input, customerId: "customer-b" }))).rejects.toMatchObject({
@@ -159,15 +153,13 @@ describe("returning customer points without QR", () => {
     await db
       .doc(`active_service_sessions/${activeId}`)
       .set({ salonId: "salon-test", customerId: "customer-a", sessionId: "pending-qr" });
-    await db
-      .doc("chair_sessions/pending-qr")
-      .set({
-        salonId: "salon-test",
-        customerId: "customer-a",
-        status: "pending_approval",
-        isOpen: true,
-        expiresAt: Timestamp.fromMillis(Date.now() + 60_000),
-      });
+    await db.doc("chair_sessions/pending-qr").set({
+      salonId: "salon-test",
+      customerId: "customer-a",
+      status: "pending_approval",
+      isOpen: true,
+      expiresAt: Timestamp.fromMillis(Date.now() + 60_000),
+    });
     await expect(award(request())).rejects.toMatchObject({
       code: "failed-precondition",
       details: { errorCode: "ACTIVE_SESSION_EXISTS" },
@@ -196,12 +188,10 @@ describe("returning customer points without QR", () => {
 
   it("allows a new visit after two hours and lets an owner use the same audited path", async () => {
     await award(request());
-    await db
-      .doc("customers/customer-a")
-      .update({
-        lastVisitAt: Timestamp.fromMillis(Date.now() - 2 * 60 * 60_000 - 1000),
-        nextPointEligibleAt: Timestamp.fromMillis(1),
-      });
+    await db.doc("customers/customer-a").update({
+      lastVisitAt: Timestamp.fromMillis(Date.now() - 2 * 60 * 60_000 - 1000),
+      nextPointEligibleAt: Timestamp.fromMillis(1),
+    });
     await db.doc("users/owner").set({ salonId: "salon-test", role: "owner", isActive: true });
     expect(
       await award(request({ ...input, operationId: "operation-0000000002" }, "owner")),

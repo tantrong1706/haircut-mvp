@@ -13,6 +13,7 @@
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:returning:coverage": "vitest run --config vitest.returning.config.ts --coverage",
+    "test:photo-security:coverage": "vitest run --config vitest.photo-security.config.ts --coverage",
     "test:returning:browser": "playwright test --config playwright.returning.config.ts",
     "test:domain": "vitest run --config vitest.domain.config.ts --coverage",
     "test:e2e": "npm run build:test && npm run test:e2e:run",

@@ -161,18 +161,39 @@ afterAll(async () => {
 
 describe("Firestore production rules", () => {
   it("legacy_upload_requires_operation", async () => {
-    const photo = ref(testEnv.authenticatedContext("staff-a").storage(), `salons/${salonA}/customers/customer-photo/haircuts/session-photo/photo-legacy123456.jpg`);
-    await assertFails(uploadBytes(photo, new Uint8Array([1, 2, 3]), {
-      contentType: "image/jpeg", customMetadata: { salonId: salonA, customerId: "customer-photo", sessionId: "session-photo", branchId: branchA, uploaderUid: "staff-a" },
-    }));
+    const photo = ref(
+      testEnv.authenticatedContext("staff-a").storage(),
+      `salons/${salonA}/customers/customer-photo/haircuts/session-photo/photo-legacy123456.jpg`,
+    );
+    await assertFails(
+      uploadBytes(photo, new Uint8Array([1, 2, 3]), {
+        contentType: "image/jpeg",
+        customMetadata: {
+          salonId: salonA,
+          customerId: "customer-photo",
+          sessionId: "session-photo",
+          branchId: branchA,
+          uploaderUid: "staff-a",
+        },
+      }),
+    );
   });
   it("prevents minting long-lived haircut URLs through client metadata reads", async () => {
     const storage = testEnv.authenticatedContext("staff-a").storage();
-    const photo = ref(storage, `salons/${salonA}/customers/customer-photo/haircuts/session-photo/photo-private12345.jpg`);
-    await testEnv.withSecurityRulesDisabled(async context => {
+    const photo = ref(
+      storage,
+      `salons/${salonA}/customers/customer-photo/haircuts/session-photo/photo-private12345.jpg`,
+    );
+    await testEnv.withSecurityRulesDisabled(async (context) => {
       await uploadBytes(ref(context.storage(), photo.fullPath), new Uint8Array([1, 2, 3]), {
         contentType: "image/jpeg",
-        customMetadata: { salonId: salonA, customerId: "customer-photo", sessionId: "session-photo", branchId: branchA, uploaderUid: "staff-a" },
+        customMetadata: {
+          salonId: salonA,
+          customerId: "customer-photo",
+          sessionId: "session-photo",
+          branchId: branchA,
+          uploaderUid: "staff-a",
+        },
       });
     });
     await assertFails(getDownloadURL(photo));
@@ -491,7 +512,7 @@ describe("Firestore production rules", () => {
     };
 
     await assertFails(uploadBytes(allowed, bytes, validMetadata));
-    await testEnv.withSecurityRulesDisabled(async context => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
       await uploadBytes(ref(context.storage(), allowedPath), bytes, validMetadata);
     });
     await assertFails(getBytes(allowed));
@@ -633,7 +654,7 @@ describe("Firestore production rules", () => {
     };
 
     await assertFails(uploadBytes(ref(ownerStorage, path), bytes, metadata));
-    await testEnv.withSecurityRulesDisabled(async context => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
       await uploadBytes(ref(context.storage(), path), bytes, metadata);
     });
     await assertFails(getBytes(ref(ownerStorage, path)));

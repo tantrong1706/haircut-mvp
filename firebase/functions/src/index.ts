@@ -127,6 +127,8 @@ import {
 } from "./domains/photos/photoUploadOperations";
 import { apiError } from "./shared/errors";
 import { publicRequestPeer } from "./security";
+import { revokeHaircutDownloadTokens } from "./domains/photos/photoDownloadTokens";
+import { createPrivatePhotoReader, privatePhotoUrl, PRIVATE_PHOTO_URL_TTL_MS } from "./domains/photos/privatePhotoAccess";
 
 initializeApp();
 
@@ -189,6 +191,7 @@ const AUTHENTICATED_RATE_LIMITS = {
   beginHaircutPhotoUpload: 30,
   finalizeHaircutPhotoUpload: 30,
   getRecoverableHaircutPhotoUploads: 60,
+  getHaircutPhotoReadUrls: 60,
   cancelHaircutPhotoUpload: 30,
   submitPointRequest: 20,
   awardReturningCustomerPoints: 20,
@@ -566,19 +569,23 @@ async function resolvedHaircutPhotoUrls(
 ) {
   const trustedLegacyUrls = trustedStoredHaircutPhotoUrls(legacyUrls, input);
   const trustedPaths = trustedStoredHaircutPhotoPaths(photoPaths, input);
-  const expires = Date.now() + 15 * 60 * 1000;
+  const bucket = storage.bucket();
+  const legacyPaths = trustedLegacyUrls.flatMap((url) => {
+    const path = storageObjectNameFromDownloadUrl(url, bucket.name);
+    return path ? [path] : [];
+  });
+  const expires = Date.now() + PRIVATE_PHOTO_URL_TTL_MS;
   const signedUrls = await Promise.all(
-    trustedPaths.map(async (path) => {
+    [...new Set([...legacyPaths, ...trustedPaths])].map(async (path) => {
       try {
-        const [url] = await storage.bucket().file(path).getSignedUrl({ action: "read", expires });
-        return url;
+        return await privatePhotoUrl(bucket, path, expires);
       } catch {
         return null;
       }
     }),
   );
   return [
-    ...new Set([...trustedLegacyUrls, ...signedUrls.filter((url): url is string => Boolean(url))]),
+    ...new Set(signedUrls.filter((url): url is string => Boolean(url))),
   ].slice(0, MAX_HAIRCUT_PHOTOS);
 }
 
@@ -3685,6 +3692,11 @@ async function loadPhotoUploadContext(input: {
   };
 }
 
+export const getHaircutPhotoReadUrls = onCall(
+  { ...functionOptions, maxInstances: 5 },
+  (request) => createPrivatePhotoReader(db, storage.bucket(), (uid, salonId) => enforceAuthenticatedRateLimit("getHaircutPhotoReadUrls", uid, salonId))(request),
+);
+
 export const beginHaircutPhotoUpload = onCall(functionOptions, async (request) => {
   const uid = currentUid(request.auth);
   const salonId = requireString(request.data?.salonId, "salonId");
@@ -3836,7 +3848,12 @@ export const finalizeHaircutPhotoUpload = onCall(
   if (operation.staffUid !== uid) {
     throw new HttpsError("permission-denied", "Yêu cầu tải ảnh không thuộc tài khoản này");
   }
+  if (!isExpectedPhotoUploadPath(String(operation.storagePath || ""), {
+    salonId, customerId: String(operation.customerId || ""),
+    sessionId: String(operation.sessionId || ""), operationId,
+  })) throw new HttpsError("failed-precondition", "Đường dẫn ảnh không hợp lệ");
   if (operation.status === "finalized") {
+    await revokeHaircutDownloadTokens(storage.bucket().file(String(operation.storagePath)));
     return {
       operationId,
       requestId: operation.requestId,
@@ -3890,6 +3907,11 @@ export const finalizeHaircutPhotoUpload = onCall(
     [[metadata], [photoBytes]] = await Promise.all([file.getMetadata(), file.download()]);
   } catch {
     throw new HttpsError("failed-precondition", "Ảnh chưa được tải lên hoàn tất");
+  }
+  try {
+    await revokeHaircutDownloadTokens(storage.bucket().file(String(operation.storagePath)));
+  } catch {
+    throw new HttpsError("unavailable", "Chưa thể bảo vệ liên kết ảnh. Vui lòng thử lại.");
   }
   if (
     !validatePhotoUploadObject(metadata, {

@@ -1,12 +1,12 @@
 import {
   deleteObject,
-  getDownloadURL,
   ref,
   uploadBytesResumable,
   type UploadTask,
 } from "firebase/storage";
 import { callFunction, getFirebaseAuth, getFirebaseStorage } from "./firebase";
 import { PHOTO_MAX_UPLOAD_BYTES, processHaircutPhoto } from "./photoProcessing";
+import { getPrivatePhotoUrl } from "./privatePhotoUrls";
 
 export const MAX_HAIRCUT_PHOTOS = 3;
 const DEFAULT_UPLOAD_TIMEOUT_MS = 45_000;
@@ -50,7 +50,7 @@ export async function recoverHaircutPhotoUploads(input: {
       }
       return {
         ...photo,
-        url: await getDownloadURL(ref(storage, photo.path)),
+        url: await getPrivatePhotoUrl(photo.path, input),
       };
     }),
   );
@@ -160,7 +160,7 @@ export async function uploadHaircutPhoto(input: {
     operationId: begin.operationId,
     requestId,
     path: begin.storagePath,
-    url: await getDownloadURL(photoRef),
+    url: await getPrivatePhotoUrl(begin.storagePath, { salonId, customerId, sessionId }),
   };
 }
 
