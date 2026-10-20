@@ -659,22 +659,22 @@ export function OwnerPage({ currentUser }: Props) {
         <div>
           <p className="eyebrow">Chủ salon</p>
           <h1>{salonProfile?.name || "Quản lý salon"}</h1>
-          <span>{salonId}</span>
+          <span>Quản lý hằng ngày</span>
         </div>
         <OwnerAvatar avatarUrl={ownerAvatarUrl} name={currentUser.name} />
       </header>
 
-      <div className="segmented-control owner-tabs compact-tabs" aria-label="Chọn mục quản lý">
+      <nav className="segmented-control owner-tabs compact-tabs" aria-label="Chọn mục quản lý">
         <OwnerTabButton
           active={activeTab === "overview"}
           icon={<BarChart3 size={18} />}
-          label="Tổng"
+          label="Tổng quan"
           onClick={() => setActiveTab("overview")}
         />
         <OwnerTabButton
           active={activeTab === "approvals"}
           icon={<ClipboardCheck size={18} />}
-          label="Duyệt & ảnh"
+          label="Duyệt điểm"
           onClick={() => setActiveTab("approvals")}
         />
         <OwnerTabButton
@@ -692,7 +692,7 @@ export function OwnerPage({ currentUser }: Props) {
         <OwnerTabButton
           active={activeTab === "customers"}
           icon={<Search size={18} />}
-          label="Khách"
+          label="Khách hàng"
           onClick={() => setActiveTab("customers")}
         />
         <OwnerTabButton
@@ -704,7 +704,7 @@ export function OwnerPage({ currentUser }: Props) {
         <OwnerTabButton
           active={activeTab === "redeem"}
           icon={<TicketCheck size={18} />}
-          label="Quà"
+          label="Đổi quà"
           onClick={() => setActiveTab("redeem")}
         />
         <OwnerTabButton
@@ -713,11 +713,11 @@ export function OwnerPage({ currentUser }: Props) {
           label="Cài đặt"
           onClick={() => setActiveTab("settings")}
         />
-      </div>
+      </nav>
 
       {activeTab === "overview" || activeTab === "approvals" ? (
         <label className="field owner-branch-filter">
-          <span>Phạm vi dữ liệu</span>
+          <span>Chi nhánh đang xem</span>
           <select value={branchFilter} onChange={(event) => setBranchFilter(event.target.value)}>
             <option value="all">Tất cả chi nhánh</option>
             {ownerBranches.map((branch) => (
@@ -826,9 +826,9 @@ function OwnerTabButton({
   onClick: () => void;
 }) {
   return (
-    <button className={active ? "active" : ""} onClick={onClick}>
-      {icon}
-      {label}
+    <button type="button" className={active ? "active" : ""} aria-pressed={active} onClick={onClick}>
+      <span aria-hidden="true">{icon}</span>
+      <span>{label}</span>
     </button>
   );
 }
@@ -1162,6 +1162,21 @@ function OverviewPanel({
         </button>
       </div>
 
+      <section className="owner-next-actions" aria-label="Thao tác nhanh">
+        <button type="button" onClick={() => onOpenTab("approvals")}>
+          <ClipboardCheck size={20} aria-hidden="true" />
+          <span><strong>Duyệt điểm & ảnh</strong><small>{data.pendingRequests > 0 ? `${data.pendingRequests} đang chờ` : "Chưa có yêu cầu"}</small></span>
+        </button>
+        <button type="button" onClick={() => onOpenTab("customers")}>
+          <Search size={20} aria-hidden="true" />
+          <span><strong>Tìm khách</strong><small>Điểm và lịch sử</small></span>
+        </button>
+        <button type="button" onClick={() => onOpenTab("redeem")}>
+          <TicketCheck size={20} aria-hidden="true" />
+          <span><strong>Đổi mã quà</strong><small>{data.unusedRewards > 0 ? `${data.unusedRewards} mã chưa dùng` : "Kiểm tra mã quà"}</small></span>
+        </button>
+      </section>
+
       <div className="overview-grid">
         <OverviewMetric
           icon={<UsersRound size={21} />}
@@ -1169,18 +1184,8 @@ function OverviewPanel({
           value={data.customersToday}
         />
         <OverviewMetric
-          icon={<BarChart3 size={21} />}
-          label="Khách 7 ngày"
-          value={data.customers7Days}
-        />
-        <OverviewMetric
-          icon={<BarChart3 size={21} />}
-          label="Khách 30 ngày"
-          value={data.customers30Days}
-        />
-        <OverviewMetric
           icon={<ClipboardCheck size={21} />}
-          label="Chờ duyệt"
+          label="Chờ xác nhận"
           value={data.pendingRequests}
         />
         <OverviewMetric
@@ -1188,12 +1193,14 @@ function OverviewPanel({
           label="Điểm đã cộng"
           value={data.pointsApprovedToday}
         />
-        <OverviewMetric icon={<Gift size={21} />} label="Lượt quay" value={data.spinsToday} />
         <OverviewMetric
           icon={<TicketCheck size={21} />}
           label="Mã quà chưa dùng"
           value={data.unusedRewards}
         />
+        <OverviewMetric icon={<BarChart3 size={21} />} label="Khách 7 ngày" value={data.customers7Days} />
+        <OverviewMetric icon={<BarChart3 size={21} />} label="Khách 30 ngày" value={data.customers30Days} />
+        <OverviewMetric icon={<Gift size={21} />} label="Lượt quay" value={data.spinsToday} />
       </div>
 
       <div className="retention-panel">
@@ -1238,58 +1245,6 @@ function OverviewPanel({
         )}
       </div>
 
-      <div className="owner-next-actions">
-        <button type="button" onClick={() => onOpenTab("approvals")}>
-          <ClipboardCheck size={20} aria-hidden="true" />
-          <span>
-            <strong>Duyệt điểm & ảnh</strong>
-            <small>
-              {data.pendingRequests > 0
-                ? `${data.pendingRequests} khách đang chờ duyệt`
-                : "Chụp bổ sung khi có yêu cầu mới"}
-            </small>
-          </span>
-        </button>
-        <button type="button" onClick={() => onOpenTab("redeem")}>
-          <TicketCheck size={20} aria-hidden="true" />
-          <span>
-            <strong>Đổi mã quà</strong>
-            <small>
-              {data.unusedRewards > 0
-                ? `${data.unusedRewards} mã chưa dùng`
-                : "Sẵn sàng xác nhận mã mới"}
-            </small>
-          </span>
-        </button>
-        <button type="button" onClick={() => onOpenTab("wheel")}>
-          <SlidersHorizontal size={20} aria-hidden="true" />
-          <span>
-            <strong>Cấu hình vòng quay</strong>
-            <small>Đổi điểm quay và 6 ô thưởng</small>
-          </span>
-        </button>
-        <button type="button" onClick={() => onOpenTab("branches")}>
-          <QrCode size={20} aria-hidden="true" />
-          <span>
-            <strong>Chi nhánh & QR</strong>
-            <small>QR riêng của từng chi nhánh để khách yêu cầu tích điểm</small>
-          </span>
-        </button>
-        <button type="button" onClick={() => onOpenTab("staff")}>
-          <UserPlus size={20} aria-hidden="true" />
-          <span>
-            <strong>Nhân viên</strong>
-            <small>Thêm, tắt và cấp quyền đổi quà</small>
-          </span>
-        </button>
-        <button type="button" onClick={() => onOpenTab("customers")}>
-          <Search size={20} aria-hidden="true" />
-          <span>
-            <strong>Tìm khách</strong>
-            <small>Tra điểm, lịch sử và mã quà chưa dùng</small>
-          </span>
-        </button>
-      </div>
     </div>
   );
 }
