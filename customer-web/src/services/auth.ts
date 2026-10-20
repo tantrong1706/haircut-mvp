@@ -1,11 +1,13 @@
 import {
   User,
+  browserLocalPersistence,
   createUserWithEmailAndPassword,
   onAuthStateChanged,
   sendPasswordResetEmail,
   sendEmailVerification,
   signInWithEmailAndPassword,
   signOut,
+  setPersistence,
   updateProfile,
 } from "firebase/auth";
 import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
@@ -54,10 +56,21 @@ export async function signInOwnerStaff(email: string, password: string) {
     throw new Error("Firebase Auth chưa được cấu hình");
   }
 
+  await prepareOwnerStaffPersistence(auth);
   try {
     await signInWithEmailAndPassword(auth, email, password);
   } catch (err) {
     throw new Error(friendlyAuthError(err));
+  }
+}
+
+async function prepareOwnerStaffPersistence(auth: Parameters<typeof setPersistence>[0]) {
+  try {
+    // Firebase owns the saved session; never persist the email/password ourselves.
+    // This instance is separate from the customer Phone Auth instance.
+    await setPersistence(auth, browserLocalPersistence);
+  } catch {
+    throw new Error("Trình duyệt chưa cho phép lưu phiên đăng nhập. Hãy mở bằng Safari hoặc Chrome ở chế độ thường và cho phép lưu dữ liệu trang web.");
   }
 }
 
@@ -140,6 +153,7 @@ export async function registerOwnerSalon(input: {
     throw new Error("Mật khẩu chủ salon phải có ít nhất 8 ký tự");
   }
 
+  await prepareOwnerStaffPersistence(auth);
   let credential;
   try {
     credential = await createUserWithEmailAndPassword(auth, email, password);

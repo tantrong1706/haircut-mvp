@@ -61,9 +61,12 @@ export function AuthGate({ allowedRoles, children }: Props) {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    return listenAuthState(async (firebaseUser) => {
+    let revision = 0;
+    const unsubscribe = listenAuthState(async (firebaseUser) => {
+      const current = ++revision;
       setLoading(true);
       setError("");
+      setAppUser(null);
 
       try {
         if (!firebaseUser) {
@@ -73,6 +76,7 @@ export function AuthGate({ allowedRoles, children }: Props) {
         }
 
         const profile = await getAppUser(firebaseUser.uid);
+        if (current !== revision) return;
 
         if (!profile || !profile.salonId) {
           setAppUser(null);
@@ -99,11 +103,12 @@ export function AuthGate({ allowedRoles, children }: Props) {
         setUnlinkedUser(null);
         setAppUser(profile);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Không tải được tài khoản");
+        if (current === revision) setError(err instanceof Error ? err.message : "Không tải được tài khoản");
       } finally {
-        setLoading(false);
+        if (current === revision) setLoading(false);
       }
     });
+    return () => { revision += 1; unsubscribe(); };
   }, []);
 
   useEffect(() => {
@@ -577,6 +582,7 @@ export function AuthGate({ allowedRoles, children }: Props) {
           {!isPasswordReset ? (
             <p className="field-note">
               Nhân viên dùng email được chủ salon mời và tự đặt mật khẩu qua email.
+              {" "}Tài khoản được giữ đăng nhập trên trình duyệt này. Dùng máy chung, hãy đăng xuất sau khi sử dụng.
             </p>
           ) : null}
           {passwordResetSent ? (
