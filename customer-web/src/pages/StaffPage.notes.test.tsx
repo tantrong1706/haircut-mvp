@@ -25,11 +25,11 @@ describe("staff pending visit notes", () => {
     const note = await screen.findByPlaceholderText("Ví dụ: Fade thấp, giữ mái, không cắt quá cao");
     expect(note).toHaveValue("Saved A");
     await user.clear(note); await user.type(note, "Draft A");
-    await user.click(screen.getByRole("button", { name: /Khách B Chờ xác nhận/ }));
+    await user.click(screen.getByRole("button", { name: /Khách B.*Chờ xác nhận/ }));
     expect(note).toHaveValue("Saved B");
-    await user.click(screen.getByRole("button", { name: /Khách A Chờ xác nhận/ }));
+    await user.click(screen.getByRole("button", { name: /Khách A.*Chờ xác nhận/ }));
     expect(note).toHaveValue("Draft A");
-    await user.click(screen.getByRole("button", { name: "Lưu ghi chú", exact: true }));
+    await user.click(screen.getByRole("button", { name: "Lưu ghi chú" }));
     expect(await screen.findByText("Đã lưu ghi chú.")).toBeVisible();
     expect(mocks.save).toHaveBeenCalledWith({ salonId: "salon-fixture", requestId: "request-A", note: "Draft A" });
     expect(mocks.confirm).not.toHaveBeenCalled();
@@ -40,7 +40,7 @@ describe("staff pending visit notes", () => {
     render(<StaffPage currentUser={currentUser} />);
     const note = await screen.findByPlaceholderText("Ví dụ: Fade thấp, giữ mái, không cắt quá cao");
     await user.clear(note); await user.type(note, "Draft after failure");
-    await user.click(screen.getByRole("button", { name: "Lưu ghi chú", exact: true }));
+    await user.click(screen.getByRole("button", { name: "Lưu ghi chú" }));
     expect(await screen.findByText("Fixture save denied")).toBeVisible();
     expect(note).toHaveValue("Draft after failure");
     expect(mocks.confirm).not.toHaveBeenCalled();

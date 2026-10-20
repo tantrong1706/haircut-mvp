@@ -47,6 +47,7 @@ export type CustomerSummary = {
 };
 
 export type StaffSession = {
+  note?: string;
   pointsRequested?: number;
   approvalMode?: string;
   photoConsentGranted?: boolean;
@@ -1711,7 +1712,7 @@ async function redeemRewardCodeDirect(
 export async function confirmCustomerPointRequest(input: {
   salonId: string;
   session: StaffSession;
-  note: string;
+  note?: string;
   photoPaths: string[];
 }): Promise<{ ok: boolean; alreadyProcessed: boolean; pointsAdded: number }> {
   if (!isFirebaseConfigured()) {
@@ -1724,7 +1725,7 @@ export async function confirmCustomerPointRequest(input: {
   return callFunction("approvePointRequest", {
     salonId: input.salonId,
     requestId: input.session.id,
-    note: input.note,
+    ...(input.note === undefined ? {} : { note: input.note }),
     photoPaths: input.photoPaths,
   });
 }
@@ -2123,6 +2124,7 @@ function mapSession(docSnap: QueryDocumentSnapshot<DocumentData>): StaffSession 
   const customerId = String(data.customerId || "");
 
   return {
+    note: String(data.note || ""),
     pointsRequested: typeof data.pointsRequested === "number" ? data.pointsRequested : undefined,
     approvalMode: String(data.approvalMode || ""),
     photoConsentGranted: data.photoConsentGranted === true,
