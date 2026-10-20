@@ -11,6 +11,11 @@ export const listenPendingPointRequests = (_salon: string, _branch: string | nul
 };
 export const listenStaffProfiles = (_salon: string, next: (items: unknown[]) => void) => { next([]); return () => undefined; };
 export const searchSalonCustomers = async () => ({ customers: [], nextCursor: null });
+export const listSalonCustomerDirectory = async () => ({ customers: [{ id: "customer-fixture", name: "Khách mẫu trong danh bạ", phoneLast4: "5678", points: 7, allowPhoto: false, detailsLoaded: false, recentRecords: [], unusedRewards: [] }], nextCursor: null, totalCount: 1 });
+// Only local text drafts are allowed; points/deletions stay blocked below.
+export const savePendingVisitNote = async (input: { note: string }) => {
+  if (input.note === "simulate-failure") throw new Error("Không lưu được ghi chú mẫu");
+};
 export const formatDateTime = () => "20/10/2026 · 09:30";
 // All write actions are blocked in this browser-only fixture.
 const noWrite = async () => { throw new Error("Fixture blocks all business writes"); };

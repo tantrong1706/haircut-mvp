@@ -6,7 +6,7 @@ test.beforeEach(async ({ page }) => {
     const url = new URL(route.request().url());
     return url.hostname === "127.0.0.1" ? route.continue() : route.abort();
   });
-  await page.goto("/e2e/fixtures/owner-responsive.html");
+  await page.goto("/e2e/fixtures/owner-responsive.html", { waitUntil: "domcontentloaded" });
   await expect(page.getByRole("heading", { name: "CH Hair Studio" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Làm mới", exact: true })).toBeEnabled();
 });
@@ -69,4 +69,28 @@ test("overview is accessible and confirmation can be cancelled without writes", 
   await page.keyboard.press("Escape");
   await expect(dialog).not.toBeVisible();
   await expect(page.locator(".approval-card")).toHaveCount(1);
+});
+
+test("customer directory opens without typing a search and shows the salon total", async ({ page }) => {
+  await page.getByRole("navigation").getByRole("button", { name: "Khách hàng", exact: true }).click();
+  await expect(page.getByText("Khách mẫu trong danh bạ", { exact: true })).toBeVisible();
+  await expect(page.getByText("Tổng: 1 khách", { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test("owner saves a note before points, keeps it across tabs and blocks approval if saving fails", async ({ page }) => {
+  const menu = page.getByRole("navigation");
+  await menu.getByRole("button", { name: "Duyệt điểm", exact: true }).click();
+  const note = page.getByLabel("Ghi chú kiểu tóc (không bắt buộc)");
+  await note.fill("Ghi chú đã lưu từ kiểm thử");
+  await page.getByRole("button", { name: "Lưu ghi chú", exact: true }).click();
+  await expect(page.getByText("Đã lưu ghi chú.", { exact: true })).toBeVisible();
+  await menu.getByRole("button", { name: "Tổng quan", exact: true }).click();
+  await menu.getByRole("button", { name: "Duyệt điểm", exact: true }).click();
+  await expect(note).toHaveValue("Ghi chú đã lưu từ kiểm thử");
+  await note.fill("simulate-failure");
+  await page.getByRole("button", { name: "Duyệt", exact: true }).click();
+  await expect(page.getByText("Không lưu được ghi chú mẫu", { exact: true })).toBeVisible();
+  await expect(page.getByRole("dialog")).not.toBeVisible();
+  await expect(note).toHaveValue("simulate-failure");
 });

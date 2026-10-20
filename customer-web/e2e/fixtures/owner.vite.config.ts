@@ -5,6 +5,6 @@ export default defineConfig({
   envDir: false,
   optimizeDeps: { entries: ["e2e/fixtures/owner-responsive.html"] },
   plugins: [react()],
-  resolve: { alias: [{ find: "../services/operations", replacement: fileURLToPath(new URL("./owner-operations.ts", import.meta.url)) }] },
+  resolve: { alias: ["../services/operations", "../services/ownerWorkspace"].map(find => ({ find, replacement: fileURLToPath(new URL("./owner-operations.ts", import.meta.url)) })) },
   server: { host: "127.0.0.1", port: 4176, strictPort: true },
 });
