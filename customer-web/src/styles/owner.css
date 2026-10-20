@@ -56,12 +56,24 @@
 .app-shell .owner-page .owner-next-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-block: 2px 8px; }
 .app-shell .owner-page .owner-next-actions button { min-width: 0; gap: 12px; padding: 16px; }
 .app-shell .owner-page .owner-next-actions strong { font-size: 15px; line-height: 1.45; }
-.app-shell .owner-page .overview-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.app-shell .owner-page .overview-grid { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+.app-shell .owner-page .overview-metric { grid-column: span 3; }
+.app-shell .owner-page .overview-metric:nth-child(n + 5) { grid-column: span 4; }
+.app-shell .owner-page .wheel-slot-row { grid-template-columns: 32px minmax(0, 1.5fr) minmax(0, 1fr) 100px auto; align-items: end; }
+.app-shell .owner-page .wheel-slot-row .field { display: grid; min-width: 0; gap: 6px; }
+.app-shell .owner-page .wheel-slot-row .field > span { width: auto; height: auto; font-size: 14px; }
+.app-shell .owner-page .wheel-slot-row .field :is(input, select) { width: 100%; min-width: 0; }
 .app-shell .owner-page .owner-branch-filter { max-width: 320px; }
 
 @media (max-width: 1023px) {
   .app-shell .owner-page .owner-tabs { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .app-shell .owner-page .overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .app-shell .owner-page .overview-metric,
+  .app-shell .owner-page .overview-metric:nth-child(n + 5) { grid-column: auto; }
+  .app-shell .owner-page .wheel-slot-row { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .app-shell .owner-page .wheel-slot-row > span,
+  .app-shell .owner-page .wheel-slot-name,
+  .app-shell .owner-page .wheel-slot-row > label:last-child { grid-column: 1 / -1; }
 }
 
 @media (max-width: 640px) {
@@ -75,7 +87,9 @@
   .app-shell .owner-page :is(.panel, .retention-panel, .management-card) { padding: 14px; }
   .app-shell .owner-page .overview-grid { gap: 10px; }
   .app-shell .owner-page .overview-metric { padding: 12px; gap: 8px; }
-  .app-shell .owner-page .overview-metric:last-child { grid-column: 1 / -1; }
+  .app-shell .owner-page .overview-metric:nth-child(n + 5) { grid-column: 1 / -1; display: flex; align-items: center; min-height: 56px; gap: 12px; }
+  .app-shell .owner-page .overview-metric:nth-child(n + 5) > span { flex: 1; }
+  .app-shell .owner-page .overview-metric:nth-child(n + 5) > strong { font-size: 23px; margin-left: auto; }
   .app-shell .owner-page .owner-next-actions { gap: 8px; }
   .app-shell .owner-page .owner-next-actions button { grid-template-columns: 1fr; gap: 8px; padding: 12px 8px; align-content: start; }
   .app-shell .owner-page .owner-next-actions strong { font-size: 14px; }
@@ -86,7 +100,7 @@
   .app-shell .owner-page .button-row { flex-wrap: wrap; }
   .app-shell .owner-page .button-row > button { flex: 1 1 auto; }
   .app-shell .owner-page .approval-card .photo-consent { font-size: 13px; }
-  .app-shell .owner-page .confirm-dialog { width: 100%; max-height: calc(100dvh - 24px); overflow-y: auto; }
+  .app-shell .owner-page .confirm-dialog { width: 100%; max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); overflow-y: auto; }
 }
 
 @media (max-height: 500px) and (max-width: 1023px) {

@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
-  AlertTriangle,
   BarChart3,
   CheckCircle2,
   ClipboardCheck,
@@ -29,6 +28,7 @@ import {
 } from "lucide-react";
 import QRCode from "qrcode";
 import { BrandLogo } from "../components/BrandLogo";
+import { OwnerConfirmDialog, type OwnerConfirmation as ConfirmRequest } from "../components/OwnerConfirmDialog";
 import { MINI_APP_NAME } from "../config/branding";
 import { AccountDeletionPanel } from "../components/AccountDeletionPanel";
 import { HaircutPhotoCapture, type HaircutPhotoItem } from "../components/HaircutPhotoCapture";
@@ -77,15 +77,6 @@ import { legacyPhotoUrlsFor, photoItemsFor, storedPhotoCount } from "../services
 
 type OwnerTab =
   "overview" | "approvals" | "branches" | "staff" | "customers" | "wheel" | "redeem" | "settings";
-
-type ConfirmRequest = {
-  title: string;
-  description: string;
-  confirmLabel: string;
-  cancelLabel?: string;
-  tone?: "default" | "danger";
-  onConfirm: () => Promise<void> | void;
-};
 
 type Props = {
   currentUser: AppUser;
@@ -804,7 +795,7 @@ export function OwnerPage({ currentUser }: Props) {
 
       {message ? <p className="alert success">{message}</p> : null}
       {error ? <p className="alert error">{error}</p> : null}
-      <ConfirmDialog
+      <OwnerConfirmDialog
         request={confirmRequest}
         busy={confirming}
         onCancel={cancelConfirmRequest}
@@ -830,55 +821,6 @@ function OwnerTabButton({
       <span aria-hidden="true">{icon}</span>
       <span>{label}</span>
     </button>
-  );
-}
-
-function ConfirmDialog({
-  request,
-  busy,
-  onCancel,
-  onConfirm,
-}: {
-  request: ConfirmRequest | null;
-  busy: boolean;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  if (!request) {
-    return null;
-  }
-
-  return (
-    <div className="dialog-backdrop" role="presentation">
-      <div
-        className={request.tone === "danger" ? "confirm-dialog danger" : "confirm-dialog"}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="owner-confirm-title"
-      >
-        <div className="confirm-icon">
-          <AlertTriangle size={24} aria-hidden="true" />
-        </div>
-        <div className="confirm-copy">
-          <h2 id="owner-confirm-title">{request.title}</h2>
-          <p className="muted">{request.description}</p>
-        </div>
-        <div className="button-row wrap-row">
-          <button className="secondary-button" disabled={busy} onClick={onCancel}>
-            {request.cancelLabel || "Hủy"}
-          </button>
-          <button
-            className={
-              request.tone === "danger" ? "primary-button danger-primary" : "primary-button"
-            }
-            disabled={busy}
-            onClick={onConfirm}
-          >
-            {busy ? "Đang xử lý..." : request.confirmLabel}
-          </button>
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -1165,7 +1107,7 @@ function OverviewPanel({
       <section className="owner-next-actions" aria-label="Thao tác nhanh">
         <button type="button" onClick={() => onOpenTab("approvals")}>
           <ClipboardCheck size={20} aria-hidden="true" />
-          <span><strong>Duyệt điểm & ảnh</strong><small>{data.pendingRequests > 0 ? `${data.pendingRequests} đang chờ` : "Chưa có yêu cầu"}</small></span>
+          <span><strong>Duyệt điểm</strong><small>{data.pendingRequests > 0 ? `${data.pendingRequests} đang chờ` : "Chưa có yêu cầu"}</small></span>
         </button>
         <button type="button" onClick={() => onOpenTab("customers")}>
           <Search size={20} aria-hidden="true" />
@@ -1173,7 +1115,7 @@ function OverviewPanel({
         </button>
         <button type="button" onClick={() => onOpenTab("redeem")}>
           <TicketCheck size={20} aria-hidden="true" />
-          <span><strong>Đổi mã quà</strong><small>{data.unusedRewards > 0 ? `${data.unusedRewards} mã chưa dùng` : "Kiểm tra mã quà"}</small></span>
+          <span><strong>Đổi quà</strong><small>{data.unusedRewards > 0 ? `${data.unusedRewards} mã quà` : "Kiểm tra mã quà"}</small></span>
         </button>
       </section>
 
@@ -2474,12 +2416,16 @@ function WheelConfigPanel({
           {config.slots.map((slot, index) => (
             <div className="wheel-slot-row" key={slot.slotId}>
               <span>{index + 1}</span>
+              <label className="field wheel-slot-name"><span>Tên ô</span>
               <input
+                aria-label={`Tên ô ${index + 1}`}
                 value={slot.label}
                 maxLength={60}
                 onChange={(event) => updateSlot(index, event.target.value)}
                 placeholder={`Ô ${index + 1}`}
               />
+              </label>
+              <label className="field"><span>Loại ô</span>
               <select
                 aria-label={`Loại ô ${index + 1}`}
                 value={slot.type}
@@ -2490,6 +2436,8 @@ function WheelConfigPanel({
                 <option value="reward">Có quà</option>
                 <option value="no_prize">Không trúng</option>
               </select>
+              </label>
+              <label className="field"><span>Trọng số</span>
               <input
                 aria-label={`Trọng số ô ${index + 1}`}
                 type="number"
@@ -2498,6 +2446,7 @@ function WheelConfigPanel({
                 value={slot.weight}
                 onChange={(event) => updateSlotWeight(index, Number(event.target.value || 1))}
               />
+              </label>
               <label>
                 <input
                   type="checkbox"
