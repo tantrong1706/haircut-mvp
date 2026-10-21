@@ -108,6 +108,24 @@ test("customer directory opens without typing a search and shows the salon total
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
+test("directory offers points with an explicit customer and branch confirmation, cancel writes nothing", async ({
+  page,
+}, info) => {
+  await page
+    .getByRole("navigation")
+    .getByRole("button", { name: "Khách hàng", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Tích điểm cho Khách mẫu trong danh bạ" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toContainText("******5678");
+  await expect(dialog).toContainText("Chi nhánh Nguyễn Văn Linh");
+  await page.getByRole("button", { name: "Hủy", exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+  await expect(page.getByText("7 điểm", { exact: true })).toBeVisible();
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path: info.outputPath("owner-customers.png"), fullPage: true });
+});
+
 test("owner saves a note before points, keeps it across tabs and blocks approval if saving fails", async ({
   page,
 }) => {

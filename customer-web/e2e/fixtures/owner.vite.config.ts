@@ -6,7 +6,11 @@ export default defineConfig({
   optimizeDeps: { entries: ["e2e/fixtures/owner-responsive.html"] },
   plugins: [react()],
   resolve: {
-    alias: ["../services/operations", "../services/ownerWorkspace"].map((find) => ({
+    alias: [
+      "../services/operations",
+      "../services/ownerWorkspace",
+      "../services/returningCustomerPoints",
+    ].map((find) => ({
       find,
       replacement: fileURLToPath(new URL("./owner-operations.ts", import.meta.url)),
     })),

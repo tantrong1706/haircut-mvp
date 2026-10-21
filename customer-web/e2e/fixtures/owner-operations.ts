@@ -106,6 +106,7 @@ export const formatDateTime = () => "20/10/2026 · 09:30";
 const noWrite = async () => {
   throw new Error("Fixture blocks all business writes");
 };
+export const awardReturningCustomerPoints = noWrite;
 export const approvePointRequest = noWrite,
   createBranch = noWrite,
   createStaffProfile = noWrite,

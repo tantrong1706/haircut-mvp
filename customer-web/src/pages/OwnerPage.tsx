@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import QRCode from "qrcode";
 import { BrandLogo } from "../components/BrandLogo";
+import { CustomerPointAction } from "../components/CustomerPointAction";
 import { OwnerConfirmDialog, type OwnerConfirmation as ConfirmRequest } from "../components/OwnerConfirmDialog";
 import { MINI_APP_NAME } from "../config/branding";
 import { AccountDeletionPanel } from "../components/AccountDeletionPanel";
@@ -774,6 +775,8 @@ export function OwnerPage({ currentUser }: Props) {
       ) : activeTab === "customers" ? (
         <CustomerSearchPanel
           salonId={salonId}
+          branches={ownerBranches}
+          pointPerVisit={salonProfile?.pointPerVisit || 1}
           onMessage={setMessage}
           onError={setError}
           onConfirm={setConfirmRequest}
@@ -2123,11 +2126,15 @@ function StaffCard({
 
 function CustomerSearchPanel({
   salonId,
+  branches,
+  pointPerVisit,
   onMessage,
   onError,
   onConfirm,
 }: {
   salonId: string;
+  branches: SalonBranch[];
+  pointPerVisit: number;
   onMessage: (message: string) => void;
   onError: (message: string) => void;
   onConfirm: (request: ConfirmRequest) => void;
@@ -2141,6 +2148,9 @@ function CustomerSearchPanel({
   const [detailsCustomerId, setDetailsCustomerId] = useState("");
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [searchedTerm, setSearchedTerm] = useState("");
+  const [awardBranchId, setAwardBranchId] = useState("");
+  const activeBranches = branches.filter(branch => branch.isActive);
+  const awardBranch = activeBranches.find(branch => branch.id === awardBranchId) ?? (activeBranches.length === 1 ? activeBranches[0] : undefined);
   const compactTerm = term.trim().replace(/\s/g, "");
   const termDigits = compactTerm.replace(/\D/g, "");
   const isNumericTerm = compactTerm.length > 0 && termDigits.length === compactTerm.length;
@@ -2248,6 +2258,14 @@ function CustomerSearchPanel({
         </div>
       </div>
 
+      <label className="field">
+        <span>Chi nhánh cộng điểm</span>
+        <select value={awardBranch?.id || ""} onChange={event => setAwardBranchId(event.target.value)}>
+          <option value="">Chọn chi nhánh</option>
+          {activeBranches.map(branch => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+        </select>
+      </label>
+
       <div className="inline-form">
         <input
           value={term}
@@ -2287,6 +2305,7 @@ function CustomerSearchPanel({
               </div>
               <span>SĐT: {ownerPhoneLabel(customer)}</span>
               <span>Lần ghé gần nhất: {formatDateTime(customer.lastVisitAtMs) || "Chưa có"}</span>
+              <CustomerPointAction salonId={salonId} branchId={awardBranch?.id || ""} branchName={awardBranch?.name || ""} pointPerVisit={pointPerVisit} customer={customer} onAwarded={pointsAfter => setResults(current => current.map(item => item.id === customer.id ? { ...item, points: pointsAfter, detailsLoaded: false } : item))} />
 
               {customer.detailsLoaded ? (
                 <div className="customer-insight-grid">
