@@ -4833,7 +4833,8 @@ export const updatePendingPointRequestPhotos = onCall(functionOptions, async (re
     }
   });
 
-  return { photoUrls, photoPaths };
+  // Saving text is not a photo-read capability, including after consent withdrawal.
+  return changesPhotos ? { photoUrls, photoPaths } : { noteSaved: true };
 });
 
 export const claimServiceSession = onCall(functionOptions, async (request) => {
