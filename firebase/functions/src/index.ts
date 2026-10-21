@@ -3697,6 +3697,37 @@ export const getHaircutPhotoReadUrls = onCall(
   (request) => createPrivatePhotoReader(db, storage.bucket(), (uid, salonId) => enforceAuthenticatedRateLimit("getHaircutPhotoReadUrls", uid, salonId))(request),
 );
 
+// Storage permits only two cross-service document reads. A server-issued,
+// five-minute grant authorizes private staging, not attachment or photo reads.
+// Recheck mutable membership, salon/branch status and feature flags atomically
+// both when issuing the grant and when finalizing the image.
+async function assertPhotoGrantEnvironment(
+  tx: FirebaseFirestore.Transaction, context: PhotoUploadContext, uid: string, appVersion: unknown,
+) {
+  const [memberSnap, salonSnap, branchSnap, systemSnap, featuresSnap] = await Promise.all([
+    tx.get(db.doc(`users/${uid}`)), tx.get(db.doc(`salons/${context.salonId}`)),
+    tx.get(db.doc(`branches/${context.branchId}`)), tx.get(db.doc("system_config/features")),
+    tx.get(db.doc(`salons/${context.salonId}/settings/features`)),
+  ]);
+  const member = memberSnap.data();
+  if (!member || member.salonId !== context.salonId || member.isActive !== true ||
+    !["owner", "staff"].includes(String(member.role)) || member.inviteStatus === "pending" ||
+    !canUserAccessBranch(member, context.branchId)) {
+    throw new HttpsError("permission-denied", "Tài khoản không còn quyền lưu ảnh tại chi nhánh này");
+  }
+  if (!salonSnap.exists || salonSnap.data()?.isActive === false) {
+    throw new HttpsError("failed-precondition", "Salon không còn hoạt động");
+  }
+  assertSalonIsOperational(salonSnap.data());
+  assertBranchIsOperational(branchSnap.data(), context.salonId, context.branchId);
+  const features = normalizeSystemFeatures(systemSnap.data(), featuresSnap.data());
+  assertSupportedAppVersion(features, appVersion);
+  if (features.maintenanceMode || !features.photoUploadEnabled) {
+    throw new HttpsError("failed-precondition", "Tính năng lưu ảnh đang tạm ngừng");
+  }
+  return { ...member, uid } as AppUser;
+}
+
 export const beginHaircutPhotoUpload = onCall(functionOptions, async (request) => {
   const uid = currentUid(request.auth);
   const salonId = requireString(request.data?.salonId, "salonId");
@@ -3741,19 +3772,42 @@ export const beginHaircutPhotoUpload = onCall(functionOptions, async (request) =
   let status = "pending";
 
   await db.runTransaction(async (tx) => {
+    const currentActor = await assertPhotoGrantEnvironment(tx, context, uid, request.data?.appVersion);
     const [operationSnap, sessionSnap, customerSnap] = await Promise.all([
       tx.get(operationRef),
       tx.get(db.collection("chair_sessions").doc(sessionId)),
       tx.get(db.collection("customers").doc(context.customerId)),
     ]);
     const operation = operationSnap.data();
+    const session = sessionSnap.data();
+    const customer = customerSnap.data();
+    const accessStillValid =
+      sessionSnap.exists &&
+      session?.salonId === salonId && session?.branchId === context.branchId &&
+      session?.customerId === context.customerId &&
+      ((session?.status === "serving" && session?.assignedStaffId === uid) ||
+        (currentActor.role === "owner" && session?.status === "pending_approval" && session?.approvalMode !== "staff_confirmation") ||
+        pendingPhotoRequestAllowed(session));
+    if (!accessStillValid) throw new HttpsError("failed-precondition", "Phiên phục vụ đã thay đổi, vui lòng tải lại");
+    if (!customerSnap.exists || customer?.salonId !== salonId || customer?.allowPhoto !== true) {
+      throw new HttpsError("failed-precondition", "Khách đã thu hồi đồng ý lưu ảnh");
+    }
+    const uploadGrant = {
+      uploadGrantVersion: 1,
+      uploadExpiresAt: Timestamp.fromMillis(Math.min(
+        now.toMillis() + 5 * 60_000,
+        timestampMillis(operation?.expiresAt) ?? expiresAt.toMillis(),
+        session.approvalMode === "staff_confirmation" ? timestampMillis(session.expiresAt) ?? 0 : Infinity,
+      )),
+    };
     if (operationSnap.exists) {
       if (
         operation?.salonId !== salonId ||
         operation?.sessionId !== sessionId ||
         operation?.staffUid !== uid ||
         operation?.requestId !== requestId ||
-        operation?.storagePath !== storagePath
+        operation?.storagePath !== storagePath || operation?.checksum !== checksum ||
+        operation?.expectedBytes !== expectedBytes || operation?.expectedContentType !== expectedContentType
       ) {
         throw new HttpsError("already-exists", "Mã yêu cầu tải ảnh đã được dùng");
       }
@@ -3765,25 +3819,11 @@ export const beginHaircutPhotoUpload = onCall(functionOptions, async (request) =
       }
       status = String(operation.status || "pending");
       returnedExpiresAtMs = timestampMillis(operation.expiresAt) ?? expiresAt.toMillis();
+      if (["pending", "uploading"].includes(status)) tx.set(operationRef, { ...uploadGrant, updatedAt: now }, { merge: true });
       return;
     }
-    const session = sessionSnap.data();
-    const customer = customerSnap.data();
-    const accessStillValid =
-      sessionSnap.exists &&
-      session?.salonId === salonId &&
-      session?.branchId === context.branchId &&
-      session?.customerId === context.customerId &&
-      ((session?.status === "serving" && session?.assignedStaffId === uid) ||
-        (context.user.role === "owner" && session?.status === "pending_approval" && session?.approvalMode !== "staff_confirmation") ||
-        pendingPhotoRequestAllowed(session));
-    if (!accessStillValid) {
-      throw new HttpsError("failed-precondition", "Phiên phục vụ đã thay đổi, vui lòng tải lại");
-    }
-    if (!customerSnap.exists || customer?.salonId !== salonId || customer?.allowPhoto !== true) {
-      throw new HttpsError("failed-precondition", "Khách đã thu hồi đồng ý lưu ảnh");
-    }
     tx.create(operationRef, {
+      ...uploadGrant,
       operationId,
       requestId,
       salonId,
@@ -3870,6 +3910,7 @@ export const finalizeHaircutPhotoUpload = onCall(
   }
   let context: PhotoUploadContext;
   try {
+    await assertFeatureEnabled(salonId, "photoUploadEnabled", "Tính năng lưu ảnh đang tạm ngừng.", request.data?.appVersion);
     context = await loadPhotoUploadContext({
       uid,
       salonId,
@@ -3942,6 +3983,7 @@ export const finalizeHaircutPhotoUpload = onCall(
   let alreadyFinalized = false;
   let finalizationFailure = false;
   await db.runTransaction(async (tx) => {
+    const currentActor = await assertPhotoGrantEnvironment(tx, context, uid, request.data?.appVersion);
     const [currentOperationSnap, sessionSnap, customerSnap] = await Promise.all([
       tx.get(operationRef),
       tx.get(db.collection("chair_sessions").doc(context.sessionId)),
@@ -3970,7 +4012,7 @@ export const finalizeHaircutPhotoUpload = onCall(
       session?.branchId === context.branchId &&
       session?.customerId === context.customerId &&
       ((session?.status === "serving" && session?.assignedStaffId === uid) ||
-        (user.role === "owner" && session?.status === "pending_approval" && session?.approvalMode !== "staff_confirmation") ||
+        (currentActor.role === "owner" && session?.status === "pending_approval" && session?.approvalMode !== "staff_confirmation") ||
         pendingPhotoRequestAllowed(session));
     if (!sessionAllowed || !customerSnap.exists || customer?.allowPhoto !== true) {
       finalizationFailure = true;
