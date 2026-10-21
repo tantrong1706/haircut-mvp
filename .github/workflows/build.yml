@@ -129,6 +129,10 @@ jobs:
         working-directory: customer-web
         run: npm run test:photo-security:coverage
 
+      - name: Owner workspace and remembered sign-in coverage
+        working-directory: customer-web
+        run: npm run test:owner:coverage
+
       - name: Build customer Web
         working-directory: customer-web
         env:
@@ -237,6 +241,10 @@ jobs:
       - name: Returning customer browser interaction and accessibility
         working-directory: customer-web
         run: npm run test:returning:browser
+
+      - name: Responsive owner workspace
+        working-directory: customer-web
+        run: npm run test:owner:browser
 
       - name: Install Admin browser test dependencies
         working-directory: apps/admin-web

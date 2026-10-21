@@ -74,6 +74,7 @@ import { trackEvent, withMonitoringTrace } from "../services/monitoring";
 import { removeSalonAvatar, uploadSalonAvatarFile } from "../services/salonBranding";
 import { LuckyWheelConfig, defaultLuckyWheelConfig } from "../services/types";
 import { legacyPhotoUrlsFor, photoItemsFor, storedPhotoCount } from "../services/pointRequestPhotos";
+import { listSalonCustomerDirectory, savePendingVisitNote } from "../services/ownerWorkspace";
 
 type OwnerTab =
   "overview" | "approvals" | "branches" | "staff" | "customers" | "wheel" | "redeem" | "settings";
@@ -88,6 +89,7 @@ export function OwnerPage({ currentUser }: Props) {
   }, [currentUser.salonId]);
   const [activeTab, setActiveTab] = useState<OwnerTab>("overview");
   const [requests, setRequests] = useState<PointRequest[]>([]);
+  const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
   const [ownerBranches, setOwnerBranches] = useState<SalonBranch[]>([]);
   const [branchFilter, setBranchFilter] = useState("all");
 
@@ -262,7 +264,25 @@ export function OwnerPage({ currentUser }: Props) {
     }
   }
 
-  function approve(request: PointRequest) {
+  async function saveOwnerNote(request: PointRequest) {
+    const note = noteDrafts[request.id] ?? request.note;
+    setBusyId(request.id); setMessage(""); setError("");
+    try {
+      await savePendingVisitNote({ salonId, requestId: request.id, note });
+      setRequests(current => current.map(item => item.id === request.id ? { ...item, note } : item));
+      setNoteDrafts(current => { const next = { ...current }; delete next[request.id]; return next; });
+      setMessage("Đã lưu ghi chú.");
+      return true;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không lưu được ghi chú");
+      return false;
+    } finally { setBusyId(""); }
+  }
+
+  async function approve(request: PointRequest) {
+    if (busyId || photoBusyId) return;
+    const draft = noteDrafts[request.id];
+    if (draft !== undefined && draft !== request.note && !(await saveOwnerNote(request))) return;
     setConfirmRequest({
       title: "Duyệt cộng điểm?",
       description: `Cộng ${request.pointsAdded} điểm cho ${request.customer?.name || "khách hàng"} và lưu lịch sử cắt tóc.`,
@@ -730,6 +750,9 @@ export function OwnerPage({ currentUser }: Props) {
       ) : activeTab === "approvals" ? (
         <ApprovalsPanel
           requests={requests}
+          noteDrafts={noteDrafts}
+          onNoteChange={(requestId, note) => setNoteDrafts(current => ({ ...current, [requestId]: note }))}
+          onSaveNote={saveOwnerNote}
           busyId={busyId}
           photoBusyId={photoBusyId}
           photoProgress={photoProgress}
@@ -1224,6 +1247,9 @@ function ownerPhoneLabel(customer: { phone?: string; phoneLast4: string }) {
 
 function ApprovalsPanel({
   requests,
+  noteDrafts,
+  onNoteChange,
+  onSaveNote,
   busyId,
   photoBusyId,
   photoProgress,
@@ -1234,6 +1260,9 @@ function ApprovalsPanel({
   onCancelPhotoUpload,
 }: {
   requests: PointRequest[];
+  noteDrafts: Record<string, string>;
+  onNoteChange: (requestId: string, note: string) => void;
+  onSaveNote: (request: PointRequest) => Promise<boolean>;
   busyId: string;
   photoBusyId: string;
   photoProgress: number;
@@ -1258,7 +1287,13 @@ function ApprovalsPanel({
             <span>SĐT: {request.customer ? ownerPhoneLabel(request.customer) : "Chưa có"}</span>
             <span>Thợ: {request.staffName || "Nhân viên"}</span>
             <span>Chi nhánh: {request.branchName || "Chi nhánh"}</span>
-            <p>{request.note || "Không có ghi chú"}</p>
+            <label className="field">
+              <span>Ghi chú kiểu tóc (không bắt buộc)</span>
+              <textarea value={noteDrafts[request.id] ?? request.note} maxLength={1000} disabled={Boolean(busyId) || Boolean(photoBusyId)} onChange={event => onNoteChange(request.id, event.target.value)} />
+            </label>
+            <button type="button" className="secondary-button" disabled={Boolean(busyId) || Boolean(photoBusyId) || noteDrafts[request.id] === undefined || noteDrafts[request.id] === request.note} onClick={() => void onSaveNote(request)}>
+              Lưu ghi chú
+            </button>
             {request.photoReadError ? <p role="status">Ảnh tạm thời chưa tải được. Các ảnh đã lưu vẫn được giữ; hãy làm mới trang để thử lại.</p> : null}
             <HaircutPhotoCapture
               title="Ảnh khách sau cắt"
@@ -2099,7 +2134,9 @@ function CustomerSearchPanel({
 }) {
   const [term, setTerm] = useState("");
   const [results, setResults] = useState<CustomerLookupResult[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [totalCount, setTotalCount] = useState<number | null>(null);
+  const revision = useRef(0);
   const [busyCustomerId, setBusyCustomerId] = useState("");
   const [detailsCustomerId, setDetailsCustomerId] = useState("");
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -2109,27 +2146,42 @@ function CustomerSearchPanel({
   const isNumericTerm = compactTerm.length > 0 && termDigits.length === compactTerm.length;
   const canSearch = term.trim().length >= 2 && (!isNumericTerm || termDigits.length === 4);
 
-  async function search(loadMore = false) {
-    const normalizedTerm = term.trim();
+  useEffect(() => {
+    const current = ++revision.current;
+    setLoading(true);
+    listSalonCustomerDirectory({ salonId }).then(page => {
+      if (current !== revision.current) return;
+      setResults(page.customers); setNextCursor(page.nextCursor); setTotalCount(page.totalCount);
+    }).catch(err => {
+      if (current === revision.current) onError(err instanceof Error ? err.message : "Không tải được danh sách khách");
+    }).finally(() => { if (current === revision.current) setLoading(false); });
+    return () => { revision.current += 1; };
+  }, [salonId, onError]);
+
+  async function search(loadMore = false, override?: string) {
+    const currentRevision = ++revision.current;
+    const normalizedTerm = (override ?? term).trim();
     const append = loadMore && normalizedTerm === searchedTerm && Boolean(nextCursor);
     setLoading(true);
     onMessage("");
     onError("");
 
     try {
-      const page = await searchSalonCustomers({
+      const page = normalizedTerm ? await searchSalonCustomers({
         salonId,
         term: normalizedTerm,
         cursor: append ? nextCursor : null,
         pageSize: 10,
-      });
+      }) : await listSalonCustomerDirectory({ salonId, cursor: append ? nextCursor : null });
+      if (currentRevision !== revision.current) return;
+      if ("totalCount" in page) setTotalCount(Number(page.totalCount));
       setResults((current) => (append ? [...current, ...page.customers] : page.customers));
       setNextCursor(page.nextCursor);
       setSearchedTerm(normalizedTerm);
     } catch (err) {
-      onError(err instanceof Error ? err.message : "Không tìm được khách");
+      if (currentRevision === revision.current) onError(err instanceof Error ? err.message : "Không tìm được khách");
     } finally {
-      setLoading(false);
+      if (currentRevision === revision.current) setLoading(false);
     }
   }
 
@@ -2172,6 +2224,7 @@ function CustomerSearchPanel({
     try {
       const result = await deleteCustomerData({ salonId, customerId: customer.id });
       setResults((current) => current.filter((item) => item.id !== customer.id));
+      setTotalCount(current => current === null ? null : Math.max(0, current - 1));
       onMessage(
         `Đã xóa dữ liệu khách: ${result.deletedRecords} lịch sử, ${result.deletedRewards} mã quà, ${result.deletedStorageFiles} ảnh.`,
       );
@@ -2187,7 +2240,8 @@ function CustomerSearchPanel({
       <div className="section-heading">
         <Search size={22} aria-hidden="true" />
         <div>
-          <h2>Tìm khách</h2>
+          <h2>Danh sách khách</h2>
+          {totalCount !== null ? <p>Tổng: {totalCount} khách</p> : null}
           <p className="muted">
             Tìm theo tên, phần đầu một từ hoặc đúng 4 số cuối SĐT để xem điểm, lịch sử và mã quà.
           </p>
@@ -2204,6 +2258,7 @@ function CustomerSearchPanel({
             }
           }}
           placeholder="Ví dụ: Anh Tân hoặc 8761"
+          aria-label="Tìm khách theo tên hoặc 4 số cuối"
         />
         <button
           className="primary-button"
@@ -2213,14 +2268,15 @@ function CustomerSearchPanel({
           <Search size={18} aria-hidden="true" />
           Tìm
         </button>
+        <button type="button" className="secondary-button" disabled={loading} onClick={() => { setTerm(""); void search(false, ""); }}>Tất cả khách</button>
       </div>
 
       <div className="ops-list">
         {results.length === 0 ? (
           <div className="empty-state compact-empty">
             <Search size={28} aria-hidden="true" />
-            <strong>{loading ? "Đang tìm khách" : "Chưa có kết quả"}</strong>
-            <p>Nhập ít nhất 2 ký tự hoặc 4 số cuối SĐT để tìm nhanh.</p>
+            <strong>{loading ? "Đang tải khách" : searchedTerm ? "Chưa có kết quả" : "Salon chưa có khách"}</strong>
+            <p>Khách đã đăng ký sẽ xuất hiện trong danh sách này. Có thể tìm nhanh bằng tên hoặc 4 số cuối SĐT.</p>
           </div>
         ) : (
           results.map((customer) => (

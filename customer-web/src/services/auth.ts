@@ -1,13 +1,11 @@
 import {
   User,
-  browserLocalPersistence,
   createUserWithEmailAndPassword,
   onAuthStateChanged,
   sendPasswordResetEmail,
   sendEmailVerification,
   signInWithEmailAndPassword,
   signOut,
-  setPersistence,
   updateProfile,
 } from "firebase/auth";
 import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
@@ -21,6 +19,7 @@ import {
 } from "./firebase";
 import { callWriteFunctionOrFallback } from "./functionWrites";
 import { prepareSquareImage } from "./imageProcessing";
+import { prepareOwnerStaffPersistence } from "./ownerStaffSession";
 
 export type AppRole = "owner" | "staff";
 
@@ -61,16 +60,6 @@ export async function signInOwnerStaff(email: string, password: string) {
     await signInWithEmailAndPassword(auth, email, password);
   } catch (err) {
     throw new Error(friendlyAuthError(err));
-  }
-}
-
-async function prepareOwnerStaffPersistence(auth: Parameters<typeof setPersistence>[0]) {
-  try {
-    // Firebase owns the saved session; never persist the email/password ourselves.
-    // This instance is separate from the customer Phone Auth instance.
-    await setPersistence(auth, browserLocalPersistence);
-  } catch {
-    throw new Error("Trình duyệt chưa cho phép lưu phiên đăng nhập. Hãy mở bằng Safari hoặc Chrome ở chế độ thường và cho phép lưu dữ liệu trang web.");
   }
 }
 

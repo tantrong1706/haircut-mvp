@@ -3,16 +3,33 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { OwnerConfirmDialog } from "./OwnerConfirmDialog";
-const request = { title: "Xác nhận thao tác", description: "Thông tin thử", confirmLabel: "Xác nhận", onConfirm: () => undefined };
+const request = {
+  title: "Xác nhận thao tác",
+  description: "Thông tin thử",
+  confirmLabel: "Xác nhận",
+  onConfirm: () => undefined,
+};
 describe("OwnerConfirmDialog", () => {
   it("does not render a closed dialog", () => {
-    render(<OwnerConfirmDialog request={null} busy={false} onCancel={vi.fn()} onConfirm={vi.fn()} />);
+    render(
+      <OwnerConfirmDialog request={null} busy={false} onCancel={vi.fn()} onConfirm={vi.fn()} />,
+    );
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
   it("focuses cancel, traps Tab and restores the trigger after Escape", async () => {
     function Harness() {
       const [open, setOpen] = useState(false);
-      return <><button onClick={() => setOpen(true)}>Mở</button><OwnerConfirmDialog request={open ? request : null} busy={false} onCancel={() => setOpen(false)} onConfirm={vi.fn()} /></>;
+      return (
+        <>
+          <button onClick={() => setOpen(true)}>Mở</button>
+          <OwnerConfirmDialog
+            request={open ? request : null}
+            busy={false}
+            onCancel={() => setOpen(false)}
+            onConfirm={vi.fn()}
+          />
+        </>
+      );
     }
     const user = userEvent.setup();
     render(<Harness />);
@@ -28,7 +45,8 @@ describe("OwnerConfirmDialog", () => {
     expect(trigger).toHaveFocus();
   });
   it("does not cancel or submit while busy", async () => {
-    const cancel = vi.fn(), confirm = vi.fn();
+    const cancel = vi.fn(),
+      confirm = vi.fn();
     render(<OwnerConfirmDialog request={request} busy onCancel={cancel} onConfirm={confirm} />);
     expect(screen.getByRole("button", { name: "Đang xử lý..." })).toBeDisabled();
     await userEvent.setup().keyboard("{Escape}{Tab}");
@@ -37,8 +55,16 @@ describe("OwnerConfirmDialog", () => {
     expect(screen.getByRole("dialog")).toHaveFocus();
   });
   it("keeps custom labels and danger style, confirming only on explicit click", async () => {
-    const cancel = vi.fn(), confirm = vi.fn();
-    render(<OwnerConfirmDialog request={{ ...request, tone: "danger", cancelLabel: "Quay lại" }} busy={false} onCancel={cancel} onConfirm={confirm} />);
+    const cancel = vi.fn(),
+      confirm = vi.fn();
+    render(
+      <OwnerConfirmDialog
+        request={{ ...request, tone: "danger", cancelLabel: "Quay lại" }}
+        busy={false}
+        onCancel={cancel}
+        onConfirm={confirm}
+      />,
+    );
     expect(screen.getByRole("dialog")).toHaveClass("danger");
     await userEvent.setup().click(screen.getByRole("button", { name: "Xác nhận" }));
     expect(confirm).toHaveBeenCalledOnce();
@@ -46,7 +72,9 @@ describe("OwnerConfirmDialog", () => {
     expect(cancel).toHaveBeenCalledOnce();
   });
   it("moves keyboard focus from the dialog container into its controls", () => {
-    render(<OwnerConfirmDialog request={request} busy={false} onCancel={vi.fn()} onConfirm={vi.fn()} />);
+    render(
+      <OwnerConfirmDialog request={request} busy={false} onCancel={vi.fn()} onConfirm={vi.fn()} />,
+    );
     const dialog = screen.getByRole("dialog");
     dialog.focus();
     fireEvent.keyDown(dialog, { key: "Tab" });

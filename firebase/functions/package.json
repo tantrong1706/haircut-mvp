@@ -18,7 +18,7 @@
     "test:rules": "cd .. && npx --yes firebase-tools@15.22.3 emulators:exec --project demo-haircut --only firestore,storage \"npm --prefix functions run test:rules:emulator\"",
     "test:rules:emulator": "vitest run --hookTimeout=30000 --testTimeout=20000 test/firestore.rules.test.ts",
     "test:integration": "cd .. && npx --yes firebase-tools@15.22.3 emulators:exec --project demo-haircut --only firestore,storage \"npm --prefix functions run test:integration:emulator\"",
-    "test:integration:emulator": "vitest run --no-file-parallelism --testTimeout=20000 test/callables.integration.test.ts test/webCustomer.integration.test.ts test/salonBranding.integration.test.ts test/photoUploadOperations.integration.test.ts test/adversarial.audit.test.ts test/adminSupport.integration.test.ts test/privatePhotoAccess.integration.test.ts",
+    "test:integration:emulator": "vitest run --no-file-parallelism --testTimeout=20000 test/callables.integration.test.ts test/webCustomer.integration.test.ts test/salonBranding.integration.test.ts test/photoUploadOperations.integration.test.ts test/adversarial.audit.test.ts test/adminSupport.integration.test.ts test/privatePhotoAccess.integration.test.ts test/ownerWorkspace.integration.test.ts",
     "test:admin:coverage": "vitest run --config vitest.admin.config.ts --coverage",
     "test:returning:coverage": "vitest run --config vitest.returning.config.ts --coverage",
     "test:photo-security:coverage": "vitest run --config vitest.photo-security.config.ts --coverage",
