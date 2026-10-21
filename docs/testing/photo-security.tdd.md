@@ -73,6 +73,12 @@ signing credentials. They must return a temporary URL, never a legacy Firebase t
 
 ## Remaining release gates
 
+The 2026-10-21 owner-workspace follow-up fixes the haircut upload Rules' seven-document
+budget violation using a bounded, server-issued private staging grant and current customer
+consent (two documents). Full authorization is repeated at issuance/renewal and finalization.
+See `owner-workspace.tdd.md` for the five-minute staging limitation, updated tests and
+compatible rollout order. This follow-up is not deployed and has no new live-upload PASS.
+
 - Run remote CI against the final commit and preserve the local evidence above.
 - Confirm runtime signing IAM and backend endpoint before restricting deployed reads.
 - Backend first, compatible clients next, restrictive Storage Rules next. Cached older clients

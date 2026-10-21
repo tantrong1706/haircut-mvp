@@ -96,26 +96,71 @@ describe("photo upload operation callables", () => {
 
   it("issues a five-minute private upload grant, capped by the QR request deadline", async () => {
     const deadline = Timestamp.fromMillis(Date.now() + 120_000);
-    await db.doc("chair_sessions/session-photo").update({ status: "pending_approval", approvalMode: "staff_confirmation", photoConsentGranted: true, expiresAt: deadline });
+    await db.doc("chair_sessions/session-photo").update({
+      status: "pending_approval",
+      approvalMode: "staff_confirmation",
+      photoConsentGranted: true,
+      expiresAt: deadline,
+    });
     const begin = await beginOperation("photo-short-grant-fixture");
     const operation = (await db.doc(`photo_upload_operations/${begin.operationId}`).get()).data();
     expect(operation?.uploadGrantVersion).toBe(1);
     expect(operation?.uploadExpiresAt.toMillis()).toBeLessThanOrEqual(deadline.toMillis());
     expect(operation?.uploadExpiresAt.toMillis()).toBeGreaterThan(Date.now());
-    await db.doc(`photo_upload_operations/${begin.operationId}`).update({ uploadExpiresAt: Timestamp.fromMillis(Date.now() - 1) });
+    await db
+      .doc(`photo_upload_operations/${begin.operationId}`)
+      .update({ uploadExpiresAt: Timestamp.fromMillis(Date.now() - 1) });
     await beginOperation("photo-short-grant-fixture");
     const renewed = (await db.doc(`photo_upload_operations/${begin.operationId}`).get()).data();
     expect(renewed?.uploadExpiresAt.toMillis()).toBeGreaterThan(Date.now());
     await db.doc("customers/customer-photo").update({ allowPhoto: false });
-    await expect(beginOperation("photo-short-grant-fixture")).rejects.toMatchObject({ code: "failed-precondition" });
+    await expect(beginOperation("photo-short-grant-fixture")).rejects.toMatchObject({
+      code: "failed-precondition",
+    });
   });
 
   it("does not finalize a pending image after the photo feature is switched off", async () => {
     const begin = await beginOperation("photo-disabled-after-grant");
     await saveUploadedObject(begin);
     await db.doc("salons/salon-photo/settings/features").set({ photoUploadEnabled: false });
-    await expect(finalizeHaircutPhotoUpload.run(requestFor("staff-photo", { salonId: "salon-photo", operationId: begin.operationId }))).rejects.toMatchObject({ code: "failed-precondition" });
-    expect((await db.doc(`photo_upload_operations/${begin.operationId}`).get()).data()?.status).not.toBe("finalized");
+    await expect(
+      finalizeHaircutPhotoUpload.run(
+        requestFor("staff-photo", { salonId: "salon-photo", operationId: begin.operationId }),
+      ),
+    ).rejects.toMatchObject({ code: "failed-precondition" });
+    expect(
+      (await db.doc(`photo_upload_operations/${begin.operationId}`).get()).data()?.status,
+    ).not.toBe("finalized");
+  });
+
+  it.each([
+    ["disabled member", "users/staff-photo", { isActive: false }, "permission-denied"],
+    ["removed tenant", "users/staff-photo", { salonId: "salon-other" }, "permission-denied"],
+    ["disabled branch", "branches/branch-photo", { isActive: false }, "failed-precondition"],
+    [
+      "completed visit",
+      "chair_sessions/session-photo",
+      { status: "completed" },
+      "permission-denied",
+    ],
+    [
+      "global photo switch",
+      "system_config/features",
+      { photoUploadEnabled: false },
+      "failed-precondition",
+    ],
+  ])("does not accept staged bytes after %s", async (_reason, path, data, code) => {
+    const begin = await beginOperation("photo-grant-revoked-fixture");
+    await saveUploadedObject(begin);
+    await db.doc(path as string).set(data as Record<string, unknown>, { merge: true });
+    await expect(
+      finalizeHaircutPhotoUpload.run(
+        requestFor("staff-photo", { salonId: "salon-photo", operationId: begin.operationId }),
+      ),
+    ).rejects.toMatchObject({ code });
+    expect(
+      (await db.doc(`photo_upload_operations/${begin.operationId}`).get()).data()?.status,
+    ).not.toBe("finalized");
   });
 
   it("cho nhân viên đúng chi nhánh chụp ảnh cho yêu cầu QR đang chờ xác nhận", async () => {

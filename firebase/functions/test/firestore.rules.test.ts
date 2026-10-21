@@ -322,6 +322,70 @@ describe("Firestore production rules", () => {
     });
     await assertFails(uploadBytes(ref(staff, path), new Uint8Array([1]), metadata));
   });
+  it.each(["legacy", "expired", "overlong", "consent-revoked", "wrong-actor"])(
+    "rejects invalid private upload grant: %s",
+    async (reason) => {
+      const operationId = `op-${"f".repeat(40)}`;
+      const path = `salons/${salonA}/customers/customer-photo/sessions/session-photo/${operationId}.jpg`;
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        await setDoc(doc(context.firestore(), "photo_upload_operations", operationId), {
+          salonId: salonA,
+          branchId: branchA,
+          customerId: "customer-photo",
+          sessionId: "session-photo",
+          staffUid: "staff-a",
+          requestId: "fixture-invalid-grant",
+          storagePath: path,
+          status: "pending",
+          expectedMaxBytes: 1024,
+          expiresAt: Timestamp.fromMillis(Date.now() + 1_800_000),
+          ...(reason === "legacy"
+            ? {}
+            : {
+                uploadGrantVersion: 1,
+                uploadExpiresAt: Timestamp.fromMillis(
+                  Date.now() +
+                    (reason === "expired" ? -1000 : reason === "overlong" ? 600_000 : 60_000),
+                ),
+              }),
+        });
+        if (reason === "consent-revoked")
+          await updateDoc(doc(context.firestore(), "customers", "customer-photo"), {
+            allowPhoto: false,
+          });
+      });
+      const actor = reason === "wrong-actor" ? "owner-a" : "staff-a";
+      await assertFails(
+        uploadBytes(
+          ref(testEnv.authenticatedContext(actor).storage(), path),
+          new Uint8Array([1, 2, 3]),
+          {
+            contentType: "image/jpeg",
+            customMetadata: {
+              salonId: salonA,
+              branchId: branchA,
+              customerId: "customer-photo",
+              sessionId: "session-photo",
+              uploaderUid: actor,
+              operationId,
+              requestId: "fixture-invalid-grant",
+            },
+          },
+        ),
+      );
+      await assertFails(
+        setDoc(
+          doc(
+            testEnv.authenticatedContext("staff-a").firestore(),
+            "photo_upload_operations",
+            operationId,
+          ),
+          { uploadGrantVersion: 1 },
+        ),
+      );
+    },
+  );
+
   it("chặn người chưa đăng nhập đọc dữ liệu riêng của khách", async () => {
     const db = testEnv.unauthenticatedContext().firestore();
 

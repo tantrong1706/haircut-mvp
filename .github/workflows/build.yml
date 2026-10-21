@@ -320,5 +320,8 @@ jobs:
       - name: Verify Web security headers
         run: node --test test/web-security-headers.test.mjs
 
+      - name: Verify haircut upload Rules document budget
+        run: node --test test/storage-photo-rule-budget.test.mjs
+
       - name: Verify Admin Hosting boundary
         run: node --test test/admin-hosting-boundary.test.mjs test/admin-build-script.test.mjs
