@@ -27,60 +27,50 @@ describe("owner directory and pending visit notes", () => {
       db
         .doc("users/owner-note")
         .set({ salonId: "salon-owner-test", isActive: true, role: "owner", name: "Owner fixture" }),
-      db
-        .doc("users/staff-note")
-        .set({
-          salonId: "salon-owner-test",
-          isActive: true,
-          role: "staff",
-          branchIds: ["branch-note"],
-        }),
-      db
-        .doc("users/staff-other")
-        .set({
-          salonId: "salon-owner-test",
-          isActive: true,
-          role: "staff",
-          branchIds: ["other-branch"],
-        }),
+      db.doc("users/staff-note").set({
+        salonId: "salon-owner-test",
+        isActive: true,
+        role: "staff",
+        branchIds: ["branch-note"],
+      }),
+      db.doc("users/staff-other").set({
+        salonId: "salon-owner-test",
+        isActive: true,
+        role: "staff",
+        branchIds: ["other-branch"],
+      }),
       ...Array.from({ length: 6 }, (_, i) =>
-        db
-          .doc(`customers/customer-${i}`)
-          .set({
-            salonId: "salon-owner-test",
-            name: `Customer ${i}`,
-            phoneLast4: "5678",
-            points: i,
-            allowPhoto: true,
-          }),
+        db.doc(`customers/customer-${i}`).set({
+          salonId: "salon-owner-test",
+          name: `Customer ${i}`,
+          phoneLast4: "5678",
+          points: i,
+          allowPhoto: true,
+        }),
       ),
       db
         .doc("customers/foreign-customer")
         .set({ salonId: "other-salon", name: "Foreign", phoneLast4: "5678", points: 99 }),
-      db
-        .doc("chair_sessions/session-note")
-        .set({
-          salonId: "salon-owner-test",
-          branchId: "branch-note",
-          customerId: "customer-0",
-          status: "pending_approval",
-          approvalMode: "staff_confirmation",
-          expiresAt: Timestamp.fromMillis(Date.now() + 600_000),
-        }),
-      db
-        .doc("point_requests/request-note")
-        .set({
-          salonId: "salon-owner-test",
-          branchId: "branch-note",
-          customerId: "customer-0",
-          sessionId: "session-note",
-          status: "pending",
-          approvalMode: "staff_confirmation",
-          note: "Old note",
-          photoUrls: [existingPhoto],
-          photoPaths: [],
-          pointsRequested: 1,
-        }),
+      db.doc("chair_sessions/session-note").set({
+        salonId: "salon-owner-test",
+        branchId: "branch-note",
+        customerId: "customer-0",
+        status: "pending_approval",
+        approvalMode: "staff_confirmation",
+        expiresAt: Timestamp.fromMillis(Date.now() + 600_000),
+      }),
+      db.doc("point_requests/request-note").set({
+        salonId: "salon-owner-test",
+        branchId: "branch-note",
+        customerId: "customer-0",
+        sessionId: "session-note",
+        status: "pending",
+        approvalMode: "staff_confirmation",
+        note: "Old note",
+        photoUrls: [existingPhoto],
+        photoPaths: [],
+        pointsRequested: 1,
+      }),
     ]);
   });
   afterAll(async () => {
@@ -212,5 +202,22 @@ describe("owner directory and pending visit notes", () => {
       ),
     ).rejects.toMatchObject({ code: "failed-precondition" });
     expect((await db.doc("point_requests/request-note").get()).data()?.note).toBe("Old note");
+  });
+
+  it("does not disclose stored image locations through the text-only note response", async () => {
+    await db.doc("customers/customer-0").update({ allowPhoto: false });
+    const result = await updatePendingPointRequestPhotos.run(
+      call("staff-note", {
+        salonId: "salon-owner-test",
+        requestId: "request-note",
+        note: "Text without image access",
+      }),
+    );
+    expect(result).toEqual({ noteSaved: true });
+    expect(JSON.stringify(result)).not.toContain(existingPhoto);
+    expect((await db.doc("point_requests/request-note").get()).data()).toMatchObject({
+      photoUrls: [existingPhoto],
+      note: "Text without image access",
+    });
   });
 });
