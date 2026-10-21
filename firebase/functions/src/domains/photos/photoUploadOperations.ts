@@ -1,4 +1,9 @@
 import { createHash } from "node:crypto";
+import { createRequire } from "node:module";
+
+// Sharp exposes separate CJS/ESM declarations. Keep this backend's existing CJS
+// compiler configuration while selecting the actual, typed CJS runtime factory.
+const sharp = createRequire(__filename)("sharp") as typeof import("sharp").default;
 
 export const PHOTO_UPLOAD_MAX_BYTES = 3 * 1024 * 1024;
 export const PHOTO_UPLOAD_OPERATION_TTL_MS = 30 * 60 * 1000;
@@ -83,9 +88,13 @@ export function validatePhotoUploadObject(
   );
 }
 
-export function validatePhotoUploadBytes(bytes: Buffer, expectedChecksum: string): boolean {
+export async function validatePhotoUploadBytes(
+  bytes: Buffer,
+  expectedChecksum: string,
+): Promise<boolean> {
   if (
     bytes.length < 4 ||
+    bytes.length > PHOTO_UPLOAD_MAX_BYTES ||
     bytes[0] !== 0xff ||
     bytes[1] !== 0xd8 ||
     bytes[2] !== 0xff ||
@@ -94,7 +103,32 @@ export function validatePhotoUploadBytes(bytes: Buffer, expectedChecksum: string
   ) {
     return false;
   }
-  return createHash("sha256").update(bytes).digest("hex") === expectedChecksum;
+  if (createHash("sha256").update(bytes).digest("hex") !== expectedChecksum) return false;
+  try {
+    const image = sharp(bytes, { failOn: "warning", limitInputPixels: 2048 * 2048 });
+    const metadata = await image.metadata();
+    if (
+      metadata.format !== "jpeg" ||
+      !metadata.width ||
+      !metadata.height ||
+      metadata.width > 2048 ||
+      metadata.height > 2048 ||
+      (metadata.pages ?? 1) !== 1
+    )
+      return false;
+    // Reading metadata alone does not decode the scan. Bound the complete pixel decode,
+    // not just marker bytes or a client-supplied checksum. Do not overwrite the original:
+    // unchanged bytes keep checksum/retry semantics safe if finalization is interrupted.
+    const decoded = await image.timeout({ seconds: 5 }).raw().toBuffer({ resolveWithObject: true });
+    return (
+      decoded.info.width === metadata.width &&
+      decoded.info.height === metadata.height &&
+      decoded.data.length > 0 &&
+      decoded.data.length <= 2048 * 2048 * 4
+    );
+  } catch {
+    return false;
+  }
 }
 
 export function isPhotoUploadOperationExpired(expiresAtMs: number, nowMs = Date.now()): boolean {

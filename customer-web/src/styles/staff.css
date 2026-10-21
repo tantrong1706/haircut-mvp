@@ -8,6 +8,24 @@
   padding-bottom: 24px;
 }
 
+.returning-customer-panel .returning-customer-results {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
+  gap: 10px;
+  margin-block: 12px;
+}
+
+.returning-customer-results .ops-card {
+  display: grid;
+  gap: 6px;
+  text-align: left;
+}
+
+.returning-customer-panel .button-row > .field {
+  flex: 1;
+  min-width: min(100%, 180px);
+}
+
 .compact-ops-page .ops-topbar {
   display: flex;
   align-items: center;

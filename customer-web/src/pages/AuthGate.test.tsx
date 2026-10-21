@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthGate } from "./AuthGate";
@@ -38,6 +38,37 @@ describe("AuthGate", () => {
       onChange(null);
       return () => undefined;
     });
+  });
+
+  it.each(["owner", "staff"] as const)("restores remembered %s without asking for credentials", async (role) => {
+    mocks.listenAuthState.mockImplementation((onChange) => {
+      void onChange({ uid: "remembered", email: "fixture@example.test" });
+      return () => undefined;
+    });
+    mocks.getAppUser.mockResolvedValue({ uid: "remembered", salonId: "demo", name: "Remembered", role, isActive: true });
+    const view = render(<AuthGate allowedRoles={[role]}>{() => <div>Remembered workspace</div>}</AuthGate>);
+    expect(await screen.findByText("Remembered workspace")).toBeVisible();
+    view.unmount();
+    render(<AuthGate allowedRoles={[role]}>{() => <div>Remembered workspace</div>}</AuthGate>);
+    expect(await screen.findByText("Remembered workspace")).toBeVisible();
+    expect(screen.queryByLabelText("Mật khẩu")).not.toBeInTheDocument();
+  });
+
+  it("never restores a stale profile after a sign-out event", async () => {
+    let emit!: (user: { uid: string } | null) => Promise<void>;
+    let finish!: (profile: unknown) => void;
+    mocks.listenAuthState.mockImplementation((onChange) => { emit = onChange; return () => undefined; });
+    mocks.getAppUser.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    render(<AuthGate allowedRoles={["owner"]}>{() => <div>Private workspace</div>}</AuthGate>);
+    let restoring!: Promise<void>;
+    act(() => { restoring = emit({ uid: "old-owner" }); });
+    await act(async () => { await emit(null); });
+    await act(async () => {
+      finish({ uid: "old-owner", salonId: "demo", role: "owner", isActive: true });
+      await restoring;
+    });
+    expect(screen.queryByText("Private workspace")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Đăng nhập quản lý" })).toBeVisible();
   });
 
   it("gửi email đặt lại mật khẩu từ màn hình khôi phục riêng", async () => {

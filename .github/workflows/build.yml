@@ -64,6 +64,14 @@ jobs:
         working-directory: firebase
         run: npx --yes firebase-tools@15.22.3 emulators:exec --project demo-haircut --only firestore "npm --prefix functions run test:admin:coverage"
 
+      - name: Returning customer point transaction coverage
+        working-directory: firebase
+        run: npx --yes firebase-tools@15.22.3 emulators:exec --project demo-haircut --only firestore "npm --prefix functions run test:returning:coverage"
+
+      - name: Private photo security coverage
+        working-directory: firebase
+        run: npx --yes firebase-tools@15.22.3 emulators:exec --project demo-haircut --only firestore,storage "npm --prefix functions run test:photo-security:coverage"
+
   customer-web:
     name: Customer Web
     runs-on: ubuntu-latest
@@ -112,6 +120,18 @@ jobs:
       - name: Shared client domain coverage
         working-directory: customer-web
         run: npm run test:domain
+
+      - name: Returning customer staff flow coverage
+        working-directory: customer-web
+        run: npm run test:returning:coverage
+
+      - name: Private photo client coverage
+        working-directory: customer-web
+        run: npm run test:photo-security:coverage
+
+      - name: Owner workspace and remembered sign-in coverage
+        working-directory: customer-web
+        run: npm run test:owner:coverage
 
       - name: Build customer Web
         working-directory: customer-web
@@ -218,6 +238,14 @@ jobs:
         working-directory: customer-web
         run: npm run test:e2e
 
+      - name: Returning customer browser interaction and accessibility
+        working-directory: customer-web
+        run: npm run test:returning:browser
+
+      - name: Responsive owner workspace
+        working-directory: customer-web
+        run: npm run test:owner:browser
+
       - name: Install Admin browser test dependencies
         working-directory: apps/admin-web
         run: npm ci
@@ -291,6 +319,9 @@ jobs:
 
       - name: Verify Web security headers
         run: node --test test/web-security-headers.test.mjs
+
+      - name: Verify haircut upload Rules document budget
+        run: node --test test/storage-photo-rule-budget.test.mjs
 
       - name: Verify Admin Hosting boundary
         run: node --test test/admin-hosting-boundary.test.mjs test/admin-build-script.test.mjs

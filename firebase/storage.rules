@@ -153,6 +153,9 @@ service firebase.storage {
 
     function isAllowedOperationPhoto(salonId, customerId, sessionId, operationId) {
       return photoOperationExists(operationId)
+        && photoOperation(operationId).data.uploadGrantVersion == 1
+        && photoOperation(operationId).data.uploadExpiresAt > request.time
+        && photoOperation(operationId).data.uploadExpiresAt <= request.time + duration.value(300, 's')
         && photoOperation(operationId).data.status in ["pending", "uploading"]
         && photoOperation(operationId).data.salonId == salonId
         && photoOperation(operationId).data.customerId == customerId
@@ -162,19 +165,9 @@ service firebase.storage {
           == "salons/" + salonId + "/customers/" + customerId
             + "/sessions/" + sessionId + "/" + operationId + ".jpg"
         && photoOperation(operationId).data.expiresAt > request.time
-        && sessionExists(sessionId)
-        && canAccessBranch(salonId, sessionDoc(sessionId).data.branchId)
-        && (
-          !("approvalMode" in sessionDoc(sessionId).data)
-          || sessionDoc(sessionId).data.approvalMode != "staff_confirmation"
-          || (
-            sessionDoc(sessionId).data.status == "pending_approval"
-            && sessionDoc(sessionId).data.photoConsentGranted == true
-            && sessionDoc(sessionId).data.expiresAt > request.time
-          )
-        )
         && request.resource != null
         && request.resource.size > 0
+        && request.resource.size <= 3 * 1024 * 1024
         && request.resource.size <= photoOperation(operationId).data.expectedMaxBytes
         && request.resource.contentType == "image/jpeg"
         && request.resource.metadata.salonId == salonId
@@ -215,13 +208,12 @@ service firebase.storage {
     }
 
     match /salons/{salonId}/customers/{customerId}/haircuts/{sessionId}/{fileName} {
-      allow read: if customerAllowsPhoto(salonId, customerId)
-        && (isOwner(salonId) || isAssignedSessionMember(salonId, customerId, sessionId));
-      allow create: if (isAssignedServingMember(salonId, customerId, sessionId)
-          || isOwnerPendingApprovalSession(salonId, customerId, sessionId))
-        && customerAllowsPhoto(salonId, customerId)
-        && photoUploadEnabled(salonId)
-        && isAllowedHaircutPhoto(salonId, customerId, sessionId);
+      // Metadata GET can mint a permanent download token. Photo reads must use
+      // the server-authorized short-lived URL API, not the Firebase client API.
+      allow read: if false;
+      // Legacy uploads bypass the operation validator/finalizer. New uploads
+      // must use the /sessions operation path below; existing objects are kept.
+      allow create: if false;
       allow update: if false;
       allow delete: if isOwner(salonId)
         || (
@@ -231,10 +223,13 @@ service firebase.storage {
     }
 
     match /salons/{salonId}/customers/{customerId}/sessions/{sessionId}/{fileName} {
-      allow read: if signedIn() && sessionExists(sessionId) && canReadOperationPhoto(salonId, customerId, sessionId);
-      allow create: if fileName.matches('op-[a-f0-9]{40}\\.jpg')
+      allow read: if false;
+      // Only private staging. The callable issues/renews this bounded grant
+      // after full authorization, then rechecks before finalizing/attaching.
+      // Current customer consent is still checked on every upload. Exactly two
+      // Firestore documents: customer and server-controlled operation.
+      allow create: if signedIn() && fileName.matches('op-[a-f0-9]{40}\\.jpg')
         && fileName == request.resource.metadata.operationId + ".jpg"
-        && photoUploadEnabled(salonId)
         && customerAllowsPhoto(salonId, customerId)
         && isAllowedOperationPhoto(
           salonId,

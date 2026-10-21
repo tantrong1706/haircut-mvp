@@ -312,7 +312,8 @@ describe("StaffPage", () => {
       expect.objectContaining({
         salonId: "salon-a",
         session: expect.objectContaining({ id: "session-a", branchId: "branch-a" }),
-        note: "",
+        // An untouched note is omitted so a saved draft is not erased.
+        note: undefined,
         photoPaths: [],
       }),
     );

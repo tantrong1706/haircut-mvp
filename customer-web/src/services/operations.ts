@@ -17,7 +17,6 @@ import {
   where,
 } from "firebase/firestore";
 import { sendPasswordResetEmail } from "firebase/auth";
-import { getDownloadURL, ref } from "firebase/storage";
 import {
   DEFAULT_SYSTEM_FEATURES,
   normalizeSystemFeatures,
@@ -28,12 +27,13 @@ import {
   callFunction,
   getFirebaseAuth,
   getFirebaseDb,
-  getFirebaseStorage,
   isFirebaseConfigured,
 } from "./firebase";
 import { LuckyWheelConfig, defaultLuckyWheelConfig } from "./types";
 import { normalizeLuckyWheelConfig } from "./wheel";
 import { safeStorageGet, safeStorageRemove, safeStorageSet } from "./safeStorage";
+import { getPrivatePhotoUrls, legacyPhotoPathFromUrl } from "./privatePhotoUrls";
+import { legacyPhotoUrlsFor } from "./pointRequestPhotos";
 
 const SESSION_POINT_REQUEST_WINDOW_MS = 12 * 60 * 60 * 1000;
 
@@ -47,6 +47,7 @@ export type CustomerSummary = {
 };
 
 export type StaffSession = {
+  note?: string;
   pointsRequested?: number;
   approvalMode?: string;
   photoConsentGranted?: boolean;
@@ -89,6 +90,8 @@ export type PointRequest = {
   photoUrls: string[];
   legacyPhotoUrls?: string[];
   photoPaths?: string[];
+  photoReadUrls?: Record<string, string>;
+  photoReadError?: boolean;
   pointsAdded: number;
   status: "pending" | "approved" | "rejected";
   createdAtMs: number | null;
@@ -1709,7 +1712,7 @@ async function redeemRewardCodeDirect(
 export async function confirmCustomerPointRequest(input: {
   salonId: string;
   session: StaffSession;
-  note: string;
+  note?: string;
   photoPaths: string[];
 }): Promise<{ ok: boolean; alreadyProcessed: boolean; pointsAdded: number }> {
   if (!isFirebaseConfigured()) {
@@ -1722,7 +1725,7 @@ export async function confirmCustomerPointRequest(input: {
   return callFunction("approvePointRequest", {
     salonId: input.salonId,
     requestId: input.session.id,
-    note: input.note,
+    ...(input.note === undefined ? {} : { note: input.note }),
     photoPaths: input.photoPaths,
   });
 }
@@ -2121,6 +2124,7 @@ function mapSession(docSnap: QueryDocumentSnapshot<DocumentData>): StaffSession 
   const customerId = String(data.customerId || "");
 
   return {
+    note: String(data.note || ""),
     pointsRequested: typeof data.pointsRequested === "number" ? data.pointsRequested : undefined,
     approvalMode: String(data.approvalMode || ""),
     photoConsentGranted: data.photoConsentGranted === true,
@@ -2167,7 +2171,7 @@ function mapPointRequest(docSnap: QueryDocumentSnapshot<DocumentData>): PointReq
     customerId,
     staffName: String(data.staffName || ""),
     note: String(data.note || ""),
-    photoUrls: legacyPhotoUrls,
+    photoUrls: [],
     legacyPhotoUrls,
     photoPaths: trustedPointRequestPhotoPaths(data.photoPaths, { salonId, customerId, sessionId }),
     pointsAdded: Number(data.pointsAdded ?? data.pointsRequested ?? 1),
@@ -2231,13 +2235,10 @@ async function attachCustomersToRequests(requests: PointRequest[]) {
   const pairs = await Promise.all(
     requests.map(async (request) => {
       const customer = await getCustomer(request.customerId, request.salonId);
-      const photoUrls = await resolvePointRequestPhotos(
-        request.photoUrls,
-        request.photoPaths ?? [],
-      );
+      const photos = await resolvePointRequestPhotos(request);
       return {
         ...request,
-        photoUrls,
+        ...photos,
         customer: customer ?? request.customer,
       };
     }),
@@ -2262,21 +2263,25 @@ function trustedPointRequestPhotoPaths(
     );
 }
 
-async function resolvePointRequestPhotos(legacyUrls: string[], photoPaths: string[]) {
-  const storage = getFirebaseStorage();
-  if (!storage || photoPaths.length === 0) return legacyUrls;
-  const resolved = await Promise.all(
-    photoPaths.map(async (path) => {
-      try {
-        return await getDownloadURL(ref(storage, path));
-      } catch {
-        return null;
-      }
-    }),
-  );
-  return [
-    ...new Set([...legacyUrls, ...resolved.filter((url): url is string => Boolean(url))]),
-  ].slice(0, 3);
+async function resolvePointRequestPhotos(request: PointRequest) {
+  const legacy = legacyPhotoUrlsFor(request);
+  const bucket = String(import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "");
+  const sources = [
+    ...legacy.map(id => ({ id, path: legacyPhotoPathFromUrl(id, bucket) })),
+    ...(request.photoPaths ?? []).map(path => ({ id: path, path })),
+  ];
+  const empty = { photoUrls: [] as string[], photoReadUrls: {} as Record<string, string>, photoReadError: false };
+  if (sources.length === 0) return empty;
+  if (sources.some(source => !source.path) || sources.length > 3) return { ...empty, photoReadError: true };
+  try {
+    const urls = await getPrivatePhotoUrls({ salonId: request.salonId, customerId: request.customerId, sessionId: request.sessionId, photoPaths: sources.map(source => source.path!) });
+    const photoReadUrls = Object.fromEntries(sources.map(source => [source.id, urls[source.path!]]));
+    return { photoReadUrls, photoUrls: sources.map(source => photoReadUrls[source.id]), photoReadError: false };
+  } catch {
+    // Keep the request and its stored source identities. Never revive a permanent URL
+    // or turn a temporary image-read failure into deleting/replacing existing photos.
+    return { ...empty, photoReadError: true };
+  }
 }
 
 async function getCustomer(

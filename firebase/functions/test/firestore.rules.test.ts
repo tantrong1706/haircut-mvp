@@ -18,7 +18,7 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
-import { deleteObject, getBytes, ref, uploadBytes } from "firebase/storage";
+import { deleteObject, getBytes, getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { afterAll, beforeAll, beforeEach, describe, it } from "vitest";
 import { requireRulesEmulators } from "./emulatorEnvironment";
 
@@ -160,6 +160,45 @@ afterAll(async () => {
 });
 
 describe("Firestore production rules", () => {
+  it("legacy_upload_requires_operation", async () => {
+    const photo = ref(
+      testEnv.authenticatedContext("staff-a").storage(),
+      `salons/${salonA}/customers/customer-photo/haircuts/session-photo/photo-legacy123456.jpg`,
+    );
+    await assertFails(
+      uploadBytes(photo, new Uint8Array([1, 2, 3]), {
+        contentType: "image/jpeg",
+        customMetadata: {
+          salonId: salonA,
+          customerId: "customer-photo",
+          sessionId: "session-photo",
+          branchId: branchA,
+          uploaderUid: "staff-a",
+        },
+      }),
+    );
+  });
+  it("prevents minting long-lived haircut URLs through client metadata reads", async () => {
+    const storage = testEnv.authenticatedContext("staff-a").storage();
+    const photo = ref(
+      storage,
+      `salons/${salonA}/customers/customer-photo/haircuts/session-photo/photo-private12345.jpg`,
+    );
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await uploadBytes(ref(context.storage(), photo.fullPath), new Uint8Array([1, 2, 3]), {
+        contentType: "image/jpeg",
+        customMetadata: {
+          salonId: salonA,
+          customerId: "customer-photo",
+          sessionId: "session-photo",
+          branchId: branchA,
+          uploaderUid: "staff-a",
+        },
+      });
+    });
+    await assertFails(getDownloadURL(photo));
+    await assertFails(getBytes(photo));
+  });
   it("chặn chủ đã bị khóa đọc hồ sơ nhân viên nhưng vẫn cho đọc trạng thái bản thân", async () => {
     await testEnv.withSecurityRulesDisabled(async (context) => {
       await updateDoc(doc(context.firestore(), "users", "owner-a"), { isActive: false });
@@ -198,6 +237,8 @@ describe("Firestore production rules", () => {
         sessionId: "session-photo",
         staffUid: "staff-a",
         requestId: "fixture-bound-path",
+        uploadGrantVersion: 1,
+        uploadExpiresAt: Timestamp.fromMillis(Date.now() + 60_000),
         storagePath: path,
         status: "pending",
         expectedMaxBytes: 1024,
@@ -227,7 +268,7 @@ describe("Firestore production rules", () => {
     );
   });
 
-  it("nhân viên tải và đọc ảnh yêu cầu QR đúng chi nhánh, hết hạn thì chặn upload", async () => {
+  it("nhân viên tải ảnh QR qua grant riêng nhưng không đọc trực tiếp; grant hết hạn chặn upload", async () => {
     const operationId = `op-${"e".repeat(40)}`;
     const path = `salons/${salonA}/customers/customer-photo/sessions/session-photo/${operationId}.jpg`;
     await testEnv.withSecurityRulesDisabled(async (context) => {
@@ -245,6 +286,8 @@ describe("Firestore production rules", () => {
         sessionId: "session-photo",
         staffUid: "staff-a",
         requestId: "fixture-qr-photo",
+        uploadGrantVersion: 1,
+        uploadExpiresAt: Timestamp.fromMillis(Date.now() + 60_000),
         storagePath: path,
         status: "pending",
         expectedMaxBytes: 1024,
@@ -265,16 +308,84 @@ describe("Firestore production rules", () => {
     };
     const staff = testEnv.authenticatedContext("staff-a").storage();
     await assertSucceeds(uploadBytes(ref(staff, path), new Uint8Array([1, 2, 3]), metadata));
-    await assertSucceeds(getBytes(ref(staff, path)));
+    await assertFails(getBytes(ref(staff, path)));
+    await assertFails(getDownloadURL(ref(staff, path)));
     await assertFails(getBytes(ref(testEnv.authenticatedContext("staff-other-a").storage(), path)));
     await testEnv.withSecurityRulesDisabled(async (context) => {
       await updateDoc(doc(context.firestore(), "chair_sessions", "session-photo"), {
         expiresAt: Timestamp.fromMillis(Date.now() - 1),
       });
+      await updateDoc(doc(context.firestore(), "photo_upload_operations", operationId), {
+        uploadExpiresAt: Timestamp.fromMillis(Date.now() - 1),
+      });
       await deleteObject(ref(context.storage(), path));
     });
     await assertFails(uploadBytes(ref(staff, path), new Uint8Array([1]), metadata));
   });
+  it.each(["legacy", "expired", "overlong", "consent-revoked", "wrong-actor"])(
+    "rejects invalid private upload grant: %s",
+    async (reason) => {
+      const operationId = `op-${"f".repeat(40)}`;
+      const path = `salons/${salonA}/customers/customer-photo/sessions/session-photo/${operationId}.jpg`;
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        await setDoc(doc(context.firestore(), "photo_upload_operations", operationId), {
+          salonId: salonA,
+          branchId: branchA,
+          customerId: "customer-photo",
+          sessionId: "session-photo",
+          staffUid: "staff-a",
+          requestId: "fixture-invalid-grant",
+          storagePath: path,
+          status: "pending",
+          expectedMaxBytes: 1024,
+          expiresAt: Timestamp.fromMillis(Date.now() + 1_800_000),
+          ...(reason === "legacy"
+            ? {}
+            : {
+                uploadGrantVersion: 1,
+                uploadExpiresAt: Timestamp.fromMillis(
+                  Date.now() +
+                    (reason === "expired" ? -1000 : reason === "overlong" ? 600_000 : 60_000),
+                ),
+              }),
+        });
+        if (reason === "consent-revoked")
+          await updateDoc(doc(context.firestore(), "customers", "customer-photo"), {
+            allowPhoto: false,
+          });
+      });
+      const actor = reason === "wrong-actor" ? "owner-a" : "staff-a";
+      await assertFails(
+        uploadBytes(
+          ref(testEnv.authenticatedContext(actor).storage(), path),
+          new Uint8Array([1, 2, 3]),
+          {
+            contentType: "image/jpeg",
+            customMetadata: {
+              salonId: salonA,
+              branchId: branchA,
+              customerId: "customer-photo",
+              sessionId: "session-photo",
+              uploaderUid: actor,
+              operationId,
+              requestId: "fixture-invalid-grant",
+            },
+          },
+        ),
+      );
+      await assertFails(
+        setDoc(
+          doc(
+            testEnv.authenticatedContext("staff-a").firestore(),
+            "photo_upload_operations",
+            operationId,
+          ),
+          { uploadGrantVersion: 1 },
+        ),
+      );
+    },
+  );
+
   it("chặn người chưa đăng nhập đọc dữ liệu riêng của khách", async () => {
     const db = testEnv.unauthenticatedContext().firestore();
 
@@ -448,7 +559,7 @@ describe("Firestore production rules", () => {
     }
   });
 
-  it("chỉ cho nhân viên phụ trách tải ảnh vào đúng lượt khách đã đồng ý", async () => {
+  it("đóng upload/read ảnh legacy nhưng giữ quyền xóa đúng người phụ trách", async () => {
     const staffStorage = testEnv.authenticatedContext("staff-a").storage();
     const otherStaffStorage = testEnv.authenticatedContext("staff-other-a").storage();
     const allowedPath =
@@ -471,8 +582,11 @@ describe("Firestore production rules", () => {
       },
     };
 
-    await assertSucceeds(uploadBytes(allowed, bytes, validMetadata));
-    await assertSucceeds(getBytes(allowed));
+    await assertFails(uploadBytes(allowed, bytes, validMetadata));
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await uploadBytes(ref(context.storage(), allowedPath), bytes, validMetadata);
+    });
+    await assertFails(getBytes(allowed));
     await assertFails(uploadBytes(wrongStaff, bytes, validMetadata));
     await assertFails(deleteObject(wrongStaff));
     await assertFails(
@@ -523,6 +637,8 @@ describe("Firestore production rules", () => {
             staffUid: "staff-a",
             status: "pending",
             expectedMaxBytes: 3 * 1024 * 1024,
+            uploadGrantVersion: 1,
+            uploadExpiresAt: Timestamp.fromMillis(operation.expiresAt),
             expiresAt: Timestamp.fromMillis(operation.expiresAt),
           }),
         ),
@@ -588,7 +704,7 @@ describe("Firestore production rules", () => {
     await assertFails(deleteObject(ref(ownerContext.storage(), path)));
   });
 
-  it("cho owner bổ sung ảnh ở lượt chờ duyệt nhưng vẫn bắt buộc khách đồng ý", async () => {
+  it("đóng upload/read legacy cho owner, giữ ảnh cũ và quyền xóa đúng salon", async () => {
     const ownerStorage = testEnv.authenticatedContext("owner-a").storage();
     const staffStorage = testEnv.authenticatedContext("staff-a").storage();
     const otherOwnerStorage = testEnv.authenticatedContext("owner-b").storage();
@@ -610,8 +726,12 @@ describe("Firestore production rules", () => {
       },
     };
 
-    await assertSucceeds(uploadBytes(ref(ownerStorage, path), bytes, metadata));
-    await assertSucceeds(getBytes(ref(ownerStorage, path)));
+    await assertFails(uploadBytes(ref(ownerStorage, path), bytes, metadata));
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await uploadBytes(ref(context.storage(), path), bytes, metadata);
+    });
+    await assertFails(getBytes(ref(ownerStorage, path)));
+    await assertFails(deleteObject(ref(otherOwnerStorage, path)));
     await assertFails(
       uploadBytes(ref(staffStorage, path), bytes, {
         ...metadata,

@@ -12,6 +12,7 @@ import { HaircutPhotoCapture } from "../components/HaircutPhotoCapture";
 import { RedeemRewardPanel } from "../components/RedeemRewardPanel";
 import { AccountDeletionPanel } from "../components/AccountDeletionPanel";
 import { BrandLogo } from "../components/BrandLogo";
+import { ReturningCustomerPoints } from "../components/ReturningCustomerPoints";
 import {
   StaffSession,
   cancelServiceSession,
@@ -33,6 +34,7 @@ import {
   uploadHaircutPhoto,
 } from "../services/customerPhotos";
 import { trackEvent, withMonitoringTrace } from "../services/monitoring";
+import { savePendingVisitNote } from "../services/ownerWorkspace";
 
 type Props = {
   currentUser: AppUser;
@@ -50,7 +52,7 @@ export function StaffPage({ currentUser }: Props) {
     currentUser.role === "owner" ? "all" : currentUser.branchId || currentUser.branchIds?.[0] || "",
   );
   const [selectedId, setSelectedId] = useState("");
-  const [note, setNote] = useState("");
+  const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [claimingId, setClaimingId] = useState("");
   const [cancellingId, setCancellingId] = useState("");
@@ -69,6 +71,12 @@ export function StaffPage({ currentUser }: Props) {
   const [error, setError] = useState("");
 
   const selectedSession = sessions.find((session) => session.id === selectedId) || sessions[0];
+  const note = selectedSession ? noteDrafts[selectedSession.id] ?? selectedSession.note ?? "" : "";
+  function setNote(value: string | ((previous: string) => string)) {
+    if (!selectedSession) return;
+    const session = selectedSession;
+    setNoteDrafts(current => ({ ...current, [session.id]: typeof value === "function" ? value(current[session.id] ?? session.note ?? "") : value }));
+  }
   const waitingCount = sessions.filter((session) => session.status === "waiting").length;
   const servingCount = sessions.filter((session) => session.status === "serving").length;
   const pendingApprovalCount = sessions.filter(
@@ -206,10 +214,6 @@ export function StaffPage({ currentUser }: Props) {
   }, [selectedId, sessions]);
 
   useEffect(() => {
-    setNote("");
-  }, [selectedId]);
-
-  useEffect(() => {
     const session = selectedSession;
     if (
       !session ||
@@ -313,7 +317,7 @@ export function StaffPage({ currentUser }: Props) {
       const result = await confirmCustomerPointRequest({
         salonId,
         session: selectedSession,
-        note,
+        note: noteDrafts[selectedSession.id],
         photoPaths: selectedPhotos.map((photo) => photo.path),
       });
       setSessions((current) => current.filter((session) => session.id !== selectedSession.id));
@@ -328,6 +332,20 @@ export function StaffPage({ currentUser }: Props) {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleSaveNote() {
+    if (!selectedSession || !canConfirmRequest || loading || photoBusy) return;
+    const sessionId = selectedSession.id;
+    const draft = note;
+    setLoading(true); setError(""); setMessage("");
+    try {
+      await savePendingVisitNote({ salonId, requestId: sessionId, note: draft });
+      setSessions(current => current.map(session => session.id === sessionId ? { ...session, note: draft } : session));
+      setMessage("Đã lưu ghi chú.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không lưu được ghi chú");
+    } finally { setLoading(false); }
   }
 
   async function handleRejectPoints() {
@@ -558,6 +576,14 @@ export function StaffPage({ currentUser }: Props) {
         </label>
       ) : null}
 
+      <ReturningCustomerPoints
+        salonId={salonId}
+        branchId={branchFilter === "all" ? "" : branchFilter}
+        branchName={currentBranchName}
+        pointPerVisit={pointPerVisit}
+        canAward={canAwardPointsDirectly}
+      />
+
       <div className="metrics-row compact-metrics">
         {waitingCount > 0 ? (
           <Metric icon={<UsersRound size={20} />} label="Lượt cũ đang chờ" value={waitingCount} />
@@ -605,6 +631,7 @@ export function StaffPage({ currentUser }: Props) {
                 ]
                   .filter(Boolean)
                   .join(" ")}
+                disabled={loading || photoBusy}
                 onClick={() => setSelectedId(session.id)}
               >
                 <div className="ops-card-row">
@@ -690,17 +717,17 @@ export function StaffPage({ currentUser }: Props) {
               onRemove={removePhoto}
             />
 
-            <label className="field">
-              <span>
+            <div className="field">
+              <label htmlFor="staff-visit-note">
                 <ClipboardPenLine size={18} aria-hidden="true" />
                 Ghi chú kiểu tóc (không bắt buộc)
-              </span>
+              </label>
               <div className="quick-note-row" aria-label="Ghi chú nhanh">
                 {quickNotes.map((quickNote) => (
                   <button
                     key={quickNote}
                     type="button"
-                    disabled={!canEditService}
+                    disabled={!canEditService || loading}
                     onClick={() => addQuickNote(quickNote)}
                   >
                     {quickNote}
@@ -708,12 +735,19 @@ export function StaffPage({ currentUser }: Props) {
                 ))}
               </div>
               <textarea
+                id="staff-visit-note"
+                maxLength={isCustomerPointRequest ? 1000 : 500}
                 value={note}
                 onChange={(event) => setNote(event.target.value)}
                 placeholder="Ví dụ: Fade thấp, giữ mái, không cắt quá cao"
-                disabled={!canEditService}
+                disabled={!canEditService || loading}
               />
-            </label>
+              {canConfirmRequest ? (
+                <button type="button" className="secondary-button" disabled={loading || photoBusy || note === (selectedSession.note ?? "")} onClick={() => void handleSaveNote()}>
+                  Lưu ghi chú
+                </button>
+              ) : null}
+            </div>
 
             {isCustomerPointRequest ? (
               <div className="button-row wrap-row">

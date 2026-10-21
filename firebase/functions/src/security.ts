@@ -1,4 +1,22 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { isIP } from "node:net";
+
+/** Conservative transport-peer quota. Behind a proxy this can group clients.
+ * Neither forwarded headers nor Express `ip` are a trusted client identity.
+ * Unknown peers share a bucket rather than getting a caller-controlled one.
+ */
+export function publicRequestPeer(request: { socket?: { remoteAddress?: unknown } }): string {
+  const value = typeof request.socket?.remoteAddress === "string" ? request.socket.remoteAddress.trim() : "";
+  const family = isIP(value);
+  if (family === 4) return value;
+  if (family !== 6) return "unidentified-transport-peer";
+  const canonical = new URL(`http://[${value}]/`).hostname.slice(1, -1);
+  if (canonical.startsWith("::ffff:")) {
+    const words = canonical.slice(7).split(":").map((word) => Number.parseInt(word, 16));
+    if (words.length === 2) return words.flatMap((word) => [word >> 8, word & 255]).join(".");
+  }
+  return canonical;
+}
 
 export type MirrorQrRecord = {
   salonId?: unknown;

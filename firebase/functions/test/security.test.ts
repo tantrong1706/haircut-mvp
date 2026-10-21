@@ -7,7 +7,26 @@ import {
   planDefaultBranchMigration,
   selectQrBranch,
   shouldReuseActiveSession,
+  publicRequestPeer,
 } from "../src/security";
+
+describe("public request transport peer", () => {
+  it("normalizes IPv4-mapped IPv6 to the same quota key", () => {
+    expect(publicRequestPeer({ socket: { remoteAddress: "203.0.113.10" } })).toBe("203.0.113.10");
+    expect(publicRequestPeer({ socket: { remoteAddress: "::ffff:203.0.113.10" } })).toBe("203.0.113.10");
+    expect(publicRequestPeer({ socket: { remoteAddress: "::ffff:cb00:710a" } })).toBe("203.0.113.10");
+  });
+  it("canonicalizes equivalent IPv6 spellings", () => {
+    expect(publicRequestPeer({ socket: { remoteAddress: "2001:0DB8:0:0:0:0:0:1" } })).toBe("2001:db8::1");
+    expect(publicRequestPeer({ socket: { remoteAddress: "2001:db8::1" } })).toBe("2001:db8::1");
+  });
+  it("does not let missing or malformed addresses create arbitrary buckets", () => {
+    for (const value of [undefined, "", "fake", "203.0.113.10, 198.51.100.1", "127.1", 123]) {
+      expect(publicRequestPeer({ socket: { remoteAddress: value } })).toBe("unidentified-transport-peer");
+    }
+    expect(publicRequestPeer({})).toBe("unidentified-transport-peer");
+  });
+});
 
 const secret = "0123456789abcdef0123456789abcdef";
 

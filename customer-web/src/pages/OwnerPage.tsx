@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
-  AlertTriangle,
   BarChart3,
   CheckCircle2,
   ClipboardCheck,
@@ -29,6 +28,8 @@ import {
 } from "lucide-react";
 import QRCode from "qrcode";
 import { BrandLogo } from "../components/BrandLogo";
+import { CustomerPointAction } from "../components/CustomerPointAction";
+import { OwnerConfirmDialog, type OwnerConfirmation as ConfirmRequest } from "../components/OwnerConfirmDialog";
 import { MINI_APP_NAME } from "../config/branding";
 import { AccountDeletionPanel } from "../components/AccountDeletionPanel";
 import { HaircutPhotoCapture, type HaircutPhotoItem } from "../components/HaircutPhotoCapture";
@@ -73,40 +74,15 @@ import {
 import { trackEvent, withMonitoringTrace } from "../services/monitoring";
 import { removeSalonAvatar, uploadSalonAvatarFile } from "../services/salonBranding";
 import { LuckyWheelConfig, defaultLuckyWheelConfig } from "../services/types";
+import { legacyPhotoUrlsFor, photoItemsFor, storedPhotoCount } from "../services/pointRequestPhotos";
+import { listSalonCustomerDirectory, savePendingVisitNote } from "../services/ownerWorkspace";
 
 type OwnerTab =
   "overview" | "approvals" | "branches" | "staff" | "customers" | "wheel" | "redeem" | "settings";
 
-type ConfirmRequest = {
-  title: string;
-  description: string;
-  confirmLabel: string;
-  cancelLabel?: string;
-  tone?: "default" | "danger";
-  onConfirm: () => Promise<void> | void;
-};
-
 type Props = {
   currentUser: AppUser;
 };
-
-function legacyPhotoUrlsFor(request: PointRequest): string[] {
-  if (request.legacyPhotoUrls) return request.legacyPhotoUrls;
-  const pathCount = request.photoPaths?.length ?? 0;
-  return request.photoUrls.slice(0, Math.max(0, request.photoUrls.length - pathCount));
-}
-
-function photoItemsFor(request: PointRequest): HaircutPhotoItem[] {
-  const legacyUrls = legacyPhotoUrlsFor(request);
-  const pathUrls = request.photoUrls.slice(legacyUrls.length);
-  return [
-    ...legacyUrls.map((url) => ({ id: url, url })),
-    ...(request.photoPaths ?? []).flatMap((path, index) => {
-      const url = pathUrls[index];
-      return url ? [{ id: path, url }] : [];
-    }),
-  ];
-}
 
 export function OwnerPage({ currentUser }: Props) {
   const salonId = useMemo(() => {
@@ -114,6 +90,7 @@ export function OwnerPage({ currentUser }: Props) {
   }, [currentUser.salonId]);
   const [activeTab, setActiveTab] = useState<OwnerTab>("overview");
   const [requests, setRequests] = useState<PointRequest[]>([]);
+  const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
   const [ownerBranches, setOwnerBranches] = useState<SalonBranch[]>([]);
   const [branchFilter, setBranchFilter] = useState("all");
 
@@ -288,7 +265,25 @@ export function OwnerPage({ currentUser }: Props) {
     }
   }
 
-  function approve(request: PointRequest) {
+  async function saveOwnerNote(request: PointRequest) {
+    const note = noteDrafts[request.id] ?? request.note;
+    setBusyId(request.id); setMessage(""); setError("");
+    try {
+      await savePendingVisitNote({ salonId, requestId: request.id, note });
+      setRequests(current => current.map(item => item.id === request.id ? { ...item, note } : item));
+      setNoteDrafts(current => { const next = { ...current }; delete next[request.id]; return next; });
+      setMessage("Đã lưu ghi chú.");
+      return true;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không lưu được ghi chú");
+      return false;
+    } finally { setBusyId(""); }
+  }
+
+  async function approve(request: PointRequest) {
+    if (busyId || photoBusyId) return;
+    const draft = noteDrafts[request.id];
+    if (draft !== undefined && draft !== request.note && !(await saveOwnerNote(request))) return;
     setConfirmRequest({
       title: "Duyệt cộng điểm?",
       description: `Cộng ${request.pointsAdded} điểm cho ${request.customer?.name || "khách hàng"} và lưu lịch sử cắt tóc.`,
@@ -356,7 +351,7 @@ export function OwnerPage({ currentUser }: Props) {
       return;
     }
 
-    const availableSlots = MAX_HAIRCUT_PHOTOS - request.photoUrls.length;
+    const availableSlots = MAX_HAIRCUT_PHOTOS - storedPhotoCount(request);
     if (availableSlots <= 0) {
       setError(`Mỗi lượt chỉ lưu tối đa ${MAX_HAIRCUT_PHOTOS} ảnh.`);
       return;
@@ -413,6 +408,10 @@ export function OwnerPage({ currentUser }: Props) {
                 photoUrls: nextPhotoUrls,
                 legacyPhotoUrls: nextLegacyPhotoUrls,
                 photoPaths: nextPhotoPaths,
+                photoReadUrls: Object.fromEntries([
+                  ...photoItemsFor(item).map(photo => [photo.id, photo.url]),
+                  ...uploadedPhotos.map(photo => [photo.path, photo.url]),
+                ]),
               }
             : item,
         ),
@@ -462,6 +461,7 @@ export function OwnerPage({ currentUser }: Props) {
                 photoUrls: nextPhotoUrls,
                 legacyPhotoUrls: nextLegacyPhotoUrls,
                 photoPaths: nextPhotoPaths,
+                photoReadUrls: Object.fromEntries(photoItemsFor(item).filter(currentPhoto => currentPhoto.id !== photo.id).map(currentPhoto => [currentPhoto.id, currentPhoto.url])),
               }
             : item,
         ),
@@ -671,22 +671,22 @@ export function OwnerPage({ currentUser }: Props) {
         <div>
           <p className="eyebrow">Chủ salon</p>
           <h1>{salonProfile?.name || "Quản lý salon"}</h1>
-          <span>{salonId}</span>
+          <span>Quản lý hằng ngày</span>
         </div>
         <OwnerAvatar avatarUrl={ownerAvatarUrl} name={currentUser.name} />
       </header>
 
-      <div className="segmented-control owner-tabs compact-tabs" aria-label="Chọn mục quản lý">
+      <nav className="segmented-control owner-tabs compact-tabs" aria-label="Chọn mục quản lý">
         <OwnerTabButton
           active={activeTab === "overview"}
           icon={<BarChart3 size={18} />}
-          label="Tổng"
+          label="Tổng quan"
           onClick={() => setActiveTab("overview")}
         />
         <OwnerTabButton
           active={activeTab === "approvals"}
           icon={<ClipboardCheck size={18} />}
-          label="Duyệt & ảnh"
+          label="Duyệt điểm"
           onClick={() => setActiveTab("approvals")}
         />
         <OwnerTabButton
@@ -704,7 +704,7 @@ export function OwnerPage({ currentUser }: Props) {
         <OwnerTabButton
           active={activeTab === "customers"}
           icon={<Search size={18} />}
-          label="Khách"
+          label="Khách hàng"
           onClick={() => setActiveTab("customers")}
         />
         <OwnerTabButton
@@ -716,7 +716,7 @@ export function OwnerPage({ currentUser }: Props) {
         <OwnerTabButton
           active={activeTab === "redeem"}
           icon={<TicketCheck size={18} />}
-          label="Quà"
+          label="Đổi quà"
           onClick={() => setActiveTab("redeem")}
         />
         <OwnerTabButton
@@ -725,11 +725,11 @@ export function OwnerPage({ currentUser }: Props) {
           label="Cài đặt"
           onClick={() => setActiveTab("settings")}
         />
-      </div>
+      </nav>
 
       {activeTab === "overview" || activeTab === "approvals" ? (
         <label className="field owner-branch-filter">
-          <span>Phạm vi dữ liệu</span>
+          <span>Chi nhánh đang xem</span>
           <select value={branchFilter} onChange={(event) => setBranchFilter(event.target.value)}>
             <option value="all">Tất cả chi nhánh</option>
             {ownerBranches.map((branch) => (
@@ -751,6 +751,9 @@ export function OwnerPage({ currentUser }: Props) {
       ) : activeTab === "approvals" ? (
         <ApprovalsPanel
           requests={requests}
+          noteDrafts={noteDrafts}
+          onNoteChange={(requestId, note) => setNoteDrafts(current => ({ ...current, [requestId]: note }))}
+          onSaveNote={saveOwnerNote}
           busyId={busyId}
           photoBusyId={photoBusyId}
           photoProgress={photoProgress}
@@ -772,6 +775,8 @@ export function OwnerPage({ currentUser }: Props) {
       ) : activeTab === "customers" ? (
         <CustomerSearchPanel
           salonId={salonId}
+          branches={ownerBranches}
+          pointPerVisit={salonProfile?.pointPerVisit || 1}
           onMessage={setMessage}
           onError={setError}
           onConfirm={setConfirmRequest}
@@ -816,7 +821,7 @@ export function OwnerPage({ currentUser }: Props) {
 
       {message ? <p className="alert success">{message}</p> : null}
       {error ? <p className="alert error">{error}</p> : null}
-      <ConfirmDialog
+      <OwnerConfirmDialog
         request={confirmRequest}
         busy={confirming}
         onCancel={cancelConfirmRequest}
@@ -838,59 +843,10 @@ function OwnerTabButton({
   onClick: () => void;
 }) {
   return (
-    <button className={active ? "active" : ""} onClick={onClick}>
-      {icon}
-      {label}
+    <button type="button" className={active ? "active" : ""} aria-pressed={active} onClick={onClick}>
+      <span aria-hidden="true">{icon}</span>
+      <span>{label}</span>
     </button>
-  );
-}
-
-function ConfirmDialog({
-  request,
-  busy,
-  onCancel,
-  onConfirm,
-}: {
-  request: ConfirmRequest | null;
-  busy: boolean;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  if (!request) {
-    return null;
-  }
-
-  return (
-    <div className="dialog-backdrop" role="presentation">
-      <div
-        className={request.tone === "danger" ? "confirm-dialog danger" : "confirm-dialog"}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="owner-confirm-title"
-      >
-        <div className="confirm-icon">
-          <AlertTriangle size={24} aria-hidden="true" />
-        </div>
-        <div className="confirm-copy">
-          <h2 id="owner-confirm-title">{request.title}</h2>
-          <p className="muted">{request.description}</p>
-        </div>
-        <div className="button-row wrap-row">
-          <button className="secondary-button" disabled={busy} onClick={onCancel}>
-            {request.cancelLabel || "Hủy"}
-          </button>
-          <button
-            className={
-              request.tone === "danger" ? "primary-button danger-primary" : "primary-button"
-            }
-            disabled={busy}
-            onClick={onConfirm}
-          >
-            {busy ? "Đang xử lý..." : request.confirmLabel}
-          </button>
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -1174,6 +1130,21 @@ function OverviewPanel({
         </button>
       </div>
 
+      <section className="owner-next-actions" aria-label="Thao tác nhanh">
+        <button type="button" onClick={() => onOpenTab("approvals")}>
+          <ClipboardCheck size={20} aria-hidden="true" />
+          <span><strong>Duyệt điểm</strong><small>{data.pendingRequests > 0 ? `${data.pendingRequests} đang chờ` : "Chưa có yêu cầu"}</small></span>
+        </button>
+        <button type="button" onClick={() => onOpenTab("customers")}>
+          <Search size={20} aria-hidden="true" />
+          <span><strong>Tìm khách</strong><small>Điểm và lịch sử</small></span>
+        </button>
+        <button type="button" onClick={() => onOpenTab("redeem")}>
+          <TicketCheck size={20} aria-hidden="true" />
+          <span><strong>Đổi quà</strong><small>{data.unusedRewards > 0 ? `${data.unusedRewards} mã quà` : "Kiểm tra mã quà"}</small></span>
+        </button>
+      </section>
+
       <div className="overview-grid">
         <OverviewMetric
           icon={<UsersRound size={21} />}
@@ -1181,18 +1152,8 @@ function OverviewPanel({
           value={data.customersToday}
         />
         <OverviewMetric
-          icon={<BarChart3 size={21} />}
-          label="Khách 7 ngày"
-          value={data.customers7Days}
-        />
-        <OverviewMetric
-          icon={<BarChart3 size={21} />}
-          label="Khách 30 ngày"
-          value={data.customers30Days}
-        />
-        <OverviewMetric
           icon={<ClipboardCheck size={21} />}
-          label="Chờ duyệt"
+          label="Chờ xác nhận"
           value={data.pendingRequests}
         />
         <OverviewMetric
@@ -1200,12 +1161,14 @@ function OverviewPanel({
           label="Điểm đã cộng"
           value={data.pointsApprovedToday}
         />
-        <OverviewMetric icon={<Gift size={21} />} label="Lượt quay" value={data.spinsToday} />
         <OverviewMetric
           icon={<TicketCheck size={21} />}
           label="Mã quà chưa dùng"
           value={data.unusedRewards}
         />
+        <OverviewMetric icon={<BarChart3 size={21} />} label="Khách 7 ngày" value={data.customers7Days} />
+        <OverviewMetric icon={<BarChart3 size={21} />} label="Khách 30 ngày" value={data.customers30Days} />
+        <OverviewMetric icon={<Gift size={21} />} label="Lượt quay" value={data.spinsToday} />
       </div>
 
       <div className="retention-panel">
@@ -1250,58 +1213,6 @@ function OverviewPanel({
         )}
       </div>
 
-      <div className="owner-next-actions">
-        <button type="button" onClick={() => onOpenTab("approvals")}>
-          <ClipboardCheck size={20} aria-hidden="true" />
-          <span>
-            <strong>Duyệt điểm & ảnh</strong>
-            <small>
-              {data.pendingRequests > 0
-                ? `${data.pendingRequests} khách đang chờ duyệt`
-                : "Chụp bổ sung khi có yêu cầu mới"}
-            </small>
-          </span>
-        </button>
-        <button type="button" onClick={() => onOpenTab("redeem")}>
-          <TicketCheck size={20} aria-hidden="true" />
-          <span>
-            <strong>Đổi mã quà</strong>
-            <small>
-              {data.unusedRewards > 0
-                ? `${data.unusedRewards} mã chưa dùng`
-                : "Sẵn sàng xác nhận mã mới"}
-            </small>
-          </span>
-        </button>
-        <button type="button" onClick={() => onOpenTab("wheel")}>
-          <SlidersHorizontal size={20} aria-hidden="true" />
-          <span>
-            <strong>Cấu hình vòng quay</strong>
-            <small>Đổi điểm quay và 6 ô thưởng</small>
-          </span>
-        </button>
-        <button type="button" onClick={() => onOpenTab("branches")}>
-          <QrCode size={20} aria-hidden="true" />
-          <span>
-            <strong>Chi nhánh & QR</strong>
-            <small>QR riêng của từng chi nhánh để khách yêu cầu tích điểm</small>
-          </span>
-        </button>
-        <button type="button" onClick={() => onOpenTab("staff")}>
-          <UserPlus size={20} aria-hidden="true" />
-          <span>
-            <strong>Nhân viên</strong>
-            <small>Thêm, tắt và cấp quyền đổi quà</small>
-          </span>
-        </button>
-        <button type="button" onClick={() => onOpenTab("customers")}>
-          <Search size={20} aria-hidden="true" />
-          <span>
-            <strong>Tìm khách</strong>
-            <small>Tra điểm, lịch sử và mã quà chưa dùng</small>
-          </span>
-        </button>
-      </div>
     </div>
   );
 }
@@ -1339,6 +1250,9 @@ function ownerPhoneLabel(customer: { phone?: string; phoneLast4: string }) {
 
 function ApprovalsPanel({
   requests,
+  noteDrafts,
+  onNoteChange,
+  onSaveNote,
   busyId,
   photoBusyId,
   photoProgress,
@@ -1349,6 +1263,9 @@ function ApprovalsPanel({
   onCancelPhotoUpload,
 }: {
   requests: PointRequest[];
+  noteDrafts: Record<string, string>;
+  onNoteChange: (requestId: string, note: string) => void;
+  onSaveNote: (request: PointRequest) => Promise<boolean>;
   busyId: string;
   photoBusyId: string;
   photoProgress: number;
@@ -1373,7 +1290,14 @@ function ApprovalsPanel({
             <span>SĐT: {request.customer ? ownerPhoneLabel(request.customer) : "Chưa có"}</span>
             <span>Thợ: {request.staffName || "Nhân viên"}</span>
             <span>Chi nhánh: {request.branchName || "Chi nhánh"}</span>
-            <p>{request.note || "Không có ghi chú"}</p>
+            <label className="field">
+              <span>Ghi chú kiểu tóc (không bắt buộc)</span>
+              <textarea value={noteDrafts[request.id] ?? request.note} maxLength={1000} disabled={Boolean(busyId) || Boolean(photoBusyId)} onChange={event => onNoteChange(request.id, event.target.value)} />
+            </label>
+            <button type="button" className="secondary-button" disabled={Boolean(busyId) || Boolean(photoBusyId) || noteDrafts[request.id] === undefined || noteDrafts[request.id] === request.note} onClick={() => void onSaveNote(request)}>
+              Lưu ghi chú
+            </button>
+            {request.photoReadError ? <p role="status">Ảnh tạm thời chưa tải được. Các ảnh đã lưu vẫn được giữ; hãy làm mới trang để thử lại.</p> : null}
             <HaircutPhotoCapture
               title="Ảnh khách sau cắt"
               photos={photoItemsFor(request)}
@@ -2202,48 +2126,72 @@ function StaffCard({
 
 function CustomerSearchPanel({
   salonId,
+  branches,
+  pointPerVisit,
   onMessage,
   onError,
   onConfirm,
 }: {
   salonId: string;
+  branches: SalonBranch[];
+  pointPerVisit: number;
   onMessage: (message: string) => void;
   onError: (message: string) => void;
   onConfirm: (request: ConfirmRequest) => void;
 }) {
   const [term, setTerm] = useState("");
   const [results, setResults] = useState<CustomerLookupResult[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [totalCount, setTotalCount] = useState<number | null>(null);
+  const revision = useRef(0);
   const [busyCustomerId, setBusyCustomerId] = useState("");
   const [detailsCustomerId, setDetailsCustomerId] = useState("");
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [searchedTerm, setSearchedTerm] = useState("");
+  const [awardBranchId, setAwardBranchId] = useState("");
+  const activeBranches = branches.filter(branch => branch.isActive);
+  const awardBranch = activeBranches.find(branch => branch.id === awardBranchId) ?? (activeBranches.length === 1 ? activeBranches[0] : undefined);
   const compactTerm = term.trim().replace(/\s/g, "");
   const termDigits = compactTerm.replace(/\D/g, "");
   const isNumericTerm = compactTerm.length > 0 && termDigits.length === compactTerm.length;
   const canSearch = term.trim().length >= 2 && (!isNumericTerm || termDigits.length === 4);
 
-  async function search(loadMore = false) {
-    const normalizedTerm = term.trim();
+  useEffect(() => {
+    const current = ++revision.current;
+    setLoading(true);
+    listSalonCustomerDirectory({ salonId }).then(page => {
+      if (current !== revision.current) return;
+      setResults(page.customers); setNextCursor(page.nextCursor); setTotalCount(page.totalCount);
+    }).catch(err => {
+      if (current === revision.current) onError(err instanceof Error ? err.message : "Không tải được danh sách khách");
+    }).finally(() => { if (current === revision.current) setLoading(false); });
+    return () => { revision.current += 1; };
+  }, [salonId, onError]);
+
+  async function search(loadMore = false, override?: string) {
+    const currentRevision = ++revision.current;
+    const normalizedTerm = (override ?? term).trim();
     const append = loadMore && normalizedTerm === searchedTerm && Boolean(nextCursor);
     setLoading(true);
     onMessage("");
     onError("");
 
     try {
-      const page = await searchSalonCustomers({
+      const page = normalizedTerm ? await searchSalonCustomers({
         salonId,
         term: normalizedTerm,
         cursor: append ? nextCursor : null,
         pageSize: 10,
-      });
+      }) : await listSalonCustomerDirectory({ salonId, cursor: append ? nextCursor : null });
+      if (currentRevision !== revision.current) return;
+      if ("totalCount" in page) setTotalCount(Number(page.totalCount));
       setResults((current) => (append ? [...current, ...page.customers] : page.customers));
       setNextCursor(page.nextCursor);
       setSearchedTerm(normalizedTerm);
     } catch (err) {
-      onError(err instanceof Error ? err.message : "Không tìm được khách");
+      if (currentRevision === revision.current) onError(err instanceof Error ? err.message : "Không tìm được khách");
     } finally {
-      setLoading(false);
+      if (currentRevision === revision.current) setLoading(false);
     }
   }
 
@@ -2286,6 +2234,7 @@ function CustomerSearchPanel({
     try {
       const result = await deleteCustomerData({ salonId, customerId: customer.id });
       setResults((current) => current.filter((item) => item.id !== customer.id));
+      setTotalCount(current => current === null ? null : Math.max(0, current - 1));
       onMessage(
         `Đã xóa dữ liệu khách: ${result.deletedRecords} lịch sử, ${result.deletedRewards} mã quà, ${result.deletedStorageFiles} ảnh.`,
       );
@@ -2301,12 +2250,21 @@ function CustomerSearchPanel({
       <div className="section-heading">
         <Search size={22} aria-hidden="true" />
         <div>
-          <h2>Tìm khách</h2>
+          <h2>Danh sách khách</h2>
+          {totalCount !== null ? <p>Tổng: {totalCount} khách</p> : null}
           <p className="muted">
             Tìm theo tên, phần đầu một từ hoặc đúng 4 số cuối SĐT để xem điểm, lịch sử và mã quà.
           </p>
         </div>
       </div>
+
+      <label className="field">
+        <span>Chi nhánh cộng điểm</span>
+        <select value={awardBranch?.id || ""} onChange={event => setAwardBranchId(event.target.value)}>
+          <option value="">Chọn chi nhánh</option>
+          {activeBranches.map(branch => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+        </select>
+      </label>
 
       <div className="inline-form">
         <input
@@ -2318,6 +2276,7 @@ function CustomerSearchPanel({
             }
           }}
           placeholder="Ví dụ: Anh Tân hoặc 8761"
+          aria-label="Tìm khách theo tên hoặc 4 số cuối"
         />
         <button
           className="primary-button"
@@ -2327,14 +2286,15 @@ function CustomerSearchPanel({
           <Search size={18} aria-hidden="true" />
           Tìm
         </button>
+        <button type="button" className="secondary-button" disabled={loading} onClick={() => { setTerm(""); void search(false, ""); }}>Tất cả khách</button>
       </div>
 
       <div className="ops-list">
         {results.length === 0 ? (
           <div className="empty-state compact-empty">
             <Search size={28} aria-hidden="true" />
-            <strong>{loading ? "Đang tìm khách" : "Chưa có kết quả"}</strong>
-            <p>Nhập ít nhất 2 ký tự hoặc 4 số cuối SĐT để tìm nhanh.</p>
+            <strong>{loading ? "Đang tải khách" : searchedTerm ? "Chưa có kết quả" : "Salon chưa có khách"}</strong>
+            <p>Khách đã đăng ký sẽ xuất hiện trong danh sách này. Có thể tìm nhanh bằng tên hoặc 4 số cuối SĐT.</p>
           </div>
         ) : (
           results.map((customer) => (
@@ -2345,6 +2305,7 @@ function CustomerSearchPanel({
               </div>
               <span>SĐT: {ownerPhoneLabel(customer)}</span>
               <span>Lần ghé gần nhất: {formatDateTime(customer.lastVisitAtMs) || "Chưa có"}</span>
+              <CustomerPointAction salonId={salonId} branchId={awardBranch?.id || ""} branchName={awardBranch?.name || ""} pointPerVisit={pointPerVisit} customer={customer} onAwarded={pointsAfter => setResults(current => current.map(item => item.id === customer.id ? { ...item, points: pointsAfter, detailsLoaded: false } : item))} />
 
               {customer.detailsLoaded ? (
                 <div className="customer-insight-grid">
@@ -2530,12 +2491,16 @@ function WheelConfigPanel({
           {config.slots.map((slot, index) => (
             <div className="wheel-slot-row" key={slot.slotId}>
               <span>{index + 1}</span>
+              <label className="field wheel-slot-name"><span>Tên ô</span>
               <input
+                aria-label={`Tên ô ${index + 1}`}
                 value={slot.label}
                 maxLength={60}
                 onChange={(event) => updateSlot(index, event.target.value)}
                 placeholder={`Ô ${index + 1}`}
               />
+              </label>
+              <label className="field"><span>Loại ô</span>
               <select
                 aria-label={`Loại ô ${index + 1}`}
                 value={slot.type}
@@ -2546,6 +2511,8 @@ function WheelConfigPanel({
                 <option value="reward">Có quà</option>
                 <option value="no_prize">Không trúng</option>
               </select>
+              </label>
+              <label className="field"><span>Trọng số</span>
               <input
                 aria-label={`Trọng số ô ${index + 1}`}
                 type="number"
@@ -2554,6 +2521,7 @@ function WheelConfigPanel({
                 value={slot.weight}
                 onChange={(event) => updateSlotWeight(index, Number(event.target.value || 1))}
               />
+              </label>
               <label>
                 <input
                   type="checkbox"

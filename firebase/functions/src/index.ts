@@ -112,6 +112,7 @@ import {
   type UserRole,
 } from "./authz/authorization";
 import { auditEventData } from "./domains/audit/auditEvent";
+import { createReturningCustomerPointAward } from "./domains/points/returningCustomerPoints";
 import { createAdminSupport } from "./domains/admin/support";
 import {
   PHOTO_UPLOAD_MAX_BYTES,
@@ -125,6 +126,9 @@ import {
   validatePhotoUploadBytes,
 } from "./domains/photos/photoUploadOperations";
 import { apiError } from "./shared/errors";
+import { publicRequestPeer } from "./security";
+import { revokeHaircutDownloadTokens } from "./domains/photos/photoDownloadTokens";
+import { createPrivatePhotoReader, privatePhotoUrl, PRIVATE_PHOTO_URL_TTL_MS } from "./domains/photos/privatePhotoAccess";
 
 initializeApp();
 
@@ -187,8 +191,11 @@ const AUTHENTICATED_RATE_LIMITS = {
   beginHaircutPhotoUpload: 30,
   finalizeHaircutPhotoUpload: 30,
   getRecoverableHaircutPhotoUploads: 60,
+  getHaircutPhotoReadUrls: 60,
   cancelHaircutPhotoUpload: 30,
   submitPointRequest: 20,
+  awardReturningCustomerPoints: 20,
+  searchSalonCustomers: 30,
   approvePointRequest: 60,
   rejectPointRequest: 60,
   lookupRewardCode: 60,
@@ -562,19 +569,23 @@ async function resolvedHaircutPhotoUrls(
 ) {
   const trustedLegacyUrls = trustedStoredHaircutPhotoUrls(legacyUrls, input);
   const trustedPaths = trustedStoredHaircutPhotoPaths(photoPaths, input);
-  const expires = Date.now() + 15 * 60 * 1000;
+  const bucket = storage.bucket();
+  const legacyPaths = trustedLegacyUrls.flatMap((url) => {
+    const path = storageObjectNameFromDownloadUrl(url, bucket.name);
+    return path ? [path] : [];
+  });
+  const expires = Date.now() + PRIVATE_PHOTO_URL_TTL_MS;
   const signedUrls = await Promise.all(
-    trustedPaths.map(async (path) => {
+    [...new Set([...legacyPaths, ...trustedPaths])].map(async (path) => {
       try {
-        const [url] = await storage.bucket().file(path).getSignedUrl({ action: "read", expires });
-        return url;
+        return await privatePhotoUrl(bucket, path, expires);
       } catch {
         return null;
       }
     }),
   );
   return [
-    ...new Set([...trustedLegacyUrls, ...signedUrls.filter((url): url is string => Boolean(url))]),
+    ...new Set(signedUrls.filter((url): url is string => Boolean(url))),
   ].slice(0, MAX_HAIRCUT_PHOTOS);
 }
 
@@ -980,7 +991,7 @@ async function enforcePublicRequestPolicy(
   endpoint: PublicEndpoint,
   request: {
     app?: unknown;
-    rawRequest: { ip?: string; get(name: string): string | undefined };
+    rawRequest: { ip?: string; socket?: { remoteAddress?: string }; get(name: string): string | undefined };
   },
   salonId: string,
   accessTokenInput: unknown,
@@ -990,8 +1001,7 @@ async function enforcePublicRequestPolicy(
   }
 
   const accessToken = requireString(accessTokenInput, "zaloAccessToken");
-  const forwardedIp = request.rawRequest.get("x-forwarded-for")?.split(",")[0]?.trim();
-  const clientIp = forwardedIp || request.rawRequest.ip || "unknown";
+  const transportPeer = publicRequestPeer(request.rawRequest);
   const policy = PUBLIC_RATE_LIMITS[endpoint];
   const nowMs = Date.now();
   const windowStart = Math.floor(nowMs / policy.windowMs) * policy.windowMs;
@@ -1004,7 +1014,7 @@ async function enforcePublicRequestPolicy(
     },
     {
       kind: "ip",
-      value: createHash("sha256").update(clientIp).digest("hex"),
+      value: createHash("sha256").update(transportPeer).digest("hex"),
       limit: policy.ipLimit,
     },
   ];
@@ -3682,6 +3692,42 @@ async function loadPhotoUploadContext(input: {
   };
 }
 
+export const getHaircutPhotoReadUrls = onCall(
+  { ...functionOptions, maxInstances: 5 },
+  (request) => createPrivatePhotoReader(db, storage.bucket(), (uid, salonId) => enforceAuthenticatedRateLimit("getHaircutPhotoReadUrls", uid, salonId))(request),
+);
+
+// Storage permits only two cross-service document reads. A server-issued,
+// five-minute grant authorizes private staging, not attachment or photo reads.
+// Recheck mutable membership, salon/branch status and feature flags atomically
+// both when issuing the grant and when finalizing the image.
+async function assertPhotoGrantEnvironment(
+  tx: FirebaseFirestore.Transaction, context: PhotoUploadContext, uid: string, appVersion: unknown,
+) {
+  const [memberSnap, salonSnap, branchSnap, systemSnap, featuresSnap] = await Promise.all([
+    tx.get(db.doc(`users/${uid}`)), tx.get(db.doc(`salons/${context.salonId}`)),
+    tx.get(db.doc(`branches/${context.branchId}`)), tx.get(db.doc("system_config/features")),
+    tx.get(db.doc(`salons/${context.salonId}/settings/features`)),
+  ]);
+  const member = memberSnap.data();
+  if (!member || member.salonId !== context.salonId || member.isActive !== true ||
+    !["owner", "staff"].includes(String(member.role)) || member.inviteStatus === "pending" ||
+    !canUserAccessBranch(member, context.branchId)) {
+    throw new HttpsError("permission-denied", "Tài khoản không còn quyền lưu ảnh tại chi nhánh này");
+  }
+  if (!salonSnap.exists || salonSnap.data()?.isActive === false) {
+    throw new HttpsError("failed-precondition", "Salon không còn hoạt động");
+  }
+  assertSalonIsOperational(salonSnap.data());
+  assertBranchIsOperational(branchSnap.data(), context.salonId, context.branchId);
+  const features = normalizeSystemFeatures(systemSnap.data(), featuresSnap.data());
+  assertSupportedAppVersion(features, appVersion);
+  if (features.maintenanceMode || !features.photoUploadEnabled) {
+    throw new HttpsError("failed-precondition", "Tính năng lưu ảnh đang tạm ngừng");
+  }
+  return { ...member, uid } as AppUser;
+}
+
 export const beginHaircutPhotoUpload = onCall(functionOptions, async (request) => {
   const uid = currentUid(request.auth);
   const salonId = requireString(request.data?.salonId, "salonId");
@@ -3726,19 +3772,42 @@ export const beginHaircutPhotoUpload = onCall(functionOptions, async (request) =
   let status = "pending";
 
   await db.runTransaction(async (tx) => {
+    const currentActor = await assertPhotoGrantEnvironment(tx, context, uid, request.data?.appVersion);
     const [operationSnap, sessionSnap, customerSnap] = await Promise.all([
       tx.get(operationRef),
       tx.get(db.collection("chair_sessions").doc(sessionId)),
       tx.get(db.collection("customers").doc(context.customerId)),
     ]);
     const operation = operationSnap.data();
+    const session = sessionSnap.data();
+    const customer = customerSnap.data();
+    const accessStillValid =
+      sessionSnap.exists &&
+      session?.salonId === salonId && session?.branchId === context.branchId &&
+      session?.customerId === context.customerId &&
+      ((session?.status === "serving" && session?.assignedStaffId === uid) ||
+        (currentActor.role === "owner" && session?.status === "pending_approval" && session?.approvalMode !== "staff_confirmation") ||
+        pendingPhotoRequestAllowed(session));
+    if (!accessStillValid) throw new HttpsError("failed-precondition", "Phiên phục vụ đã thay đổi, vui lòng tải lại");
+    if (!customerSnap.exists || customer?.salonId !== salonId || customer?.allowPhoto !== true) {
+      throw new HttpsError("failed-precondition", "Khách đã thu hồi đồng ý lưu ảnh");
+    }
+    const uploadGrant = {
+      uploadGrantVersion: 1,
+      uploadExpiresAt: Timestamp.fromMillis(Math.min(
+        now.toMillis() + 5 * 60_000,
+        timestampMillis(operation?.expiresAt) ?? expiresAt.toMillis(),
+        session.approvalMode === "staff_confirmation" ? timestampMillis(session.expiresAt) ?? 0 : Infinity,
+      )),
+    };
     if (operationSnap.exists) {
       if (
         operation?.salonId !== salonId ||
         operation?.sessionId !== sessionId ||
         operation?.staffUid !== uid ||
         operation?.requestId !== requestId ||
-        operation?.storagePath !== storagePath
+        operation?.storagePath !== storagePath || operation?.checksum !== checksum ||
+        operation?.expectedBytes !== expectedBytes || operation?.expectedContentType !== expectedContentType
       ) {
         throw new HttpsError("already-exists", "Mã yêu cầu tải ảnh đã được dùng");
       }
@@ -3750,25 +3819,11 @@ export const beginHaircutPhotoUpload = onCall(functionOptions, async (request) =
       }
       status = String(operation.status || "pending");
       returnedExpiresAtMs = timestampMillis(operation.expiresAt) ?? expiresAt.toMillis();
+      if (["pending", "uploading"].includes(status)) tx.set(operationRef, { ...uploadGrant, updatedAt: now }, { merge: true });
       return;
     }
-    const session = sessionSnap.data();
-    const customer = customerSnap.data();
-    const accessStillValid =
-      sessionSnap.exists &&
-      session?.salonId === salonId &&
-      session?.branchId === context.branchId &&
-      session?.customerId === context.customerId &&
-      ((session?.status === "serving" && session?.assignedStaffId === uid) ||
-        (context.user.role === "owner" && session?.status === "pending_approval" && session?.approvalMode !== "staff_confirmation") ||
-        pendingPhotoRequestAllowed(session));
-    if (!accessStillValid) {
-      throw new HttpsError("failed-precondition", "Phiên phục vụ đã thay đổi, vui lòng tải lại");
-    }
-    if (!customerSnap.exists || customer?.salonId !== salonId || customer?.allowPhoto !== true) {
-      throw new HttpsError("failed-precondition", "Khách đã thu hồi đồng ý lưu ảnh");
-    }
     tx.create(operationRef, {
+      ...uploadGrant,
       operationId,
       requestId,
       salonId,
@@ -3817,7 +3872,8 @@ export const beginHaircutPhotoUpload = onCall(functionOptions, async (request) =
   };
 });
 
-export const finalizeHaircutPhotoUpload = onCall(functionOptions, async (request) => {
+export const finalizeHaircutPhotoUpload = onCall(
+  { ...functionOptions, concurrency: 2, maxInstances: 5, memory: "512MiB" }, async (request) => {
   const uid = currentUid(request.auth);
   const salonId = requireString(request.data?.salonId, "salonId");
   const operationId = requireString(request.data?.operationId, "operationId");
@@ -3832,7 +3888,12 @@ export const finalizeHaircutPhotoUpload = onCall(functionOptions, async (request
   if (operation.staffUid !== uid) {
     throw new HttpsError("permission-denied", "Yêu cầu tải ảnh không thuộc tài khoản này");
   }
+  if (!isExpectedPhotoUploadPath(String(operation.storagePath || ""), {
+    salonId, customerId: String(operation.customerId || ""),
+    sessionId: String(operation.sessionId || ""), operationId,
+  })) throw new HttpsError("failed-precondition", "Đường dẫn ảnh không hợp lệ");
   if (operation.status === "finalized") {
+    await revokeHaircutDownloadTokens(storage.bucket().file(String(operation.storagePath)));
     return {
       operationId,
       requestId: operation.requestId,
@@ -3849,6 +3910,7 @@ export const finalizeHaircutPhotoUpload = onCall(functionOptions, async (request
   }
   let context: PhotoUploadContext;
   try {
+    await assertFeatureEnabled(salonId, "photoUploadEnabled", "Tính năng lưu ảnh đang tạm ngừng.", request.data?.appVersion);
     context = await loadPhotoUploadContext({
       uid,
       salonId,
@@ -3887,6 +3949,11 @@ export const finalizeHaircutPhotoUpload = onCall(functionOptions, async (request
   } catch {
     throw new HttpsError("failed-precondition", "Ảnh chưa được tải lên hoàn tất");
   }
+  try {
+    await revokeHaircutDownloadTokens(storage.bucket().file(String(operation.storagePath)));
+  } catch {
+    throw new HttpsError("unavailable", "Chưa thể bảo vệ liên kết ảnh. Vui lòng thử lại.");
+  }
   if (
     !validatePhotoUploadObject(metadata, {
       salonId,
@@ -3899,7 +3966,7 @@ export const finalizeHaircutPhotoUpload = onCall(functionOptions, async (request
     }) ||
     Number(metadata.size ?? 0) !== Number(operation.expectedBytes ?? 0) ||
     String(metadata.metadata?.checksum || "") !== String(operation.checksum || "") ||
-    !validatePhotoUploadBytes(photoBytes, String(operation.checksum || ""))
+    !(await validatePhotoUploadBytes(photoBytes, String(operation.checksum || "")))
   ) {
     await operationRef.set(
       {
@@ -3916,6 +3983,7 @@ export const finalizeHaircutPhotoUpload = onCall(functionOptions, async (request
   let alreadyFinalized = false;
   let finalizationFailure = false;
   await db.runTransaction(async (tx) => {
+    const currentActor = await assertPhotoGrantEnvironment(tx, context, uid, request.data?.appVersion);
     const [currentOperationSnap, sessionSnap, customerSnap] = await Promise.all([
       tx.get(operationRef),
       tx.get(db.collection("chair_sessions").doc(context.sessionId)),
@@ -3944,7 +4012,7 @@ export const finalizeHaircutPhotoUpload = onCall(functionOptions, async (request
       session?.branchId === context.branchId &&
       session?.customerId === context.customerId &&
       ((session?.status === "serving" && session?.assignedStaffId === uid) ||
-        (user.role === "owner" && session?.status === "pending_approval" && session?.approvalMode !== "staff_confirmation") ||
+        (currentActor.role === "owner" && session?.status === "pending_approval" && session?.approvalMode !== "staff_confirmation") ||
         pendingPhotoRequestAllowed(session));
     if (!sessionAllowed || !customerSnap.exists || customer?.allowPhoto !== true) {
       finalizationFailure = true;
@@ -4126,6 +4194,13 @@ export const cancelHaircutPhotoUpload = onCall(functionOptions, async (request) 
   }
   return { operationId, status: "cancelled", alreadyCancelled: false };
 });
+
+export const awardReturningCustomerPoints = onCall(functionOptions,
+  createReturningCustomerPointAward(db, {
+    rateLimit: (uid, salonId) => enforceAuthenticatedRateLimit("awardReturningCustomerPoints", uid, salonId),
+    featureCheck: (salonId, appVersion) => assertFeatureEnabled(salonId, "pointApprovalEnabled", "Tính năng cộng điểm đang tạm ngừng.", appVersion),
+  }),
+);
 
 export const submitPointRequest = onCall(functionOptions, async (request) => {
   const uid = currentUid(request.auth);
@@ -4531,8 +4606,9 @@ export const updatePendingPointRequestPhotos = onCall(functionOptions, async (re
   const uid = currentUid(request.auth);
   const salonId = requireString(request.data?.salonId, "salonId");
   const requestId = requireString(request.data?.requestId, "requestId");
-  const photoUrls = safePhotoUrls(request.data?.photoUrls);
-  const photoPaths = safePhotoPaths(request.data?.photoPaths);
+  const changesPhotos = request.data?.photoUrls !== undefined || request.data?.photoPaths !== undefined;
+  let photoUrls = safePhotoUrls(request.data?.photoUrls);
+  let photoPaths = safePhotoPaths(request.data?.photoPaths);
   const actor = await assertSalonRole(uid, salonId, ["owner", "staff"]);
   const note = optionalLimitedString(request.data?.note, "note", 1000);
 
@@ -4603,16 +4679,31 @@ export const updatePendingPointRequestPhotos = onCall(functionOptions, async (re
   });
 
   await db.runTransaction(async (tx) => {
-    const [currentRequestSnap, currentSessionSnap, currentCustomerSnap] = await Promise.all([
+    const [currentRequestSnap, currentSessionSnap, currentCustomerSnap, memberSnap, salonSnap, branchSnap] = await Promise.all([
       tx.get(requestRef),
       tx.get(sessionRef),
       tx.get(customerRef),
+      tx.get(db.doc(`users/${uid}`)),
+      tx.get(db.doc(`salons/${salonId}`)),
+      tx.get(db.doc(`branches/${branchId}`)),
     ]);
     const currentRequest = currentRequestSnap.data();
     const currentSession = currentSessionSnap.data();
     const currentCustomer = currentCustomerSnap.data();
-    if (currentRequest) assertPointRequestActor(actor, currentRequest);
-    if (currentSession?.approvalMode === "staff_confirmation" && !pendingPhotoRequestAllowed(currentSession)) {
+    const member = memberSnap.data();
+    if (!member || member.salonId !== salonId || member.isActive !== true ||
+      !["owner", "staff"].includes(String(member.role)) || member.inviteStatus === "pending") {
+      throw new HttpsError("permission-denied", "Tài khoản không còn quyền với salon này");
+    }
+    if (!salonSnap.exists || salonSnap.data()?.isActive === false ||
+      ![undefined, "active"].includes(salonSnap.data()?.status)) {
+      throw new HttpsError("failed-precondition", "Salon đang tạm khóa");
+    }
+    assertBranchIsOperational(branchSnap.data(), salonId, branchId);
+    if (currentRequest) assertPointRequestActor({ ...member, uid } as AppUser, currentRequest);
+    if (currentSession?.approvalMode === "staff_confirmation" &&
+      ((timestampMillis(currentSession.expiresAt) ?? 0) <= Date.now() ||
+        (changesPhotos && !pendingPhotoRequestAllowed(currentSession)))) {
       throw new HttpsError("failed-precondition", "Yêu cầu đã hết hạn hoặc không còn cho phép lưu ảnh.");
     }
 
@@ -4638,9 +4729,25 @@ export const updatePendingPointRequestPhotos = onCall(functionOptions, async (re
     if (
       !currentCustomerSnap.exists ||
       currentCustomer?.salonId !== salonId ||
-      ((photoUrls.length > 0 || photoPaths.length > 0) && currentCustomer?.allowPhoto !== true)
+      (changesPhotos && (photoUrls.length > 0 || photoPaths.length > 0) && currentCustomer?.allowPhoto !== true)
     ) {
       throw new HttpsError("failed-precondition", "Khách chưa đồng ý lưu ảnh kiểu tóc");
+    }
+
+    // A text-only draft must never replace the photo list or require photo consent.
+    if (!changesPhotos) {
+      if (note === undefined) throw new HttpsError("invalid-argument", "Thiếu ghi chú cần lưu");
+      photoUrls = safePhotoUrls(currentRequest.photoUrls);
+      photoPaths = safePhotoPaths(currentRequest.photoPaths);
+      const now = Timestamp.now();
+      tx.update(requestRef, { note, updatedAt: now });
+      tx.update(sessionRef, { note, updatedAt: now });
+      tx.create(db.collection("audit_events").doc(), auditEventData({
+        salonId, branchId, actorId: uid, actorRole: member.role,
+        action: "point_request.note_updated", targetType: "point_request", targetId: requestId,
+        metadata: { noteChanged: currentRequest.note !== note }, createdAt: now,
+      }));
+      return;
     }
 
     const currentPhotoUrls = safePhotoUrls(currentRequest.photoUrls);
@@ -4726,7 +4833,8 @@ export const updatePendingPointRequestPhotos = onCall(functionOptions, async (re
     }
   });
 
-  return { photoUrls, photoPaths };
+  // Saving text is not a photo-read capability, including after consent withdrawal.
+  return changesPhotos ? { photoUrls, photoPaths } : { noteSaved: true };
 });
 
 export const claimServiceSession = onCall(functionOptions, async (request) => {
@@ -6548,24 +6656,29 @@ export const searchSalonCustomers = onCall(functionOptions, async (request) => {
     ? Math.min(Math.max(Math.floor(requestedPageSize), 5), 20)
     : 10;
   const user = await assertSalonRole(uid, salonId, ["owner", "staff"]);
+  const directory = request.data?.directory === true;
+  if (directory && user.role !== "owner") {
+    throw new HttpsError("permission-denied", "Chỉ chủ salon được xem toàn bộ danh sách khách");
+  }
   await resolveAuthorizedBranchScope(user, salonId, request.data?.branchId);
+  await enforceAuthenticatedRateLimit("searchSalonCustomers", uid, salonId);
 
   const normalizedTerm = normalizeSearchText(term);
-  if (normalizedTerm.length < 2) {
+  if (!directory && normalizedTerm.length < 2) {
     throw new HttpsError("invalid-argument", "Nhập ít nhất 2 ký tự để tìm khách");
   }
 
   const phoneDigits = term.replace(/\D/g, "");
-  const isPhoneSearch = phoneDigits.length === term.replace(/\s/g, "").length;
+  const isPhoneSearch = !directory && phoneDigits.length === term.replace(/\s/g, "").length;
   if (isPhoneSearch && phoneDigits.length !== 4) {
     throw new HttpsError("invalid-argument", "Vui lòng nhập đủ 4 số cuối điện thoại");
   }
 
-  let customersQuery = db.collection("customers").where("salonId", "==", salonId);
-  customersQuery = (
-    isPhoneSearch
-      ? customersQuery.where("phoneLast4", "==", phoneDigits)
-      : customersQuery.where("namePrefixes", "array-contains", normalizedTerm)
+  const tenantCustomers = db.collection("customers").where("salonId", "==", salonId);
+  let customersQuery = (
+    directory ? tenantCustomers : isPhoneSearch
+      ? tenantCustomers.where("phoneLast4", "==", phoneDigits)
+      : tenantCustomers.where("namePrefixes", "array-contains", normalizedTerm)
   ).orderBy(FieldPath.documentId());
 
   if (cursor) {
@@ -6593,6 +6706,7 @@ export const searchSalonCustomers = onCall(functionOptions, async (request) => {
   });
 
   return {
+    ...(directory ? { totalCount: (await tenantCustomers.count().get()).data().count } : {}),
     customers: customers.map((customer) => ({
       ...customer,
       detailsLoaded: false,

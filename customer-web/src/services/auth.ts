@@ -19,6 +19,7 @@ import {
 } from "./firebase";
 import { callWriteFunctionOrFallback } from "./functionWrites";
 import { prepareSquareImage } from "./imageProcessing";
+import { prepareOwnerStaffPersistence } from "./ownerStaffSession";
 
 export type AppRole = "owner" | "staff";
 
@@ -54,6 +55,7 @@ export async function signInOwnerStaff(email: string, password: string) {
     throw new Error("Firebase Auth chưa được cấu hình");
   }
 
+  await prepareOwnerStaffPersistence(auth);
   try {
     await signInWithEmailAndPassword(auth, email, password);
   } catch (err) {
@@ -140,6 +142,7 @@ export async function registerOwnerSalon(input: {
     throw new Error("Mật khẩu chủ salon phải có ít nhất 8 ký tự");
   }
 
+  await prepareOwnerStaffPersistence(auth);
   let credential;
   try {
     credential = await createUserWithEmailAndPassword(auth, email, password);
