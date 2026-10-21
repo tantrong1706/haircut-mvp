@@ -237,6 +237,8 @@ describe("Firestore production rules", () => {
         sessionId: "session-photo",
         staffUid: "staff-a",
         requestId: "fixture-bound-path",
+        uploadGrantVersion: 1,
+        uploadExpiresAt: Timestamp.fromMillis(Date.now() + 60_000),
         storagePath: path,
         status: "pending",
         expectedMaxBytes: 1024,
@@ -266,7 +268,7 @@ describe("Firestore production rules", () => {
     );
   });
 
-  it("nhân viên tải ảnh QR qua operation nhưng không đọc trực tiếp; hết hạn chặn upload", async () => {
+  it("nhân viên tải ảnh QR qua grant riêng nhưng không đọc trực tiếp; grant hết hạn chặn upload", async () => {
     const operationId = `op-${"e".repeat(40)}`;
     const path = `salons/${salonA}/customers/customer-photo/sessions/session-photo/${operationId}.jpg`;
     await testEnv.withSecurityRulesDisabled(async (context) => {
@@ -284,6 +286,8 @@ describe("Firestore production rules", () => {
         sessionId: "session-photo",
         staffUid: "staff-a",
         requestId: "fixture-qr-photo",
+        uploadGrantVersion: 1,
+        uploadExpiresAt: Timestamp.fromMillis(Date.now() + 60_000),
         storagePath: path,
         status: "pending",
         expectedMaxBytes: 1024,
@@ -310,6 +314,9 @@ describe("Firestore production rules", () => {
     await testEnv.withSecurityRulesDisabled(async (context) => {
       await updateDoc(doc(context.firestore(), "chair_sessions", "session-photo"), {
         expiresAt: Timestamp.fromMillis(Date.now() - 1),
+      });
+      await updateDoc(doc(context.firestore(), "photo_upload_operations", operationId), {
+        uploadExpiresAt: Timestamp.fromMillis(Date.now() - 1),
       });
       await deleteObject(ref(context.storage(), path));
     });
@@ -566,6 +573,8 @@ describe("Firestore production rules", () => {
             staffUid: "staff-a",
             status: "pending",
             expectedMaxBytes: 3 * 1024 * 1024,
+            uploadGrantVersion: 1,
+            uploadExpiresAt: Timestamp.fromMillis(operation.expiresAt),
             expiresAt: Timestamp.fromMillis(operation.expiresAt),
           }),
         ),

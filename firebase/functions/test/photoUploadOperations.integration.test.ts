@@ -94,6 +94,30 @@ describe("photo upload operation callables", () => {
     ).rejects.toMatchObject({ code: "permission-denied" });
   });
 
+  it("issues a five-minute private upload grant, capped by the QR request deadline", async () => {
+    const deadline = Timestamp.fromMillis(Date.now() + 120_000);
+    await db.doc("chair_sessions/session-photo").update({ status: "pending_approval", approvalMode: "staff_confirmation", photoConsentGranted: true, expiresAt: deadline });
+    const begin = await beginOperation("photo-short-grant-fixture");
+    const operation = (await db.doc(`photo_upload_operations/${begin.operationId}`).get()).data();
+    expect(operation?.uploadGrantVersion).toBe(1);
+    expect(operation?.uploadExpiresAt.toMillis()).toBeLessThanOrEqual(deadline.toMillis());
+    expect(operation?.uploadExpiresAt.toMillis()).toBeGreaterThan(Date.now());
+    await db.doc(`photo_upload_operations/${begin.operationId}`).update({ uploadExpiresAt: Timestamp.fromMillis(Date.now() - 1) });
+    await beginOperation("photo-short-grant-fixture");
+    const renewed = (await db.doc(`photo_upload_operations/${begin.operationId}`).get()).data();
+    expect(renewed?.uploadExpiresAt.toMillis()).toBeGreaterThan(Date.now());
+    await db.doc("customers/customer-photo").update({ allowPhoto: false });
+    await expect(beginOperation("photo-short-grant-fixture")).rejects.toMatchObject({ code: "failed-precondition" });
+  });
+
+  it("does not finalize a pending image after the photo feature is switched off", async () => {
+    const begin = await beginOperation("photo-disabled-after-grant");
+    await saveUploadedObject(begin);
+    await db.doc("salons/salon-photo/settings/features").set({ photoUploadEnabled: false });
+    await expect(finalizeHaircutPhotoUpload.run(requestFor("staff-photo", { salonId: "salon-photo", operationId: begin.operationId }))).rejects.toMatchObject({ code: "failed-precondition" });
+    expect((await db.doc(`photo_upload_operations/${begin.operationId}`).get()).data()?.status).not.toBe("finalized");
+  });
+
   it("cho nhân viên đúng chi nhánh chụp ảnh cho yêu cầu QR đang chờ xác nhận", async () => {
     await db.collection("chair_sessions").doc("session-photo").set(
       {
