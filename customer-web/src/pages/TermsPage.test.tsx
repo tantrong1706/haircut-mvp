@@ -8,7 +8,10 @@ describe("trang pháp lý công khai", () => {
     render(<TermsPage />);
 
     expect(screen.getByRole("heading", { name: "Điều khoản sử dụng" })).toBeInTheDocument();
-    expect(screen.getByText(/quản lý chi nhánh, hàng chờ, lịch sử phục vụ/i)).toBeInTheDocument();
+    expect(screen.getByText(/quản lý chi nhánh, yêu cầu tích điểm, lịch sử phục vụ/i)).toBeInTheDocument();
+    expect(screen.getByText(/xác thực số điện thoại bằng OTP/i)).toBeInTheDocument();
+    expect(screen.getByText(/trước khi xác nhận cộng điểm/i)).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/Zalo|số điện thoại là thông tin tùy chọn|QR salon hoặc/);
     const privacyLinks = screen.getAllByRole("link", { name: "Chính sách quyền riêng tư" });
     expect(privacyLinks.length).toBeGreaterThan(0);
     privacyLinks.forEach((link) => expect(link).toHaveAttribute("href", "/privacy"));
