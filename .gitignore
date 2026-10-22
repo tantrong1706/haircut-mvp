@@ -36,7 +36,7 @@ pnpm-debug.log*
 .firebaserc
 *.local
 
-# Zalo Mini App env
+# Customer Web and Functions local configuration
 customer-web/.env
 customer-web/.env.local
 customer-web/.env.production

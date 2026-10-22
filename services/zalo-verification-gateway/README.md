@@ -1,5 +1,10 @@
 # Zalo Verification Gateway
 
+> Legacy compatibility — không thuộc luồng đăng nhập của Customer Web.
+> Thư mục này được giữ để tra cứu/duy trì dịch vụ cũ đã triển khai, không phải bước
+> cài đặt CH Hair Web. Không đổi tên API, xóa service hoặc secret chỉ để dọn repo.
+> Xem [ranh giới tương thích](../../docs/LEGACY_COMPATIBILITY.md).
+
 Gateway xác minh danh tính Zalo chạy trên máy có outbound IP Việt Nam (laptop Windows qua Cloudflare Tunnel hoặc VPS). Service chỉ xác minh token với Zalo, không chứa dữ liệu salon, khách, hàng chờ, điểm, ảnh hay quà.
 
 ## Local

@@ -2,7 +2,7 @@ import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState }
 import { Gift, LockKeyhole, RefreshCcw, Sparkles, Ticket } from "lucide-react";
 import { BrandLogo } from "../components/BrandLogo";
 import { RewardNavigation } from "../components/RewardNavigation";
-import { MINI_APP_MARK } from "../config/branding";
+import { APP_MARK } from "../config/branding";
 import { getCustomerWheelConfig, spinWheel } from "../services/api";
 import { trackEvent, withMonitoringTrace } from "../services/monitoring";
 import {
@@ -239,7 +239,7 @@ export function WheelPage({ session, onSessionChange, onOpenRewards }: Props) {
           })}
           <div className="wheel-center">
             <Sparkles size={26} aria-hidden="true" />
-            <span>{MINI_APP_MARK}</span>
+            <span>{APP_MARK}</span>
           </div>
         </div>
       </div>

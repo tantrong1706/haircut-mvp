@@ -6,7 +6,7 @@ $ErrorActionPreference = "Stop"
 $env:FIREBASE_CLI_DISABLE_UPDATE_CHECK = "true"
 $root = Resolve-Path (Join-Path $PSScriptRoot "..")
 
-Write-Host "== Thiết lập HAIRCUT MVP ==" -ForegroundColor Green
+Write-Host "== Thiết lập CH Hair Web ==" -ForegroundColor Green
 Write-Host "Dự án: $root"
 
 function Run-Step($Name, $ScriptBlock) {
@@ -40,7 +40,7 @@ Run-Step "Cài thư viện Firebase Functions" {
   Pop-Location
 }
 
-Run-Step "Cài thư viện Zalo Mini App" {
+Run-Step "Cài thư viện Customer Web" {
   Push-Location (Join-Path $root "customer-web")
   npm install
   npm run build
@@ -49,7 +49,7 @@ Run-Step "Cài thư viện Zalo Mini App" {
 
 Write-Host ""
 Write-Host "Thiết lập xong." -ForegroundColor Green
-Write-Host "Chạy Mini App: .\scripts\start-miniapp.ps1"
+Write-Host "Chạy Web: .\scripts\start-web.ps1"
 Write-Host "Chạy Firebase Emulator: .\scripts\start-emulators.ps1"
 Write-Host "Nạp dữ liệu demo: .\scripts\seed-demo.ps1"
 Write-Host "Đăng nhập Firebase: .\scripts\firebase-login.ps1"

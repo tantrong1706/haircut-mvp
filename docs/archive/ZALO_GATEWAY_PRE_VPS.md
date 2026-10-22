@@ -1,5 +1,9 @@
 # Zalo Gateway - Hồ sơ trước khi mua VPS
 
+> Tài liệu lịch sử của luồng đã ngừng phát triển, không phải hướng dẫn triển khai Web hiện tại.
+> Giữ nguyên nội dung bên dưới để tra cứu; không chạy các lệnh mua/cài VPS từ tài liệu này.
+> Sản phẩm đang hoạt động dùng Firebase Phone Auth, xem [tài liệu Web](../README.md).
+
 ## Phạm vi
 
 Gateway phục vụ CH Haircut Salon Mini App ID `2038116772828167300` và chỉ làm một việc: xác minh danh tính Zalo từ Firebase Functions thông qua IP Việt Nam. Gateway không đọc Firestore, không biết `salonId`/`branchId`, không giữ access token và không thực hiện nghiệp vụ khách hàng.
