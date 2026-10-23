@@ -12,4 +12,5 @@ Mô tả ngắn hành vi trước và sau.
 
 ## Ảnh hưởng triển khai
 
-Ghi rõ Functions, Rules, Hosting hoặc Zalo Mini App cần deploy lại.
+Ghi rõ Customer Web Hosting, Admin Hosting, Functions hoặc Rules nào cần phát hành lại.
+Merge source không tự cho phép deploy production.

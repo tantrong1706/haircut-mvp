@@ -5,7 +5,7 @@
 1. Working tree sạch, CI xanh, release SHA và người phê duyệt đã ghi nhận.
 2. `scripts/backup-firestore.ps1` đã export thành công trước migration/thay đổi Rules.
 3. `audit:tenant-data` không còn document nghiệp vụ thiếu `salonId`, hoặc đã có mapping được duyệt.
-4. Deploy Functions tương thích trước, sau đó indexes, Rules, Hosting và Zalo/Manager.
+4. Deploy đúng mục tiêu được duyệt: API tương thích trước, client sau, Rules phụ thuộc sau cùng. Indexes/migration chỉ khi có kế hoạch riêng.
 5. Smoke test salon demo; không dùng dữ liệu khách thật để diễn tập.
 
 ## Backup và restore
@@ -35,7 +35,7 @@ Diễn tập restore hàng quý với dữ liệu giả. Ghi RPO, RTO, số docu
 - Billing: budget alerts 50%, 80%, 100% và anomaly notification.
 - Product health: check-in lỗi, point request chờ lâu, session mở quá hạn, mã quà lỗi và app version cũ.
 
-Không gửi tên, phone/email đầy đủ, ghi chú, ảnh, reward code, QR/Zalo/Firebase token vào log hoặc monitoring.
+Không gửi tên, phone/email đầy đủ, ghi chú, ảnh, reward code, QR signature hoặc token xác thực vào log/monitoring.
 
 ## Công tắc khẩn cấp
 
@@ -47,6 +47,6 @@ Không gửi tên, phone/email đầy đủ, ghi chú, ảnh, reward code, QR/Za
 - Functions: checkout tag ổn định và deploy theo nhóm nhỏ; giữ code tương thích dữ liệu mới.
 - Rules: không hạ Rules nếu việc đó mở quyền; ưu tiên forward fix.
 - Firestore: restore vào môi trường phục hồi/dữ liệu giả để kiểm đếm trước production.
-- Manager/Zalo: dừng rollout, giữ TestFlight/Internal/Testing version trước và bật feature flag nếu cần.
+- Admin/Manager Web có phạm vi phát hành riêng; không rollout native hoặc nền tảng cũ trong đợt phát hành Customer Web.
 
 Mọi sự cố phải ghi thời điểm, release SHA, tenant bị ảnh hưởng, error code, thao tác giảm thiểu và người kết thúc sự cố.

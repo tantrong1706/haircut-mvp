@@ -30,7 +30,7 @@ import QRCode from "qrcode";
 import { BrandLogo } from "../components/BrandLogo";
 import { CustomerPointAction } from "../components/CustomerPointAction";
 import { OwnerConfirmDialog, type OwnerConfirmation as ConfirmRequest } from "../components/OwnerConfirmDialog";
-import { MINI_APP_NAME } from "../config/branding";
+import { APP_NAME } from "../config/branding";
 import { AccountDeletionPanel } from "../components/AccountDeletionPanel";
 import { HaircutPhotoCapture, type HaircutPhotoItem } from "../components/HaircutPhotoCapture";
 import { RedeemRewardPanel } from "../components/RedeemRewardPanel";
@@ -1013,7 +1013,7 @@ function SalonProfilePanel({
             value={phone}
             onChange={(event) => setPhone(event.target.value)}
             inputMode="tel"
-            placeholder="Số hotline hoặc Zalo"
+            placeholder="Số điện thoại liên hệ"
           />
         </label>
         <label className="field wide-field">
@@ -1638,7 +1638,7 @@ function ManagedQrCard({
       <html lang="vi">
         <head>
           <meta charset="utf-8" />
-          <title>${escapeHtml(title)} - ${escapeHtml(MINI_APP_NAME)} QR</title>
+          <title>${escapeHtml(title)} - ${escapeHtml(APP_NAME)} QR</title>
           <style>
             body { font-family: Arial, sans-serif; margin: 28px; color: #0b1712; text-align: center; }
             h1 { margin: 0 0 8px; font-size: 28px; }
@@ -1648,7 +1648,7 @@ function ManagedQrCard({
         </head>
         <body>
           <h1>${escapeHtml(title)}</h1>
-          <p>Quét QR để check-in ${escapeHtml(MINI_APP_NAME)}</p>
+          <p>Quét QR để check-in ${escapeHtml(APP_NAME)}</p>
           <img src="${qrImageUrl}" alt="" />
           <script>window.onload = () => window.print();</script>
         </body>

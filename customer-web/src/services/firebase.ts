@@ -241,24 +241,15 @@ export function friendlyFirebaseFunctionError(error: unknown, callableName = "")
   const businessCode = readBusinessErrorCode(error);
 
   if (code === "unauthenticated") {
-    if (
-      businessCode === "ZALO_VERIFICATION_FAILED" ||
-      isZaloInfrastructureVerificationMessage(message)
-    ) {
-      return "Không thể xác minh tài khoản Zalo lúc này. Vui lòng thử lại sau.";
-    }
-    return message || "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.";
+    return "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.";
   }
-  if (businessCode === "INVALID_REQUEST" && callableName === "registerCustomerFromZalo") {
+  if (
+    businessCode === "INVALID_REQUEST" &&
+    ["resolveCustomerQr", "getWebCustomerContext", "checkInWebCustomer"].includes(callableName)
+  ) {
     const field = readErrorDetail(error, "field");
-    if (field === "salonId" || field === "qrToken") {
+    if (field === "salonId" || field === "branchId" || field === "qrToken") {
       return "Mã QR không còn đầy đủ. Vui lòng quét lại mã QR của salon.";
-    }
-    if (field === "zaloAccessToken") {
-      return "Không xác minh được phiên Zalo. Vui lòng đóng Mini App, mở lại và thử lại.";
-    }
-    if (field === "allowPhoto") {
-      return "Lựa chọn lưu ảnh chưa hợp lệ. Vui lòng thử lại.";
     }
   }
   if (businessCode && BUSINESS_ERROR_MESSAGES[businessCode]) {
@@ -340,15 +331,9 @@ const PERMISSION_MESSAGES_BY_CALLABLE: Record<string, Set<string>> = {
     "QR chi nhánh không hợp lệ hoặc đã được tạo lại",
     "QR salon không hợp lệ hoặc đã được tạo lại",
   ]),
-  registerCustomerFromZalo: new Set([
-    "QR Gương 1 không hợp lệ hoặc đã bị khóa",
-    "QR chi nhánh không hợp lệ hoặc đã được tạo lại",
-    "QR salon không hợp lệ hoặc đã được tạo lại",
-  ]),
   submitPointRequest: new Set(["Bạn không phụ trách lượt cắt này"]),
   cancelServiceSession: new Set(["Bạn không được hủy lượt cắt này"]),
   approvePointRequest: new Set(["Yêu cầu không thuộc salon này"]),
-  getCustomerSessionFromZalo: new Set(["Lượt cắt không thuộc khách hàng này"]),
   lookupRewardCode: new Set(["Nhân viên chưa được phép kiểm tra mã quà"]),
   redeemRewardCode: new Set(["Nhân viên chưa được phép xác nhận mã quà"]),
 };
@@ -393,15 +378,6 @@ function readErrorField(error: unknown, field: "code" | "message") {
 function readBusinessErrorCode(error: unknown) {
   const value = readErrorDetail(error, "errorCode");
   return value.toUpperCase();
-}
-
-function isZaloInfrastructureVerificationMessage(message: string) {
-  const normalized = message.toLowerCase();
-  return (
-    normalized.includes("personal information is limited") &&
-    normalized.includes("ip address") &&
-    normalized.includes("not inside vietnam")
-  );
 }
 
 function readErrorDetail(error: unknown, field: string) {

@@ -309,7 +309,7 @@ jobs:
         run: node --test test/web-workspace-boundary.test.mjs
 
       - name: Verify retired SDK and deployment paths stay removed
-        run: node --test test/web-only-retirement.test.mjs
+        run: node --test test/web-only-retirement.test.mjs test/web-naming-cleanup.test.mjs
 
       - name: Verify bounded version-update policy
         run: node --test test/dependabot-policy.test.mjs

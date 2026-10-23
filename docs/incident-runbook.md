@@ -1,42 +1,54 @@
-# Xử lý sự cố HAIRCUT
+# Xử lý sự cố CH Hair Web
 
-## Khách không check-in
+## Khách không mở được từ QR
 
-1. Xác nhận salon và chi nhánh đang hoạt động.
-2. Kiểm tra QR salon/chi nhánh có phải token hiện hành, chưa bị xoay và đúng App ID Zalo.
-3. Kiểm tra phiên bản Zalo Mini App đang mở và log `registerCustomerFromZalo` theo `requestId`.
-4. Kiểm tra lỗi xác minh Zalo, App Check, Functions và Firestore quota.
+1. Kiểm tra salon/chi nhánh còn hoạt động và QR chi nhánh là bản ký hiện hành.
+2. Link phải mở https://app.chhaircutsalon.cc/checkin với đủ tham số. Không thêm môi trường Testing.
+3. Kiểm tra resolveCustomerQr, getWebCustomerContext, checkInWebCustomer theo request ID;
+   không chép QR signature hoặc thông tin khách đầy đủ vào ticket/log.
+4. Kiểm tra Firebase Auth, Functions, quota và App Check hiện hành. Không tắt bảo vệ để thử.
 
-QR gương cũ chỉ là cơ chế tương thích migration. Không mở Rules hoặc tiết lộ token để xử lý tạm.
+Không tự tạo token hoặc cho chọn chi nhánh khác để vượt qua QR sai.
 
-## Owner/staff báo không có quyền
+## Bị yêu cầu đăng nhập lại
 
-Kiểm tra Firebase Auth UID và `users/{uid}` gồm `role`, `isActive`, `salonId`, `branchId/branchIds`. Tiếp theo kiểm tra salon/chi nhánh có bị khóa và phiên bản Manager có đạt `minimumVersion` hay không. Không sửa URL hoặc dữ liệu client để né kiểm tra quyền.
+Xác nhận đúng domain và cùng trình duyệt đã đăng nhập. Chrome, Safari, trình duyệt trong ứng dụng
+và chế độ riêng tư không chia sẻ phiên với nhau. Kiểm tra Auth restore trước khi kết luận mất dữ liệu.
+Không yêu cầu khách gửi OTP/password/token. Owner/staff và khách dùng phiên Auth tách biệt.
 
-## Hai nhân viên cùng nhận một khách
+## Ảnh hoặc ghi chú không lưu
 
-Kiểm tra trạng thái `chair_sessions`, actor trong audit và log `claimServiceSession`. Giao dịch chỉ được phép có một người thành công; nếu có hai người, tạm dừng thao tác tại salon liên quan và rollback release gần nhất sau khi lưu bằng chứng đã làm sạch.
+- Yêu cầu phải còn chờ xác nhận; ảnh/ghi chú chỉ lưu trước cộng điểm.
+- Kiểm tra chi nhánh, nhân viên được giao, trạng thái salon và đồng ý lưu ảnh.
+- Kiểm tra beginHaircutPhotoUpload -> Storage upload -> finalizeHaircutPhotoUpload ->
+  getHaircutPhotoReadUrls. JPEG tối đa 3 MiB; Rules cần grant server cấp còn hiệu lực.
+- Kiểm tra quyền Storage Rules đọc Firestore và quyền ký ảnh của runtime; không cấp quyền rộng
+  hoặc mở ảnh công khai để chữa tạm.
+- Note-only update phải giữ nguyên ảnh, không tự cộng điểm và không trả URL ảnh.
+- Link ký hết hạn cần được cấp lại sau kiểm tra quyền; không biến link đó thành URL công khai dài hạn.
 
-## Duyệt điểm không cập nhật
+## Điểm không cập nhật hoặc cộng trùng
 
-Kiểm tra `point_requests`, `chair_sessions`, `haircut_records` và audit bằng request ID. Không cộng điểm trực tiếp trong Firestore Console; chạy lại request idempotent hoặc dùng quy trình khôi phục có biên bản.
+Đối chiếu point_requests, chair_sessions, haircut_records và audit bằng request ID của đúng salon.
+Cùng thao tác phải giữ operation/request ID khi retry; không cộng bù trực tiếp trong Firestore.
+Khách vừa được cộng điểm có cooldown hai giờ; không đổi giờ hoặc ID để bỏ qua.
 
-## Mã quà bị đổi hai lần
+Khách quen có thể trùng 4 số cuối. Phải chọn đúng tên/hồ sơ và chi nhánh, không tự gộp khách.
 
-Khóa thao tác đổi quà của salon bị ảnh hưởng, đối chiếu reward, audit và request ID. Một mã chỉ có một lần chuyển sang `used`; không tự sửa trạng thái trước khi xác định race/replay hay tài khoản bị lộ.
+## Mã quà lỗi hoặc bị đổi hai lần
 
-## Zalo đứng ở splash hoặc báo đang phát triển
+Kiểm tra trạng thái, thời hạn, chi nhánh được phép dùng và quyền nhân viên. Một mã chỉ chuyển
+sang used một lần. Không sửa trạng thái trực tiếp hoặc làm mới idempotency key để đổi lại.
 
-Xác nhận bản Testing/Production đã được phát hành cho đúng App ID và tài khoản thử có quyền truy cập. Chạy `npm run build:zmp` và `npm run validate:zmp`, kiểm tra asset trong `app-config.json`, sau đó xóa cache Mini App trên thiết bị thử.
+## Trang trắng, lỗi tải hoặc hiển thị bản cũ
 
-## Push Manager không đến
+Kiểm tra Hosting version, HTML/assets và console/network; tải lại trang để nhận bundle mới.
+Đối chiếu source đã deploy, không nhầm code mới trên GitHub với website live.
+Không dùng hướng dẫn Mini App hoặc native để sửa trang Web.
 
-Kiểm tra permission thiết bị, FCM token, APNs/Firebase native config và log trigger đã làm sạch. Xóa token không còn hợp lệ; không ghi token đầy đủ vào log hoặc ticket.
+## Chi phí, lỗi tăng hoặc dữ liệu cần khôi phục
 
-## Chi phí hoặc lỗi tăng bất thường
-
-Kiểm tra Functions invocations, Firestore reads/writes, Storage egress và tỷ lệ lỗi theo salon/thời gian. Có thể khóa salon hoặc QR bị lạm dụng bằng luồng quản trị có audit; giữ Rules đóng và rà log trước khi thay đổi quota.
-
-## Xóa dữ liệu bị lỗi
-
-Kiểm tra `customer_deletion_jobs`/salon deletion job, trạng thái retry và residue. Không đánh dấu hoàn tất thủ công khi Firestore hoặc Storage còn dữ liệu; dùng worker idempotent và quy trình tại `docs/PRODUCTION_OPERATIONS.md`.
+Kiểm tra invocations, Firestore reads/writes, Storage egress theo thời gian và phạm vi salon.
+Dùng thao tác quản trị có audit và quyền rõ ràng. Giữ Rules đóng.
+Việc restore/migration/xóa dữ liệu cần kế hoạch riêng tại [Production Operations](PRODUCTION_OPERATIONS.md).
+Không đánh dấu job xóa hoàn tất nếu vẫn còn document hoặc object liên quan.

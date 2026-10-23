@@ -12,13 +12,13 @@ describe("friendlyFirebaseFunctionError", () => {
     ).toBe("Khách đã được một nhân viên khác nhận.");
   });
 
-  it("giữ thông báo unauthenticated từ backend", () => {
+  it("không đưa thông báo xác thực thô của provider vào Web", () => {
     expect(
       friendlyFirebaseFunctionError({
         code: "functions/unauthenticated",
         message: "Zalo access token không hợp lệ",
       }),
-    ).toBe("Zalo access token không hợp lệ");
+    ).toBe("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
   });
 
   it("không để lỗi chính sách IP Zalo lộ thông tin hạ tầng ra UI", () => {
@@ -28,7 +28,7 @@ describe("friendlyFirebaseFunctionError", () => {
         "Personal information is limited due to IP address not inside Vietnam: 203.0.113.10",
     });
 
-    expect(message).toBe("Không thể xác minh tài khoản Zalo lúc này. Vui lòng thử lại sau.");
+    expect(message).toBe("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
     expect(message).not.toContain("203.0.113.10");
     expect(message).not.toContain("IP address");
   });
@@ -43,7 +43,7 @@ describe("friendlyFirebaseFunctionError", () => {
           requestId: "zalo_safe_request_id",
         },
       }),
-    ).toBe("Không thể xác minh tài khoản Zalo lúc này. Vui lòng thử lại sau.");
+    ).toBe("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
   });
 
   it("dùng thông báo hết phiên khi backend không gửi chi tiết", () => {
@@ -69,7 +69,7 @@ describe("friendlyFirebaseFunctionError", () => {
           message: "Thiếu trường bắt buộc: qrToken",
           details: { errorCode: "INVALID_REQUEST", field: "qrToken" },
         },
-        "registerCustomerFromZalo",
+        "checkInWebCustomer",
       ),
     ).toBe("Mã QR không còn đầy đủ. Vui lòng quét lại mã QR của salon.");
   });
@@ -81,7 +81,7 @@ describe("friendlyFirebaseFunctionError", () => {
           code: "functions/permission-denied",
           message: "QR chi nhánh không hợp lệ hoặc đã được tạo lại",
         },
-        "registerCustomerFromZalo",
+        "resolveCustomerQr",
       ),
     ).toBe("QR chi nhánh không hợp lệ hoặc đã được tạo lại");
   });
@@ -93,7 +93,7 @@ describe("friendlyFirebaseFunctionError", () => {
           code: "functions/permission-denied",
           message: "Chi tiết nội bộ không được phép hiển thị",
         },
-        "registerCustomerFromZalo",
+        "resolveCustomerQr",
       ),
     ).toBe("Tài khoản này không có quyền với salon này.");
   });
@@ -127,7 +127,7 @@ describe("friendlyFirebaseFunctionError", () => {
     expect(
       friendlyFirebaseFunctionError(
         { code: "functions/permission-denied" },
-        "registerCustomerFromZalo",
+        "resolveCustomerQr",
       ),
     ).toBe("Tài khoản này không có quyền với salon này.");
   });

@@ -22,22 +22,22 @@ export function TermsPage({ onBack, onNavigate }: Props = {}) {
         <BrandLogo />
         <p className="eyebrow">CH Haircut Salon</p>
         <h1>Điều khoản sử dụng</h1>
-        <p className="muted">Cập nhật: 18/07/2026</p>
+        <p className="muted">Cập nhật: 22/10/2026</p>
       </header>
 
       <div className="panel privacy-content">
         <h2>1. Phạm vi dịch vụ</h2>
         <p>
-          CH Haircut Salon hỗ trợ salon quản lý chi nhánh, hàng chờ, lịch sử phục vụ, điểm chăm sóc
-          khách hàng, vòng quay và mã quà. Khách truy cập bằng QR salon hoặc QR chi nhánh; chủ
+          CH Haircut Salon hỗ trợ salon quản lý chi nhánh, yêu cầu tích điểm, lịch sử phục vụ, điểm chăm sóc
+          khách hàng, vòng quay và mã quà. Khách truy cập Web bằng QR của chi nhánh; chủ
           salon và nhân viên sử dụng tài khoản được phân quyền riêng.
         </p>
 
         <h2>2. Xác nhận và tài khoản</h2>
         <p>
           Khách chịu trách nhiệm xác nhận đúng salon, chi nhánh và thông tin hiển thị trước khi tạo
-          lượt. CH Haircut Salon chỉ yêu cầu quyền đọc tên và ảnh đại diện Zalo để nhận diện khách;
-          số điện thoại là thông tin tùy chọn do khách tự nhập. Chủ salon và nhân viên phải bảo vệ
+          lượt. Khách xác thực số điện thoại bằng OTP qua Firebase Authentication để đăng nhập.
+          Trên cùng trình duyệt, phiên hợp lệ được giữ cho những lần truy cập sau. Chủ salon và nhân viên phải bảo vệ
           tài khoản đăng nhập, không chia sẻ quyền truy cập và thông báo ngay khi nghi ngờ tài khoản
           bị sử dụng trái phép.
         </p>
@@ -61,6 +61,7 @@ export function TermsPage({ onBack, onNavigate }: Props = {}) {
         <p>
           Nhân viên chỉ được lưu ảnh kiểu tóc khi khách đã đồng ý. Ghi chú và ảnh phải phục vụ trực
           tiếp cho lần cắt tóc, không được dùng cho mục đích khác hoặc chứa nội dung không phù hợp.
+          Ảnh và ghi chú được lưu trước khi xác nhận cộng điểm.
         </p>
 
         <h2>6. Dữ liệu cá nhân</h2>
@@ -77,14 +78,14 @@ export function TermsPage({ onBack, onNavigate }: Props = {}) {
           >
             Chính sách quyền riêng tư
           </a>
-          . Khi khách rút lại đồng ý hoặc gửi yêu cầu xóa hợp lệ qua Zalo, hệ thống sẽ tiếp nhận và
+          . Khi khách rút lại đồng ý hoặc gửi yêu cầu xóa hợp lệ qua chức năng trên Web hoặc liên hệ salon, hệ thống sẽ tiếp nhận và
           xử lý dữ liệu liên quan theo quy trình bảo mật của CH Haircut Salon.
         </p>
 
         <h2>7. Tính sẵn sàng của dịch vụ</h2>
         <p>
           CH Haircut Salon cố gắng duy trì dịch vụ ổn định nhưng có thể tạm gián đoạn do bảo trì,
-          kết nối mạng, Zalo, Firebase hoặc sự kiện ngoài khả năng kiểm soát. Các thay đổi quan
+          kết nối mạng, Firebase hoặc sự kiện ngoài khả năng kiểm soát. Các thay đổi quan
           trọng sẽ được triển khai theo hướng bảo vệ dữ liệu và hạn chế ảnh hưởng tới hoạt động
           salon.
         </p>

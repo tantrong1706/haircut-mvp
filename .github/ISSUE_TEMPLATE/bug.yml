@@ -21,10 +21,10 @@ body:
     id: role
     attributes:
       label: Màn hình
-      options: [Khách, Nhân viên, Chủ salon, Firebase, Zalo Mini App]
+      options: [Khách, Nhân viên, Chủ salon, Quản trị hệ thống, Firebase]
     validations:
       required: true
   - type: input
     id: device
     attributes:
-      label: Thiết bị và trình duyệt/Zalo
+      label: Thiết bị và trình duyệt

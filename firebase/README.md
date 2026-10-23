@@ -1,86 +1,47 @@
-# Firebase Backend
+# Firebase — backend của CH Hair Web
 
-## Thiết Lập
+Firebase phục vụ Customer Web tại https://app.chhaircutsalon.cc và cổng Admin riêng.
+Khách đăng nhập bằng Firebase Phone Auth (OTP); chủ salon và nhân viên dùng tài khoản
+Email/Password được phân quyền. Không cần cấu hình nhà cung cấp danh tính cũ để phát triển Web.
 
-```bash
-cd haircut/firebase
-cp .firebaserc.example .firebaserc
-```
+## Cài đặt và kiểm thử
 
-Sửa `.firebaserc` và thay `your-firebase-project-id` bằng project thật.
+Dùng Node.js 22 và Java 21 cho Emulator. Từ thư mục gốc repository:
 
-Cài Firebase CLI nếu máy chưa có:
+    npm --prefix firebase/functions ci
+    npm --prefix firebase/functions run check
+    npm --prefix firebase/functions run build
+    npm --prefix firebase/functions run test:rules
+    npm --prefix firebase/functions run test:integration
 
-```bash
-npm install -g firebase-tools
-firebase login
-```
+Rules/integration chỉ dùng project demo-haircut. Giữ nguyên lockfile, không nâng dependency
+để khắc phục lỗi cài đặt. Nếu contracts chưa đồng bộ, đối chiếu packages/contracts trước
+khi chạy script sync:contracts; không bỏ qua check:contracts.
 
-Chỉ cài thư viện Functions khi cần sửa Cloud Functions:
+## Cấu hình
 
-```bash
-cd functions
-npm install
-npm run build
-```
+- Client Web dùng các file mẫu trong customer-web; cấu hình riêng không commit.
+- Biến VITE_* là công khai trong bundle, tuyệt đối không chứa secret/token/mật khẩu.
+- CUSTOMER_WEB_CHECKIN_URL trỏ tới https://app.chhaircutsalon.cc/checkin.
+- QR_SIGNING_SECRET nằm trong Secret Manager; không sao chép vào frontend.
+- Giữ nguyên biến và secret của endpoint đã triển khai nếu không có kế hoạch chuyển đổi riêng.
+- Không bật App Check enforcement chỉ để chạy test; chỉ thay khi có phê duyệt và bằng chứng tương thích.
+- Backend còn các adapter cũ: xem [ranh giới tương thích](../docs/LEGACY_COMPATIBILITY.md).
 
-Cấu hình Zalo Mini App ID và App Secret nếu dùng Functions:
+## Phát hành
 
-```bash
-cp functions/.env.example functions/.env
-```
+Xem [quy trình Web](../docs/deployment.md) và [trạng thái đang chạy](../docs/RELEASE_STATUS.md).
+CI xanh hoặc merge main không tự cho phép deploy.
 
-Sửa `functions/.env`:
+Chỉ phát hành đúng API/Hosting/Rules được duyệt. Khi thay đổi luồng ảnh: API tương thích trước,
+Web tương thích sau, Rules hạn chế đọc sau cùng. Không dùng deploy toàn bộ Functions để
+phát hành một thay đổi giao diện. Admin Hosting là site riêng.
 
-```env
-ZALO_MINI_APP_ID=your-mini-app-id
-ZALO_APP_SECRET=your-zalo-app-secret
-```
+## Bảo vệ dữ liệu
 
-`ZALO_APP_SECRET` bắt buộc cho luồng khách thật vì Functions phải xác minh `zaloAccessToken` với Zalo Open API trước khi suy ra `zaloUserId`.
+Điểm, vòng quay và đổi quà do server quyết định; UID và salon không lấy từ thông tin khách tự khai.
+Ảnh kiểu tóc dùng operation upload riêng, JPEG tối đa 3 MiB và sự đồng ý hiện hành của khách.
+Backend kiểm tra ảnh trước khi chấp nhận; link xem ảnh có chữ ký hết hạn tối đa 15 phút.
+Không mở quyền Storage công khai để sửa lỗi ảnh. Ảnh/ghi chú được lưu trước xác nhận cộng điểm.
 
-## Deploy Khuyến Nghị
-
-Trong giai đoạn chưa deploy Functions, chỉ deploy hosting:
-
-```powershell
-.\scripts\deploy-firebase.ps1 -OnlyHosting
-```
-
-Khi chuyển web app sang `VITE_FUNCTION_WRITE_MODE=required`, cần deploy Functions trước rồi mới deploy rules:
-
-```powershell
-.\scripts\deploy-firebase.ps1 -IncludeFunctions
-.\scripts\deploy-firebase.ps1 -IncludeFirestore
-```
-
-Chỉ deploy Storage khi Firebase project đã bật Storage/Blaze và bạn đã sẵn sàng dùng ảnh kiểu tóc:
-
-```powershell
-.\scripts\deploy-firebase.ps1 -IncludeStorage
-```
-
-Không deploy full mặc định nếu project chưa bật Storage.
-
-## Demo Bằng Emulator
-
-Terminal 1:
-
-```powershell
-.\scripts\start-emulators.ps1
-```
-
-Terminal 2:
-
-```powershell
-.\scripts\seed-demo.ps1
-```
-
-## Ghi Chú Production
-
-- Luồng khách Zalo gửi `zaloAccessToken`; Functions xác minh token ở server trước khi suy ra `zaloUserId`.
-- Đặt `VITE_FUNCTION_WRITE_MODE=required` cho bản pilot thật.
-- Deploy Firestore rules production trước khi mở cho khách thật.
-- Storage rules chỉ cho upload ảnh dưới 5MB và chỉ khi khách đã bật `allowPhoto`.
-- Thêm job dọn `chair_sessions` cũ khi salon bắt đầu dùng thường xuyên.
-- Bật App Check trước khi public test rộng.
+Không xóa dữ liệu, reset Auth, thu hồi ảnh khách cũ hoặc deploy để dọn tên trong repository.
