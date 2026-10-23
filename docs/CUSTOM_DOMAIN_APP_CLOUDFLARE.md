@@ -21,8 +21,7 @@ cho landing page tương lai. Task này không cấu hình `manager` hoặc `adm
 - Custom domain gắn vào Firebase Hosting site `haircut-c7d12`.
 - Hai domain mặc định `haircut-c7d12.web.app` và
   `haircut-c7d12.firebaseapp.com` tiếp tục hoạt động song song.
-- Zalo Mini App vẫn dùng Mini App ID `2038116772828167300`; không deploy ZMP chỉ
-  để thêm custom web domain.
+- Customer Web dùng Firebase Phone Auth; không cấu hình Mini App ID cho custom domain.
 - Record `gateway.chhaircutsalon.cc` của named Cloudflare Tunnel không bị sửa.
 
 Nếu custom domain gặp sự cố, tắt/xóa riêng DNS record `app` sau khi xác nhận phạm
@@ -30,14 +29,14 @@ vi. Không disable Hosting site, không đổi nameserver và không xóa domain
 
 ## Kiến trúc Hosting
 
-`zalo-mini-app` build vào `zalo-mini-app/www`. Script deploy chép nội dung này
+`customer-web` build vào `customer-web/www`. Script deploy chép nội dung này
 vào `firebase/public`, sau đó chỉ deploy Firebase Hosting. `firebase/firebase.json`
 đặt rõ site `haircut-c7d12` và có SPA fallback `** -> /index.html`; không rewrite
 Functions/API.
 
 Asset dùng đường dẫn tương đối và Firebase SDK/Functions/Storage dùng HTTPS. CSP
-dùng `'self'` cho origin hiện tại và whitelist hẹp cho Firebase, Google, Zalo và
-Sentry; custom domain không cần mở rộng CSP hoặc CORS.
+baseline chặn base URL ngoài origin, plugin object và iframe nhúng trang; không phải allowlist
+script/network đầy đủ. Xem `config/content-security-policy.txt`, không tự mở rộng CSP hoặc CORS.
 
 ## Cloudflare conflict gate
 

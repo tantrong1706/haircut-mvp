@@ -48,7 +48,7 @@ test("local startup and GitHub contribution templates describe Web", () => {
 test("Firebase setup documents Phone Auth without obsolete secret instructions", () => {
   const doc = read("firebase/README.md");
   assert.match(doc, /Phone Auth/);
-  assert.doesNotMatch(doc, /ZALO_APP_SECRET=|ZALO_MINI_APP_ID=|Luồng khách Zalo|Mini App ID/);
+  assert.doesNotMatch(doc, /ZALO_APP_SECRET\s*=|ZALO_MINI_APP_ID\s*=|Luồng khách Zalo|Mini App ID/);
   assert.ok(existsSync(path.join(root, "docs/archive/ZALO_GATEWAY_PRE_VPS.md")));
   assert.equal(existsSync(path.join(root, "docs/ZALO_GATEWAY_PRE_VPS.md")), false);
 });

@@ -3,7 +3,7 @@
 [Mở ứng dụng](https://app.chhaircutsalon.cc/) · [Chủ salon](https://app.chhaircutsalon.cc/owner) · [Nhân viên](https://app.chhaircutsalon.cc/staff)
 
 CH Hair chạy trên trình duyệt điện thoại và máy tính, dùng **Firebase** cho Hosting, đăng nhập,
-API, dữ liệu và ảnh. Không cần Zalo Mini App, tài khoản tester, VPS hay Botkeep.
+API, dữ liệu và ảnh. Khách không phải cài ứng dụng riêng; chủ salon và nhân viên cũng dùng Web.
 
 Nhánh chính: **[`main`](https://github.com/tantrong1706/haircut-mvp/tree/main)** — bản Web/Firebase hiện tại.
 Thay đổi mới dùng nhánh ngắn hạn `codex/<noi-dung>`, kiểm tra CI rồi nhập vào `main` và xóa nhánh đã xong.
@@ -25,6 +25,9 @@ Không tự gộp hồ sơ hoặc đổi ID khách khi dọn mã nguồn.
 Đăng xuất, xóa dữ liệu trình duyệt, đổi thiết bị hoặc phiên hết hiệu lực có thể yêu cầu OTP lại.
 QR phải do hệ thống ký; **không thêm `env=TESTING` hoặc số version Zalo** vào QR Web.
 
+Chủ salon có danh bạ và tìm nhanh theo tên/4 số cuối. Tích điểm khách quen cần chọn đúng hồ sơ;
+ảnh/ghi chú được lưu trong lượt chờ trước khi xác nhận điểm, không qua nút tích điểm nhanh.
+
 ## Cấu trúc
 
 | Thư mục                   | Vai trò                                                   |
@@ -41,6 +44,7 @@ Frontend không còn SDK, đăng nhập, build hoặc công cụ review Zalo. M�
 endpoint/backend và mã Gateway được giữ để bảo toàn tương thích với dịch vụ đã triển khai;
 chúng không phải luồng đăng nhập của khách Web. Không xóa Functions, secrets hay dữ liệu live
 chỉ vì tên chứa “Zalo”. Mã và tài liệu đã gỡ có thể phục hồi từ lịch sử Git.
+Chi tiết các phần còn giữ và lý do: [ranh giới tương thích cũ](docs/LEGACY_COMPATIBILITY.md).
 
 ## Chạy local
 
@@ -104,6 +108,7 @@ enforcement chưa được xác nhận bật. Không tự bật enforcement tron
 
 ## Tài liệu
 
+- [Mục lục tài liệu Web hiện tại](docs/README.md)
 - [Hướng dẫn làm việc và giới hạn an toàn](AGENTS.md)
 - [Customer Web](customer-web/README.md)
 - [Checklist vận hành Web](docs/WEB_CUSTOMER_COMPLETION_CHECKLIST.md)

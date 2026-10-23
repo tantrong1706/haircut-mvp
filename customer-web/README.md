@@ -1,7 +1,7 @@
 # CH Hair — Customer Web
 
-Web/PWA tại https://app.chhaircutsalon.cc, chạy trong Safari/Chrome, không cần Zalo.
-Workspace được đổi tên từ `zalo-mini-app/`; hướng dẫn tổng thể nằm ở [README gốc](../README.md).
+Web/PWA tại https://app.chhaircutsalon.cc, chạy trong trình duyệt điện thoại và máy tính.
+Khởi động từ repo root bằng scripts/start-web.ps1; hướng dẫn tổng thể ở [README gốc](../README.md).
 
 ## Phát triển và kiểm thử
 

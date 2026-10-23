@@ -4,13 +4,11 @@
 
 Các hàm dưới đây là callable HTTPS Functions. Web app nên dùng `VITE_FUNCTION_WRITE_MODE=required` khi chạy pilot thật để mọi thao tác nghiệp vụ đi qua Cloud Functions.
 
-Luồng khách Zalo không tin `zaloUserId` do client tự gửi. Client lấy `zaloAccessToken` bằng `getAccessToken()` của `zmp-sdk`, gửi token lên Cloud Functions; server dùng `ZALO_APP_SECRET` để gọi Zalo Open API và tự suy ra user id thật.
+Khách Web đăng nhập bằng Firebase Phone Auth. Server lấy UID/provider đã xác minh từ request.auth và dẫn xuất hồ sơ theo salon; không tin customer ID do client tự chọn. Các adapter cũ không thuộc luồng Web: xem [ranh giới tương thích](LEGACY_COMPATIBILITY.md).
 
 ## Biến môi trường Functions
 
 ```env
-ZALO_MINI_APP_ID=...
-ZALO_APP_SECRET=...
 QR_SIGNING_SECRET=...
 CUSTOMER_WEB_CHECKIN_URL=https://app.chhaircutsalon.cc/checkin
 ```
@@ -113,39 +111,6 @@ xoay QR chi nhánh không ảnh hưởng QR salon.
 `migrateSalonBranches` tạo Chi nhánh chính, gắn `branchId` vào dữ liệu cũ và có thể chạy lại mà
 không tạo trùng.
 
-## registerCustomerFromZalo
-
-Input:
-
-```json
-{
-  "salonId": "...",
-  "qrType": "salon | branch | legacy-mirror",
-  "branchId": "...",
-  "mirrorId": "... chỉ dành cho QR cũ",
-  "qrToken": "...",
-  "zaloAccessToken": "...",
-  "name": "Nguyễn Văn A",
-  "phone": "84900000000",
-  "birthday": "1998-01-01",
-  "allowPhoto": false
-}
-```
-
-Output:
-
-```json
-{
-  "customerId": "...",
-  "sessionId": "...",
-  "points": 0,
-  "zaloUserId": "..."
-}
-```
-
-`name` là tên hiển thị khách xác nhận tại salon. `zaloUserId` trong output là ID đã xác minh từ Zalo.
-Token chỉ dùng trong request này, không được trả về, lưu trong session hay ghi vào Firestore.
-
 ## Web customer callables
 
 Các callable `getWebCustomerContext`, `checkInWebCustomer`, `getWebCustomerSession`,
@@ -158,10 +123,7 @@ hoặc chọn `uid`/`customerId`.
 theo tenant. QR salon chỉ tự chọn chi nhánh khi salon có đúng một chi nhánh hoạt động; salon nhiều
 chi nhánh phải dùng QR chi nhánh.
 
-`checkInWebCustomer` tạo hoặc trả lại duy nhất một active session ở trạng thái `waiting`. Retry mạng
-và double click không tạo session trùng. Session/history/rewards/spin đều dẫn xuất customer từ UID
-đã xác thực, nên không thể giả `customerId` để đọc hoặc quay thay người khác. Các callable Zalo hiện
-tại tiếp tục dùng chung core business logic và không bị xóa.
+`checkInWebCustomer` tạo hoặc trả lại active session `pending_approval`, `approvalMode=staff_confirmation`, cùng yêu cầu điểm đang chờ nhân viên xác nhận. Retry không tạo trùng; cooldown hai giờ được server kiểm tra theo khách/salon. Session/history/rewards/spin dẫn xuất khách từ Firebase UID đã xác minh. Không có bước bắt buộc nhận khách rồi chờ chủ duyệt trong luồng Web này.
 
 ## submitPointRequest
 
@@ -187,7 +149,7 @@ tiếp trong ngày nhận `status=pending_approval` để owner duyệt. Cả ha
 
 ## approvePointRequest / rejectPointRequest
 
-Chỉ owner được gọi. Khi duyệt, server tăng điểm, tạo `haircut_records` và đóng phiên phục vụ. Khi từ chối, yêu cầu điểm chuyển sang `rejected`.
+Owner hoặc staff đúng chi nhánh được xử lý yêu cầu `staff_confirmation`; yêu cầu theo chế độ owner approval vẫn kiểm tra quyền riêng. Khi duyệt, server tăng điểm, tạo `haircut_records` và đóng phiên. Ảnh/ghi chú phải lưu trước duyệt; khi từ chối, yêu cầu chuyển sang `rejected`.
 Transaction ghi `processedAt`, `processedBy`, `pointsBefore` và `pointsAfter`; gọi lại không cộng điểm lần hai.
 
 ## updateLuckyWheel
@@ -213,14 +175,13 @@ Input:
 
 Chỉ owner được gọi. Mỗi lần lưu tăng `configVersion`; slot legacy thiếu `weight` dùng `1`, thiếu `slotId` dùng `slot-1...slot-6`.
 
-## spinLuckyWheelFromZalo
+## spinWebLuckyWheel
 
 Input:
 
 ```json
 {
   "salonId": "...",
-  "zaloAccessToken": "...",
   "configVersion": 3,
   "idempotencyKey": "random-16-128-characters"
 }
@@ -244,23 +205,32 @@ Nếu config client đã cũ, backend trả `STALE_WHEEL_CONFIG` trước khi tr
 
 Kết quả quay được tạo trong transaction ở server. `selectedIndex` giúp frontend quay đúng ô.
 
-## getCustomerHistoryFromZalo / getCustomerRewardsFromZalo
+## getWebCustomerHistory / getWebCustomerRewards
 
 Input:
 
 ```json
 {
   "salonId": "...",
-  "zaloAccessToken": "...",
   "limit": 20
 }
 ```
 
-Server xác minh token, tự suy ra `customerId`, rồi chỉ trả lịch sử hoặc mã quà của đúng khách đó.
+Server xác minh Firebase Phone Auth, tự suy ra `customerId` theo salon và UID, rồi chỉ trả lịch sử hoặc mã quà của đúng khách.
 
 ## searchSalonCustomers
 
-Owner/staff tìm khách theo tên hoặc 4 số cuối SĐT. Output gồm điểm, lịch sử gần đây và mã quà chưa dùng.
+Owner/staff tìm theo tên hoặc 4 số cuối SĐT; 4 số cuối chỉ là bộ lọc, không phải định danh. Owner có chế độ `directory=true`, phân trang và `totalCount`; staff không được mở toàn bộ danh bạ bằng chế độ này. Hồ sơ/điểm/lịch sử/quà vẫn bị giới hạn theo salon.
+
+## awardReturningCustomerPoints
+
+Owner hoặc staff có `canAwardPointsDirectly=true` gửi salonId, branchId, customerId, phoneLast4 và operationId ổn định. Backend xác minh đúng người/chi nhánh, cooldown hai giờ, session đang mở và hạn mức staff. Không nhận số điểm tự chọn. Gửi lại cùng operationId không cộng lần hai; thao tác này không đính kèm ảnh/ghi chú.
+
+## Ảnh và ghi chú của lượt chờ
+
+`beginHaircutPhotoUpload` cấp operation cho uploader và session; `finalizeHaircutPhotoUpload` kiểm tra JPEG và quyền hiện hành trước khi chấp nhận. `getHaircutPhotoReadUrls` cấp URL ký tối đa 15 phút sau kiểm tra quyền/consent; client không đọc metadata ảnh trực tiếp.
+
+`updatePendingPointRequestPhotos` lưu ảnh/ghi chú trước duyệt. Request chỉ có note không thay ảnh và chỉ trả `{noteSaved: true}`; không trả URL ảnh qua thao tác lưu chữ.
 
 ## lookupRewardCode / redeemRewardCode
 

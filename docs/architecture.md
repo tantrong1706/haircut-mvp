@@ -1,51 +1,59 @@
-# Kiến trúc HAIRCUT
+# Kiến trúc CH Hair Web
 
-```text
-Khách -> Zalo Mini App -> Callable Functions xác minh Zalo
-Owner/Staff -> HAIRCUT Manager -> Firebase Auth + App Check -> Callable Functions
-System admin -> HAIRCUT Admin Web -> Firebase Auth + App Check -> Admin callables
-                                          |
-                     Firestore + Storage + FCM + audit/monitoring
-```
+    Khách -> Customer Web -> Firebase Phone Auth -> Web callables
+    Chủ salon/Nhân viên -> /owner, /staff -> Firebase Email/Password -> callables phân quyền
+    Quản trị hệ thống -> Admin Web riêng -> quyền quản trị riêng -> Admin callables
+                                                   |
+                              Firestore + Storage + audit/monitoring
 
 ## Phân tách ứng dụng
 
-- `zalo-mini-app`: trải nghiệm khách. QR salon chọn chi nhánh; QR chi nhánh mở trực tiếp. `mirrors` chỉ giữ tương thích QR Gương 1.
-- `apps/manager-mobile`: một app Capacitor chung cho mọi salon. Role từ `users/{uid}` quyết định owner/staff; native gồm FCM, App Check, camera, biometric, secure storage, deep link, share và network state.
-- `apps/admin-web`: cổng riêng chỉ cho `system_admin`; không dùng route owner để giả lập quyền hệ thống.
-- `packages/contracts`: role, status, schema, error code, tên callable và public QR contract dùng chung. Functions giữ mirror nội bộ được CI kiểm tra để Cloud Build không phụ thuộc đường dẫn ngoài source.
+- customer-web/: Web/PWA khách, trang Chủ salon và Nhân viên; QR xác định chi nhánh.
+- apps/admin-web/: cổng quản trị riêng; không tự cấp quyền quản trị từ tài khoản chủ salon.
+- apps/manager-mobile/: source Manager còn được kiểm tra Web và dùng adapter chung. Phát hành
+  iOS/Android không nằm trong luồng vận hành hiện tại.
+- packages/client-domain/: kiểu dữ liệu và tiện ích thuần dùng chung.
+- packages/contracts/: schema, trạng thái, lỗi và tên callable. Mirror trong Functions được
+  kiểm tra trước build để Cloud Build không phụ thuộc file ngoài gói nguồn.
 
-## Tenant isolation
+## Danh tính và tenant
 
-Mỗi document nghiệp vụ có `salonId`; dữ liệu hàng chờ, lượt cắt, point request, lịch sử và quà còn có `branchId` khi phù hợp. Callable owner/staff luôn:
+Khách Web dùng Firebase UID có Phone provider đã xác minh; server dẫn xuất customer ID theo salon.
+Không xác thực khách bằng customer ID trong URL/cache hoặc bằng 4 số cuối điện thoại.
 
-1. Xác minh Firebase Auth và đọc `users/{uid}`.
-2. Lấy salon thật từ hồ sơ, so với request và kiểm tra role/isActive.
-3. Kiểm tra salon `active`; staff phải có branch trong `branchIds`.
-4. Query theo `salonId`, hoặc đọc document rồi xác minh tenant trước khi ghi.
+Owner/staff được kiểm tra Firebase Auth, users/{uid}, role, isActive, salon và chi nhánh được giao.
+Các query và transaction phải giữ salonId/branchId phù hợp; client không tự chọn số điểm hay
+quyền truy cập. Quản trị hệ thống có grant riêng, không thay quyền chủ salon.
 
-Cross-tenant và branch denial tạo audit không chứa dữ liệu khách. Firestore/Storage Rules chặn business write từ client và chặn salon/tài khoản bị khóa.
+## Luồng điểm và QR
 
-## Tính nhất quán
+QR chi nhánh có chữ ký. Khách gửi yêu cầu, nhân viên đúng chi nhánh xác nhận; không bắt buộc thêm
+bước nhận khách rồi chờ chủ duyệt trong luồng Web này. Session/request có định danh và transaction
+chống gửi lặp. Sau khi cộng điểm, cooldown hai giờ áp dụng theo khách/salon; UI không hiện đồng hồ.
 
-- `active_service_sessions` dùng ID xác định theo salon + customer để check-in gửi lại nhận phiên cũ.
-- Claim session, submit/approve/reject point, spin và redeem chạy transaction.
-- Spin/redeem có `idempotencyKey`; point request dùng session ID xác định. Retry trả kết quả cũ và không cộng điểm/đổi quà lần hai.
-- Audit chuẩn gồm salon, branch, actor UID/role, action, target, request ID, before/after và metadata an toàn.
+Danh bạ chủ salon có phân trang/tổng số khách. Tích điểm khách quen cần chọn đúng khách, xác nhận
+chi nhánh và gửi operation ID ổn định. Trùng 4 số cuối không tự gộp người; giới hạn và quyền được
+kiểm tra ở backend. Điểm, lịch sử, vòng quay và đổi quà vẫn do server quyết định.
 
-## Khả năng cô lập sự cố
+## Ảnh và ghi chú
 
-`system_config/features` và `salons/{salonId}/settings/features` điều khiển check-in, wheel, reward, photo và point approval. Maintenance mode và minimum app version cho phép dừng phạm vi nhỏ; rate limit theo token/IP băm hoặc UID/salon ngăn một tenant gây tải bất thường.
+Ảnh/ghi chú lưu trước xác nhận điểm. Khách phải đồng ý lưu ảnh; ảnh không bắt buộc để cộng điểm.
+API cấp operation upload JPEG tối đa 3 MiB, giới hạn staging năm phút và kiểm tra lại quyền/
+consent lúc finalize. Storage Rules chỉ đọc hai document để kiểm tra grant và consent hiện hành.
 
-## Bảo mật runtime
+Backend kiểm tra byte ảnh, thu hồi token tải dài hạn của object được xử lý và cấp link xem có
+chữ ký tối đa 15 phút. Client không được đọc metadata/media trực tiếp để tạo lại link dài hạn.
+Đây không phải thu hồi hàng loạt mọi link cũ hoặc thu hồi bản ảnh đã tải về.
 
-- Zalo access token được xác minh ở Functions và không lưu/log.
-- Web dùng reCAPTCHA Enterprise App Check. Manager dùng Play Integrity/App Attest/DeviceCheck qua native custom provider.
-- FCM token được băm làm document ID, hỗ trợ nhiều thiết bị và vô hiệu hóa token lỗi mà không log token.
-- Monitoring chỉ nhận allowlist vận hành; tên, phone/email, ghi chú, ảnh, mã quà và token bị loại.
+## Phiên, vận hành và tương thích
 
-## Vòng đời dữ liệu
+Firebase SDK giữ phiên trên cùng trình duyệt; phiên khách tách khỏi phiên quản lý.
+Đăng xuất, xóa site data, trình duyệt riêng tư hoặc đổi thiết bị có thể cần đăng nhập lại.
+App Check và feature flags không được thay đổi để ép test thành công.
+Monitoring không ghi token, số điện thoại đầy đủ, nội dung ghi chú hoặc URL ảnh riêng tư.
 
-Staff có thể xóa tài khoản cá nhân sau recent login. Owner yêu cầu xóa salon, nhập lại tên/mật khẩu và có 14 ngày hủy; scheduled worker dùng lease/idempotency để xóa theo batch. Zalo privacy webhook dùng chung deletion jobs cho khách.
+Adapter/field cũ còn giữ không phải luồng Web: xem [ranh giới tương thích](LEGACY_COMPATIBILITY.md).
+Không đổi ID khách hoặc xóa backend/service cũ chỉ vì tên chứa nền tảng trước đây.
 
-Xem [DATABASE](DATABASE.md), [API contracts](API_CONTRACTS.md), [deployment](deployment.md) và [production operations](PRODUCTION_OPERATIONS.md).
+Xem [API](API_CONTRACTS.md), [dữ liệu](DATABASE.md), [triển khai](deployment.md)
+và [trạng thái phát hành](RELEASE_STATUS.md).
