@@ -6110,7 +6110,7 @@ export const getCustomerSessionFromZalo = onCall(zaloFunctionOptions, async (req
 });
 
 async function customerHistoryResult(salonId: string, customerId: string, limit: number) {
-  const [recordsSnap, customerSnap, salonSnap] = await Promise.all([
+  const [recordsSnap, salonSnap] = await Promise.all([
     db
       .collection("haircut_records")
       .where("salonId", "==", salonId)
@@ -6118,13 +6118,8 @@ async function customerHistoryResult(salonId: string, customerId: string, limit:
       .orderBy("createdAt", "desc")
       .limit(limit)
       .get(),
-    db.collection("customers").doc(customerId).get(),
     db.collection("salons").doc(salonId).get(),
   ]);
-  const canViewPhotos =
-    customerSnap.exists &&
-    customerSnap.data()?.salonId === salonId &&
-    customerSnap.data()?.allowPhoto === true;
 
   const staffIds = [
     ...new Set(
@@ -6162,14 +6157,7 @@ async function customerHistoryResult(salonId: string, customerId: string, limit:
             (typeof data.staffName === "string" ? data.staffName : ""),
           serviceName: typeof data.serviceName === "string" ? data.serviceName : "",
           rewardName: typeof data.rewardName === "string" ? data.rewardName : "",
-          note: data.note ?? "",
-          photoUrls: canViewPhotos
-            ? await resolvedHaircutPhotoUrls(data.photoUrls, data.photoPaths, {
-                salonId,
-                customerId,
-                sessionId: String(data.pointRequestId || ""),
-              })
-            : [],
+          // Notes and photos are internal salon records, not customer history fields.
           pointsAdded: data.pointsAdded ?? 0,
         };
       }),
