@@ -266,7 +266,8 @@ describe("web customer callable adapter", () => {
     expect(history[0]).toMatchObject({
       branchName: "Chi nhánh A",
       staffName: "Nam",
-      photoUrls: ["https://example.com/photo.jpg"],
+      note: "",
+      photoUrls: [],
       pointsAdded: 2,
     });
     expect(history[1]).toMatchObject({
