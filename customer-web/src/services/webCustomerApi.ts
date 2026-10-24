@@ -130,8 +130,9 @@ export async function getWebCustomerHistory(session: AppSession): Promise<Haircu
     staffName: record.staffName || "",
     serviceName: record.serviceName || "",
     rewardName: record.rewardName || "",
-    note: record.note || "",
-    photoUrls: Array.isArray(record.photoUrls) ? record.photoUrls : [],
+    // Ignore private fields from older backend responses during rolling upgrades.
+    note: "",
+    photoUrls: [],
     pointsAdded: Number(record.pointsAdded ?? 0),
   }));
 }
