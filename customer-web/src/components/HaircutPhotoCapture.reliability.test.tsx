@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HaircutPhotoCapture } from "./HaircutPhotoCapture";
@@ -11,7 +11,7 @@ describe("photo capture reliability", () => {
       static revokeObjectURL = vi.fn();
     });
   });
-  afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+  afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
   const photo = () => new File([new Uint8Array([0xff, 0xd8, 0xff])], "fixture.jpg", { type: "image/jpeg" });
 
   it("opens the native file picker without waiting for the unrelated camera permission API", async () => {
@@ -20,7 +20,7 @@ describe("photo capture reliability", () => {
     render(<HaircutPhotoCapture photos={[]} consentGranted onFilesSelected={vi.fn()} />);
     const input = screen.getByLabelText("Chụp ảnh kiểu tóc");
     const click = vi.spyOn(input, "click").mockImplementation(() => {});
-    await user.click(screen.getByRole("button", { name: /Chụp ảnh Camera sau/ }));
+    await user.click(screen.getByRole("button", { name: /Chụp ảnh.*Camera sau/ }));
     expect(click).toHaveBeenCalledOnce();
   });
 
@@ -32,5 +32,17 @@ describe("photo capture reliability", () => {
     expect(screen.getByRole("button", { name: "Tải 1 ảnh" })).toBeDisabled();
     expect(upload).not.toHaveBeenCalled();
     expect(screen.getByAltText("Ảnh chờ tải 1")).toBeInTheDocument();
+  });
+  it("keeps unsuccessful drafts available to retry without reselecting", async () => {
+    const user = userEvent.setup();
+    const file = photo();
+    const upload = vi.fn().mockResolvedValueOnce({ failedFiles: [file] }).mockResolvedValueOnce({ failedFiles: [] });
+    render(<HaircutPhotoCapture photos={[]} consentGranted onFilesSelected={upload} />);
+    await user.upload(screen.getByLabelText("Chụp ảnh kiểu tóc"), file);
+    await user.click(screen.getByRole("button", { name: "Tải 1 ảnh" }));
+    expect(screen.getByAltText("Ảnh chờ tải 1")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Tải 1 ảnh" }));
+    expect(upload).toHaveBeenCalledTimes(2);
+    expect(screen.queryByAltText("Ảnh chờ tải 1")).not.toBeInTheDocument();
   });
 });
