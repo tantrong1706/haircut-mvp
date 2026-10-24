@@ -1,12 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Camera, ImagePlus, LoaderCircle, ShieldCheck, Trash2, Upload, X } from "lucide-react";
-import {
-  cameraPermissionMessage,
-  inspectCameraPermission,
-  type CameraPermissionState,
-} from "../services/cameraPermission";
 
 export type HaircutPhotoItem = { id: string; url: string };
+export type PhotoSelectionResult = void | { failedFiles: File[] };
 type DraftPhoto = { file: File; url: string };
 
 type Props<TPhoto extends HaircutPhotoItem> = {
@@ -21,7 +17,7 @@ type Props<TPhoto extends HaircutPhotoItem> = {
   maxPhotos?: number;
   progress?: number;
   onCancelUpload?: () => void;
-  onFilesSelected: (files: File[]) => void | Promise<void>;
+  onFilesSelected: (files: File[]) => PhotoSelectionResult | Promise<PhotoSelectionResult>;
   onRemove?: (photo: TPhoto) => void | Promise<void>;
 };
 
@@ -41,12 +37,14 @@ export function HaircutPhotoCapture<TPhoto extends HaircutPhotoItem>({
   onRemove,
 }: Props<TPhoto>) {
   const [drafts, setDrafts] = useState<DraftPhoto[]>([]);
-  const [cameraPermission, setCameraPermission] = useState<CameraPermissionState>("unknown");
+  const [submitting, setSubmitting] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  const submittingRef = useRef(false);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const draftsRef = useRef<DraftPhoto[]>([]);
   draftsRef.current = drafts;
   const atLimit = photos.length + drafts.length >= maxPhotos;
-  const captureDisabled = disabled || !consentGranted || busy || atLimit;
+  const captureDisabled = disabled || !consentGranted || busy || submitting || atLimit;
   const statusText = consentGranted ? "Khách đã đồng ý" : "Chưa có đồng ý";
   const message =
     disabled && disabledReason
@@ -65,6 +63,7 @@ export function HaircutPhotoCapture<TPhoto extends HaircutPhotoItem>({
   );
 
   function selectFiles(files: FileList | null) {
+    if (captureDisabled) return;
     const available = Math.max(0, maxPhotos - photos.length - drafts.length);
     const selected = Array.from(files ?? []).slice(0, available);
     if (!selected.length) return;
@@ -74,12 +73,9 @@ export function HaircutPhotoCapture<TPhoto extends HaircutPhotoItem>({
     ]);
   }
 
-  async function openCamera() {
+  function openCamera() {
     if (captureDisabled) return;
-    setCameraPermission("checking");
-    const permission = await inspectCameraPermission();
-    setCameraPermission(permission);
-    if (permission === "denied" || permission === "unavailable") return;
+    // Native capture must keep the button's user activation; the OS handles permission.
     cameraInputRef.current?.click();
   }
 
@@ -92,14 +88,26 @@ export function HaircutPhotoCapture<TPhoto extends HaircutPhotoItem>({
   }
 
   async function confirmDrafts() {
-    if (!drafts.length || busy) return;
-    await onFilesSelected(drafts.map((draft) => draft.file));
-    drafts.forEach((draft) => URL.revokeObjectURL(draft.url));
-    setDrafts([]);
+    if (!drafts.length || busy || disabled || !consentGranted || submittingRef.current) return;
+    submittingRef.current = true;
+    setSubmitting(true);
+    setUploadError("");
+    try {
+      const result = await onFilesSelected(drafts.map((draft) => draft.file));
+      const failed = new Set(result?.failedFiles ?? []);
+      drafts.filter(draft => !failed.has(draft.file)).forEach(draft => URL.revokeObjectURL(draft.url));
+      setDrafts(current => current.filter(draft => failed.has(draft.file)));
+      if (failed.size) setUploadError("Ảnh chưa tải xong được giữ lại. Bạn có thể thử tải lại.");
+    } catch {
+      setUploadError("Chưa tải được ảnh. Ảnh đã chọn vẫn được giữ lại để thử lại.");
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
+    }
   }
 
   return (
-    <section className="photo-capture-tool" aria-label={title} aria-busy={busy}>
+    <section className="photo-capture-tool" aria-label={title} aria-busy={busy || submitting}>
       <div className="photo-capture-heading">
         <div className="photo-capture-title">
           <span className="photo-capture-icon">
@@ -122,8 +130,8 @@ export function HaircutPhotoCapture<TPhoto extends HaircutPhotoItem>({
         <button
           type="button"
           className={captureDisabled ? "photo-capture-button disabled" : "photo-capture-button"}
-          disabled={captureDisabled || cameraPermission === "checking"}
-          onClick={() => void openCamera()}
+          disabled={captureDisabled}
+          onClick={openCamera}
         >
           {busy ? (
             <LoaderCircle className="spin-icon" size={22} aria-hidden="true" />
@@ -144,7 +152,6 @@ export function HaircutPhotoCapture<TPhoto extends HaircutPhotoItem>({
           capture="environment"
           disabled={captureDisabled}
           onChange={(event) => {
-            if (event.target.files?.length) setCameraPermission("granted");
             selectFiles(event.target.files);
             event.target.value = "";
           }}
@@ -176,14 +183,7 @@ export function HaircutPhotoCapture<TPhoto extends HaircutPhotoItem>({
       </div>
 
       {message ? <p className="photo-capture-message">{message}</p> : null}
-      {cameraPermissionMessage(cameraPermission) ? (
-        <p
-          className="photo-capture-message"
-          role={cameraPermission === "denied" ? "alert" : undefined}
-        >
-          {cameraPermissionMessage(cameraPermission)}
-        </p>
-      ) : null}
+      {uploadError ? <p className="photo-capture-message" role="alert">{uploadError}</p> : null}
       {busy && typeof progress === "number" ? (
         <div className="photo-upload-progress" aria-label={`Đã tải ${progress}%`}>
           <progress value={progress} max={100} />
@@ -205,7 +205,7 @@ export function HaircutPhotoCapture<TPhoto extends HaircutPhotoItem>({
                 <button
                   type="button"
                   aria-label={`Xóa ảnh chờ tải ${index + 1}`}
-                  disabled={busy}
+                  disabled={busy || submitting}
                   onClick={() => removeDraft(index)}
                 >
                   <Trash2 size={16} aria-hidden="true" />
@@ -216,7 +216,7 @@ export function HaircutPhotoCapture<TPhoto extends HaircutPhotoItem>({
           <button
             className="photo-upload-confirm"
             type="button"
-            disabled={busy}
+            disabled={busy || submitting || disabled || !consentGranted}
             onClick={() => void confirmDrafts()}
           >
             <Upload size={18} aria-hidden="true" /> Tải {drafts.length} ảnh

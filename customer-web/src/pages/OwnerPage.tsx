@@ -32,7 +32,7 @@ import { CustomerPointAction } from "../components/CustomerPointAction";
 import { OwnerConfirmDialog, type OwnerConfirmation as ConfirmRequest } from "../components/OwnerConfirmDialog";
 import { APP_NAME } from "../config/branding";
 import { AccountDeletionPanel } from "../components/AccountDeletionPanel";
-import { HaircutPhotoCapture, type HaircutPhotoItem } from "../components/HaircutPhotoCapture";
+import { HaircutPhotoCapture, type HaircutPhotoItem, type PhotoSelectionResult } from "../components/HaircutPhotoCapture";
 import { RedeemRewardPanel } from "../components/RedeemRewardPanel";
 import { SalonBrandingPanel } from "../features/owner/branding/SalonBrandingPanel";
 import {
@@ -348,17 +348,17 @@ export function OwnerPage({ currentUser }: Props) {
 
   async function addOwnerPhotos(request: PointRequest, files: File[]) {
     if (photoBusyId || request.customer?.allowPhoto !== true || files.length === 0) {
-      return;
+      return { failedFiles: files };
     }
 
     const availableSlots = MAX_HAIRCUT_PHOTOS - storedPhotoCount(request);
     if (availableSlots <= 0) {
       setError(`Mỗi lượt chỉ lưu tối đa ${MAX_HAIRCUT_PHOTOS} ảnh.`);
-      return;
+      return { failedFiles: files };
     }
     if (files.length > availableSlots) {
       setError(`Bạn chỉ có thể thêm ${availableSlots} ảnh nữa cho lượt này.`);
-      return;
+      return { failedFiles: files };
     }
 
     setPhotoBusyId(request.id);
@@ -417,11 +417,13 @@ export function OwnerPage({ currentUser }: Props) {
         ),
       );
       setMessage(`Đã lưu ${uploadedPhotos.length} ảnh cho ${request.customer?.name || "khách"}.`);
+      return { failedFiles: [] };
     } catch (err) {
       await Promise.allSettled(
         uploadedPhotos.map((photo) => deleteHaircutPhoto(photo.path, salonId)),
       );
       setError(err instanceof Error ? err.message : "Không lưu được ảnh kiểu tóc");
+      return { failedFiles: files };
     } finally {
       if (photoAbortRef.current === abortController) photoAbortRef.current = null;
       setPhotoBusyId("");
@@ -1271,7 +1273,7 @@ function ApprovalsPanel({
   photoProgress: number;
   onApprove: (request: PointRequest) => void;
   onReject: (request: PointRequest) => void;
-  onAddPhotos: (request: PointRequest, files: File[]) => void | Promise<void>;
+  onAddPhotos: (request: PointRequest, files: File[]) => PhotoSelectionResult | Promise<PhotoSelectionResult>;
   onRemovePhoto: (request: PointRequest, photo: HaircutPhotoItem) => void | Promise<void>;
   onCancelPhotoUpload: () => void;
 }) {
@@ -1871,8 +1873,8 @@ function StaffManagementPanel({
       setCanAwardPointsDirectly(false);
       onMessage(
         createdStaff.inviteEmailSent
-          ? "Đã gửi email mời. Nhân viên tự đặt mật khẩu trong hộp thư của họ."
-          : "Đã tạo tài khoản nhưng chưa gửi được email. Bấm Gửi lại email mời ở bên dưới.",
+          ? "Đã yêu cầu gửi email đặt mật khẩu. Nhân viên kiểm tra hộp thư đến và Spam."
+          : `Đã tạo tài khoản. ${createdStaff.inviteEmailError || "Chưa gửi được email. Bấm Gửi lại email mời ở bên dưới."}`,
       );
     } catch (err) {
       onError(err instanceof Error ? err.message : "Không thêm được nhân viên");
@@ -1891,7 +1893,7 @@ function StaffManagementPanel({
       if (!sent) {
         throw new Error("Firebase chưa gửi được email mời. Kiểm tra mẫu email và tên miền Auth.");
       }
-      onMessage(`Đã gửi lại email mời tới ${staffMember.email}.`);
+      onMessage(`Đã yêu cầu gửi email tới ${staffMember.email}. Kiểm tra hộp thư đến và Spam.`);
     } catch (err) {
       onError(err instanceof Error ? err.message : "Không gửi lại được email mời");
     } finally {
