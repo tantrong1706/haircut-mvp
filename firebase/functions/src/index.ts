@@ -129,6 +129,7 @@ import { apiError } from "./shared/errors";
 import { publicRequestPeer } from "./security";
 import { revokeHaircutDownloadTokens } from "./domains/photos/photoDownloadTokens";
 import { createPrivatePhotoReader, privatePhotoUrl, PRIVATE_PHOTO_URL_TTL_MS } from "./domains/photos/privatePhotoAccess";
+import { createVisitDetailsApi, assertLatestCompletedPhotoVisit } from "./domains/photos/visitDetails";
 
 initializeApp();
 
@@ -188,6 +189,7 @@ const PUBLIC_RATE_LIMITS = {
 } as const;
 
 const AUTHENTICATED_RATE_LIMITS = {
+  visitDetails: 30,
   beginHaircutPhotoUpload: 30,
   finalizeHaircutPhotoUpload: 30,
   getRecoverableHaircutPhotoUploads: 60,
@@ -3614,6 +3616,7 @@ export const registerCustomerFromZalo = onCall(zaloQrFunctionOptions, async (req
 });
 
 type PhotoUploadContext = {
+  recordId?: string;
   user: AppUser;
   salonId: string;
   branchId: string;
@@ -3645,6 +3648,7 @@ async function loadPhotoUploadContext(input: {
   uid: string;
   salonId: string;
   sessionId: string;
+  recordId?: string;
 }): Promise<PhotoUploadContext> {
   const user = await assertSalonRole(input.uid, input.salonId, ["owner", "staff"]);
   const sessionSnap = await db.collection("chair_sessions").doc(input.sessionId).get();
@@ -3675,6 +3679,10 @@ async function loadPhotoUploadContext(input: {
   }
   const staffOwnsServingSession =
     session.status === "serving" && session.assignedStaffId === input.uid;
+  if (input.recordId) {
+    await db.runTransaction(tx => assertLatestCompletedPhotoVisit(db, tx, { ...input, customerId }));
+    return { user, salonId: input.salonId, branchId, customerId, sessionId: input.sessionId, sessionStatus: "completed", recordId: input.recordId };
+  }
   const ownerCanEditPendingSession = user.role === "owner" && session.status === "pending_approval";
   if (session.approvalMode === "staff_confirmation" && !pendingPhotoRequestAllowed(session)) {
     throw new HttpsError("failed-precondition", "Yêu cầu đã hết hạn hoặc không còn cho phép lưu ảnh.");
@@ -3696,6 +3704,13 @@ export const getHaircutPhotoReadUrls = onCall(
   { ...functionOptions, maxInstances: 5 },
   (request) => createPrivatePhotoReader(db, storage.bucket(), (uid, salonId) => enforceAuthenticatedRateLimit("getHaircutPhotoReadUrls", uid, salonId))(request),
 );
+
+const visitDetailsApi = createVisitDetailsApi(db,
+  (uid, salonId) => enforceAuthenticatedRateLimit("visitDetails", uid, salonId),
+  (record, scope) => resolvedHaircutPhotoUrls(record.photoUrls, record.photoPaths, scope),
+);
+export const getLatestHaircutDetails = onCall(functionOptions, request => visitDetailsApi.read(request));
+export const updateLatestHaircutDetails = onCall(functionOptions, request => visitDetailsApi.update(request));
 
 // Storage permits only two cross-service document reads. A server-issued,
 // five-minute grant authorizes private staging, not attachment or photo reads.
@@ -3757,7 +3772,8 @@ export const beginHaircutPhotoUpload = onCall(functionOptions, async (request) =
     "Tính năng lưu ảnh kiểu tóc đang tạm ngừng.",
     request.data?.appVersion,
   );
-  const context = await loadPhotoUploadContext({ uid, salonId, sessionId });
+  const recordId = optionalLimitedString(request.data?.recordId, "recordId", 128);
+  const context = await loadPhotoUploadContext({ uid, salonId, sessionId, recordId });
   const operationId = buildPhotoUploadOperationId(salonId, sessionId, uid, requestId);
   const operationRef = db.collection("photo_upload_operations").doc(operationId);
   const storagePath = buildPhotoUploadStoragePath({
@@ -3781,13 +3797,14 @@ export const beginHaircutPhotoUpload = onCall(functionOptions, async (request) =
     const operation = operationSnap.data();
     const session = sessionSnap.data();
     const customer = customerSnap.data();
+    const completedAllowed = context.recordId ? Boolean(await assertLatestCompletedPhotoVisit(db, tx, {uid, salonId, customerId:context.customerId, sessionId, recordId:context.recordId})) : false;
     const accessStillValid =
       sessionSnap.exists &&
       session?.salonId === salonId && session?.branchId === context.branchId &&
       session?.customerId === context.customerId &&
       ((session?.status === "serving" && session?.assignedStaffId === uid) ||
         (currentActor.role === "owner" && session?.status === "pending_approval" && session?.approvalMode !== "staff_confirmation") ||
-        pendingPhotoRequestAllowed(session));
+        pendingPhotoRequestAllowed(session) || completedAllowed);
     if (!accessStillValid) throw new HttpsError("failed-precondition", "Phiên phục vụ đã thay đổi, vui lòng tải lại");
     if (!customerSnap.exists || customer?.salonId !== salonId || customer?.allowPhoto !== true) {
       throw new HttpsError("failed-precondition", "Khách đã thu hồi đồng ý lưu ảnh");
@@ -3797,7 +3814,7 @@ export const beginHaircutPhotoUpload = onCall(functionOptions, async (request) =
       uploadExpiresAt: Timestamp.fromMillis(Math.min(
         now.toMillis() + 5 * 60_000,
         timestampMillis(operation?.expiresAt) ?? expiresAt.toMillis(),
-        session.approvalMode === "staff_confirmation" ? timestampMillis(session.expiresAt) ?? 0 : Infinity,
+        session.status === "pending_approval" && session.approvalMode === "staff_confirmation" ? timestampMillis(session.expiresAt) ?? 0 : Infinity,
       )),
     };
     if (operationSnap.exists) {
@@ -3806,6 +3823,7 @@ export const beginHaircutPhotoUpload = onCall(functionOptions, async (request) =
         operation?.sessionId !== sessionId ||
         operation?.staffUid !== uid ||
         operation?.requestId !== requestId ||
+        (operation?.recordId || "") !== (context.recordId || "") ||
         operation?.storagePath !== storagePath || operation?.checksum !== checksum ||
         operation?.expectedBytes !== expectedBytes || operation?.expectedContentType !== expectedContentType
       ) {
@@ -3824,6 +3842,7 @@ export const beginHaircutPhotoUpload = onCall(functionOptions, async (request) =
     }
     tx.create(operationRef, {
       ...uploadGrant,
+      ...(context.recordId ? { recordId: context.recordId } : {}),
       operationId,
       requestId,
       salonId,
@@ -3915,6 +3934,7 @@ export const finalizeHaircutPhotoUpload = onCall(
       uid,
       salonId,
       sessionId: String(operation.sessionId || ""),
+      recordId: typeof operation.recordId === "string" ? operation.recordId : undefined,
     });
   } catch (error) {
     await operationRef.set(
@@ -4006,6 +4026,7 @@ export const finalizeHaircutPhotoUpload = onCall(
     }
     const session = sessionSnap.data();
     const customer = customerSnap.data();
+    const completedAllowed = context.recordId ? Boolean(await assertLatestCompletedPhotoVisit(db, tx, {uid, salonId, customerId:context.customerId, sessionId:context.sessionId, recordId:context.recordId})) : false;
     const sessionAllowed =
       sessionSnap.exists &&
       session?.salonId === salonId &&
@@ -4013,7 +4034,7 @@ export const finalizeHaircutPhotoUpload = onCall(
       session?.customerId === context.customerId &&
       ((session?.status === "serving" && session?.assignedStaffId === uid) ||
         (currentActor.role === "owner" && session?.status === "pending_approval" && session?.approvalMode !== "staff_confirmation") ||
-        pendingPhotoRequestAllowed(session));
+        pendingPhotoRequestAllowed(session) || completedAllowed);
     if (!sessionAllowed || !customerSnap.exists || customer?.allowPhoto !== true) {
       finalizationFailure = true;
       tx.set(
@@ -6818,7 +6839,7 @@ async function managerCustomerDetails(input: {
         pointsAdded: Number(record.pointsAdded ?? 1),
         createdAtMs: timestampMillis(record.createdAt),
         photoUrls:
-          input.user.role === "owner" && customer.allowPhoto
+          (input.user.role === "owner" || (input.user.role === "staff" && record.staffId === input.user.uid)) && customer.allowPhoto
             ? await resolvedHaircutPhotoUrls(record.photoUrls, record.photoPaths, {
                 salonId: input.salonId,
                 customerId: input.customerId,
