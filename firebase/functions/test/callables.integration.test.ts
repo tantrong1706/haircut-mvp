@@ -873,6 +873,7 @@ describe("callable transactions", () => {
       ]),
     );
 
+    await db.doc("haircut_records/record-customer-phone").update({staffId:"staff-customer-phone"});
     const staffDetails = await getSalonCustomerDetails.run(
       requestFor("staff-customer-phone", {
         salonId,
@@ -884,7 +885,7 @@ describe("callable transactions", () => {
     expect(staffDetails.customer.recentRecords).toHaveLength(1);
     expect(staffDetails.customer.recentRecords[0]).toMatchObject({
       branchId,
-      photoUrls: [],
+      photoUrls: [expect.stringContaining("storage.googleapis.com/")],
     });
     expect(staffDetails.customer.branchVisits).toEqual([]);
     expect(staffDetails.customer.rewardHistory).toEqual([]);
@@ -2106,6 +2107,13 @@ describe("callable transactions", () => {
     }
 
     expect((await db.collection("salons").doc(salonId).get()).data()?.status).toBe("suspended");
+  });
+
+  it("staff cannot request salon deletion even with a recent authenticated session", async () => {
+    await seedOwner("delete-owner", "delete-salon");
+    await db.doc("users/delete-staff").set({salonId:"delete-salon",role:"staff",isActive:true});
+    await expect(requestSalonDeletion.run(recentRequestFor("delete-staff",{salonId:"delete-salon",salonName:"Salon"}))).rejects.toMatchObject({code:"permission-denied"});
+    expect((await db.collection("salon_deletion_jobs").get()).size).toBe(0);
   });
 
   it("yêu cầu xóa salon idempotent và có thể hủy trong thời gian chờ", async () => {
