@@ -83,6 +83,12 @@ const waitingSession: StaffSession = {
 let sessionsForTest: StaffSession[] = [waitingSession];
 
 describe("StaffPage", () => {
+  it.each(["staff", "owner"] as const)("never offers salon deletion inside the staff workspace (%s)", async role => {
+    render(<StaffPage currentUser={{uid:"staff-a",salonId:"salon-a",name:"Fixture",avatarUrl:"",role,isActive:true,branchId:"branch-a",branchIds:["branch-a"]}}/>);
+    await screen.findByRole("heading",{name:"Xác nhận tích điểm"});
+    expect(screen.queryByRole("button",{name:"Yêu cầu xóa salon"})).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading",{name:"Xóa salon và tài khoản"})).not.toBeInTheDocument();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     sessionsForTest = [waitingSession];
