@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Search, UserRoundCheck } from "lucide-react";
 import { searchSalonCustomers, type CustomerLookupResult } from "../services/operations";
 import { awardReturningCustomerPoints } from "../services/returningCustomerPoints";
+import { SalonVisitDetails } from "./SalonVisitDetails";
+import { SalonHaircutHistory } from "./SalonHaircutHistory";
 
 type Props = {
   salonId: string;
@@ -29,6 +31,7 @@ function CustomerLookup({ salonId, branchId, branchName, pointPerVisit, canAward
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [completedCustomer, setCompletedCustomer] = useState<CustomerLookupResult | null>(null);
   const submitting = useRef(false);
   const revision = useRef(0);
   useEffect(
@@ -43,6 +46,7 @@ function CustomerLookup({ salonId, branchId, branchName, pointPerVisit, canAward
     if (!/^\d{4}$/.test(term) || !branchId || !canAward || searching || submitting.current) return;
     const current = ++revision.current;
     setSearching(true);
+    setCompletedCustomer(null);
     setSelected(null);
     setError("");
     setMessage("");
@@ -80,6 +84,7 @@ function CustomerLookup({ salonId, branchId, branchName, pointPerVisit, canAward
       setMessage(
         `${result.alreadyProcessed ? "Lượt này đã được ghi nhận" : `Đã cộng ${result.pointsAdded} điểm`} cho ${selected.customer.name || "khách"}. Tổng: ${result.pointsAfter} điểm.`,
       );
+      setCompletedCustomer({...selected.customer,points:result.pointsAfter});
       setSelected(null);
       setCustomers([]);
       setNextCursor(null);
@@ -125,6 +130,7 @@ function CustomerLookup({ salonId, branchId, branchName, pointPerVisit, canAward
                   revision.current += 1;
                   setTerm(event.target.value.replace(/\D/g, "").slice(0, 4));
                   setSelected(null);
+                  setCompletedCustomer(null);
                   setCustomers([]);
                   setSearched(false);
                   setNextCursor(null);
@@ -195,6 +201,7 @@ function CustomerLookup({ salonId, branchId, branchName, pointPerVisit, canAward
                   {selected.customer.name || "Khách hàng"} · ******{selected.customer.phoneLast4}
                 </strong>
                 <p>Xác nhận khách đã sử dụng dịch vụ tại {branchName}.</p>
+                <SalonHaircutHistory records={selected.customer.recentRecords || []} />
                 <button
                   type="button"
                   className="primary-button"
@@ -218,6 +225,10 @@ function CustomerLookup({ salonId, branchId, branchName, pointPerVisit, canAward
           {error}
         </p>
       ) : null}
+      {completedCustomer ? <div className="service-state-card">
+        <strong>{completedCustomer.name || "Khách hàng"} · {completedCustomer.points} điểm</strong>
+        <SalonVisitDetails salonId={salonId} customerId={completedCustomer.id} />
+      </div> : null}
     </section>
   );
 }

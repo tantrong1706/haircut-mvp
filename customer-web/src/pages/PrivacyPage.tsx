@@ -48,7 +48,8 @@ export function PrivacyPage({ onBack, onNavigate }: Props = {}) {
         <p>
           Trước nút Yêu cầu tích điểm, ứng dụng thông báo việc chụp và lưu ảnh kiểu tóc của lần phục
           vụ này. Khi bấm nút, khách đồng ý để nhân viên tại chi nhánh chụp và lưu tối đa 3 ảnh vào
-          lịch sử lần cắt. Ảnh không bắt buộc để nhân viên xác nhận điểm. Khách có thể yêu cầu salon
+          hồ sơ nội bộ của lần cắt. Ảnh và ghi chú chỉ dành cho chủ salon và nhân viên được phân quyền;
+          trang khách hiển thị ngày cắt và điểm đã cộng. Ảnh không bắt buộc để nhân viên xác nhận điểm. Khách có thể yêu cầu salon
           dừng chụp hoặc yêu cầu xóa ảnh theo mục 8.
         </p>
 

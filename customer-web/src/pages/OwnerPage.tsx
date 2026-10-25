@@ -33,6 +33,8 @@ import { OwnerConfirmDialog, type OwnerConfirmation as ConfirmRequest } from "..
 import { APP_NAME } from "../config/branding";
 import { AccountDeletionPanel } from "../components/AccountDeletionPanel";
 import { HaircutPhotoCapture, type HaircutPhotoItem, type PhotoSelectionResult } from "../components/HaircutPhotoCapture";
+import { SalonVisitDetails } from "../components/SalonVisitDetails";
+import { SalonHaircutHistory } from "../components/SalonHaircutHistory";
 import { RedeemRewardPanel } from "../components/RedeemRewardPanel";
 import { SalonBrandingPanel } from "../features/owner/branding/SalonBrandingPanel";
 import {
@@ -2309,21 +2311,10 @@ function CustomerSearchPanel({
               <span>Lần ghé gần nhất: {formatDateTime(customer.lastVisitAtMs) || "Chưa có"}</span>
               <CustomerPointAction salonId={salonId} branchId={awardBranch?.id || ""} branchName={awardBranch?.name || ""} pointPerVisit={pointPerVisit} customer={customer} onAwarded={pointsAfter => setResults(current => current.map(item => item.id === customer.id ? { ...item, points: pointsAfter, detailsLoaded: false } : item))} />
 
+              <SalonVisitDetails salonId={salonId} customerId={customer.id} onSaved={() => void loadCustomerDetails(customer.id)} />
               {customer.detailsLoaded ? (
                 <div className="customer-insight-grid">
-                  <div>
-                    <strong>Lịch sử gần đây</strong>
-                    {customer.recentRecords.length === 0 ? (
-                      <small>Chưa có lịch sử</small>
-                    ) : (
-                      customer.recentRecords.map((record) => (
-                        <small key={record.id}>
-                          {formatDateTime(record.createdAtMs)} · {record.staffName || "Nhân viên"} ·{" "}
-                          {record.note || "Không ghi chú"}
-                        </small>
-                      ))
-                    )}
-                  </div>
+                  <SalonHaircutHistory records={customer.recentRecords} />
                   <div>
                     <strong>Mã quà chưa dùng</strong>
                     {customer.unusedRewards.length === 0 ? (

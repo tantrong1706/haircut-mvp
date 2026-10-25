@@ -10,7 +10,6 @@ import {
 } from "lucide-react";
 import { HaircutPhotoCapture } from "../components/HaircutPhotoCapture";
 import { RedeemRewardPanel } from "../components/RedeemRewardPanel";
-import { AccountDeletionPanel } from "../components/AccountDeletionPanel";
 import { BrandLogo } from "../components/BrandLogo";
 import { ReturningCustomerPoints } from "../components/ReturningCustomerPoints";
 import {
@@ -852,7 +851,7 @@ export function StaffPage({ currentUser }: Props) {
           />
         ) : null}
 
-        <AccountDeletionPanel currentUser={currentUser} />
+        {currentUser.role === "staff" ? <a className="secondary-button" href="/delete-account">Quản lý tài khoản cá nhân</a> : null}
 
         {message ? <p className="alert success">{message}</p> : null}
         {error ? <p className="alert error">{error}</p> : null}
