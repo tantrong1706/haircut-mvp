@@ -1,7 +1,7 @@
 import { deleteApp, getApps } from "firebase-admin/app";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
-import "../src/index";
+import { beginHaircutPhotoUpload } from "../src/index";
 import { createVisitDetailsApi, assertLatestCompletedPhotoVisit } from "../src/domains/photos/visitDetails";
 import { requireFirestoreEmulator } from "./emulatorEnvironment";
 const { emulatorHost, projectId } = requireFirestoreEmulator();
@@ -68,10 +68,17 @@ describe("latest completed haircut internal edits", () => {
     const path = `salons/salon/customers/customer/sessions/session/${operationId}.jpg`;
     await db.doc(`photo_upload_operations/${operationId}`).set({salonId:"salon",branchId:"branch",customerId:"customer",sessionId:"session",recordId:"record",staffUid:"staff",storagePath:path,status:"pending",attachmentStatus:"unattached"});
     await expect(api.update(request("staff",{recordId:"record",revision:1,addPhotoPaths:[path]}))).rejects.toMatchObject({code:"failed-precondition"});
-    await db.doc(`photo_upload_operations/${operationId}`).update({status:"finalized"});
+    await db.doc(`photo_upload_operations/${operationId}`).update({status:"finalized",orphanExpiresAt:Timestamp.fromMillis(Date.now()+600000)});
     await api.update(request("staff",{recordId:"record",revision:1,addPhotoPaths:[path]}));
     expect((await db.doc("haircut_records/record").get()).data()?.photoPaths).toEqual([path]);
     expect((await db.doc(`photo_upload_operations/${operationId}`).get()).data()?.attachmentStatus).toBe("attached");
     expect((await db.doc("customers/customer").get()).data()?.points).toBe(7);
+  });
+  it("issues a bounded upload grant only for the authorized latest completed record", async () => {
+    await api.update(request("staff",{recordId:"record",revision:0,photoConsentConfirmed:true}));
+    const input={salonId:"salon",sessionId:"session",recordId:"record",requestId:"synthetic-upload",expectedContentType:"image/jpeg",expectedBytes:400,checksum:"a".repeat(64)};
+    const result=await beginHaircutPhotoUpload.run({auth:{uid:"staff",token:{}},data:input} as never);
+    expect((await db.doc(`photo_upload_operations/${result.operationId}`).get()).data()).toMatchObject({recordId:"record",sessionId:"session",status:"pending"});
+    await expect(beginHaircutPhotoUpload.run({auth:{uid:"staff",token:{}},data:{...input,recordId:"wrong"}} as never)).rejects.toMatchObject({code:"failed-precondition"});
   });
 });
