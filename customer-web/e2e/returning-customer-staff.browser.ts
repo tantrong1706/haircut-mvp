@@ -51,6 +51,41 @@ test("search, disambiguate and confirm once on a real browser", async ({ page },
     phoneLast4: "5678",
   });
   expect(errors).toEqual([]);
+  await page.route("**/__fixture/getLatestHaircutDetails", (route) =>
+    route.fulfill({
+      json: {
+        recordId: "record-fixture",
+        sessionId: "session-fixture",
+        branchId: "branch-fixture",
+        createdAtMs: 1234567890000,
+        revision: 0,
+        note: "",
+        photoUrls: [],
+        photoCount: 0,
+        allowPhoto: true,
+        photoConsentGranted: true,
+      },
+    }),
+  );
+  const detailWrites: Array<Record<string, unknown>> = [];
+  await page.route("**/__fixture/updateLatestHaircutDetails", (route) => {
+    detailWrites.push(route.request().postDataJSON());
+    return route.fulfill({ json: { revision: 1 } });
+  });
+  await page.getByRole("button", { name: "Thêm ghi chú" }).click();
+  await page.getByLabel("Ghi chú nội bộ").fill("Ghi chú thử nghiệm riêng của salon");
+  await page.getByRole("button", { name: "Lưu ghi chú" }).click();
+  await expect(page.getByText(/Đã lưu ghi chú nội bộ/)).toBeVisible();
+  expect(detailWrites).toHaveLength(1);
+  expect(detailWrites[0]).toMatchObject({
+    recordId: "record-fixture",
+    revision: 0,
+    note: "Ghi chú thử nghiệm riêng của salon",
+  });
+  expect(submissions).toHaveLength(1);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
 });
 
 test("a lost response retries with the same operation ID", async ({ page }) => {

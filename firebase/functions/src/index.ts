@@ -6839,7 +6839,7 @@ async function managerCustomerDetails(input: {
         pointsAdded: Number(record.pointsAdded ?? 1),
         createdAtMs: timestampMillis(record.createdAt),
         photoUrls:
-          (input.user.role === "owner" || (input.user.role === "staff" && record.staffId === input.user.uid)) && customer.allowPhoto
+          customer.allowPhoto
             ? await resolvedHaircutPhotoUrls(record.photoUrls, record.photoPaths, {
                 salonId: input.salonId,
                 customerId: input.customerId,

@@ -6,13 +6,21 @@ import * as permission from "../services/cameraPermission";
 
 describe("photo capture reliability", () => {
   beforeEach(() => {
-    vi.stubGlobal("URL", class extends URL {
-      static createObjectURL = vi.fn(() => "blob:synthetic-preview");
-      static revokeObjectURL = vi.fn();
-    });
+    vi.stubGlobal(
+      "URL",
+      class extends URL {
+        static createObjectURL = vi.fn(() => "blob:synthetic-preview");
+        static revokeObjectURL = vi.fn();
+      },
+    );
   });
-  afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
-  const photo = () => new File([new Uint8Array([0xff, 0xd8, 0xff])], "fixture.jpg", { type: "image/jpeg" });
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+  const photo = () =>
+    new File([new Uint8Array([0xff, 0xd8, 0xff])], "fixture.jpg", { type: "image/jpeg" });
 
   it("opens the native file picker without waiting for the unrelated camera permission API", async () => {
     vi.spyOn(permission, "inspectCameraPermission").mockReturnValue(new Promise(() => {}));
@@ -25,10 +33,15 @@ describe("photo capture reliability", () => {
   });
 
   it("locks confirmation if consent is withdrawn after selecting a draft", async () => {
-    const user = userEvent.setup(), upload = vi.fn();
-    const view = render(<HaircutPhotoCapture photos={[]} consentGranted onFilesSelected={upload} />);
+    const user = userEvent.setup(),
+      upload = vi.fn();
+    const view = render(
+      <HaircutPhotoCapture photos={[]} consentGranted onFilesSelected={upload} />,
+    );
     await user.upload(screen.getByLabelText("Chụp ảnh kiểu tóc"), photo());
-    view.rerender(<HaircutPhotoCapture photos={[]} consentGranted={false} onFilesSelected={upload} />);
+    view.rerender(
+      <HaircutPhotoCapture photos={[]} consentGranted={false} onFilesSelected={upload} />,
+    );
     expect(screen.getByRole("button", { name: "Tải 1 ảnh" })).toBeDisabled();
     expect(upload).not.toHaveBeenCalled();
     expect(screen.getByAltText("Ảnh chờ tải 1")).toBeInTheDocument();
@@ -36,7 +49,10 @@ describe("photo capture reliability", () => {
   it("keeps unsuccessful drafts available to retry without reselecting", async () => {
     const user = userEvent.setup();
     const file = photo();
-    const upload = vi.fn().mockResolvedValueOnce({ failedFiles: [file] }).mockResolvedValueOnce({ failedFiles: [] });
+    const upload = vi
+      .fn()
+      .mockResolvedValueOnce({ failedFiles: [file] })
+      .mockResolvedValueOnce({ failedFiles: [] });
     render(<HaircutPhotoCapture photos={[]} consentGranted onFilesSelected={upload} />);
     await user.upload(screen.getByLabelText("Chụp ảnh kiểu tóc"), file);
     await user.click(screen.getByRole("button", { name: "Tải 1 ảnh" }));

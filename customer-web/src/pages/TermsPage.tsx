@@ -61,7 +61,8 @@ export function TermsPage({ onBack, onNavigate }: Props = {}) {
         <p>
           Nhân viên chỉ được lưu ảnh kiểu tóc khi khách đã đồng ý. Ghi chú và ảnh phải phục vụ trực
           tiếp cho lần cắt tóc, không được dùng cho mục đích khác hoặc chứa nội dung không phù hợp.
-          Ảnh và ghi chú được lưu trước khi xác nhận cộng điểm.
+          Ảnh và ghi chú có thể được lưu trước khi xác nhận cộng điểm hoặc bổ sung vào lượt cắt gần nhất đã hoàn tất.
+          Đây là hồ sơ nội bộ dành cho chủ salon và nhân viên được phân quyền, không hiển thị trong lịch sử của khách.
         </p>
 
         <h2>6. Dữ liệu cá nhân</h2>

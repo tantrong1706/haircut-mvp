@@ -30,22 +30,33 @@ describe("staff invitation email request", () => {
   it("reports a useful rate-limit error without logging raw provider details", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
-      mocks.send.mockRejectedValue({ code: "auth/too-many-requests", customData: { email: "staff@example.invalid" } });
+      mocks.send.mockRejectedValue({
+        code: "auth/too-many-requests",
+        customData: { email: "staff@example.invalid" },
+      });
       await expect(sendStaffInviteEmail("staff@example.invalid")).rejects.toThrow(/giới hạn/i);
       expect(warn).not.toHaveBeenCalled();
-    } finally { warn.mockRestore(); }
+    } finally {
+      warn.mockRestore();
+    }
   });
   it("preserves the created account and a safe email failure reason rather than recreating staff", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
       mocks.send.mockRejectedValue({ code: "auth/network-request-failed" });
       const result = await createStaffProfile({
-        salonId: "salon-fixture", email: "staff@example.invalid", name: "Synthetic staff",
-        canRedeemRewards: false, canAwardPointsDirectly: false, branchIds: ["branch-fixture"],
+        salonId: "salon-fixture",
+        email: "staff@example.invalid",
+        name: "Synthetic staff",
+        canRedeemRewards: false,
+        canAwardPointsDirectly: false,
+        branchIds: ["branch-fixture"],
       });
       expect(result).toMatchObject({ uid: "staff-fixture", inviteEmailSent: false });
       expect(result).toHaveProperty("inviteEmailError", expect.stringMatching(/kết nối|mạng/i));
       expect(mocks.call).toHaveBeenCalledTimes(1);
-    } finally { warn.mockRestore(); }
+    } finally {
+      warn.mockRestore();
+    }
   });
 });

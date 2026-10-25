@@ -35,20 +35,31 @@ describe("authenticated web customer platform", () => {
 
   it("customer history never returns internal notes or images even when storage consent exists", async () => {
     await seedSalon("salon-a", "branch-a");
-    const context = await getWebCustomerContext.run(phoneRequest("uid-private", signedBranchQr("salon-a", "branch-a")));
+    const context = await getWebCustomerContext.run(
+      phoneRequest("uid-private", signedBranchQr("salon-a", "branch-a")),
+    );
     await db.doc(`customers/${context.customer.customerId}`).update({ allowPhoto: true });
     await db.doc("haircut_records/private-record").set({
-      salonId: "salon-a", customerId: context.customer.customerId, branchId: "branch-a",
-      createdAt: Timestamp.now(), pointsAdded: 1, note: "Synthetic internal formula",
-      photoUrls: ["https://example.invalid/salon-private.jpg"], photoPaths: [],
+      salonId: "salon-a",
+      customerId: context.customer.customerId,
+      branchId: "branch-a",
+      createdAt: Timestamp.now(),
+      pointsAdded: 1,
+      note: "Synthetic internal formula",
+      photoUrls: ["https://example.invalid/salon-private.jpg"],
+      photoPaths: [],
     });
-    const history = await getWebCustomerHistory.run(phoneRequest("uid-private", {salonId: "salon-a"}));
+    const history = await getWebCustomerHistory.run(
+      phoneRequest("uid-private", { salonId: "salon-a" }),
+    );
     expect(history.records).toHaveLength(1);
-    expect(history.records[0]).toMatchObject({id: "private-record", pointsAdded: 1});
+    expect(history.records[0]).toMatchObject({ id: "private-record", pointsAdded: 1 });
     expect(history.records[0]).not.toHaveProperty("note");
     expect(history.records[0]).not.toHaveProperty("photoUrls");
     expect(history.records[0]).not.toHaveProperty("photoPaths");
-    expect((await db.doc("haircut_records/private-record").get()).data()?.note).toBe("Synthetic internal formula");
+    expect((await db.doc("haircut_records/private-record").get()).data()?.note).toBe(
+      "Synthetic internal formula",
+    );
   });
 
   it("cùng UID tạo profile riêng cho từng salon và retry không tạo trùng", async () => {

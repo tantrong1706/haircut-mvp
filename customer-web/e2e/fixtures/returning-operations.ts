@@ -6,3 +6,6 @@ export async function searchSalonCustomers(input: unknown) {
   });
   return response.json();
 }
+export async function getSalonCustomerDetails(input: { customerId: string }) {
+  return { id: input.customerId, recentRecords: [] };
+}

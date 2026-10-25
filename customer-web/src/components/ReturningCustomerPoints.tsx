@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Search, UserRoundCheck } from "lucide-react";
-import { searchSalonCustomers, type CustomerLookupResult } from "../services/operations";
+import {
+  searchSalonCustomers,
+  getSalonCustomerDetails,
+  type CustomerLookupResult,
+} from "../services/operations";
 import { awardReturningCustomerPoints } from "../services/returningCustomerPoints";
 import { SalonVisitDetails } from "./SalonVisitDetails";
 import { SalonHaircutHistory } from "./SalonHaircutHistory";
@@ -84,7 +88,7 @@ function CustomerLookup({ salonId, branchId, branchName, pointPerVisit, canAward
       setMessage(
         `${result.alreadyProcessed ? "Lượt này đã được ghi nhận" : `Đã cộng ${result.pointsAdded} điểm`} cho ${selected.customer.name || "khách"}. Tổng: ${result.pointsAfter} điểm.`,
       );
-      setCompletedCustomer({...selected.customer,points:result.pointsAfter});
+      setCompletedCustomer({ ...selected.customer, points: result.pointsAfter });
       setSelected(null);
       setCustomers([]);
       setNextCursor(null);
@@ -201,7 +205,12 @@ function CustomerLookup({ salonId, branchId, branchName, pointPerVisit, canAward
                   {selected.customer.name || "Khách hàng"} · ******{selected.customer.phoneLast4}
                 </strong>
                 <p>Xác nhận khách đã sử dụng dịch vụ tại {branchName}.</p>
-                <SalonHaircutHistory records={selected.customer.recentRecords || []} />
+                <SelectedCustomerHistory
+                  key={`${branchId}:${selected.customer.id}`}
+                  salonId={salonId}
+                  branchId={branchId}
+                  customerId={selected.customer.id}
+                />
                 <button
                   type="button"
                   className="primary-button"
@@ -225,10 +234,61 @@ function CustomerLookup({ salonId, branchId, branchName, pointPerVisit, canAward
           {error}
         </p>
       ) : null}
-      {completedCustomer ? <div className="service-state-card">
-        <strong>{completedCustomer.name || "Khách hàng"} · {completedCustomer.points} điểm</strong>
-        <SalonVisitDetails salonId={salonId} customerId={completedCustomer.id} />
-      </div> : null}
+      {completedCustomer ? (
+        <div className="service-state-card">
+          <strong>
+            {completedCustomer.name || "Khách hàng"} · {completedCustomer.points} điểm
+          </strong>
+          <SalonVisitDetails salonId={salonId} customerId={completedCustomer.id} />
+        </div>
+      ) : null}
     </section>
   );
+}
+
+function SelectedCustomerHistory({
+  salonId,
+  branchId,
+  customerId,
+}: {
+  salonId: string;
+  branchId: string;
+  customerId: string;
+}) {
+  const [records, setRecords] = useState<CustomerLookupResult["recentRecords"]>([]);
+  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    let active = true;
+    setStatus("loading");
+    setRecords([]);
+    void getSalonCustomerDetails({ salonId, branchId, customerId })
+      .then((result) => {
+        if (active) {
+          setRecords(result.recentRecords || []);
+          setStatus("ready");
+        }
+      })
+      .catch(() => {
+        if (active) setStatus("error");
+      });
+    return () => {
+      active = false;
+    };
+  }, [salonId, branchId, customerId, attempt]);
+  if (status === "loading") return <p>Đang tải lịch sử của khách...</p>;
+  if (status === "error")
+    return (
+      <p>
+        Chưa tải được lịch sử.{" "}
+        <button
+          className="secondary-button"
+          type="button"
+          onClick={() => setAttempt((value) => value + 1)}
+        >
+          Tải lại lịch sử
+        </button>
+      </p>
+    );
+  return <SalonHaircutHistory records={records} />;
 }

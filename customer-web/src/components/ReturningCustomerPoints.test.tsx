@@ -3,8 +3,11 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ReturningCustomerPoints } from "./ReturningCustomerPoints";
 
-const mocks = vi.hoisted(() => ({ search: vi.fn(), award: vi.fn(), details:vi.fn() }));
-vi.mock("../services/operations", () => ({ searchSalonCustomers: mocks.search, getSalonCustomerDetails:mocks.details }));
+const mocks = vi.hoisted(() => ({ search: vi.fn(), award: vi.fn(), details: vi.fn() }));
+vi.mock("../services/operations", () => ({
+  searchSalonCustomers: mocks.search,
+  getSalonCustomerDetails: mocks.details,
+}));
 vi.mock("../services/returningCustomerPoints", () => ({
   awardReturningCustomerPoints: mocks.award,
 }));
@@ -30,7 +33,7 @@ describe("ReturningCustomerPoints", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mocks.search.mockResolvedValue({ customers, nextCursor: null });
-    mocks.details.mockResolvedValue({...customers[0],recentRecords:[]});
+    mocks.details.mockResolvedValue({ ...customers[0], recentRecords: [] });
     mocks.award.mockResolvedValue({ pointsAdded: 2, pointsAfter: 6, alreadyProcessed: false });
   });
   it("requires selecting a customer and confirming; never awards from a suffix alone", async () => {
@@ -54,16 +57,31 @@ describe("ReturningCustomerPoints", () => {
     );
     expect(await screen.findByRole("status")).toHaveTextContent(/Đã cộng 2 điểm/);
     expect(screen.queryByRole("button", { name: "Xác nhận cộng 2 điểm" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button",{name:"Thêm ảnh"})).toBeEnabled();
-    expect(screen.getByRole("button",{name:"Thêm ghi chú"})).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Thêm ảnh" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Thêm ghi chú" })).toBeEnabled();
   });
-  it("loads internal haircut history for the selected customer within the current branch",async()=>{
-    mocks.details.mockResolvedValue({...customers[0],recentRecords:[{id:"record",createdAtMs:1234567890000,note:"Synthetic old style",staffName:"Staff",photoUrls:["https://example.invalid/internal.jpg"]}]});
-    render(<ReturningCustomerPoints {...props}/>);
-    const user=await search();
-    await user.click(screen.getByRole("button",{name:/Chọn An/}));
+  it("loads internal haircut history for the selected customer within the current branch", async () => {
+    mocks.details.mockResolvedValue({
+      ...customers[0],
+      recentRecords: [
+        {
+          id: "record",
+          createdAtMs: 1234567890000,
+          note: "Synthetic old style",
+          staffName: "Staff",
+          photoUrls: ["https://example.invalid/internal.jpg"],
+        },
+      ],
+    });
+    render(<ReturningCustomerPoints {...props} />);
+    const user = await search();
+    await user.click(screen.getByRole("button", { name: /Chọn An/ }));
     expect(await screen.findByText("Synthetic old style")).toBeVisible();
-    expect(mocks.details).toHaveBeenCalledWith({salonId:"salon-a",branchId:"branch-a",customerId:"customer-a"});
+    expect(mocks.details).toHaveBeenCalledWith({
+      salonId: "salon-a",
+      branchId: "branch-a",
+      customerId: "customer-a",
+    });
     expect(screen.getByRole("img")).toBeVisible();
     expect(mocks.award).not.toHaveBeenCalled();
   });

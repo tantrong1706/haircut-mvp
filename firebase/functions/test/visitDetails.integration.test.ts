@@ -21,7 +21,17 @@ const request = (uid = "owner", data: Record<string, unknown> = {}) => ({
 const createdAt = Timestamp.fromMillis(1234567890000);
 describe("latest completed haircut internal edits", () => {
   it("accepts the actual Web callable transport metadata when saving a completed visit", async () => {
-    await expect(api.update(request("owner", {recordId:"record",revision:0,note:"Web metadata",appVersion:"0.1.0",platform:"web"}))).resolves.toEqual({revision:1});
+    await expect(
+      api.update(
+        request("owner", {
+          recordId: "record",
+          revision: 0,
+          note: "Web metadata",
+          appVersion: "0.1.0",
+          platform: "web",
+        }),
+      ),
+    ).resolves.toEqual({ revision: 1 });
   });
   it.each([
     { revision: -1, note: "x" },

@@ -43,14 +43,22 @@ describe("photo processing validation", () => {
   it("không giả hỗ trợ HEIC khi runtime chưa chuyển đổi được", async () => {
     vi.stubGlobal("Worker", undefined);
     vi.stubGlobal("createImageBitmap", vi.fn().mockRejectedValue(new Error("unsupported")));
-    vi.stubGlobal("URL", class extends URL {
-      static createObjectURL = vi.fn(() => "blob:unsupported");
-      static revokeObjectURL = vi.fn();
-    });
-    vi.stubGlobal("Image", class {
-      onerror: (() => void) | null = null;
-      set src(_value: string) { queueMicrotask(() => this.onerror?.()); }
-    });
+    vi.stubGlobal(
+      "URL",
+      class extends URL {
+        static createObjectURL = vi.fn(() => "blob:unsupported");
+        static revokeObjectURL = vi.fn();
+      },
+    );
+    vi.stubGlobal(
+      "Image",
+      class {
+        onerror: (() => void) | null = null;
+        set src(_value: string) {
+          queueMicrotask(() => this.onerror?.());
+        }
+      },
+    );
     const heic = new File(
       [new Uint8Array([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70, 0x68, 0x65, 0x69, 0x63])],
       "photo.heic",
