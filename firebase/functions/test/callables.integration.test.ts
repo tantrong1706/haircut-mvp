@@ -873,7 +873,7 @@ describe("callable transactions", () => {
       ]),
     );
 
-    await db.doc("haircut_records/record-customer-phone").update({staffId:"staff-customer-phone"});
+    await db.doc("haircut_records/record-customer-phone").update({staffId:"another-staff-at-this-branch"});
     const staffDetails = await getSalonCustomerDetails.run(
       requestFor("staff-customer-phone", {
         salonId,
