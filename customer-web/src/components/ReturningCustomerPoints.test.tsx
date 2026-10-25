@@ -53,6 +53,8 @@ describe("ReturningCustomerPoints", () => {
     );
     expect(await screen.findByRole("status")).toHaveTextContent(/Đã cộng 2 điểm/);
     expect(screen.queryByRole("button", { name: "Xác nhận cộng 2 điểm" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button",{name:"Thêm ảnh"})).toBeEnabled();
+    expect(screen.getByRole("button",{name:"Thêm ghi chú"})).toBeEnabled();
   });
   it("fails closed without a branch or permission", () => {
     const { rerender } = render(<ReturningCustomerPoints {...props} branchId="" />);
