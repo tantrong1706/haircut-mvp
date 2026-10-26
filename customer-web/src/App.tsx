@@ -4,6 +4,7 @@ import { InstallAppPrompt } from "./components/InstallAppPrompt";
 import { trackEvent } from "./services/monitoring";
 import { parseQrContext } from "./services/qr";
 import type { AppSession, TabKey } from "./services/types";
+import type { AppUser } from "./services/auth";
 
 const AuthGate = lazy(() =>
   import("./pages/AuthGate").then((module) => ({ default: module.AuthGate })),
@@ -93,9 +94,18 @@ function AdminPortalRedirect() {
   );
 }
 
+function SalonWorkspace({ user }: { user: AppUser }) {
+  useEffect(() => {
+    const destination = user.role === "owner" ? "/owner" : "/staff";
+    if (window.location.pathname !== destination) window.history.replaceState({}, "", destination);
+  }, [user.role]);
+  return user.role === "owner" ? <OwnerPage currentUser={user} /> : <StaffPage currentUser={user} />;
+}
+
 export default function App() {
   const path = window.location.pathname;
   const isCustomerRoute = ![
+    "/login",
     "/staff",
     "/owner",
     "/admin",
@@ -252,7 +262,7 @@ export default function App() {
     );
   }
 
-  if (path.startsWith("/staff")) {
+  if (["/login", "/owner", "/staff"].some(route => path === route || path.startsWith(`${route}/`))) {
     return (
       <div className="app-shell ops-shell">
         {!isOnline ? (
@@ -262,8 +272,8 @@ export default function App() {
         ) : null}
         <main className="app-main wide-main">
           <Suspense fallback={<PageLoading />}>
-            <AuthGate allowedRoles={["owner", "staff"]}>
-              {(user) => <StaffPage currentUser={user} />}
+            <AuthGate allowedRoles={["owner", "staff"]} unifiedEntry>
+              {(user) => <SalonWorkspace user={user} />}
             </AuthGate>
           </Suspense>
         </main>
@@ -278,26 +288,6 @@ export default function App() {
         <main className="app-main wide-main">
           <AdminPortalRedirect />
         </main>
-      </div>
-    );
-  }
-
-  if (path.startsWith("/owner")) {
-    return (
-      <div className="app-shell ops-shell">
-        {!isOnline ? (
-          <p className="offline-banner">
-            Mất kết nối mạng. Thao tác chưa lưu cần được thử lại sau khi có mạng.
-          </p>
-        ) : null}
-        <main className="app-main wide-main">
-          <Suspense fallback={<PageLoading />}>
-            <AuthGate allowedRoles={["owner"]}>
-              {(user) => <OwnerPage currentUser={user} />}
-            </AuthGate>
-          </Suspense>
-        </main>
-        <InstallAppPrompt />
       </div>
     );
   }

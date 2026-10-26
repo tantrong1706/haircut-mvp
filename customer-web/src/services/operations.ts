@@ -889,7 +889,7 @@ export async function createStaffProfile(input: {
   canRedeemRewards: boolean;
   canAwardPointsDirectly: boolean;
   branchIds: string[];
-}): Promise<{ uid: string; email: string; inviteEmailSent: boolean }> {
+}): Promise<{ uid: string; email: string; inviteEmailSent: boolean; inviteEmailError?: string }> {
   const email = input.email.trim().toLowerCase();
   const name = input.name.trim();
 
@@ -926,13 +926,16 @@ export async function createStaffProfile(input: {
     branchIds: input.branchIds,
   });
 
-  return {
-    ...result,
-    inviteEmailSent: await sendStaffInviteEmail(result.email),
-  };
+  try {
+    return { ...result, inviteEmailSent: await sendStaffInviteEmail(result.email) };
+  } catch (error) {
+    return { ...result, inviteEmailSent: false, inviteEmailError: error instanceof Error ? error.message : "Chưa gửi được email mời." };
+  }
 }
 
 export async function sendStaffInviteEmail(email: string): Promise<boolean> {
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) throw new Error("Vui lòng nhập email hợp lệ.");
   const auth = getFirebaseAuth();
   if (!auth) {
     return false;
@@ -940,14 +943,21 @@ export async function sendStaffInviteEmail(email: string): Promise<boolean> {
 
   try {
     auth.languageCode = "vi";
-    await sendPasswordResetEmail(auth, email, {
-      url: `${window.location.origin}/staff`,
-      handleCodeInApp: false,
-    });
+    if (["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname)) {
+      await sendPasswordResetEmail(auth, normalizedEmail);
+    } else {
+      await sendPasswordResetEmail(auth, normalizedEmail, {
+        url: `${window.location.origin}/staff`, handleCodeInApp: false,
+      });
+    }
     return true;
   } catch (error) {
-    console.warn("Không gửi được email mời nhân viên.", error);
-    return false;
+    const code = (error as { code?: string } | null)?.code;
+    if (code === "auth/too-many-requests" || code === "auth/quota-exceeded") throw new Error("Đã chạm giới hạn gửi email. Vui lòng chờ rồi thử lại, không cần tạo lại nhân viên.");
+    if (code === "auth/network-request-failed") throw new Error("Kết nối mạng bị gián đoạn. Kiểm tra mạng rồi bấm Gửi lại email mời.");
+    if (code === "auth/invalid-email") throw new Error("Email nhân viên chưa hợp lệ.");
+    if (["auth/unauthorized-continue-uri", "auth/invalid-continue-uri", "auth/operation-not-allowed"].includes(code ?? "")) throw new Error("Cấu hình gửi email chưa sẵn sàng. Vui lòng liên hệ quản trị hệ thống.");
+    throw new Error("Chưa gửi được email mời. Tài khoản đã tạo vẫn được giữ; hãy thử gửi lại sau.");
   }
 }
 

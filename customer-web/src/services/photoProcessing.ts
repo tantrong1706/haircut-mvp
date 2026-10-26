@@ -41,7 +41,9 @@ export function classifyImageBytes(bytes: Uint8Array): SupportedImageMime | "ima
   return null;
 }
 
-export async function validateHaircutPhotoSource(file: File): Promise<SupportedImageMime> {
+export async function validateHaircutPhotoSource(
+  file: File,
+): Promise<SupportedImageMime | "image/heic"> {
   if (!file || file.size <= 0) {
     throw new Error("Vui lòng chọn ảnh kiểu tóc");
   }
@@ -51,11 +53,6 @@ export async function validateHaircutPhotoSource(file: File): Promise<SupportedI
 
   const bytes = new Uint8Array(await file.slice(0, 16).arrayBuffer());
   const detected = classifyImageBytes(bytes);
-  if (detected === "image/heic") {
-    throw new Error(
-      "Ảnh HEIC chưa được thiết bị này hỗ trợ. Vui lòng chọn ảnh JPEG, PNG hoặc WebP.",
-    );
-  }
   if (!detected) {
     throw new Error("File đã chọn không phải ảnh JPEG, PNG hoặc WebP hợp lệ.");
   }
@@ -100,7 +97,7 @@ async function processHaircutPhotoOnMainThread(file: File): Promise<ProcessedHai
     context.fillRect(0, 0, width, height);
     context.imageSmoothingEnabled = true;
     context.imageSmoothingQuality = "high";
-    context.drawImage(bitmap, 0, 0, width, height);
+    context.drawImage(bitmap.source, 0, 0, width, height);
 
     let blob = await canvasToBlob(canvas, 0.9);
     for (const quality of [0.8, 0.7, 0.6]) {
@@ -150,30 +147,53 @@ function processHaircutPhotoInWorker(file: File): Promise<ProcessedHaircutPhoto>
       finish(() => resolve(message));
     };
     worker.onerror = () => finish(() => reject(new Error("Không khởi động được bộ xử lý ảnh")));
-    worker.postMessage({
-      file,
-      maxDimension: PHOTO_MAX_DIMENSION,
-      maxPixels: PHOTO_MAX_PIXELS,
-      maxBytes: PHOTO_MAX_UPLOAD_BYTES,
-    });
+    try {
+      worker.postMessage({
+        file,
+        maxDimension: PHOTO_MAX_DIMENSION,
+        maxPixels: PHOTO_MAX_PIXELS,
+        maxBytes: PHOTO_MAX_UPLOAD_BYTES,
+      });
+    } catch {
+      finish(() => reject(new Error("Không khởi động được bộ xử lý ảnh")));
+    }
   });
 }
 
-async function decodeImage(file: File): Promise<ImageBitmap> {
+async function decodeImage(
+  file: File,
+): Promise<{ source: CanvasImageSource; width: number; height: number; close: () => void }> {
   try {
-    return await createImageBitmap(file, { imageOrientation: "from-image" });
+    const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+    return {
+      source: bitmap,
+      width: bitmap.width,
+      height: bitmap.height,
+      close: () => bitmap.close(),
+    };
   } catch {
     const objectUrl = URL.createObjectURL(file);
     try {
       const image = await new Promise<HTMLImageElement>((resolve, reject) => {
         const element = new Image();
         element.onload = () => resolve(element);
-        element.onerror = () => reject(new Error("Không đọc được ảnh đã chọn"));
+        element.onerror = () =>
+          reject(
+            new Error(
+              "Thiết bị chưa đọc được ảnh này. Với ảnh HEIC, hãy chọn ảnh JPEG hoặc chụp ảnh mới.",
+            ),
+          );
         element.src = objectUrl;
       });
-      return await createImageBitmap(image);
-    } finally {
+      return {
+        source: image,
+        width: image.naturalWidth,
+        height: image.naturalHeight,
+        close: () => URL.revokeObjectURL(objectUrl),
+      };
+    } catch (error) {
       URL.revokeObjectURL(objectUrl);
+      throw error;
     }
   }
 }

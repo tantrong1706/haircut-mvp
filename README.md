@@ -1,9 +1,13 @@
 # CH Hair — Web quản lý khách và tích điểm salon
 
-[Mở ứng dụng](https://app.chhaircutsalon.cc/) · [Chủ salon](https://app.chhaircutsalon.cc/owner) · [Nhân viên](https://app.chhaircutsalon.cc/staff)
+[Ứng dụng khách](https://app.chhaircutsalon.cc/) · [Đăng nhập salon](https://app.chhaircutsalon.cc/login)
 
 CH Hair chạy trên trình duyệt điện thoại và máy tính, dùng **Firebase** cho Hosting, đăng nhập,
 API, dữ liệu và ảnh. Khách không phải cài ứng dụng riêng; chủ salon và nhân viên cũng dùng Web.
+
+Chủ salon và nhân viên dùng chung trang `/login`, với email/mật khẩu hiện có. Hệ thống lấy quyền
+từ hồ sơ đã xác thực để mở `/owner` hoặc `/staff`; không cho tự chọn vai trò. Trang nhân viên
+không có chức năng yêu cầu xóa salon.
 
 Nhánh chính: **[`main`](https://github.com/tantrong1706/haircut-mvp/tree/main)** — bản Web/Firebase hiện tại.
 Thay đổi mới dùng nhánh ngắn hạn `codex/<noi-dung>`, kiểm tra CI rồi nhập vào `main` và xóa nhánh đã xong.
@@ -15,7 +19,7 @@ Push `main` chạy GitHub Actions **Build Web** và **CodeQL**, không tự depl
 2. Lần đầu xác thực số điện thoại bằng OTP. Lần sau, cùng trình duyệt còn phiên hợp lệ sẽ nhớ đăng nhập.
 3. Khách bấm **Yêu cầu tích điểm**; nhân viên đúng chi nhánh xác nhận và có thể chụp/lưu ảnh theo sự đồng ý của khách.
 4. Điểm được cộng một lần. Trong hai giờ sau khi cộng điểm, nút yêu cầu mới được ẩn; không hiện đồng hồ đếm ngược.
-5. Khách xem điểm, lịch sử, ảnh và quà. Khi đủ điều kiện, khách quay thưởng; nhân viên xác nhận dùng quà.
+5. Khách xem ngày cắt, điểm và quà. Ảnh/ghi chú là hồ sơ nội bộ: chủ salon và thợ được phân công cùng chi nhánh mới được xem. Khi đủ điều kiện, khách quay thưởng; nhân viên xác nhận dùng quà.
 
 Nhiều khách quét cùng QR vẫn có yêu cầu riêng. Điểm, lịch sử và quà tách theo khách/salon;
 backend quyết định danh tính, quyền truy cập, cooldown và kết quả vòng quay.
@@ -26,7 +30,7 @@ Không tự gộp hồ sơ hoặc đổi ID khách khi dọn mã nguồn.
 QR phải do hệ thống ký; **không thêm `env=TESTING` hoặc số version Zalo** vào QR Web.
 
 Chủ salon có danh bạ và tìm nhanh theo tên/4 số cuối. Tích điểm khách quen cần chọn đúng hồ sơ;
-ảnh/ghi chú được lưu trong lượt chờ trước khi xác nhận điểm, không qua nút tích điểm nhanh.
+ảnh/ghi chú được lưu trong lượt chờ hoặc bổ sung vào lượt cắt gần nhất đã cộng điểm, ngay tại thẻ khách; không tạo lượt hoặc cộng thêm điểm.
 
 ## Cấu trúc
 

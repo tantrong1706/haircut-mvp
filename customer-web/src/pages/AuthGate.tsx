@@ -31,6 +31,7 @@ import {
 import { clearMonitoringUser, setMonitoringUser, trackEvent } from "../services/monitoring";
 
 type Props = {
+  unifiedEntry?: boolean;
   allowedRoles: AppRole[];
   children: (user: AppUser) => ReactNode;
 };
@@ -43,7 +44,7 @@ type UnlinkedUser = {
   displayName: string;
 };
 
-export function AuthGate({ allowedRoles, children }: Props) {
+export function AuthGate({ allowedRoles, children, unifiedEntry = false }: Props) {
   const [appUser, setAppUser] = useState<AppUser | null>(null);
   const [unlinkedUser, setUnlinkedUser] = useState<UnlinkedUser | null>(null);
   const [mode, setMode] = useState<AuthMode>("signin");
@@ -59,6 +60,12 @@ export function AuthGate({ allowedRoles, children }: Props) {
   const [passwordResetSent, setPasswordResetSent] = useState(false);
   const [profileCompletionAttempted, setProfileCompletionAttempted] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (unifiedEntry && !loading && !appUser && window.location.pathname !== "/login") {
+      window.history.replaceState({}, "", "/login");
+    }
+  }, [unifiedEntry, loading, appUser]);
 
   useEffect(() => {
     let revision = 0;
@@ -371,7 +378,7 @@ export function AuthGate({ allowedRoles, children }: Props) {
               ? "Nhận email xác minh để đặt lại mật khẩu an toàn."
               : isSignup
                 ? "Tạo tài khoản chủ salon. Nhân viên sẽ được chủ salon tạo tài khoản riêng."
-                : "Dùng tài khoản đã được phân quyền trong salon."}
+                : "Đăng nhập bằng email của bạn. Hệ thống tự mở khu vực Chủ salon hoặc Nhân viên theo quyền đã được cấp."}
           </p>
         </header>
 

@@ -79,6 +79,7 @@ export async function uploadHaircutPhoto(input: {
   branchId: string;
   customerId: string;
   sessionId: string;
+  recordId?: string;
   file: File;
   requestId?: string;
   signal?: AbortSignal;
@@ -111,6 +112,7 @@ export async function uploadHaircutPhoto(input: {
           expectedContentType: string;
           expectedBytes: number;
           checksum: string;
+          recordId?: string;
         },
         BeginPhotoUploadResult
       >("beginHaircutPhotoUpload", {
@@ -120,6 +122,7 @@ export async function uploadHaircutPhoto(input: {
         expectedContentType: processed.contentType,
         expectedBytes: processed.blob.size,
         checksum: processed.checksum,
+        ...(input.recordId ? { recordId: safeDocumentId(input.recordId, "lượt cắt đã hoàn tất") } : {}),
       }),
     { signal: input.signal, timeoutMs: input.timeoutMs },
   );

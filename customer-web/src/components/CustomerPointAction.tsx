@@ -100,7 +100,7 @@ function PointAction({ salonId, branchId, branchName, pointPerVisit, customer, o
           open
             ? {
                 title: "Xác nhận lượt cắt?",
-                description: `${customer.name} · ******${customer.phoneLast4} · ${branchName}. Chỉ xác nhận khi khách đã sử dụng dịch vụ. Đây là cộng điểm nhanh; nếu cần lưu ảnh hoặc ghi chú, dùng lượt trong mục Duyệt điểm.`,
+                description: `${customer.name} · ******${customer.phoneLast4} · ${branchName}. Chỉ xác nhận khi khách đã sử dụng dịch vụ. Có thể bổ sung ảnh và ghi chú vào lượt này sau khi cộng điểm.`,
                 confirmLabel: `Xác nhận cộng ${pointPerVisit} điểm`,
                 onConfirm: confirm,
               }

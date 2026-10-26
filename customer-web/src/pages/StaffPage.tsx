@@ -10,7 +10,6 @@ import {
 } from "lucide-react";
 import { HaircutPhotoCapture } from "../components/HaircutPhotoCapture";
 import { RedeemRewardPanel } from "../components/RedeemRewardPanel";
-import { AccountDeletionPanel } from "../components/AccountDeletionPanel";
 import { BrandLogo } from "../components/BrandLogo";
 import { ReturningCustomerPoints } from "../components/ReturningCustomerPoints";
 import {
@@ -367,17 +366,17 @@ export function StaffPage({ currentUser }: Props) {
   async function handlePhotoFiles(files: File[]) {
     const session = selectedSession;
     if (!session || !canEditService || !customerAllowsPhoto || photoBusy) {
-      return;
+      return { failedFiles: files };
     }
 
     const availableSlots = MAX_HAIRCUT_PHOTOS - selectedPhotos.length;
     if (availableSlots <= 0) {
       setError(`Mỗi lượt chỉ lưu tối đa ${MAX_HAIRCUT_PHOTOS} ảnh.`);
-      return;
+      return { failedFiles: files };
     }
     if (files.length > availableSlots) {
       setError(`Bạn chỉ có thể thêm ${availableSlots} ảnh nữa cho lượt này.`);
-      return;
+      return { failedFiles: files };
     }
 
     setPhotoBusy(true);
@@ -423,6 +422,7 @@ export function StaffPage({ currentUser }: Props) {
       });
       setMessage(`Đã thêm ${uploadedCount} ảnh kiểu tóc.`);
       setFailedPhotoSessionId("");
+      return { failedFiles: [] };
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
         setMessage("Đã hủy tải ảnh.");
@@ -430,6 +430,7 @@ export function StaffPage({ currentUser }: Props) {
         setFailedPhotoSessionId(session.id);
         setError(err instanceof Error ? err.message : "Không tải được ảnh kiểu tóc");
       }
+      return { failedFiles: files.slice(uploadedCount) };
     } finally {
       photoAbortRef.current = null;
       setPhotoBusy(false);
@@ -850,7 +851,7 @@ export function StaffPage({ currentUser }: Props) {
           />
         ) : null}
 
-        <AccountDeletionPanel currentUser={currentUser} />
+        {currentUser.role === "staff" ? <a className="secondary-button" href="/delete-account">Quản lý tài khoản cá nhân</a> : null}
 
         {message ? <p className="alert success">{message}</p> : null}
         {error ? <p className="alert error">{error}</p> : null}

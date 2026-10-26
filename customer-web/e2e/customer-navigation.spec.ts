@@ -71,10 +71,10 @@ test("khách chuyển qua điểm, lịch sử, vòng quay và quà", async ({ p
   await expect(page.getByRole("heading", { name: "Khách Web" })).toBeVisible();
   await page.getByRole("button", { name: "Lịch sử" }).last().click();
   await expect(page.getByRole("heading", { name: "Lịch sử cắt tóc" })).toBeVisible();
-  await page.getByRole("button", { name: /20\/06\/2026/ }).click();
-  await expect(page.getByRole("dialog", { name: "Chi tiết lần cắt" })).toBeVisible();
-  await expect(page.getByRole("dialog").getByText("Không có ảnh")).toBeVisible();
-  await page.getByRole("button", { name: "Đóng chi tiết" }).click();
+  await expect(page.getByText("20/06/2026")).toBeVisible();
+  await expect(page.getByLabel("Đã cộng 1 điểm")).toBeVisible();
+  await expect(page.getByText("Fade thấp")).toHaveCount(0);
+  await expect(page.locator(".history-page img")).toHaveCount(0);
   await expect(page.getByRole("dialog")).toHaveCount(0);
 
   await page.getByRole("button", { name: "Điểm" }).click();

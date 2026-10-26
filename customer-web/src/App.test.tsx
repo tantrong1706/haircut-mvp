@@ -3,8 +3,11 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import type { AppSession } from "./services/types";
+import type { AppUser } from "./services/auth";
+import type { ReactNode } from "react";
 
 const mocks = vi.hoisted(() => ({
+  managementUser: null as AppUser | null,
   stopSync: vi.fn(),
   stopAuth: vi.fn(),
   listenSessionLiveUpdates: vi.fn(),
@@ -67,7 +70,9 @@ vi.mock("./pages/CustomerAccountPage", () => ({
     <button onClick={onLoggedOut}>Web logout</button>
   ),
 }));
-vi.mock("./pages/AuthGate", () => ({ AuthGate: () => <div>management-auth</div> }));
+vi.mock("./pages/AuthGate", () => ({ AuthGate: ({allowedRoles,children}:{allowedRoles:string[];children:(user:AppUser)=>ReactNode}) => mocks.managementUser ? allowedRoles.includes(mocks.managementUser.role) ? children(mocks.managementUser) : <div>role-denied</div> : <div>management-auth</div> }));
+vi.mock("./pages/OwnerPage", () => ({OwnerPage:()=> <div>owner-workspace</div>}));
+vi.mock("./pages/StaffPage", () => ({StaffPage:()=> <div>staff-workspace</div>}));
 vi.mock("./pages/AppCheckDiagnosticPage", () => ({
   AppCheckDiagnosticPage: () => <div>app-check-diagnostic</div>,
 }));
@@ -80,6 +85,7 @@ describe("Web-only routing and Firebase session isolation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.authListener = null;
+    mocks.managementUser = null;
     mocks.listenSessionLiveUpdates.mockReturnValue(mocks.stopSync);
     window.history.replaceState({}, "", "/checkin");
   });
@@ -97,7 +103,7 @@ describe("Web-only routing and Firebase session isolation", () => {
     expect(mocks.listenSessionLiveUpdates).not.toHaveBeenCalled();
   });
 
-  it.each(["/staff", "/owner", "/delete-account"])(
+  it.each(["/login", "/staff", "/owner", "/delete-account"])(
     "keeps %s behind management authentication in any browser",
     async (path) => {
       vi.stubGlobal("ZJSBridge", {});
@@ -107,6 +113,19 @@ describe("Web-only routing and Firebase session isolation", () => {
       expect(mocks.authListener).toBeNull();
     },
   );
+
+  it.each(["/login", "/owner", "/staff"])("routes the verified role from the common %s entry without a role selector", async path => {
+    for (const role of ["owner","staff"] as const) {
+      window.history.replaceState({},"",path);
+      mocks.managementUser = {uid:"synthetic-user",salonId:"salon",name:"Fixture",avatarUrl:"",role,isActive:true};
+      const view=render(<App/>);
+      expect(await screen.findByText(`${role}-workspace`)).toBeVisible();
+      await waitFor(()=>expect(window.location.pathname).toBe(`/${role}`));
+      expect(screen.queryByText(role==="owner"?"staff-workspace":"owner-workspace")).not.toBeInTheDocument();
+      expect(mocks.authListener).toBeNull();
+      view.unmount();
+    }
+  });
 
   it.each([
     ["/privacy", "Chính sách quyền riêng tư"],
