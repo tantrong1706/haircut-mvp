@@ -2,9 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { signOut, type User } from "firebase/auth";
 import type { SystemFeatures } from "@haircut/contracts";
 import {
-  Activity,
   Building2,
-  CirclePause,
   Gauge,
   History,
   LoaderCircle,
@@ -12,13 +10,15 @@ import {
   RefreshCcw,
   Settings2,
   ShieldCheck,
-  Users,
   Wrench,
 } from "lucide-react";
 import { auth, firebaseProjectId } from "../services/firebase";
 import { ADMIN_TABS, type AdminTab } from "../adminCapabilities";
-import { adminErrorMessage, supportLinks } from "../services/adminSupport";
+import { adminErrorMessage } from "../services/adminSupport";
 import { SalonSupportPanel } from "./SalonSupportPanel";
+import { AuditPanel, FeaturePanel, Overview, SupportSteps } from "./AdminSections";
+import { SalonDirectory } from "./SalonDirectory";
+import { SupportGuide } from "./SupportGuide";
 import {
   adminApi,
   type AdminAuditEvent,
@@ -32,26 +32,6 @@ const tabIcons: Record<AdminTab, typeof Gauge> = {
   features: Settings2,
   audit: History,
   support: Wrench,
-};
-
-const featureLabels: Record<
-  keyof Pick<
-    SystemFeatures,
-    | "checkinEnabled"
-    | "luckyWheelEnabled"
-    | "rewardRedeemEnabled"
-    | "photoUploadEnabled"
-    | "pointApprovalEnabled"
-    | "maintenanceMode"
-  >,
-  string
-> = {
-  checkinEnabled: "Khách check-in",
-  luckyWheelEnabled: "Vòng quay",
-  rewardRedeemEnabled: "Đổi mã quà",
-  photoUploadEnabled: "Tải ảnh kiểu tóc",
-  pointApprovalEnabled: "Gửi và duyệt điểm",
-  maintenanceMode: "Chế độ bảo trì",
 };
 
 export function AdminDashboard({ user }: { user: User }) {
@@ -182,9 +162,10 @@ export function AdminDashboard({ user }: { user: User }) {
               <button
                 key={item.id}
                 className={tab === item.id ? "active" : ""}
+                aria-current={tab === item.id ? "page" : undefined}
                 onClick={() => setTab(item.id)}
               >
-                <Icon />
+                <Icon aria-hidden="true" />
                 {item.label}
               </button>
             );
@@ -206,18 +187,41 @@ export function AdminDashboard({ user }: { user: User }) {
             <p className="eyebrow">Trung tâm quản trị salon</p>
             <h1>{ADMIN_TABS.find((item) => item.id === tab)?.label}</h1>
           </div>
-          <button className="icon-button" title="Làm mới" onClick={refresh} disabled={loading}>
-            <RefreshCcw className={loading ? "spin" : ""} />
+          <button className="secondary workspace-refresh" onClick={refresh} disabled={loading}>
+            <RefreshCcw className={loading ? "spin" : ""} aria-hidden="true" />
+            Làm mới dữ liệu
           </button>
         </header>
-        <p className="notice">
-          Xem tất cả salon, kiểm tra từng salon và chỉ sửa đúng lỗi đã đối chiếu. Mọi thao tác sửa
-          đều cần xác nhận và được ghi nhật ký.
-        </p>
+        <section className="data-status-strip" aria-label="Tình trạng dữ liệu">
+          <span className="quiet-label">
+            <ShieldCheck aria-hidden="true" /> Quyền quản trị đã xác minh
+          </span>
+          <div>
+            {ADMIN_TABS.filter((item) => errors[item.id]).map((item) => (
+              <button className="status-link" key={item.id} onClick={() => setTab(item.id)}>
+                {item.label}{" "}
+                {item.id === "salons" && salons !== null ? "chưa tải đủ" : "chưa tải được"}
+              </button>
+            ))}
+          </div>
+          <span className="quiet-label">
+            {loading
+              ? "Đang cập nhật dữ liệu…"
+              : Object.values(errors).some(Boolean)
+                ? "Có mục cần kiểm tra kết nối"
+                : "Dữ liệu đã tải · Chưa quét toàn bộ salon"}
+          </span>
+        </section>
         {errors[tab] ? (
-          <p className="notice error" role="alert">
-            {errors[tab]}
-          </p>
+          <div className="notice error load-error" role="alert">
+            <div>
+              <strong>Chưa tải được mục này</strong>
+              <p>{errors[tab]}</p>
+            </div>
+            <button className="secondary" disabled={loading} onClick={refresh}>
+              Thử tải lại
+            </button>
+          </div>
         ) : null}
         {loading ? (
           <div className="loading-band">
@@ -226,245 +230,58 @@ export function AdminDashboard({ user }: { user: User }) {
           </div>
         ) : null}
 
-        {tab === "overview" && overview ? <Overview overview={overview} /> : null}
+        {tab === "overview" && overview ? (
+          <Overview overview={overview} onOpenSalons={() => setTab("salons")} />
+        ) : null}
         {tab === "salons" ? (
           <>
-            {salons ? <SalonTable salons={salons} onSelect={setSelected} /> : null}
-            {nextCursor ? (
-              <button
-                className="secondary load-more"
-                disabled={loadingMore || loading}
-                onClick={() => void loadMore()}
-              >
-                {loadingMore ? "Đang tải thêm…" : "Tải thêm salon"}
-              </button>
-            ) : null}
-            {selected ? (
-              <SalonSupportPanel
-                key={selected.id}
-                salon={selected}
-                onClose={() => setSelected(null)}
-                onRepaired={refresh}
-              />
-            ) : null}
+            <SupportSteps />
+            <div className={`salon-workspace${selected ? " has-selection" : ""}`}>
+              <div className="directory-column">
+                {salons ? (
+                  <SalonDirectory
+                    salons={salons}
+                    selectedId={selected?.id}
+                    onSelect={setSelected}
+                  />
+                ) : null}
+                {nextCursor ? (
+                  <button
+                    className="secondary load-more"
+                    disabled={loadingMore || loading}
+                    onClick={() => void loadMore()}
+                  >
+                    {loadingMore ? "Đang tải thêm…" : "Tải thêm salon"}
+                  </button>
+                ) : null}
+              </div>
+              {selected ? (
+                <SalonSupportPanel
+                  key={selected.id}
+                  salon={selected}
+                  onClose={() => setSelected(null)}
+                  onRepaired={refresh}
+                />
+              ) : (
+                <section className="empty-workbench surface">
+                  <Building2 aria-hidden="true" />
+                  <h2>Chọn một salon để bắt đầu</h2>
+                  <p>
+                    Xem kết quả đối chiếu, hướng xử lý và phạm vi kiểm tra tại đây. Chọn salon không
+                    tự sửa dữ liệu.
+                  </p>
+                  <span className="quiet-label">Không quét tất cả salon trong nền</span>
+                </section>
+              )}
+            </div>
           </>
         ) : null}
         {tab === "features" && features ? <FeaturePanel features={features} /> : null}
         {tab === "audit" && auditEvents ? <AuditPanel events={auditEvents} /> : null}
         {tab === "support" ? (
-          <section className="content-section">
-            <h2>Xử lý đúng loại sự cố</h2>
-            <p>
-              Kiểm tra salon ở mục Salon trước. Lỗi phần mềm cần bản vá đã kiểm thử; lỗi hạ tầng cần
-              xử lý tại Google Cloud. Không có nút tự sửa mọi lỗi.
-            </p>
-            <div className="support-links">
-              {supportLinks(firebaseProjectId).map((link) => (
-                <article key={link.href}>
-                  <h3>{link.label}</h3>
-                  <p>{link.description}</p>
-                  <a
-                    className="text-button"
-                    href={link.href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Mở công cụ Google
-                  </a>
-                </article>
-              ))}
-            </div>
-          </section>
+          <SupportGuide projectId={firebaseProjectId} onOpenSalons={() => setTab("salons")} />
         ) : null}
       </main>
     </div>
   );
-}
-
-function Overview({ overview }: { overview: AdminOverview }) {
-  const metrics = [
-    ["Salon hoạt động", overview.salons.active, Building2],
-    ["Salon đang khóa", overview.salons.suspended, CirclePause],
-    ["Owner và staff", overview.users.owners + overview.users.staff, Users],
-    ["Yêu cầu điểm chờ", overview.operations.pendingPointRequests, Activity],
-    ["Lượt đang mở", overview.operations.openSessions, Gauge],
-  ] as const;
-  return (
-    <section className="metric-grid">
-      {metrics.map(([label, value, Icon]) => (
-        <article key={label}>
-          <Icon />
-          <span>{label}</span>
-          <strong>{value}</strong>
-        </article>
-      ))}
-    </section>
-  );
-}
-
-function SalonTable({
-  salons,
-  onSelect,
-}: {
-  salons: AdminSalon[];
-  onSelect: (salon: AdminSalon) => void;
-}) {
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("all");
-  const filtered = salons.filter(
-    (salon) =>
-      `${salon.name} ${salon.id}`
-        .toLocaleLowerCase("vi")
-        .includes(search.trim().toLocaleLowerCase("vi")) &&
-      (status === "all" || salon.status === status),
-  );
-  return (
-    <section className="content-section">
-      <div className="section-heading">
-        <div>
-          <p className="eyebrow">Tenant</p>
-          <h2>Danh sách salon</h2>
-        </div>
-        <span>Đã tải {salons.length} salon</span>
-      </div>
-      <div className="salon-filters">
-        <label>
-          Tìm trong salon đã tải
-          <input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Tên hoặc mã salon"
-          />
-        </label>
-        <label>
-          Trạng thái
-          <select value={status} onChange={(event) => setStatus(event.target.value)}>
-            <option value="all">Tất cả</option>
-            <option value="active">Hoạt động</option>
-            <option value="suspended">Đang khóa</option>
-            <option value="pending_deletion">Chờ xóa</option>
-          </select>
-        </label>
-      </div>
-      <div className="table-wrap">
-        <table className="salon-table" role="table">
-          <thead>
-            <tr>
-              <th>Salon</th>
-              <th>Trạng thái</th>
-              <th>Gói</th>
-              <th>Khách</th>
-              <th>Kiểm tra</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((salon) => (
-              <tr key={salon.id}>
-                <td data-label="Salon">
-                  <strong>{salon.name}</strong>
-                  <small>{salon.id}</small>
-                </td>
-                <td data-label="Trạng thái">
-                  <StatusBadge status={salon.status} />
-                </td>
-                <td data-label="Gói">{salon.plan}</td>
-                <td data-label="Khách">{salon.customerCount}</td>
-                <td data-label="Kiểm tra">
-                  <button
-                    className="secondary compact"
-                    aria-label={`Kiểm tra ${salon.name}`}
-                    onClick={() => onSelect(salon)}
-                  >
-                    Kiểm tra
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {filtered.length === 0 ? (
-          <p className="empty">
-            {salons.length ? "Không có salon khớp bộ lọc trong dữ liệu đã tải." : "Chưa có salon"}
-          </p>
-        ) : null}
-      </div>
-    </section>
-  );
-}
-
-function FeaturePanel({ features }: { features: SystemFeatures }) {
-  const booleanKeys = Object.keys(featureLabels) as Array<keyof typeof featureLabels>;
-  return (
-    <section className="content-section">
-      <div className="section-heading">
-        <div>
-          <p className="eyebrow">Chỉ đọc</p>
-          <h2>Cấu hình toàn hệ thống</h2>
-        </div>
-      </div>
-      <div className="toggle-list">
-        {booleanKeys.map((key) => (
-          <div key={key}>
-            <span>
-              <strong>{featureLabels[key]}</strong>
-              <small>{key}</small>
-            </span>
-            <StatusBadge status={features[key] ? "active" : "suspended"} />
-          </div>
-        ))}
-      </div>
-      <div className="version-grid">
-        <div>
-          <span>Phiên bản tối thiểu</span>
-          <strong>{features.minimumSupportedAppVersion || "Chưa đặt"}</strong>
-        </div>
-        <div>
-          <span>Phiên bản khuyến nghị</span>
-          <strong>{features.recommendedAppVersion || "Chưa đặt"}</strong>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function AuditPanel({ events }: { events: AdminAuditEvent[] }) {
-  return (
-    <section className="content-section">
-      <div className="section-heading">
-        <div>
-          <p className="eyebrow">Truy vết</p>
-          <h2>Nhật ký gần nhất</h2>
-        </div>
-      </div>
-      <div className="audit-list">
-        {events.length === 0 ? (
-          <p className="empty">Chưa có thao tác quản trị.</p>
-        ) : (
-          events.map((event) => (
-            <article key={event.id}>
-              <span className="audit-dot" />
-              <div>
-                <strong>{event.action}</strong>
-                <small>
-                  {event.targetType} · {event.targetId}
-                </small>
-              </div>
-              <time>{formatDate(event.createdAtMs)}</time>
-            </article>
-          ))
-        )}
-      </div>
-    </section>
-  );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const label = status === "active" ? "Hoạt động" : status === "suspended" ? "Đang tắt" : "Chờ xóa";
-  return <span className={`status ${status}`}>{label}</span>;
-}
-
-function formatDate(value: number | null) {
-  return value
-    ? new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" }).format(value)
-    : "Chưa rõ";
 }
