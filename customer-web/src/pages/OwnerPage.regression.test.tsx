@@ -24,12 +24,14 @@ const mocks = vi.hoisted(() => ({
   upload: vi.fn(),
   remove: vi.fn(),
   savePhotos: vi.fn(),
+  saveProfile: vi.fn(),
 }));
 vi.mock("../services/operations", () => ({
   listenPendingPointRequests: mocks.subscribe,
   getOwnerOverview: mocks.overview,
   getBranchQrSettings: mocks.branches,
   getSalonProfile: mocks.profile,
+  updateSalonProfile: mocks.saveProfile,
   getLuckyWheelConfig: mocks.wheel,
   saveLuckyWheelConfig: mocks.saveWheel,
   approvePointRequest: mocks.approve,
@@ -164,6 +166,96 @@ describe("OwnerPage behavior before extraction", () => {
     expect(mocks.subscribe).not.toHaveBeenCalled();
     expect(mocks.overview).not.toHaveBeenCalled();
     expect(mocks.wheel).not.toHaveBeenCalled();
+  });
+
+  it("shows monthly Plus/Pro only in settings without prices, checkout or entitlement writes", async () => {
+    await openPage();
+    expect(
+      screen.queryByRole("region", { name: "Gói dịch vụ theo tháng" }),
+    ).not.toBeInTheDocument();
+    const initialProfileReads = mocks.profile.mock.calls.length;
+    await openTab("Cài đặt");
+    const preview = within(screen.getByRole("region", { name: "Gói dịch vụ theo tháng" }));
+    expect(preview.getByRole("heading", { name: "Plus" })).toBeVisible();
+    expect(preview.getByRole("heading", { name: "Pro" })).toBeVisible();
+    expect(preview.getByText("1 chi nhánh", { exact: true })).toBeVisible();
+    expect(preview.getByText("Tối đa 3 chi nhánh", { exact: true })).toBeVisible();
+    expect(preview.getAllByText("Giá chưa công bố")).toHaveLength(2);
+    expect(preview.getByText("Hằng tháng", { exact: true })).toBeVisible();
+    expect(
+      preview.getByText(/Hạn mức OTP, nhân viên, danh bạ và dung lượng ảnh chưa được chốt/),
+    ).toBeVisible();
+    expect(preview.queryByRole("button")).not.toBeInTheDocument();
+    expect(preview.queryByRole("link")).not.toBeInTheDocument();
+    expect(preview.queryByText(/\d[\d.,]*\s*(đ|₫)/)).not.toBeInTheDocument();
+    expect(screen.getByText("50 khách miễn phí", { exact: true })).toBeVisible();
+    expect(mocks.profile).toHaveBeenCalledTimes(initialProfileReads);
+    expect(mocks.saveProfile).not.toHaveBeenCalled();
+    expect(mocks.saveWheel).not.toHaveBeenCalled();
+    expect(mocks.approve).not.toHaveBeenCalled();
+    expect(mocks.savePhotos).not.toHaveBeenCalled();
+    await openTab("Tổng quan");
+    expect(
+      screen.queryByRole("region", { name: "Gói dịch vụ theo tháng" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps existing branches usable even above the proposed Pro limit", async () => {
+    const existingBranches = Array.from({ length: 4 }, (_, index) => ({
+      ...branches[0],
+      id: `existing-${index}`,
+      name: `Chi nhánh đang dùng ${index + 1}`,
+    }));
+    mocks.branches.mockResolvedValue({ branches: existingBranches });
+    await openPage();
+    await waitFor(() =>
+      expect(
+        within(screen.getByLabelText("Chi nhánh đang xem")).getAllByRole("option"),
+      ).toHaveLength(5),
+    );
+    await openTab("Cài đặt");
+    expect(screen.getByRole("region", { name: "Gói dịch vụ theo tháng" })).toHaveTextContent(
+      "Quyền sử dụng và dữ liệu của salon hiện tại không thay đổi.",
+    );
+    await openTab("Tổng quan");
+    await userEvent
+      .setup()
+      .selectOptions(screen.getByLabelText("Chi nhánh đang xem"), "existing-3");
+    expect(mocks.overview).toHaveBeenLastCalledWith("salon-fixture", "existing-3");
+    expect(mocks.saveProfile).not.toHaveBeenCalled();
+  });
+
+  it("keeps salon settings save payload unchanged when the plan preview is visible", async () => {
+    await openPage();
+    await openTab("Cài đặt");
+    expect(screen.getByRole("region", { name: "Gói dịch vụ theo tháng" })).toBeVisible();
+    const nextProfile = {
+      id: "salon-fixture",
+      name: "Salon mẫu mới",
+      address: "",
+      phone: "",
+      avatarUrl: "",
+      pointPerVisit: 2,
+      freeCustomerLimit: 50,
+    };
+    mocks.saveProfile.mockResolvedValue(nextProfile);
+    mocks.profile.mockResolvedValue(nextProfile);
+    const actor = userEvent.setup();
+    await actor.clear(screen.getByRole("textbox", { name: "Tên salon" }));
+    await actor.type(screen.getByRole("textbox", { name: "Tên salon" }), nextProfile.name);
+    await actor.click(screen.getByRole("button", { name: "Lưu thông tin salon" }));
+    await waitFor(() =>
+      expect(mocks.saveProfile).toHaveBeenCalledExactlyOnceWith({
+        salonId: "salon-fixture",
+        name: nextProfile.name,
+        address: "",
+        phone: "",
+        pointPerVisit: 2,
+      }),
+    );
+    expect(await screen.findByText("Đã cập nhật thông tin salon.")).toBeVisible();
+    expect(screen.getByRole("region", { name: "Gói dịch vụ theo tháng" })).toBeVisible();
+    expect(mocks.approve).not.toHaveBeenCalled();
   });
 
   it("keeps trimmed salon/branch scope and disposes subscriptions on filter change and unmount", async () => {
