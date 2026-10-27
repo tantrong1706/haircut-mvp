@@ -1,8 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { OverviewPanel } from "../features/owner/OverviewPanel";
+import { ApprovalsPanel } from "../features/owner/ApprovalsPanel";
+import { WheelConfigPanel } from "../features/owner/WheelConfigPanel";
+import { ownerPhoneLabel } from "../features/owner/ownerFormatters";
+import { useOwnerNavigation } from "../features/owner/useOwnerNavigation";
 import type { ReactNode } from "react";
 import {
   BarChart3,
-  CheckCircle2,
   ClipboardCheck,
   Copy,
   Download,
@@ -32,7 +36,7 @@ import { CustomerPointAction } from "../components/CustomerPointAction";
 import { OwnerConfirmDialog, type OwnerConfirmation as ConfirmRequest } from "../components/OwnerConfirmDialog";
 import { APP_NAME } from "../config/branding";
 import { AccountDeletionPanel } from "../components/AccountDeletionPanel";
-import { HaircutPhotoCapture, type HaircutPhotoItem, type PhotoSelectionResult } from "../components/HaircutPhotoCapture";
+import type { HaircutPhotoItem } from "../components/HaircutPhotoCapture";
 import { SalonVisitDetails } from "../components/SalonVisitDetails";
 import { SalonHaircutHistory } from "../components/SalonHaircutHistory";
 import { RedeemRewardPanel } from "../components/RedeemRewardPanel";
@@ -79,8 +83,6 @@ import { LuckyWheelConfig, defaultLuckyWheelConfig } from "../services/types";
 import { legacyPhotoUrlsFor, photoItemsFor, storedPhotoCount } from "../services/pointRequestPhotos";
 import { listSalonCustomerDirectory, savePendingVisitNote } from "../services/ownerWorkspace";
 
-type OwnerTab =
-  "overview" | "approvals" | "branches" | "staff" | "customers" | "wheel" | "redeem" | "settings";
 
 type Props = {
   currentUser: AppUser;
@@ -90,21 +92,12 @@ export function OwnerPage({ currentUser }: Props) {
   const salonId = useMemo(() => {
     return currentUser.salonId.trim();
   }, [currentUser.salonId]);
-  const [activeTab, setActiveTab] = useState<OwnerTab>("overview");
+  const [activeTab, setActiveTab] = useOwnerNavigation();
   const [requests, setRequests] = useState<PointRequest[]>([]);
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
   const [ownerBranches, setOwnerBranches] = useState<SalonBranch[]>([]);
   const [branchFilter, setBranchFilter] = useState("all");
 
-  useEffect(() => {
-    const navigate = (event: Event) => {
-      const route = String((event as CustomEvent<string>).detail || "");
-      const nextTab = ownerTabFromRoute(route);
-      if (nextTab) setActiveTab(nextTab);
-    };
-    window.addEventListener("haircut:navigate", navigate);
-    return () => window.removeEventListener("haircut:navigate", navigate);
-  }, []);
   const [overview, setOverview] = useState<OwnerOverview | null>(null);
   const [salonProfile, setSalonProfile] = useState<SalonProfile | null>(null);
   const [wheelConfig, setWheelConfig] = useState<LuckyWheelConfig>(defaultLuckyWheelConfig);
@@ -1097,254 +1090,8 @@ function ownerInitials(name: string) {
   return words.map((word) => word[0]?.toUpperCase() || "").join("");
 }
 
-function OverviewPanel({
-  overview,
-  loading,
-  onRefresh,
-  onOpenTab,
-}: {
-  overview: OwnerOverview | null;
-  loading: boolean;
-  onRefresh: () => void;
-  onOpenTab: (tab: OwnerTab) => void;
-}) {
-  const data =
-    overview ||
-    ({
-      customersToday: 0,
-      customers7Days: 0,
-      customers30Days: 0,
-      pendingRequests: 0,
-      pointsApprovedToday: 0,
-      spinsToday: 0,
-      unusedRewards: 0,
-      inactiveCustomers: [],
-    } satisfies OwnerOverview);
 
-  return (
-    <div className="panel overview-panel">
-      <div className="dashboard-heading">
-        <div>
-          <p className="eyebrow">Hôm nay</p>
-          <h2>Tổng quan</h2>
-        </div>
-        <button className="icon-text-button" disabled={loading} onClick={onRefresh}>
-          <RefreshCcw size={18} aria-hidden="true" />
-          {loading ? "Đang tải" : "Làm mới"}
-        </button>
-      </div>
 
-      <section className="owner-next-actions" aria-label="Thao tác nhanh">
-        <button type="button" onClick={() => onOpenTab("approvals")}>
-          <ClipboardCheck size={20} aria-hidden="true" />
-          <span><strong>Duyệt điểm</strong><small>{data.pendingRequests > 0 ? `${data.pendingRequests} đang chờ` : "Chưa có yêu cầu"}</small></span>
-        </button>
-        <button type="button" onClick={() => onOpenTab("customers")}>
-          <Search size={20} aria-hidden="true" />
-          <span><strong>Tìm khách</strong><small>Điểm và lịch sử</small></span>
-        </button>
-        <button type="button" onClick={() => onOpenTab("redeem")}>
-          <TicketCheck size={20} aria-hidden="true" />
-          <span><strong>Đổi quà</strong><small>{data.unusedRewards > 0 ? `${data.unusedRewards} mã quà` : "Kiểm tra mã quà"}</small></span>
-        </button>
-      </section>
-
-      <div className="overview-grid">
-        <OverviewMetric
-          icon={<UsersRound size={21} />}
-          label="Khách hôm nay"
-          value={data.customersToday}
-        />
-        <OverviewMetric
-          icon={<ClipboardCheck size={21} />}
-          label="Chờ xác nhận"
-          value={data.pendingRequests}
-        />
-        <OverviewMetric
-          icon={<CheckCircle2 size={21} />}
-          label="Điểm đã cộng"
-          value={data.pointsApprovedToday}
-        />
-        <OverviewMetric
-          icon={<TicketCheck size={21} />}
-          label="Mã quà chưa dùng"
-          value={data.unusedRewards}
-        />
-        <OverviewMetric icon={<BarChart3 size={21} />} label="Khách 7 ngày" value={data.customers7Days} />
-        <OverviewMetric icon={<BarChart3 size={21} />} label="Khách 30 ngày" value={data.customers30Days} />
-        <OverviewMetric icon={<Gift size={21} />} label="Lượt quay" value={data.spinsToday} />
-      </div>
-
-      <div className="retention-panel">
-        <div className="dashboard-heading">
-          <div>
-            <p className="eyebrow">Giữ chân khách</p>
-            <h2>Khách lâu chưa quay lại</h2>
-          </div>
-          <button
-            className="secondary-button compact"
-            type="button"
-            onClick={() => onOpenTab("customers")}
-          >
-            <Search size={18} aria-hidden="true" />
-            Tìm khách
-          </button>
-        </div>
-
-        {data.inactiveCustomers.length === 0 ? (
-          <div className="empty-state compact-empty soft-empty">
-            <UsersRound size={28} aria-hidden="true" />
-            <strong>Chưa có khách cần nhắc lại</strong>
-            <p>Khi có khách hơn 30 ngày chưa quay lại, danh sách sẽ hiện ở đây.</p>
-          </div>
-        ) : (
-          <div className="retention-list">
-            {data.inactiveCustomers.map((customer) => (
-              <article className="retention-card" key={customer.id}>
-                <div>
-                  <strong>{customer.name}</strong>
-                  <span>
-                    {ownerPhoneLabel(customer)} · {customer.points} điểm
-                  </span>
-                </div>
-                <div>
-                  <strong>{formatInactiveDays(customer.daysSinceLastVisit)}</strong>
-                  <span>{formatDateTime(customer.lastVisitAtMs) || "Chưa có lịch sử"}</span>
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-      </div>
-
-    </div>
-  );
-}
-
-function OverviewMetric({ icon, label, value }: { icon: ReactNode; label: string; value: number }) {
-  return (
-    <div className="overview-metric">
-      {icon}
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  );
-}
-
-function formatInactiveDays(days: number) {
-  if (days >= 999) {
-    return "Chưa quay lại";
-  }
-
-  return `${days} ngày`;
-}
-
-function ownerPhoneLabel(customer: { phone?: string; phoneLast4: string }) {
-  const digits = String(customer.phone || "").replace(/\D/g, "");
-
-  if (digits.startsWith("84") && digits.length >= 10) {
-    return `0${digits.slice(2)}`;
-  }
-  if (digits) {
-    return digits;
-  }
-
-  return customer.phoneLast4 ? `******${customer.phoneLast4}` : "Chưa có SĐT";
-}
-
-function ApprovalsPanel({
-  requests,
-  noteDrafts,
-  onNoteChange,
-  onSaveNote,
-  busyId,
-  photoBusyId,
-  photoProgress,
-  onApprove,
-  onReject,
-  onAddPhotos,
-  onRemovePhoto,
-  onCancelPhotoUpload,
-}: {
-  requests: PointRequest[];
-  noteDrafts: Record<string, string>;
-  onNoteChange: (requestId: string, note: string) => void;
-  onSaveNote: (request: PointRequest) => Promise<boolean>;
-  busyId: string;
-  photoBusyId: string;
-  photoProgress: number;
-  onApprove: (request: PointRequest) => void;
-  onReject: (request: PointRequest) => void;
-  onAddPhotos: (request: PointRequest, files: File[]) => PhotoSelectionResult | Promise<PhotoSelectionResult>;
-  onRemovePhoto: (request: PointRequest, photo: HaircutPhotoItem) => void | Promise<void>;
-  onCancelPhotoUpload: () => void;
-}) {
-  return (
-    <div className="ops-list">
-      {requests.length === 0 ? (
-        <div className="empty-state">
-          <ClipboardCheck size={30} aria-hidden="true" />
-          <strong>Chưa có yêu cầu cộng điểm</strong>
-          <p>Khi nhân viên gửi yêu cầu, chủ salon có thể bổ sung ảnh rồi duyệt tại đây.</p>
-        </div>
-      ) : (
-        requests.map((request) => (
-          <article className="ops-card static-card approval-card" key={request.id}>
-            <span className="ops-card-title">{request.customer?.name || "Khách hàng"}</span>
-            <span>SĐT: {request.customer ? ownerPhoneLabel(request.customer) : "Chưa có"}</span>
-            <span>Thợ: {request.staffName || "Nhân viên"}</span>
-            <span>Chi nhánh: {request.branchName || "Chi nhánh"}</span>
-            <label className="field">
-              <span>Ghi chú kiểu tóc (không bắt buộc)</span>
-              <textarea value={noteDrafts[request.id] ?? request.note} maxLength={1000} disabled={Boolean(busyId) || Boolean(photoBusyId)} onChange={event => onNoteChange(request.id, event.target.value)} />
-            </label>
-            <button type="button" className="secondary-button" disabled={Boolean(busyId) || Boolean(photoBusyId) || noteDrafts[request.id] === undefined || noteDrafts[request.id] === request.note} onClick={() => void onSaveNote(request)}>
-              Lưu ghi chú
-            </button>
-            {request.photoReadError ? <p role="status">Ảnh tạm thời chưa tải được. Các ảnh đã lưu vẫn được giữ; hãy làm mới trang để thử lại.</p> : null}
-            <HaircutPhotoCapture
-              title="Ảnh khách sau cắt"
-              photos={photoItemsFor(request)}
-              consentGranted={request.customer?.allowPhoto === true}
-              busy={photoBusyId === request.id}
-              disabled={busyId === request.id || Boolean(photoBusyId)}
-              disabledReason="Chụp hoặc chọn ảnh trước khi duyệt điểm."
-              captureLabel={`Chụp ảnh kiểu tóc cho ${request.customer?.name || "khách hàng"}`}
-              galleryLabel={`Chọn ảnh kiểu tóc cho ${request.customer?.name || "khách hàng"}`}
-              maxPhotos={MAX_HAIRCUT_PHOTOS}
-              progress={photoBusyId === request.id ? photoProgress : undefined}
-              onCancelUpload={onCancelPhotoUpload}
-              onFilesSelected={(files) => onAddPhotos(request, files)}
-              onRemove={(photo) => onRemovePhoto(request, photo)}
-            />
-            <small>
-              +{request.pointsAdded} điểm · {formatDateTime(request.createdAtMs)}
-            </small>
-
-            <div className="button-row">
-              <button
-                className="primary-button compact"
-                disabled={busyId === request.id || photoBusyId === request.id}
-                onClick={() => onApprove(request)}
-              >
-                <CheckCircle2 size={18} aria-hidden="true" />
-                Duyệt
-              </button>
-              <button
-                className="secondary-button"
-                disabled={busyId === request.id || photoBusyId === request.id}
-                onClick={() => onReject(request)}
-              >
-                <XCircle size={18} aria-hidden="true" />
-                Từ chối
-              </button>
-            </div>
-          </article>
-        ))
-      )}
-    </div>
-  );
-}
 
 function BranchesPanel({
   salonId,
@@ -1754,17 +1501,6 @@ function ManagedQrCard({
   );
 }
 
-function ownerTabFromRoute(route: string): OwnerTab | null {
-  if (route.startsWith("/approvals")) return "approvals";
-  if (route.startsWith("/branches")) return "branches";
-  if (route.startsWith("/staff")) return "staff";
-  if (route.startsWith("/customers")) return "customers";
-  if (route.startsWith("/wheel")) return "wheel";
-  if (route.startsWith("/rewards")) return "redeem";
-  if (route.startsWith("/settings") || route.startsWith("/delete-account")) return "settings";
-  if (route.startsWith("/overview") || route.startsWith("/queue")) return "overview";
-  return null;
-}
 
 function safeFileName(value: string) {
   return (
@@ -2371,173 +2107,6 @@ function CustomerSearchPanel({
           {loading ? "Đang tải..." : "Xem thêm khách"}
         </button>
       ) : null}
-    </div>
-  );
-}
-
-function WheelConfigPanel({
-  config,
-  saving,
-  onChange,
-  onSave,
-}: {
-  config: LuckyWheelConfig;
-  saving: boolean;
-  onChange: (config: LuckyWheelConfig) => void;
-  onSave: () => void;
-}) {
-  function updateSlot(index: number, label: string) {
-    onChange({
-      ...config,
-      slots: config.slots.map((slot, slotIndex) =>
-        slotIndex === index ? { ...slot, label } : slot,
-      ),
-    });
-  }
-
-  function toggleSlot(index: number, active: boolean) {
-    onChange({
-      ...config,
-      slots: config.slots.map((slot, slotIndex) =>
-        slotIndex === index ? { ...slot, active } : slot,
-      ),
-    });
-  }
-
-  function updateSlotType(index: number, type: "reward" | "no_prize") {
-    onChange({
-      ...config,
-      slots: config.slots.map((slot, slotIndex) =>
-        slotIndex === index ? { ...slot, type } : slot,
-      ),
-    });
-  }
-
-  function updateSlotWeight(index: number, weight: number) {
-    onChange({
-      ...config,
-      slots: config.slots.map((slot, slotIndex) =>
-        slotIndex === index
-          ? { ...slot, weight: Math.min(1_000_000, Math.max(1, Math.floor(weight || 1))) }
-          : slot,
-      ),
-    });
-  }
-
-  return (
-    <div className="panel">
-      <div className="detail-stack">
-        <div className="section-heading">
-          <Settings2 size={22} aria-hidden="true" />
-          <div>
-            <h2>Cấu hình vòng quay</h2>
-            <p className="muted">
-              Chủ salon có thể đổi điểm cần quay, nội dung và trọng số xác suất từng ô.
-            </p>
-          </div>
-        </div>
-
-        <label className="field">
-          <span>Số điểm cần để quay</span>
-          <input
-            type="number"
-            min={1}
-            max={10000}
-            value={config.requiredPoints}
-            onChange={(event) =>
-              onChange({
-                ...config,
-                requiredPoints: Math.min(10_000, Math.max(1, Number(event.target.value || 1))),
-              })
-            }
-          />
-        </label>
-
-        <label className="field">
-          <span>Hạn dùng mã quà (ngày)</span>
-          <input
-            type="number"
-            min={1}
-            max={365}
-            value={config.rewardValidityDays}
-            onChange={(event) =>
-              onChange({
-                ...config,
-                rewardValidityDays: Math.min(365, Math.max(1, Number(event.target.value || 1))),
-              })
-            }
-          />
-        </label>
-
-        <label className="toggle-row">
-          <input
-            type="checkbox"
-            checked={config.deductPointsAfterSpin}
-            onChange={(event) =>
-              onChange({ ...config, deductPointsAfterSpin: event.target.checked })
-            }
-          />
-          <span>Trừ điểm sau khi khách quay</span>
-        </label>
-
-        <div className="wheel-config-list" aria-label="Danh sách ô vòng quay">
-          {config.slots.map((slot, index) => (
-            <div className="wheel-slot-row" key={slot.slotId}>
-              <span>{index + 1}</span>
-              <label className="field wheel-slot-name"><span>Tên ô</span>
-              <input
-                aria-label={`Tên ô ${index + 1}`}
-                value={slot.label}
-                maxLength={60}
-                onChange={(event) => updateSlot(index, event.target.value)}
-                placeholder={`Ô ${index + 1}`}
-              />
-              </label>
-              <label className="field"><span>Loại ô</span>
-              <select
-                aria-label={`Loại ô ${index + 1}`}
-                value={slot.type}
-                onChange={(event) =>
-                  updateSlotType(index, event.target.value === "no_prize" ? "no_prize" : "reward")
-                }
-              >
-                <option value="reward">Có quà</option>
-                <option value="no_prize">Không trúng</option>
-              </select>
-              </label>
-              <label className="field"><span>Trọng số</span>
-              <input
-                aria-label={`Trọng số ô ${index + 1}`}
-                type="number"
-                min={1}
-                max={1_000_000}
-                value={slot.weight}
-                onChange={(event) => updateSlotWeight(index, Number(event.target.value || 1))}
-              />
-              </label>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={slot.active}
-                  onChange={(event) => toggleSlot(index, event.target.checked)}
-                />
-                Bật
-              </label>
-            </div>
-          ))}
-        </div>
-
-        <button className="primary-button" disabled={saving} onClick={onSave}>
-          {saving ? (
-            "Đang lưu..."
-          ) : (
-            <>
-              <Save size={20} aria-hidden="true" />
-              Lưu vòng quay
-            </>
-          )}
-        </button>
-      </div>
     </div>
   );
 }
