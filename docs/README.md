@@ -3,6 +3,7 @@
 Các tài liệu bắt đầu nên đọc:
 
 - [Trạng thái source và bản đang phục vụ](RELEASE_STATUS.md)
+- [App Check: kết quả kiểm tra và kế hoạch chưa bật chặn](RELEASE_STATUS.md#kế-hoạch-app-check--chưa-thực-hiện-thay-đổi-production)
 - [Luồng sản phẩm hiện tại](PRODUCT_SPEC.md)
 - [Kiến trúc Web/Firebase](architecture.md)
 - [API](API_CONTRACTS.md) và [dữ liệu](DATABASE.md)
