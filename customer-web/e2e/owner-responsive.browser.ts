@@ -11,6 +11,30 @@ test.beforeEach(async ({ page }) => {
   await expect(page.getByRole("button", { name: "Làm mới", exact: true })).toBeEnabled();
 });
 
+test("monthly plan preview is readable, accessible and never opens checkout", async ({
+  page,
+}, info) => {
+  await page
+    .getByRole("navigation", { name: "Chọn mục quản lý" })
+    .getByRole("button", { name: "Cài đặt", exact: true })
+    .click();
+  const preview = page.getByRole("region", { name: "Gói dịch vụ theo tháng" });
+  await expect(preview.getByRole("heading", { name: "Plus", exact: true })).toBeVisible();
+  await expect(preview.getByRole("heading", { name: "Pro", exact: true })).toBeVisible();
+  await expect(preview.getByText("1 chi nhánh", { exact: true })).toBeVisible();
+  await expect(preview.getByText("Tối đa 3 chi nhánh", { exact: true })).toBeVisible();
+  await expect(preview.getByText("Giá chưa công bố", { exact: true })).toHaveCount(2);
+  await expect(preview.getByRole("button")).toHaveCount(0);
+  await expect(preview.getByRole("link")).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  const audit = await new AxeBuilder({ page })
+    .include(".monthly-plans-preview")
+    .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+    .analyze();
+  expect(audit.violations).toEqual([]);
+  await preview.screenshot({ path: info.outputPath("monthly-plans-preview.png") });
+});
+
 test("all owner menu items fit without horizontal scrolling", async ({ page }, info) => {
   await page.screenshot({ path: info.outputPath("owner-home.png"), fullPage: true });
   const menu = page.locator(".owner-tabs");
