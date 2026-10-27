@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import test from "node:test";
+import { registerZodSecurityTests } from "./helpers/zod-security.mjs";
 
 const lock = JSON.parse(
   readFileSync(new URL("../firebase/functions/package-lock.json", import.meta.url), "utf8"),
@@ -11,6 +12,8 @@ const requireFunctions = createRequire(
 );
 const proxyAddr = requireFunctions("proxy-addr");
 const qs = requireFunctions("qs");
+
+registerZodSecurityTests(requireFunctions, "Functions");
 
 for (const [name, minimum] of [
   ["@fastify/busboy", "3.2.2"],
