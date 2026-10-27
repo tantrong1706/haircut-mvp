@@ -57,21 +57,30 @@ theo timeout khi đợi toàn bộ mạng rảnh. Cả hai được giữ trong 
 PASS. Lần cuối đợi giao diện/font sẵn sàng, vẫn kiểm tra lỗi ứng dụng và ghi riêng telemetry;
 không ghi nhận lỗi ở lần đó. Không sửa ứng dụng hoặc cấu hình để ép kết quả đạt.
 
-## App Check và API key — kiểm tra chỉ đọc ngày 27/10
+## App Check và API key — kiểm tra ngày 27/10
 
-| Hạng mục                                              | Kết quả quan sát                                                                                     |
-| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Authentication (`identitytoolkit.googleapis.com`)     | `UNENFORCED`                                                                                         |
-| Firestore (`firestore.googleapis.com`)                | `UNENFORCED`                                                                                         |
-| Storage (`firebasestorage.googleapis.com`)            | `UNENFORCED`                                                                                         |
-| Biến `ENFORCE_APP_CHECK` trên Functions đã triển khai | Cả 83 Functions có giá trị `false`; đây là kiểm tra biến cấu hình, không phải thử toàn bộ endpoint   |
-| Cấu hình build Customer Web cục bộ                    | Đúng project; chưa có giá trị `VITE_FIREBASE_APP_CHECK_SITE_KEY`                                     |
-| Đọc giới hạn API key                                  | Chưa xác minh: API quản lý khóa trả `403 SERVICE_DISABLED`; không lấy giá trị khóa, không tự bật API |
+| Hạng mục                                              | Kết quả quan sát                                                                                                                  |
+| ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Authentication (`identitytoolkit.googleapis.com`)     | `UNENFORCED`                                                                                                                      |
+| Firestore (`firestore.googleapis.com`)                | `UNENFORCED`                                                                                                                      |
+| Storage (`firebasestorage.googleapis.com`)            | `UNENFORCED`                                                                                                                      |
+| Biến `ENFORCE_APP_CHECK` trên Functions đã triển khai | Cả 83 Functions có giá trị `false`; đây là kiểm tra biến cấu hình, không phải thử toàn bộ endpoint                                |
+| Cấu hình build Customer Web cục bộ                    | Đúng project; chưa có giá trị `VITE_FIREBASE_APP_CHECK_SITE_KEY`                                                                  |
+| API quản lý khóa                                      | Đã bật riêng `apikeys.googleapis.com` sau khi chủ dự án phê duyệt; so sánh trước/sau chỉ thêm đúng API này, không tắt dịch vụ nào |
+| Metadata khóa trong project                           | Có ba khóa do Firebase tự tạo: Browser, Android, iOS; mỗi khóa có danh sách cho phép 27 API                                       |
+| Khóa của Customer Web hiện tại                        | Đã đối chiếu đúng khóa Browser với cấu hình Web bằng API lookup; không yêu cầu API trả giá trị khóa hoặc in giá trị khóa          |
+| Danh sách tên miền của khóa Browser                   | `allowedReferrers` rỗng; chưa có tên miền trong danh sách giới hạn                                                                |
+| Thay đổi giới hạn khóa                                | Không thay đổi; metadata của cả ba khóa được đối chiếu giữ nguyên trước/sau lượt đọc                                              |
 
-Không kết luận khóa đang không giới hạn từ lỗi đọc metadata. Khóa cấu hình Firebase Web là thông
-tin nhận diện công khai, không thay cho đăng nhập/phân quyền. Khi rà soát cần xem đúng khóa đang
-dùng, các API được phép và hạn mức; thử cấu hình hạn chế trên môi trường kiểm thử trước khi đổi
-khóa production. Xem [hướng dẫn quản lý khóa của Firebase](https://firebase.google.com/docs/projects/api-keys).
+Lần đọc đầu bị `403 SERVICE_DISABLED`; sau khi được phép bật API quản lý khóa, metadata đã đọc
+thành công. Khóa Web đã có giới hạn theo API, không phải hoàn toàn không giới hạn. Chưa xác minh
+API nào trong 27 API thực sự cần cho từng caller hoặc các hạn mức SMS/chi phí; không coi danh sách
+cho phép là bằng chứng có quyền truy cập dữ liệu hay tất cả dịch vụ đó đều đang được sử dụng.
+
+Khóa cấu hình Firebase Web là thông tin nhận diện công khai, không thay cho đăng nhập/phân quyền.
+Trước khi thu hẹp danh sách API hoặc giới hạn ứng dụng, cần kiểm kê các caller và thử cấu hình
+trên môi trường kiểm thử; chưa sửa khóa/quyền/hạn mức, không tạo hoặc xoay khóa trong lượt này.
+Xem [hướng dẫn quản lý khóa của Firebase](https://firebase.google.com/docs/projects/api-keys).
 
 Website hiện dùng `Referrer-Policy: no-referrer`. Cần kiểm tra tương thích trước khi thêm giới hạn
 HTTP referrer, tránh tự chặn yêu cầu đăng nhập hợp lệ; chưa thay header hoặc giới hạn khóa.
