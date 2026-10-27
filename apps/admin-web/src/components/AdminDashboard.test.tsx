@@ -86,6 +86,42 @@ async function openSalon() {
 }
 
 describe("all-salon operations dashboard", () => {
+  it("starts a guided salon inspection without scanning salons or writing automatically", async () => {
+    const actor = userEvent.setup();
+    render(<AdminDashboard user={user} />);
+    await actor.click(await screen.findByRole("button", { name: "Kiểm tra một salon" }));
+    expect(await screen.findByRole("heading", { name: "Danh sách salon" })).toBeVisible();
+    expect(screen.getByRole("region", { name: "Quy trình xử lý" })).toHaveTextContent("Xem trước");
+    expect(mock.diagnostics).not.toHaveBeenCalled();
+    expect(mock.repair).not.toHaveBeenCalled();
+    await actor.click(screen.getByRole("button", { name: "Kiểm tra Salon A" }));
+    expect(screen.getByRole("button", { name: "Kiểm tra Salon A" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(await screen.findByRole("heading", { name: "Kiểm tra Salon A" })).toHaveFocus();
+  });
+  it("exposes an unavailable section across tabs and offers an explicit retry", async () => {
+    mock.overview.mockRejectedValue({ code: "functions/unavailable" });
+    const actor = userEvent.setup();
+    render(<AdminDashboard user={user} />);
+    expect(await screen.findByRole("region", { name: "Tình trạng dữ liệu" })).toHaveTextContent(
+      "Tổng quan chưa tải được",
+    );
+    await actor.click(screen.getByRole("button", { name: "Thử tải lại" }));
+    await waitFor(() => expect(mock.overview).toHaveBeenCalledTimes(2));
+    expect(mock.repair).not.toHaveBeenCalled();
+  });
+  it("explains common incidents and routes back to salon checks without enabling writes", async () => {
+    const actor = userEvent.setup();
+    render(<AdminDashboard user={user} />);
+    await actor.click(screen.getByRole("button", { name: "Sự cố" }));
+    expect(screen.getByRole("heading", { name: "Ảnh hoặc ghi chú không lưu" })).toBeVisible();
+    expect(screen.getByText(/Không cộng bù điểm trực tiếp/)).toBeVisible();
+    await actor.click(screen.getByRole("button", { name: "Chọn salon để kiểm tra" }));
+    expect(await screen.findByRole("heading", { name: "Danh sách salon" })).toBeVisible();
+    expect(mock.repair).not.toHaveBeenCalled();
+  });
   it("loads additional salon pages instead of hiding everything after the first 50", async () => {
     mock.salons
       .mockResolvedValueOnce({ salons: [salon], nextCursor: "cursor-a" })

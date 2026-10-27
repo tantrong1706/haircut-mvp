@@ -53,6 +53,72 @@ async function completeForm(actor: ReturnType<typeof userEvent.setup>) {
   await actor.click(screen.getByRole("checkbox", { name: /Tôi đã kiểm tra đúng salon/ }));
 }
 
+it("does not report healthy when stale pointers are present without a matching issue entry", async () => {
+  mock.diagnostics.mockResolvedValue({
+    ...data,
+    issues: [],
+    stalePointers: [{ pointerId: "pointer-a", sessionId: "session-a", customerId: "customer-a" }],
+  });
+  renderPanel();
+  expect(await screen.findByRole("heading", { name: "Có dữ liệu cần đối chiếu" })).toBeVisible();
+  expect(screen.queryByText(/Không phát hiện bất thường trong phạm vi/)).not.toBeInTheDocument();
+  expect(mock.repair).not.toHaveBeenCalled();
+});
+it("visibly distinguishes partial checks from a full clean result", async () => {
+  mock.diagnostics.mockResolvedValue({
+    ...data,
+    issues: [],
+    pointerScan: { checked: 50, hasMore: true },
+  });
+  renderPanel();
+  expect(await screen.findByRole("heading", { name: "Kiểm tra chưa đầy đủ" })).toBeVisible();
+  expect(mock.repair).not.toHaveBeenCalled();
+});
+it("shows the inspected before/after values before a repair can be confirmed", async () => {
+  const actor = userEvent.setup();
+  renderPanel();
+  await actor.click(await screen.findByRole("button", { name: "Đồng bộ bộ đếm khách" }));
+  const preview = screen.getByRole("region", { name: "Xem trước thay đổi" });
+  expect(preview).toHaveTextContent("Đang lưu");
+  expect(preview).toHaveTextContent("Sau đồng bộ");
+  expect(preview).toHaveTextContent("9");
+  expect(preview).toHaveTextContent("2");
+  expect(screen.getByRole("button", { name: "Xác nhận sửa" })).toBeDisabled();
+  expect(mock.repair).not.toHaveBeenCalled();
+});
+it("copies a privacy-safe diagnostic summary without customer/session identifiers or a write", async () => {
+  mock.diagnostics.mockResolvedValue({
+    ...data,
+    stalePointers: [
+      {
+        pointerId: "PRIVATE_POINTER",
+        sessionId: "PRIVATE_SESSION",
+        customerId: "PRIVATE_CUSTOMER",
+      },
+    ],
+  });
+  const actor = userEvent.setup();
+  const write = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
+  renderPanel();
+  await actor.click(await screen.findByRole("button", { name: "Sao chép kết quả" }));
+  expect(write).toHaveBeenCalledOnce();
+  expect(write.mock.calls[0][0]).toContain("salon-a");
+  expect(write.mock.calls[0][0]).toContain("CUSTOMER_COUNT_MISMATCH");
+  expect(write.mock.calls[0][0]).not.toContain("PRIVATE_");
+  expect(mock.repair).not.toHaveBeenCalled();
+  write.mockRestore();
+});
+it("does not claim a new data change when the repair response says changed=false", async () => {
+  mock.repair.mockResolvedValue({ changed: false });
+  const actor = userEvent.setup();
+  renderPanel();
+  await actor.click(await screen.findByRole("button", { name: "Đồng bộ bộ đếm khách" }));
+  await completeForm(actor);
+  await actor.click(screen.getByRole("button", { name: "Xác nhận sửa" }));
+  expect(await screen.findByText(/Máy chủ không ghi thêm thay đổi/)).toBeVisible();
+  expect(mock.repair).toHaveBeenCalledOnce();
+});
+
 it("shows partial-scan bounds and never calls incomplete data globally healthy", async () => {
   mock.diagnostics.mockResolvedValue({
     ...data,
