@@ -32,7 +32,29 @@ test("monthly plan preview is readable, accessible and never opens checkout", as
     .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
     .analyze();
   expect(audit.violations).toEqual([]);
-  await preview.screenshot({ path: info.outputPath("monthly-plans-preview.png") });
+  const cards = preview.locator(".monthly-plans-grid");
+  await cards.scrollIntoViewIfNeeded();
+  const menuBox = await page.getByRole("navigation", { name: "Chọn mục quản lý" }).boundingBox();
+  const cardsBox = await cards.boundingBox();
+  expect(menuBox).not.toBeNull();
+  expect(cardsBox).not.toBeNull();
+  await page.evaluate(
+    (delta) => window.scrollBy(0, delta),
+    cardsBox!.y - menuBox!.y - menuBox!.height - 16,
+  );
+  await expect(cards).toBeInViewport({ ratio: 1 });
+  for (const name of ["Plus", "Pro"]) {
+    expect(
+      await preview.getByRole("heading", { name, exact: true }).evaluate((node) => {
+        const box = node.getBoundingClientRect();
+        const topmost = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+        return topmost !== null && node.contains(topmost);
+      }),
+      `${name} must not be obscured by the sticky owner menu`,
+    ).toBe(true);
+  }
+  await cards.screenshot({ path: info.outputPath("monthly-plan-cards.png") });
+  await page.screenshot({ path: info.outputPath("monthly-plans-viewport.png") });
 });
 
 test("all owner menu items fit without horizontal scrolling", async ({ page }, info) => {
