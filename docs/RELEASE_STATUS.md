@@ -1,61 +1,120 @@
 # Trạng thái CH Hair Web
 
-Cập nhật 22/10/2026 (Asia/Saigon). Sản phẩm là Web trên Firebase tại
-https://app.chhaircutsalon.cc. Source trên GitHub và bản đang phục vụ được ghi riêng bên dưới.
+Cập nhật ngày 27/10/2026 (Asia/Saigon). Website khách và cổng chủ salon/nhân viên dùng Web trên
+Firebase tại https://app.chhaircutsalon.cc. Mã nguồn đã nhập main không tự đồng nghĩa đã phát hành;
+các phiên bản đang phục vụ được ghi riêng dưới đây.
 
-## Production hiện tại
+## Bản đang phục vụ
 
-- Source đã deploy: 5435256bec2be8284215836c7a4c56aa4ff3e32b, merge PR #74.
-- Hosting version: abd70bd7cb0765fe (site haircut-c7d12).
-- 11 API Web/ảnh/khách quen đã phát hành và xác minh ACTIVE, runtime Node.js 22.
-- Storage Rules mới đã phát hành và đối chiếu trùng source.
-- Không deploy Admin, Zalo, Firestore Rules hoặc indexes. App Check enforcement không đổi.
-- Bản sao lưu 9 Functions cũ, cấu hình và Rules được giữ ngoài repository ở nơi hạn chế quyền.
-  Hosting trước đợt này: eab0acb4bfd1081a. Không commit các bản sao lưu có cấu hình riêng.
+| Thành phần                                 | Trạng thái đã xác minh                                                                                                                |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Customer Web, Chủ salon, Nhân viên         | Source `89cee9a6b9febac888bd27f7511698969fb8f16e`, merge [PR #77](https://github.com/tantrong1706/haircut-mvp/pull/77)                |
+| Customer Hosting                           | Site `haircut-c7d12`, version `71a00259847aef8f`, phát hành 27/10/2026                                                                |
+| Admin riêng                                | Site `haircut-c7d12-admin`, version `27b031fa97bf982e`; không đổi trong đợt 27/10. Xem [bản phát hành Admin](ADMIN_RELEASE_STATUS.md) |
+| Functions                                  | Đợt 27/10 không deploy Functions; đã so sánh và xác nhận metadata của cả 83 Functions không đổi trước/sau phát hành Hosting           |
+| Rules, indexes, quyền và dữ liệu nghiệp vụ | Không thay đổi trong đợt 27/10                                                                                                        |
 
-Các API được phát hành:
+Đã đọc lại metadata Hosting vào ngày 27/10: Customer và Admin vẫn phục vụ đúng hai version ở trên.
+Bản sao lưu và bằng chứng chi tiết được giữ ngoài Git; không commit credential, cấu hình riêng
+hoặc bản sao source Functions có chứa thông tin riêng.
 
-resolveCustomerQr, getWebCustomerContext, checkInWebCustomer, getHaircutPhotoReadUrls,
-beginHaircutPhotoUpload, finalizeHaircutPhotoUpload, awardReturningCustomerPoints,
-updatePendingPointRequestPhotos, getWebCustomerHistory, searchSalonCustomers,
-getSalonCustomerDetails.
+## Những thay đổi đã có trên website
 
-## Bằng chứng của lần phát hành 22/10
+- [PR #75](https://github.com/tantrong1706/haircut-mvp/pull/75): dọn tên/tài liệu Web; các thay đổi
+  này đã nằm trong bản đang chạy, không còn ở trạng thái “chưa deploy”.
+- [PR #76](https://github.com/tantrong1706/haircut-mvp/pull/76), source
+  `6a167123bf196a61c29cecfb57cdb184cf31323c`: đã phát hành 26/10; Customer Hosting khi đó là
+  `5a3de7074a1797a0`. Có đăng nhập quản lý chung theo vai trò, ảnh/ghi chú nội bộ và bổ sung
+  thông tin cho lượt cắt vừa hoàn tất theo phân quyền, không cộng thêm điểm.
+- Đợt 26/10 cũng phát hành đúng sáu API ảnh/lịch sử: `getWebCustomerHistory`,
+  `getSalonCustomerDetails`, `beginHaircutPhotoUpload`, `finalizeHaircutPhotoUpload`,
+  `getLatestHaircutDetails`, `updateLatestHaircutDetails`. Đây không phải tuyên bố toàn bộ 83
+  Functions đều được deploy từ PR #76.
+- PR #77: tách ba panel Owner, hook điều hướng và hàm định dạng dùng chung; giữ nguyên giao diện,
+  nội dung, API và nghiệp vụ. Source trên được phát hành riêng Customer Hosting ngày 27/10.
+  Phiên bản Hosting trước đợt này là `5a3de7074a1797a0`.
 
-- CI của merge SHA: Build Web và CodeQL PASS.
-- Chạy lại local: 119/119 backend unit; 256/256 Web tests, lint/format/build PASS.
-- Domain chính trả HTTPS 200 và HTML trùng artifact trên /, /owner, /staff, /history, /wheel.
-- Hai API mới từ chối request chưa đăng nhập bằng 401 UNAUTHENTICATED.
-- Kiểm tra live bằng salon/tài khoản/khách giả: danh bạ, tổng số khách, tìm trùng 4 số cuối,
-  lưu ghi chú, upload JPEG 2×2, finalize, xem link ký, chặn đọc trực tiếp và thu hồi token dài hạn PASS.
-- Consent thu hồi chặn URL ảnh mới; note-only không trả URL ảnh. Ảnh và ghi chú có trong lịch sử
-  sau xác nhận; cộng đúng một điểm. Gửi lặp/cooldown không cộng thêm.
-- Chủ salon và Nhân viên đóng/mở lại browser profile riêng vẫn giữ đăng nhập.
-- Giao diện bản thật kiểm tra ở viewport 360px và 1440px: không tràn ngang; không ghi nhận
-  page error hoặc HTTP error trong phiên thử đó.
-- Ba request mở cùng QR chi nhánh giả đồng thời PASS; QR sai bị từ chối.
-- Toàn bộ dữ liệu/tài khoản/ảnh giả và browser profile đã dọn, không đụng dữ liệu khách thật.
+## Bằng chứng phát hành 27/10
 
-Lần chuẩn bị canary đầu thất bại do công cụ thử thiếu quota-project header khi dùng OAuth;
-dữ liệu giả của lần đó cũng đã dọn. Không thay quyền Auth hay cấu hình app để ép PASS.
+- PR #77 đạt 9/9 kiểm tra trước merge. Mã nguồn sau merge trùng cây mã của PR đã kiểm thử.
+- [Build Web trên main](https://github.com/tantrong1706/haircut-mvp/actions/runs/40447691074)
+  và [CodeQL trên main](https://github.com/tantrong1706/haircut-mvp/actions/runs/40447691086): PASS,
+  cùng source `89cee9a6b9febac888bd27f7511698969fb8f16e`.
+- Chạy lại trên main: lint, định dạng, TypeScript, production build và 301/301 Web unit test PASS;
+  35/35 ca trình duyệt Owner PASS trên năm cấu hình trình duyệt/kích thước màn hình.
+- Đối chiếu SHA256 của 55 file đã phát hành với artifact đóng gói: PASS. Đã sao lưu và kiểm tra
+  55 file của bản Hosting trước để có thể khôi phục.
+- HTTPS, HTML đúng artifact và security headers: PASS trên 12 đường dẫn, gồm `/login`, `/owner`,
+  `/staff`, `/history`, `/wheel`, `/rewards` và `/app-check`.
+- Trình duyệt thật, ngữ cảnh chưa đăng nhập riêng: sáu trang trên điện thoại/máy tính, 12 lượt mở,
+  giữ nguyên tiêu đề và chuyển hướng đăng nhập; lần kiểm tra cuối không ghi nhận lỗi JavaScript,
+  console, HTTP, request thất bại hoặc tràn ngang.
+- Không gửi OTP, email mời, tạo khách, sửa ảnh thật hoặc thực hiện giao dịch điểm/quà để kiểm tra
+  đợt phát hành này. Không suy ra giao dịch thật đã PASS chỉ từ kiểm tra trang chưa đăng nhập.
 
-## Source cleanup sau phát hành — chưa deploy
+Lần kiểm tra trình duyệt đầu ghi nhận một request Google Analytics thất bại; lần chẩn đoán tiếp
+theo timeout khi đợi toàn bộ mạng rảnh. Cả hai được giữ trong bằng chứng ngoài Git, không ghi là
+PASS. Lần cuối đợi giao diện/font sẵn sàng, vẫn kiểm tra lỗi ứng dụng và ghi riêng telemetry;
+không ghi nhận lỗi ở lần đó. Không sửa ứng dụng hoặc cấu hình để ép kết quả đạt.
 
-Bản dọn tên và tài liệu Web đổi hằng branding APP_NAME/APP_MARK, script start-web, gỡ meta/CSS/
-nhánh thông báo Zalo thừa và cập nhật hướng dẫn. Chủ dự án chỉ cho phép nhập main khi CI PASS,
-không cho deploy trong đợt dọn này. Website hiện vẫn chạy source PR #74 ở trên.
+## App Check và API key — kiểm tra ngày 27/10
 
-Đổi source không xóa Functions/secrets/Gateway đã triển khai và không đổi ID khách.
-Xem [ranh giới tương thích](LEGACY_COMPATIBILITY.md) và [bằng chứng dọn tên](testing/web-naming-cleanup.tdd.md).
+| Hạng mục                                              | Kết quả quan sát                                                                                                                  |
+| ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Authentication (`identitytoolkit.googleapis.com`)     | `UNENFORCED`                                                                                                                      |
+| Firestore (`firestore.googleapis.com`)                | `UNENFORCED`                                                                                                                      |
+| Storage (`firebasestorage.googleapis.com`)            | `UNENFORCED`                                                                                                                      |
+| Biến `ENFORCE_APP_CHECK` trên Functions đã triển khai | Cả 83 Functions có giá trị `false`; đây là kiểm tra biến cấu hình, không phải thử toàn bộ endpoint                                |
+| Cấu hình build Customer Web cục bộ                    | Đúng project; chưa có giá trị `VITE_FIREBASE_APP_CHECK_SITE_KEY`                                                                  |
+| API quản lý khóa                                      | Đã bật riêng `apikeys.googleapis.com` sau khi chủ dự án phê duyệt; so sánh trước/sau chỉ thêm đúng API này, không tắt dịch vụ nào |
+| Metadata khóa trong project                           | Có ba khóa do Firebase tự tạo: Browser, Android, iOS; mỗi khóa có danh sách cho phép 27 API                                       |
+| Khóa của Customer Web hiện tại                        | Đã đối chiếu đúng khóa Browser với cấu hình Web bằng API lookup; không yêu cầu API trả giá trị khóa hoặc in giá trị khóa          |
+| Danh sách tên miền của khóa Browser                   | `allowedReferrers` rỗng; chưa có tên miền trong danh sách giới hạn                                                                |
+| Thay đổi giới hạn khóa                                | Không thay đổi; metadata của cả ba khóa được đối chiếu giữ nguyên trước/sau lượt đọc                                              |
 
-## Giới hạn
+Lần đọc đầu bị `403 SERVICE_DISABLED`; sau khi được phép bật API quản lý khóa, metadata đã đọc
+thành công. Khóa Web đã có giới hạn theo API, không phải hoàn toàn không giới hạn. Chưa xác minh
+API nào trong 27 API thực sự cần cho từng caller hoặc các hạn mức SMS/chi phí; không coi danh sách
+cho phép là bằng chứng có quyền truy cập dữ liệu hay tất cả dịch vụ đó đều đang được sử dụng.
 
-- Browser viewport không thay thế kiểm thử iPhone/Android vật lý. Không gửi OTP thật trong
-  canary 22/10; bằng chứng OTP thực trước đây nằm trong WEB_CUSTOMER_RELEASE_READINESS.md.
-- Ảnh/ghi chú chỉ lưu trước xác nhận điểm. Tích điểm nhanh không đính kèm ảnh/ghi chú.
-- Không thu hồi hàng loạt link ảnh khách cũ; link ký tối đa 15 phút không thu hồi bản đã tải về.
-- Storage Rules compile/deploy thành công, còn cảnh báo helper cũ không được gọi.
-- Đây là bằng chứng của release cụ thể, không cam kết ứng dụng không còn lỗi hoặc bảo mật tuyệt đối.
-- Các báo cáo audit và số lượng cảnh báo dependency cũ có ngày riêng; không xem là kết quả hiện tại.
+Khóa cấu hình Firebase Web là thông tin nhận diện công khai, không thay cho đăng nhập/phân quyền.
+Trước khi thu hẹp danh sách API hoặc giới hạn ứng dụng, cần kiểm kê các caller và thử cấu hình
+trên môi trường kiểm thử; chưa sửa khóa/quyền/hạn mức, không tạo hoặc xoay khóa trong lượt này.
+Xem [hướng dẫn quản lý khóa của Firebase](https://firebase.google.com/docs/projects/api-keys).
 
-Báo cáo trước ngày 22/10 còn trong lịch sử Git; không xóa lịch sử release hoặc bản sao lưu.
+Website hiện dùng `Referrer-Policy: no-referrer`. Cần kiểm tra tương thích trước khi thêm giới hạn
+HTTP referrer, tránh tự chặn yêu cầu đăng nhập hợp lệ; chưa thay header hoặc giới hạn khóa.
+
+## Kế hoạch App Check — chưa thực hiện thay đổi production
+
+1. Kiểm kê đúng các ứng dụng/caller đang sử dụng: khách Web, chủ salon/nhân viên, Admin riêng và
+   các caller tương thích còn hoạt động. Không mặc định mọi client đều đã sẵn sàng.
+2. Xác minh khóa reCAPTCHA Enterprise, danh sách tên miền và cấu hình client cho từng Web app;
+   kiểm tra lấy/refresh App Check token mà không ghi token ra log. Việc cấu hình/phát hành client
+   phải được duyệt riêng; chưa bật chặn khi client còn thiếu khóa hoặc chưa có bằng chứng token.
+3. Theo dõi request hợp lệ/thiếu/sai token trước khi chặn; kiểm tra đăng nhập, khôi phục phiên,
+   điểm, ảnh và quà bằng dữ liệu thử được cho phép. Chưa đo tỷ lệ token hợp lệ trong lượt rà soát này.
+4. Chỉ khi các client/caller liên quan đã đạt và được chủ dự án cho phép, bật lần lượt phạm vi đã
+   kiểm chứng, có đường khôi phục; không bật đồng loạt 83 Functions hoặc mọi dịch vụ.
+5. Rà soát Authentication/OTP riêng: cơ chế reCAPTCHA, chính sách vùng gửi SMS, hạn mức và cảnh báo
+   chi phí. Cờ của callable Functions không tự bật enforcement cho Authentication.
+
+[App Check cho callable Functions](https://firebase.google.com/docs/app-check/cloud-functions)
+và [bật enforcement theo từng dịch vụ](https://firebase.google.com/docs/app-check/enable-enforcement)
+là các phạm vi cấu hình riêng. App Check bổ sung chống lạm dụng, không thay kiểm tra vai trò,
+salon/chi nhánh, chữ ký QR, rate limit hoặc quyền truy cập dữ liệu hiện có.
+
+## Giới hạn và lịch sử
+
+- Chưa kiểm tra camera/HEIC trực tiếp trên điện thoại vật lý trong đợt phát hành 27/10. Kết quả
+  mô phỏng trình duyệt không thay thế bằng chứng đó; OTP thật cũng không được thử lại trong đợt này.
+- Khách chỉ xem ngày cắt/điểm; ảnh và ghi chú là nội bộ salon, đọc/sửa theo phân quyền. Bổ sung
+  cho lượt vừa hoàn tất không được đổi điểm, ngày lượt cắt hay thời gian chống cộng lặp.
+- Không thu hồi hàng loạt link ảnh khách cũ; không thể thu hồi bản ảnh người dùng đã tải xuống.
+- Không xóa dịch vụ, tunnel, API/secrets tương thích hoặc mã native trong đợt cập nhật tài liệu.
+  Xem [ranh giới tương thích](LEGACY_COMPATIBILITY.md).
+- [Bản ghi trạng thái 22/10 được giữ tại commit cố định](https://github.com/tantrong1706/haircut-mvp/blob/6a167123bf196a61c29cecfb57cdb184cf31323c/docs/RELEASE_STATUS.md).
+  Các báo cáo có ngày/SHA trong `testing/` hoặc `archive/` là bằng chứng lịch sử, không phải danh
+  sách lỗi hay số lượng kiểm thử hiện tại. Không xóa hoặc sửa lại lịch sử để làm đẹp trạng thái.
+- Bằng chứng OTP cũ nằm trong [báo cáo Web customer](WEB_CUSTOMER_RELEASE_READINESS.md). Đây là
+  bằng chứng theo từng thời điểm, không cam kết ứng dụng không còn lỗi hoặc bảo mật tuyệt đối.
