@@ -66,6 +66,7 @@ const owner: AppUser = {
   uid: "owner-fixture",
   salonId: " salon-fixture ",
   name: "Chủ mẫu",
+  avatarUrl: "",
   role: "owner",
   isActive: true,
 };
@@ -111,7 +112,6 @@ async function openTab(name: string) {
   await userEvent.setup().click(
     within(screen.getByRole("navigation", { name: "Chọn mục quản lý" })).getByRole("button", {
       name,
-      exact: true,
     }),
   );
 }
@@ -209,10 +209,7 @@ describe("OwnerPage behavior before extraction", () => {
       await act(async () =>
         window.dispatchEvent(new CustomEvent("haircut:navigate", { detail: route })),
       );
-      expect(menu.getByRole("button", { name: label, exact: true })).toHaveAttribute(
-        "aria-pressed",
-        "true",
-      );
+      expect(menu.getByRole("button", { name: label })).toHaveAttribute("aria-pressed", "true");
     }
     const handler = add.mock.calls.find(([event]) => event === "haircut:navigate")?.[1];
     expect(handler).toBeDefined();
@@ -230,7 +227,7 @@ describe("OwnerPage behavior before extraction", () => {
     await openTab("Duyệt điểm");
     expect(screen.getByLabelText("Ghi chú kiểu tóc (không bắt buộc)")).toHaveValue("Form mới");
     mocks.saveNote.mockRejectedValue(new Error("Không lưu được ghi chú mẫu"));
-    await user.click(screen.getByRole("button", { name: "Duyệt", exact: true }));
+    await user.click(screen.getByRole("button", { name: "Duyệt" }));
     expect(await screen.findByText("Không lưu được ghi chú mẫu")).toBeVisible();
     expect(mocks.saveNote).toHaveBeenCalledWith({
       salonId: "salon-fixture",
@@ -246,12 +243,12 @@ describe("OwnerPage behavior before extraction", () => {
     await openTab("Duyệt điểm");
     const user = userEvent.setup();
     await user.type(screen.getByLabelText("Ghi chú kiểu tóc (không bắt buộc)"), " mới");
-    await user.click(screen.getByRole("button", { name: "Duyệt", exact: true }));
+    await user.click(screen.getByRole("button", { name: "Duyệt" }));
     const dialog = await screen.findByRole("dialog");
     expect(dialog).toHaveTextContent("Cộng 2 điểm cho Khách mẫu");
     expect(mocks.saveNote).toHaveBeenCalledOnce();
     expect(mocks.approve).not.toHaveBeenCalled();
-    await user.click(within(dialog).getByRole("button", { name: "Duyệt điểm", exact: true }));
+    await user.click(within(dialog).getByRole("button", { name: "Duyệt điểm" }));
     await screen.findByText("Đã duyệt cộng điểm và lưu lịch sử cắt tóc.");
     // Characterizes the existing captured request, not a new payload contract.
     expect(mocks.approve).toHaveBeenCalledWith(request);
@@ -261,14 +258,12 @@ describe("OwnerPage behavior before extraction", () => {
     await openPage();
     await openTab("Duyệt điểm");
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "Từ chối", exact: true }));
+    await user.click(screen.getByRole("button", { name: "Từ chối" }));
     await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Hủy" }));
     expect(mocks.reject).not.toHaveBeenCalled();
     mocks.reject.mockRejectedValue(new Error("Quyền bị từ chối mẫu"));
-    await user.click(screen.getByRole("button", { name: "Từ chối", exact: true }));
-    await user.click(
-      within(screen.getByRole("dialog")).getByRole("button", { name: "Từ chối", exact: true }),
-    );
+    await user.click(screen.getByRole("button", { name: "Từ chối" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Từ chối" }));
     expect(await screen.findByText("Quyền bị từ chối mẫu")).toBeVisible();
     expect(mocks.reject).toHaveBeenCalledWith(request);
   });

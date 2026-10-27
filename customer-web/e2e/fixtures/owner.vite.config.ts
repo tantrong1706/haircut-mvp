@@ -7,13 +7,12 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: [
-      "../services/operations",
-      "../services/ownerWorkspace",
-      "../services/returningCustomerPoints",
-    ].map((find) => ({
-      find,
-      replacement: fileURLToPath(new URL("./owner-operations.ts", import.meta.url)),
-    })),
+      {
+        // Match the same service modules from pages and extracted owner features.
+        find: /^(?:\.\.\/)+services\/(?:operations|ownerWorkspace|returningCustomerPoints)$/,
+        replacement: fileURLToPath(new URL("./owner-operations.ts", import.meta.url)),
+      },
+    ],
   },
   server: { host: "127.0.0.1", port: 4176, strictPort: true },
 });
