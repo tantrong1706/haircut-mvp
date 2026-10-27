@@ -19,6 +19,7 @@ for (const directory of [
     const workspaceLock = JSON.parse(
       readFileSync(new URL(`../${directory}/package-lock.json`, import.meta.url), "utf8"),
     );
+    assert.equal(workspaceLock.packages["node_modules/@haircut/contracts"].dependencies.zod, "^4.6.6");
     const copies = Object.entries(workspaceLock.packages).filter(
       ([path, entry]) => path.endsWith("node_modules/zod") && entry.dev !== true,
     );
