@@ -1,0 +1,114 @@
+.monthly-plans-preview {
+  min-width: 0;
+  display: grid;
+  gap: 18px;
+}
+
+.monthly-plans-preview .dashboard-heading,
+.monthly-plans-preview p {
+  margin: 0;
+}
+
+.monthly-plans-preview .monthly-plan-cycle {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.monthly-plans-preview .monthly-plans-intro,
+.monthly-plans-preview .monthly-plan-card header p {
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.monthly-plans-preview .monthly-plans-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.monthly-plans-preview .monthly-plan-card {
+  min-width: 0;
+  display: grid;
+  gap: 18px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper-soft);
+  overflow-wrap: anywhere;
+}
+
+.monthly-plans-preview h3 {
+  margin: 0 0 8px;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.monthly-plans-preview .monthly-plan-price {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.monthly-plans-preview .monthly-plan-price strong {
+  font-size: 17px;
+  font-weight: 500;
+}
+
+.monthly-plans-preview .monthly-plan-price span,
+.monthly-plans-preview dt {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.monthly-plans-preview dl,
+.monthly-plans-preview dd {
+  margin: 0;
+}
+
+.monthly-plans-preview dl > div {
+  display: grid;
+  gap: 5px;
+}
+
+.monthly-plans-preview dd {
+  font-weight: 500;
+}
+
+.monthly-plans-preview .monthly-plans-shared h3 {
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.monthly-plans-preview .monthly-plans-shared ul {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 24px;
+  line-height: 1.6;
+}
+
+.monthly-plans-preview .monthly-plans-pending {
+  display: grid;
+  gap: 6px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+@media (max-width: 640px) {
+  .monthly-plans-preview .monthly-plans-grid,
+  .monthly-plans-preview .monthly-plans-shared ul {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .monthly-plans-preview .monthly-plan-card {
+    padding: 16px;
+    gap: 14px;
+  }
+}

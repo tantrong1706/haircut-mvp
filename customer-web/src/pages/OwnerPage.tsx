@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { OverviewPanel } from "../features/owner/OverviewPanel";
+import { MonthlyPlansPreview } from "../features/owner/MonthlyPlansPreview";
 import { ApprovalsPanel } from "../features/owner/ApprovalsPanel";
 import { WheelConfigPanel } from "../features/owner/WheelConfigPanel";
 import { ownerPhoneLabel } from "../features/owner/ownerFormatters";
@@ -798,6 +799,7 @@ export function OwnerPage({ currentUser }: Props) {
             saving={savingSalonProfile}
             onSave={saveSalonProfile}
           />
+          <MonthlyPlansPreview />
           <SalonBrandingPanel
             salonName={salonProfile?.name || "Salon"}
             avatarUrl={salonProfile?.avatarUrl || ""}
