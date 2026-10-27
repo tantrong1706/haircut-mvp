@@ -118,6 +118,46 @@ it("does not claim a new data change when the repair response says changed=false
   expect(await screen.findByText(/Máy chủ không ghi thêm thay đổi/)).toBeVisible();
   expect(mock.repair).toHaveBeenCalledOnce();
 });
+it("offers a read-only report when clipboard access fails and clears it when rechecking", async () => {
+  const actor = userEvent.setup();
+  const write = vi
+    .spyOn(navigator.clipboard, "writeText")
+    .mockRejectedValue(new Error("PRIVATE_ERROR"));
+  try {
+    renderPanel();
+    await actor.click(await screen.findByRole("button", { name: "Sao chép kết quả" }));
+    const report = await screen.findByRole("textbox", { name: "Báo cáo kiểm tra" });
+    expect(report).toHaveAttribute("readonly");
+    expect((report as HTMLTextAreaElement).value).toContain("CUSTOMER_COUNT_MISMATCH");
+    expect(screen.queryByText(/PRIVATE_ERROR/)).not.toBeInTheDocument();
+    await actor.click(screen.getByRole("button", { name: "Kiểm tra lại" }));
+    expect(screen.queryByRole("textbox", { name: "Báo cáo kiểm tra" })).not.toBeInTheDocument();
+    expect(await screen.findByText("Sai bộ đếm")).toBeVisible();
+    expect(mock.repair).not.toHaveBeenCalled();
+  } finally {
+    write.mockRestore();
+  }
+});
+it("does not announce a late copy result after leaving the salon", async () => {
+  let resolveCopy!: () => void;
+  const actor = userEvent.setup();
+  const write = vi.spyOn(navigator.clipboard, "writeText").mockImplementation(
+    () =>
+      new Promise<void>((resolve) => {
+        resolveCopy = resolve;
+      }),
+  );
+  try {
+    const view = renderPanel();
+    await actor.click(await screen.findByRole("button", { name: "Sao chép kết quả" }));
+    view.unmount();
+    await act(async () => resolveCopy());
+    expect(screen.queryByText(/Đã sao chép kết quả/)).not.toBeInTheDocument();
+    expect(mock.repair).not.toHaveBeenCalled();
+  } finally {
+    write.mockRestore();
+  }
+});
 
 it("shows partial-scan bounds and never calls incomplete data globally healthy", async () => {
   mock.diagnostics.mockResolvedValue({

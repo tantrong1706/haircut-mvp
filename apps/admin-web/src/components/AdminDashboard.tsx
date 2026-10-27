@@ -199,7 +199,8 @@ export function AdminDashboard({ user }: { user: User }) {
           <div>
             {ADMIN_TABS.filter((item) => errors[item.id]).map((item) => (
               <button className="status-link" key={item.id} onClick={() => setTab(item.id)}>
-                {item.label} chưa tải được
+                {item.label}{" "}
+                {item.id === "salons" && salons !== null ? "chưa tải đủ" : "chưa tải được"}
               </button>
             ))}
           </div>

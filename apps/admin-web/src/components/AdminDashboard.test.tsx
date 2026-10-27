@@ -87,17 +87,33 @@ async function openSalon() {
 
 describe("all-salon operations dashboard", () => {
   it("keeps loaded salons visible and distinguishes a failed next page from a failed initial list", async () => {
-    mock.salons.mockResolvedValueOnce({ salons: [salon], nextCursor: "next-page" }).mockRejectedValueOnce({ code: "functions/unavailable" });
+    mock.salons
+      .mockResolvedValueOnce({ salons: [salon], nextCursor: "next-page" })
+      .mockRejectedValueOnce({ code: "functions/unavailable" });
     const actor = userEvent.setup();
     render(<AdminDashboard user={user} />);
     await actor.click(screen.getByRole("button", { name: /^Salon$/ }));
     await actor.click(await screen.findByRole("button", { name: "Tải thêm salon" }));
     expect(await screen.findByText(/Chưa tải được trang salon tiếp theo/)).toBeVisible();
     expect(screen.getByRole("button", { name: "Kiểm tra Salon A" })).toBeVisible();
-    expect(screen.getByRole("region", { name: "Tình trạng dữ liệu" })).toHaveTextContent("Salon chưa tải đủ");
+    expect(screen.getByRole("region", { name: "Tình trạng dữ liệu" })).toHaveTextContent(
+      "Salon chưa tải đủ",
+    );
   });
   it("keeps configuration read-only and explains supported audit actions", async () => {
-    mock.auditEvents.mockResolvedValue({ events: [{ id: "event", salonId: salon.id, actorId: "admin", action: "admin.support.reconcile_customer_count", targetType: "salon", targetId: salon.id, createdAtMs: null }] });
+    mock.auditEvents.mockResolvedValue({
+      events: [
+        {
+          id: "event",
+          salonId: salon.id,
+          actorId: "admin",
+          action: "admin.support.reconcile_customer_count",
+          targetType: "salon",
+          targetId: salon.id,
+          createdAtMs: null,
+        },
+      ],
+    });
     const actor = userEvent.setup();
     render(<AdminDashboard user={user} />);
     await actor.click(screen.getByRole("button", { name: "Cấu hình" }));
@@ -109,7 +125,14 @@ describe("all-salon operations dashboard", () => {
     expect(mock.repair).not.toHaveBeenCalled();
   });
   it("filters only loaded directory entries without running remote diagnostics", async () => {
-    mock.salons.mockResolvedValue({ salons: [salon, { ...salon, id: "salon-b", name: "Salon B", status: "suspended" }, { ...salon, id: "salon-c", name: "Salon C", status: "pending_deletion" }], nextCursor: null });
+    mock.salons.mockResolvedValue({
+      salons: [
+        salon,
+        { ...salon, id: "salon-b", name: "Salon B", status: "suspended" },
+        { ...salon, id: "salon-c", name: "Salon C", status: "pending_deletion" },
+      ],
+      nextCursor: null,
+    });
     const actor = userEvent.setup();
     render(<AdminDashboard user={user} />);
     await actor.click(screen.getByRole("button", { name: /^Salon$/ }));
