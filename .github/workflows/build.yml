@@ -219,6 +219,9 @@ jobs:
         working-directory: apps/manager-mobile
         run: npm run check
 
+      - name: Manager shared-contract security regression
+        run: node --test test/manager-dependency-security.test.mjs
+
   browser-tests:
     name: Browser flows
     runs-on: ubuntu-latest

@@ -41,7 +41,20 @@
     "firebase-admin": "^13.10.0",
     "firebase-functions": "^7.2.5",
     "sharp": "0.35.5",
-    "zod": "^4.4.3"
+    "zod": "^4.6.6"
+  },
+  "overrides": {
+    "body-parser@^1.0.0": "1.20.9",
+    "qs@^6.0.0": "6.16.2",
+    "gaxios@^6.0.0": {
+      "uuid": "11.1.1"
+    },
+    "google-gax@^4.0.0": {
+      "uuid": "11.1.1"
+    },
+    "teeny-request@^9.0.0": {
+      "uuid": "11.1.1"
+    }
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
