@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ShieldCheck } from "lucide-react";
 import { BrandLogo } from "../components/BrandLogo";
+import { CustomerPasskeyPanel } from "../components/CustomerPasskeys";
 import { signOutCustomerWeb } from "../services/customerWebAuth";
 import { captureError, trackEvent } from "../services/monitoring";
 import type { AppSession } from "../services/types";
@@ -54,6 +55,7 @@ export function CustomerAccountPage({ session, onLoggedOut }: Props) {
         </div>
       </div>
       <div className="account-session-actions">
+        <CustomerPasskeyPanel onLoggedOut={onLoggedOut} />
         <button
           type="button"
           className="secondary-button"

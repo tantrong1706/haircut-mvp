@@ -1,8 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { assertPasskeyEnrollment, assertPasskeyAccount, passkeyUserHandle } from "../src/domains/auth/customerPasskeyPolicy";
+import {
+  assertPasskeyEnrollment,
+  assertPasskeyAccount,
+  passkeyUserHandle,
+} from "../src/domains/auth/customerPasskeyPolicy";
 
 const now = 1_800_000;
-const phoneAuth = { uid: "existing-uid", token: { phone_number: "+84901234567", firebase: { sign_in_provider: "phone" }, auth_time: now / 1_000 } };
+const phoneAuth = {
+  uid: "existing-uid",
+  token: {
+    phone_number: "+84901234567",
+    firebase: { sign_in_provider: "phone" },
+    auth_time: now / 1_000,
+  },
+};
 describe("customer-only passkey trust boundary", () => {
   it("enrolls only a recent verified Phone login, preserving its UID", () => {
     expect(assertPasskeyEnrollment(phoneAuth, now).uid).toBe("existing-uid");
@@ -18,7 +29,13 @@ describe("customer-only passkey trust boundary", () => {
     expect(() => assertPasskeyEnrollment(auth, now)).toThrow();
   });
   it("accepts only the same live unprivileged phone account", () => {
-    expect(() => assertPasskeyAccount({ uid: "existing-uid", phoneNumber: "+84901234567", disabled: false }, "+84901234567", false)).not.toThrow();
+    expect(() =>
+      assertPasskeyAccount(
+        { uid: "existing-uid", phoneNumber: "+84901234567", disabled: false },
+        "+84901234567",
+        false,
+      ),
+    ).not.toThrow();
   });
   it.each([
     [{ uid: "existing-uid", phoneNumber: "+84901234567", disabled: true }, false],

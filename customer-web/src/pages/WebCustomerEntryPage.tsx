@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BrandLogo } from "../components/BrandLogo";
+import { CustomerPasskeySignIn } from "../components/CustomerPasskeys";
 import {
   beginCustomerPhoneSignIn,
   clearPendingWebQr,
@@ -9,6 +10,7 @@ import {
   loadWebSalonHint,
   saveWebSalonHint,
   savePendingWebQr,
+  signOutCustomerWeb,
   subscribeCustomerWebAuth,
   type CustomerPhoneConfirmation,
 } from "../services/customerWebAuth";
@@ -232,6 +234,18 @@ export function WebCustomerEntryPage({ onReady }: Props) {
     }
   }
 
+  async function recoverWithOtp() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await signOutCustomerWeb();
+    } catch {
+      setError("Chưa đăng xuất được. Vui lòng kiểm tra mạng và thử lại.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (!hasQrContext(qr) && !salonHint) {
     return (
       <section className="panel empty-state" role="alert">
@@ -319,6 +333,7 @@ export function WebCustomerEntryPage({ onReady }: Props) {
             </>
           )}
           <div id="customer-phone-recaptcha" />
+          <CustomerPasskeySignIn disabled={busy} onBusyChange={setBusy} />
           {error ? <p role="alert">{error}</p> : null}
         </div>
         <nav className="auth-legal-links" aria-label="Thông tin sử dụng">
@@ -350,6 +365,16 @@ export function WebCustomerEntryPage({ onReady }: Props) {
             onClick={() => setLoadAttempt((value) => value + 1)}
           >
             Thử lại
+          </button>
+        ) : null}
+        {error ? (
+          <button
+            className="secondary-button"
+            type="button"
+            disabled={busy}
+            onClick={() => void recoverWithOtp()}
+          >
+            Đăng nhập lại bằng OTP
           </button>
         ) : null}
       </section>
