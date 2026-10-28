@@ -1,4 +1,5 @@
 import { deleteApp, getApps } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
 import { Timestamp, getFirestore } from "firebase-admin/firestore";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -19,6 +20,23 @@ const db = getFirestore();
 const secret = "fixture-qr-signing-key-only-32-characters";
 
 describe("authenticated web customer platform", () => {
+  it("a live server-bound passkey restores the same customer, while a marker alone or revoked key cannot", async () => {
+    await seedSalon("salon-a", "branch-a");
+    const context = await getWebCustomerContext.run(phoneRequest("uid-passkey", signedBranchQr("salon-a", "branch-a")));
+    const phone = "+84901234567";
+    const keyId = "a".repeat(64);
+    await db.doc(`_customer_passkeys/${keyId}`).set({ uid: "uid-passkey", phone, active: true });
+    vi.stubEnv("CUSTOMER_PASSKEYS_ENABLED", "true");
+    const lookup = vi.spyOn(getAuth(), "getUser").mockResolvedValue({ uid: "uid-passkey", phoneNumber: phone, disabled: false, tokensValidAfterTime: "1970-01-01T00:00:00Z" } as never);
+    const token = { phone_number: phone, customer_auth_method: "passkey-v1", customer_passkey_id: keyId, firebase: { sign_in_provider: "custom" }, iat: Math.floor(Date.now() / 1_000) };
+    try {
+      const restored = await getWebCustomerSession.run(requestFor("uid-passkey", { salonId: "salon-a" }, token));
+      expect(restored.customer.customerId).toBe(context.customer.customerId);
+      await expect(getWebCustomerSession.run(requestFor("different-uid", { salonId: "salon-a" }, token))).rejects.toMatchObject({ code: "unauthenticated" });
+      await db.doc(`_customer_passkeys/${keyId}`).update({ active: false });
+      await expect(getWebCustomerSession.run(requestFor("uid-passkey", { salonId: "salon-a" }, token))).rejects.toMatchObject({ code: "unauthenticated" });
+    } finally { lookup.mockRestore(); vi.stubEnv("CUSTOMER_PASSKEYS_ENABLED", "false"); }
+  });
   beforeEach(async () => {
     vi.stubEnv("QR_SIGNING_SECRET", secret);
     const response = await fetch(

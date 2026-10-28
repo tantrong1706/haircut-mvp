@@ -169,6 +169,7 @@ describe("Firebase Phone Auth web", () => {
   });
 
   it("xác nhận OTP chỉ chấp nhận 6 chữ số và dọn captcha", async () => {
+    await beginCustomerPhoneSignIn("0901234567", "customer-recaptcha");
     const confirm = vi.fn().mockResolvedValue(undefined);
     await expect(confirmCustomerPhoneSignIn({ confirm }, "12x")).rejects.toThrow("6 chữ số");
     await confirmCustomerPhoneSignIn({ confirm }, "123456");
