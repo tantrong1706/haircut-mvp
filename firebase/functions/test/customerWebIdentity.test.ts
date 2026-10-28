@@ -21,6 +21,21 @@ describe("customer identity theo provider", () => {
 });
 
 describe("Firebase Phone principal", () => {
+  it("accepts only an explicitly signed customer-passkey provenance on custom tokens", () => {
+    const identity = webPhonePrincipal({ uid: "uid-123", token: {
+      phone_number: "+84901234567", customer_auth_method: "passkey-v1",
+      firebase: { sign_in_provider: "custom" },
+    } });
+    expect(identity.uid).toBe("uid-123");
+    expect(customerIdForWeb("salon-a", identity.uid)).toBe(customerIdForWeb("salon-a", "uid-123"));
+  });
+
+  it.each([undefined, "phone", true, "passkey-v2"])("does not trust an arbitrary custom token marker %s", (marker) => {
+    expect(() => webPhonePrincipal({ uid: "uid-123", token: {
+      phone_number: "+84901234567", customer_auth_method: marker,
+      firebase: { sign_in_provider: "custom" },
+    } })).toThrow();
+  });
   it("chỉ lấy UID và số điện thoại đã xác minh từ auth context", () => {
     expect(
       webPhonePrincipal({

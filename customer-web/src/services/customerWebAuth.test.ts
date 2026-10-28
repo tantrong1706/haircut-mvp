@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { QrContext } from "./types";
 
 const mocks = vi.hoisted(() => ({
-  auth: { currentUser: null, languageCode: "" },
+  auth: { currentUser: null as null | { uid: string; phoneNumber: string }, languageCode: "", authStateReady: vi.fn() },
   setPersistence: vi.fn(),
   onAuthStateChanged: vi.fn(),
   signInWithPhoneNumber: vi.fn(),
@@ -102,6 +102,9 @@ describe("Firebase Phone Auth web", () => {
     (window as typeof window & { __haircutWebAuthTestMode?: boolean }).__haircutWebAuthTestMode =
       false;
     mocks.setPersistence.mockResolvedValue(undefined);
+    mocks.auth.currentUser = null;
+    mocks.auth.authStateReady.mockResolvedValue(undefined);
+    mocks.signInWithPhoneNumber.mockReset().mockResolvedValue({ confirm: vi.fn() });
     mocks.onAuthStateChanged.mockReturnValue(() => undefined);
     mocks.signOut.mockResolvedValue(undefined);
   });
@@ -132,6 +135,32 @@ describe("Firebase Phone Auth web", () => {
       "+84901234567",
       expect.anything(),
     );
+  });
+
+  it("does not send another SMS while a previous send is in flight", async () => {
+    let finish!: (value: { confirm: ReturnType<typeof vi.fn> }) => void;
+    mocks.signInWithPhoneNumber.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    const first = beginCustomerPhoneSignIn("0901234567", "customer-recaptcha");
+    await vi.waitFor(() => expect(mocks.signInWithPhoneNumber).toHaveBeenCalledTimes(1));
+    const second = beginCustomerPhoneSignIn("0901234567", "customer-recaptcha").then(() => null, (error: unknown) => error);
+    finish({ confirm: vi.fn() });
+    await first;
+    expect(await second).toMatchObject({ code: "auth/too-many-requests" });
+    expect(mocks.signInWithPhoneNumber).toHaveBeenCalledTimes(1);
+  });
+
+  it("retains the resend buffer after page state is reset, without storing the phone", async () => {
+    localStorage.setItem("haircut_web_otp_attempt_at", String(Date.now()));
+    await expect(beginCustomerPhoneSignIn("0901234567", "customer-recaptcha")).rejects.toMatchObject({ code: "auth/too-many-requests" });
+    expect(mocks.signInWithPhoneNumber).not.toHaveBeenCalled();
+    expect(localStorage.getItem("haircut_web_otp_attempt_at")).not.toContain("84901234567");
+  });
+
+  it("restores auth before sending and sends no SMS for an already signed-in customer", async () => {
+    mocks.auth.currentUser = { uid: "existing-uid", phoneNumber: "+84901234567" };
+    await expect(beginCustomerPhoneSignIn("0901234567", "customer-recaptcha")).rejects.toMatchObject({ code: "auth/already-signed-in" });
+    expect(mocks.auth.authStateReady).toHaveBeenCalled();
+    expect(mocks.signInWithPhoneNumber).not.toHaveBeenCalled();
   });
 
   it("logout chỉ dùng customer Auth instance", async () => {
