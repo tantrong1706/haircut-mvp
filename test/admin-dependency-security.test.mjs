@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { registerZodSecurityTests } from "./helpers/zod-security.mjs";
+const requireAdmin = createRequire(new URL("../apps/admin-web/package.json", import.meta.url));
+registerZodSecurityTests(requireAdmin, "Admin Web");
 
 const require = createRequire(new URL("../apps/admin-web/package.json", import.meta.url));
 test("Admin's inherited Node Firestore transport resolves to patched gRPC without an SDK upgrade", () => {
