@@ -28,7 +28,7 @@ describe("authenticated web customer platform", () => {
     await db.doc(`_customer_passkeys/${keyId}`).set({ uid: "uid-passkey", phone, active: true });
     vi.stubEnv("CUSTOMER_PASSKEYS_ENABLED", "true");
     const lookup = vi.spyOn(getAuth(), "getUser").mockResolvedValue({ uid: "uid-passkey", phoneNumber: phone, disabled: false, tokensValidAfterTime: "1970-01-01T00:00:00Z" } as never);
-    const token = { phone_number: phone, customer_auth_method: "passkey-v1", customer_passkey_id: keyId, firebase: { sign_in_provider: "custom" }, iat: Math.floor(Date.now() / 1_000) };
+    const token = { phone_number: phone, customer_auth_method: "passkey-v1", customer_passkey_id: keyId, customer_passkey_verified_at: Math.floor(Date.now() / 1_000), firebase: { sign_in_provider: "custom" }, auth_time: Math.floor(Date.now() / 1_000), iat: Math.floor(Date.now() / 1_000) };
     try {
       const restored = await getWebCustomerSession.run(requestFor("uid-passkey", { salonId: "salon-a" }, token));
       expect(restored.customer.customerId).toBe(context.customer.customerId);

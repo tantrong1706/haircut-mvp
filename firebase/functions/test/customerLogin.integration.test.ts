@@ -90,10 +90,33 @@ describe("customer passkeys and SMS gate with isolated Firestore", () => {
   it("a signed purpose marker is insufficient after the underlying credential is revoked", async () => {
     await enroll();
     const keys = await api.list(request());
-    const custom = { uid: account.uid, token: { phone_number: account.phoneNumber, customer_auth_method: "passkey-v1", customer_passkey_id: keys.keys[0].id, firebase: { sign_in_provider: "custom" }, iat: Math.floor(Date.now() / 1_000) } };
+    const custom = { uid: account.uid, token: { phone_number: account.phoneNumber, customer_auth_method: "passkey-v1", customer_passkey_id: keys.keys[0].id, customer_passkey_verified_at: Math.floor(Date.now() / 1_000), firebase: { sign_in_provider: "custom" }, auth_time: Math.floor(Date.now() / 1_000), iat: Math.floor(Date.now() / 1_000) } };
     expect((await api.resolvePrincipal(custom)).uid).toBe(account.uid);
     await api.remove(request({ id: keys.keys[0].id }));
     await expect(api.resolvePrincipal(custom)).rejects.toThrow();
+  });
+  it("revoked recent Phone tokens cannot begin or finish enrollment", async () => {
+    const old = request(); old.auth!.token.auth_time -= 120;
+    const start = await api.beginRegistration(old);
+    auth.getUser.mockResolvedValue({ ...account, tokensValidAfterTime: new Date(Date.now() - 60_000).toISOString() });
+    await expect(api.beginRegistration(old)).rejects.toThrow();
+    await expect(api.finishRegistration({ ...old, data: { challengeId: start.challengeId, response: response() } })).rejects.toThrow();
+    expect((await db.collection("_customer_passkeys").get()).empty).toBe(true);
+  });
+  it("refreshing an ID token or exchanging a previously minted token cannot bypass revocation", async () => {
+    await enroll(); const stored = await api.list(request());
+    const now = Math.floor(Date.now() / 1_000);
+    const token = { phone_number: account.phoneNumber, firebase: { sign_in_provider: "custom" }, customer_auth_method: "passkey-v1", customer_passkey_id: stored.keys[0].id, iat: now, auth_time: now - 120, customer_passkey_verified_at: now - 120 };
+    auth.getUser.mockResolvedValue({ ...account, tokensValidAfterTime: new Date((now - 60) * 1_000).toISOString() });
+    await expect(api.resolvePrincipal({ uid: account.uid, token })).rejects.toThrow();
+    await expect(api.resolvePrincipal({ uid: account.uid, token: { ...token, auth_time: now } })).rejects.toThrow();
+  });
+  it("disabling new passkey enrollment does not strand a valid existing customer session", async () => {
+    await enroll(); const stored = await api.list(request()); const now = Math.floor(Date.now() / 1_000);
+    vi.stubEnv("CUSTOMER_PASSKEYS_ENABLED", "false");
+    const token = { phone_number: account.phoneNumber, firebase: { sign_in_provider: "custom" }, customer_auth_method: "passkey-v1", customer_passkey_id: stored.keys[0].id, iat: now, auth_time: now, customer_passkey_verified_at: now };
+    expect((await api.resolvePrincipal({ uid: account.uid, token })).uid).toBe(account.uid);
+    await expect(api.beginSignIn(request({}, false))).rejects.toThrow();
   });
   it("caps actual SMS reservations atomically before transmission and never overrides CAPTCHA to ALLOW", async () => {
     const gate = createCustomerSmsGate(db);
