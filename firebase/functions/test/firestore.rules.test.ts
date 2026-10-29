@@ -29,6 +29,28 @@ const branchA = "branch-a";
 const branchB = "branch-b";
 let testEnv: RulesTestEnvironment;
 
+describe("server-only customer authentication records", () => {
+  it.each([
+    "_customer_passkeys",
+    "_customer_passkey_inventory",
+    "_customer_auth_challenges",
+    "_customer_sms_quotas",
+    "_customer_passkey_quotas",
+  ])("does not expose or allow client writes to %s", async (name) => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), name, "synthetic-record"), {
+        uid: "customer-auth-test",
+        active: true,
+      });
+    });
+    for (const uid of ["customer-auth-test", "owner-a", "staff-a"]) {
+      const client = testEnv.authenticatedContext(uid).firestore();
+      await assertFails(getDoc(doc(client, name, "synthetic-record")));
+      await assertFails(setDoc(doc(client, name, "forged-record"), { uid, active: true }));
+    }
+  });
+});
+
 beforeAll(async () => {
   testEnv = await initializeTestEnvironment({
     projectId,

@@ -22,8 +22,11 @@ import { getAuth } from "firebase-admin/auth";
 import { getMessaging } from "firebase-admin/messaging";
 import { getStorage } from "firebase-admin/storage";
 import { defineSecret } from "firebase-functions/params";
-import { HttpsError, onCall, onRequest } from "firebase-functions/v2/https";
+import { HttpsError, onCall, onRequest, type CallableRequest } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
+import { beforeSmsSent } from "firebase-functions/v2/identity";
+import { createCustomerPasskeys } from "./domains/auth/customerPasskeys";
+import { createCustomerSmsGate } from "./domains/auth/customerSmsGate";
 import { onDocumentCreated, onDocumentUpdated } from "firebase-functions/v2/firestore";
 import {
   buildCustomerContactPatch,
@@ -135,6 +138,7 @@ initializeApp();
 
 const db = getFirestore();
 const storage = getStorage();
+const customerPasskeys = createCustomerPasskeys(db, getAuth());
 const {
   assertBranchAccess,
   assertBranchIsOperational,
@@ -150,6 +154,25 @@ const functionOptions = {
   maxInstances: 50,
   enforceAppCheck: process.env.ENFORCE_APP_CHECK === "true",
 };
+const passkeyOptions = {
+  ...functionOptions,
+  enforceAppCheck: true,
+  omit: process.env.CUSTOMER_PASSKEYS_ENABLED !== "true",
+};
+function passkeyRequest(request: CallableRequest<Record<string, unknown>>) {
+  if (!request.data || typeof request.data !== "object" || Array.isArray(request.data)) {
+    throw new HttpsError("invalid-argument", "Thông tin passkey không hợp lệ.");
+  }
+  return { auth: request.auth, data: request.data, peer: publicRequestPeer(request.rawRequest) };
+}
+export const beginCustomerPasskeyRegistration = onCall(passkeyOptions, (request) => customerPasskeys.beginRegistration(passkeyRequest(request)));
+export const finishCustomerPasskeyRegistration = onCall(passkeyOptions, (request) => customerPasskeys.finishRegistration(passkeyRequest(request)));
+export const beginCustomerPasskeySignIn = onCall(passkeyOptions, (request) => customerPasskeys.beginSignIn(passkeyRequest(request)));
+export const finishCustomerPasskeySignIn = onCall(passkeyOptions, (request) => customerPasskeys.finishSignIn(passkeyRequest(request)));
+export const listCustomerPasskeys = onCall(passkeyOptions, (request) => customerPasskeys.list(passkeyRequest(request)));
+export const removeCustomerPasskey = onCall(passkeyOptions, (request) => customerPasskeys.remove(passkeyRequest(request)));
+// Opt-in only: requires Identity Platform + Auth reCAPTCHA Enterprise integration and approval.
+export const guardCustomerSms = beforeSmsSent({ region: "asia-southeast1", timeoutSeconds: 7, omit: process.env.CUSTOMER_SMS_GATE_ENABLED !== "true" }, createCustomerSmsGate(db));
 const zaloAppSecret = defineSecret("ZALO_APP_SECRET");
 const zaloGatewayHmacSecret = defineSecret("ZALO_GATEWAY_HMAC_SECRET");
 const zaloOpenApiKey = defineSecret("ZALO_OPEN_API_KEY");
@@ -969,8 +992,14 @@ function customerIdFor(salonId: string, zaloUserId: string): string {
   return customerIdForZalo(salonId, zaloUserId);
 }
 
-function requireWebPhonePrincipal(auth: Parameters<typeof webPhonePrincipal>[0]) {
+async function requireWebPhonePrincipal(auth: Parameters<typeof webPhonePrincipal>[0]) {
   try {
+    const firebase = auth?.token?.firebase as { sign_in_provider?: unknown } | undefined;
+    if (firebase?.sign_in_provider === "custom") {
+      // Unlike a purpose claim alone, this validates live server-owned credential/UID/phone,
+      // disabled/revoked account state and both manager/admin privilege registries.
+      return await customerPasskeys.resolvePrincipal(auth);
+    }
     return webPhonePrincipal(auth);
   } catch {
     throw new HttpsError("unauthenticated", "Yêu cầu Firebase Phone Auth đã xác minh");
@@ -3069,7 +3098,7 @@ async function activeWebSessionView(
 }
 
 export const getWebCustomerContext = onCall(qrFunctionOptions, async (request) => {
-  const principal = requireWebPhonePrincipal(request.auth);
+  const principal = await requireWebPhonePrincipal(request.auth);
   const salonId = requireString(request.data?.salonId, "salonId");
   await enforceAuthenticatedRateLimit("getWebCustomerContext", principal.uid, salonId);
   await assertFeatureEnabled(
@@ -3093,7 +3122,7 @@ export const getWebCustomerContext = onCall(qrFunctionOptions, async (request) =
 });
 
 export const checkInWebCustomer = onCall(qrFunctionOptions, async (request) => {
-  const principal = requireWebPhonePrincipal(request.auth);
+  const principal = await requireWebPhonePrincipal(request.auth);
   const salonId = requireString(request.data?.salonId, "salonId");
   await enforceAuthenticatedRateLimit("checkInWebCustomer", principal.uid, salonId);
   await assertFeatureEnabled(
@@ -5936,7 +5965,7 @@ export const spinLuckyWheel = onCall(functionOptions, async (request) => {
 });
 
 export const spinWebLuckyWheel = onCall(functionOptions, async (request) => {
-  const principal = requireWebPhonePrincipal(request.auth);
+  const principal = await requireWebPhonePrincipal(request.auth);
   const salonId = requireString(request.data?.salonId, "salonId");
   const idempotencyKey = requireIdempotencyKey(request.data?.idempotencyKey);
   await enforceAuthenticatedRateLimit("spinWebLuckyWheel", principal.uid, salonId);
@@ -6095,7 +6124,7 @@ function webAppSessionResult(
 }
 
 export const getWebCustomerSession = onCall(functionOptions, async (request) => {
-  const principal = requireWebPhonePrincipal(request.auth);
+  const principal = await requireWebPhonePrincipal(request.auth);
   const salonId = requireString(request.data?.salonId, "salonId");
   const sessionId = optionalLimitedString(request.data?.sessionId, "sessionId", 128) || "";
   await enforceAuthenticatedRateLimit("getWebCustomerSession", principal.uid, salonId);
@@ -6187,7 +6216,7 @@ async function customerHistoryResult(salonId: string, customerId: string, limit:
 }
 
 export const getWebCustomerHistory = onCall(functionOptions, async (request) => {
-  const principal = requireWebPhonePrincipal(request.auth);
+  const principal = await requireWebPhonePrincipal(request.auth);
   const salonId = requireString(request.data?.salonId, "salonId");
   await enforceAuthenticatedRateLimit("getWebCustomerHistory", principal.uid, salonId);
   const customerId = customerIdForWeb(salonId, principal.uid);
@@ -6255,7 +6284,7 @@ async function customerRewardsResult(salonId: string, customerId: string, limit:
 }
 
 export const getWebCustomerRewards = onCall(functionOptions, async (request) => {
-  const principal = requireWebPhonePrincipal(request.auth);
+  const principal = await requireWebPhonePrincipal(request.auth);
   const salonId = requireString(request.data?.salonId, "salonId");
   await enforceAuthenticatedRateLimit("getWebCustomerRewards", principal.uid, salonId);
   return customerRewardsResult(

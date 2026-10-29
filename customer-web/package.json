@@ -11,6 +11,8 @@
     "format:check": "prettier . --ignore-path ../.prettierignore --check",
     "test": "vitest",
     "test:run": "vitest run",
+    "test:auth:browser": "playwright test --config playwright.auth.config.ts",
+    "test:auth:coverage": "vitest run --config vitest.auth.config.ts --coverage",
     "test:coverage": "vitest run --coverage",
     "test:returning:coverage": "vitest run --config vitest.returning.config.ts --coverage",
     "test:photo-security:coverage": "vitest run --config vitest.photo-security.config.ts --coverage",
@@ -32,6 +34,7 @@
   "dependencies": {
     "@haircut/contracts": "file:../packages/contracts",
     "@sentry/react": "^10.63.0",
+    "@simplewebauthn/browser": "14.0.0",
     "@zxing/browser": "0.2.1",
     "firebase": "^11.10.0",
     "lucide-react": "^1.21.0",
@@ -74,6 +77,6 @@
     "typescript-eslint": "^8.63.0",
     "vite": "^5.4.21",
     "vitest": "^3.2.4",
-    "zod": "^4.4.3"
+    "zod": "^4.6.6"
   }
 }

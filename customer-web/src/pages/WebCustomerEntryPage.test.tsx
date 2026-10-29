@@ -35,6 +35,7 @@ const mocks = vi.hoisted(() => ({
   subscribeCustomerWebAuth: vi.fn(),
   beginCustomerPhoneSignIn: vi.fn(),
   confirmCustomerPhoneSignIn: vi.fn(),
+  signOutCustomerWeb: vi.fn(),
   customerPhoneAuthErrorMessage: vi.fn((error: unknown) =>
     error instanceof Error ? error.message : "Không xác thực được OTP",
   ),
@@ -54,6 +55,7 @@ vi.mock("../services/customerWebAuth", () => ({
   subscribeCustomerWebAuth: mocks.subscribeCustomerWebAuth,
   beginCustomerPhoneSignIn: mocks.beginCustomerPhoneSignIn,
   confirmCustomerPhoneSignIn: mocks.confirmCustomerPhoneSignIn,
+  signOutCustomerWeb: mocks.signOutCustomerWeb,
   customerPhoneAuthErrorMessage: mocks.customerPhoneAuthErrorMessage,
   savePendingWebQr: mocks.savePendingWebQr,
   loadPendingWebQr: mocks.loadPendingWebQr,
@@ -79,6 +81,18 @@ vi.mock("../services/monitoring", () => ({
 }));
 
 describe("WebCustomerEntryPage", () => {
+  it("offers explicit OTP recovery from a rejected customer session without sending a code automatically", async () => {
+    mocks.resolveWebCustomerContext.mockRejectedValue(new Error("Phiên không còn hợp lệ"));
+    mocks.signOutCustomerWeb.mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    render(<WebCustomerEntryPage onReady={vi.fn()} />);
+    act(() => mocks.authListener?.({ uid: "revoked-customer" }));
+    await user.click(await screen.findByRole("button", { name: "Đăng nhập lại bằng OTP" }));
+    expect(mocks.signOutCustomerWeb).toHaveBeenCalledTimes(1);
+    expect(mocks.beginCustomerPhoneSignIn).not.toHaveBeenCalled();
+    act(() => mocks.authListener?.(null));
+    expect(await screen.findByLabelText("Số điện thoại")).toBeVisible();
+  });
   it("reloads context and hides old points when UID changes without an intermediate logout", async () => {
     const onReady = vi.fn();
     render(<WebCustomerEntryPage onReady={onReady} />);

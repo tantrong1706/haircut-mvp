@@ -38,6 +38,10 @@ jobs:
         working-directory: firebase/functions
         run: node --test ../../test/backend-dependency-security.test.mjs
 
+      - name: Audit production Functions dependencies
+        working-directory: firebase/functions
+        run: npm audit --omit=dev
+
       - name: Check Functions source
         working-directory: firebase/functions
         run: npm run check
@@ -63,6 +67,10 @@ jobs:
       - name: Admin support repair coverage
         working-directory: firebase
         run: npx --yes firebase-tools@15.22.3 emulators:exec --project demo-haircut --only firestore "npm --prefix functions run test:admin:coverage"
+
+      - name: Customer authentication security coverage
+        working-directory: firebase
+        run: npx --yes firebase-tools@15.22.3 emulators:exec --project demo-haircut --only firestore "npm --prefix functions run test:auth:coverage:emulator"
 
       - name: Returning customer point transaction coverage
         working-directory: firebase
@@ -120,6 +128,10 @@ jobs:
       - name: Shared client domain coverage
         working-directory: customer-web
         run: npm run test:domain
+
+      - name: Customer sign-in and passkey coverage
+        working-directory: customer-web
+        run: npm run test:auth:coverage
 
       - name: Returning customer staff flow coverage
         working-directory: customer-web
@@ -211,6 +223,9 @@ jobs:
         working-directory: apps/manager-mobile
         run: npm run check
 
+      - name: Manager shared-contract security regression
+        run: node --test test/manager-dependency-security.test.mjs
+
   browser-tests:
     name: Browser flows
     runs-on: ubuntu-latest
@@ -245,6 +260,14 @@ jobs:
       - name: Responsive owner workspace
         working-directory: customer-web
         run: npm run test:owner:browser
+
+      - name: Install backend passkey verifier for cryptographic browser checks
+        working-directory: firebase/functions
+        run: npm ci --ignore-scripts
+
+      - name: Verify browser passkey signatures with the backend library
+        working-directory: customer-web
+        run: npm run test:auth:browser
 
       - name: Install Admin browser test dependencies
         working-directory: apps/admin-web

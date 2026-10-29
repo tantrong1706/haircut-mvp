@@ -2,6 +2,7 @@
 
 interface ImportMetaEnv {
   readonly VITE_APP_ENV?: string;
+  readonly VITE_CUSTOMER_PASSKEYS_ENABLED?: string;
   readonly VITE_APP_VERSION?: string;
   readonly VITE_ADMIN_URL?: string;
   readonly VITE_FIREBASE_API_KEY?: string;

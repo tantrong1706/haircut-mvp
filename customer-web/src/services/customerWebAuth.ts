@@ -18,6 +18,9 @@ const TEST_AUTH_UID_KEY = "haircut_test_web_auth_uid";
 const PENDING_QR_TTL_MS = 10 * 60_000;
 let persistencePromise: Promise<void> | null = null;
 let recaptchaVerifier: RecaptchaVerifier | null = null;
+let otpSending = false;
+const OTP_ATTEMPT_KEY = "haircut_web_otp_attempt_at";
+const OTP_RESEND_BUFFER_MS = 60_000;
 
 export type CustomerPhoneConfirmation = Pick<ConfirmationResult, "confirm">;
 
@@ -78,7 +81,9 @@ export function subscribeCustomerWebAuth(
       if (!auth) throw new Error("Firebase Auth chưa được cấu hình");
       unsubscribe = onAuthStateChanged(auth, onChange, onError);
     })
-    .catch(onError);
+    .catch((error) => {
+      if (!stopped) onError(error);
+    });
   return () => {
     stopped = true;
     unsubscribe?.();
@@ -105,19 +110,40 @@ export async function beginCustomerPhoneSignIn(
     };
   }
 
-  await configureCustomerWebAuthPersistence();
-  const auth = getCustomerFirebaseAuth();
-  if (!auth) throw new Error("Firebase Auth chưa được cấu hình");
-  auth.languageCode = "vi";
-  recaptchaVerifier?.clear();
-  recaptchaVerifier = new RecaptchaVerifier(auth, recaptchaContainerId, { size: "invisible" });
+  if (otpSending) throw otpResendError();
+  otpSending = true;
   try {
+    await configureCustomerWebAuthPersistence();
+    const auth = getCustomerFirebaseAuth();
+    if (!auth) throw new Error("Firebase Auth chưa được cấu hình");
+    await auth.authStateReady();
+    if (auth.currentUser) {
+      throw Object.assign(new Error("Bạn đã đăng nhập. Vui lòng chờ tải tài khoản."), {
+        code: "auth/already-signed-in",
+      });
+    }
+    // UX protection only. A configured Auth beforeSmsSent hook is the server-side gate.
+    const previous = Number(safeStorageGet(OTP_ATTEMPT_KEY));
+    if (previous > 0 && Date.now() - previous >= 0 && Date.now() - previous < OTP_RESEND_BUFFER_MS)
+      throw otpResendError();
+    safeStorageSet(OTP_ATTEMPT_KEY, String(Date.now()));
+    auth.languageCode = "vi";
+    recaptchaVerifier?.clear();
+    recaptchaVerifier = new RecaptchaVerifier(auth, recaptchaContainerId, { size: "invisible" });
     return await signInWithPhoneNumber(auth, phone, recaptchaVerifier);
   } catch (error) {
-    recaptchaVerifier.clear();
+    recaptchaVerifier?.clear();
     recaptchaVerifier = null;
     throw error;
+  } finally {
+    otpSending = false;
   }
+}
+
+function otpResendError() {
+  return Object.assign(new Error("Vui lòng chờ một phút trước khi yêu cầu mã mới."), {
+    code: "auth/too-many-requests",
+  });
 }
 
 export async function confirmCustomerPhoneSignIn(
