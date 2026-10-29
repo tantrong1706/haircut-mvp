@@ -59,7 +59,9 @@ test("query round-trip cannot invoke an attacker-supplied isBuffer property", ()
 });
 
 test("qs comma serialization cannot crash on an own non-callable toString", () => {
-  assert.doesNotThrow(() => qs.stringify({ a: [{ toString: "not-callable" }] }, { arrayFormat: "comma" }));
+  assert.doesNotThrow(() =>
+    qs.stringify({ a: [{ toString: "not-callable" }] }, { arrayFormat: "comma" }),
+  );
   assert.equal(qs.stringify({ a: ["one", "two"] }, { arrayFormat: "comma" }), "a=one%2Ctwo");
 });
 

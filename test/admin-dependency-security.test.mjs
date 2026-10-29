@@ -12,7 +12,9 @@ test("Admin's inherited Node Firestore transport resolves to patched gRPC withou
   assert.equal(require("@firebase/firestore/package.json").version, "4.16.0");
   const firestore = createRequire(require.resolve("@firebase/firestore/package.json"));
   assert.equal(firestore("@grpc/grpc-js/package.json").version, "1.14.6");
-  const lock = JSON.parse(readFileSync(new URL("../apps/admin-web/package-lock.json", import.meta.url), "utf8"));
+  const lock = JSON.parse(
+    readFileSync(new URL("../apps/admin-web/package-lock.json", import.meta.url), "utf8"),
+  );
   for (const [name, entry] of Object.entries(lock.packages)) {
     if (name.endsWith("node_modules/@grpc/grpc-js")) assert.equal(entry.version, "1.14.6");
   }

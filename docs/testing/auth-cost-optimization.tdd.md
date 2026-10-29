@@ -2,6 +2,10 @@
 
 Date: 2026-10-28, Asia/Saigon. Local branch: `codex/auth-cost-optimization`.
 Base: `origin/main` at `89cee9a6b9febac888bd27f7511698969fb8f16e`.
+This is the historical implementation checkpoint at `e59e4cf`. The separately authorized
+dependency remediation and subsequent verification are recorded in
+[OTP dependency remediation](otp-dependency-remediation.tdd.md); do not treat the baseline
+audit counts or absence of GitHub CI below as the final branch status.
 Scope derives from the owner's request to apply four sign-in/cost-control approaches.
 No production configuration, account, data, Firebase resources, SMS provider or DNS changed.
 
@@ -79,11 +83,11 @@ was created on production.
   Installing Admin's unchanged lockfile resolved it; all 40 root checks then passed.
 - A supplemental ESLint invocation from the root failed to locate the workspace config; the
   ordinary Customer Web lint passed, and supplemental config lint is retried from that workspace.
-- `npm audit --omit=dev` for Functions still reports 2 High / 10 Moderate / 0 Critical issues in
+- At this implementation checkpoint, `npm audit --omit=dev` for Functions reported 2 High / 10 Moderate / 0 Critical issues in
   existing dependency families (including zod and body-parser). Existing lock entries were not
   upgraded by this task; the new backend lock diff only adds the WebAuthn package family.
   This is NOT an all-clear production security audit. No broad dependency auto-fix was applied.
-- No GitHub CI was run, no PR opened, no merge and no deploy. Supplier procurement, live SMS
+- At this implementation checkpoint no GitHub CI had run and no PR had been opened. No merge or deploy was performed. Supplier procurement, live SMS
   hook prerequisites/budget, production signing IAM and physical-device canary remain release gates.
 
 ## Release / rollback

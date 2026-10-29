@@ -38,6 +38,10 @@ jobs:
         working-directory: firebase/functions
         run: node --test ../../test/backend-dependency-security.test.mjs
 
+      - name: Audit production Functions dependencies
+        working-directory: firebase/functions
+        run: npm audit --omit=dev
+
       - name: Check Functions source
         working-directory: firebase/functions
         run: npm run check

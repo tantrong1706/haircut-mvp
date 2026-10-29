@@ -10,10 +10,20 @@ const lock = JSON.parse(
 const requireWeb = createRequire(new URL("../customer-web/package.json", import.meta.url));
 registerZodSecurityTests(requireWeb, "Customer Web");
 
-for (const directory of ["customer-web", "apps/admin-web", "apps/manager-mobile", "firebase/functions"]) {
+for (const directory of [
+  "customer-web",
+  "apps/admin-web",
+  "apps/manager-mobile",
+  "firebase/functions",
+]) {
   test(`${directory}: production Zod and local contracts metadata are patched`, () => {
-    const workspaceLock = JSON.parse(readFileSync(new URL(`../${directory}/package-lock.json`, import.meta.url), "utf8"));
-    assert.equal(workspaceLock.packages["node_modules/@haircut/contracts"].dependencies.zod, "^4.6.6");
+    const workspaceLock = JSON.parse(
+      readFileSync(new URL(`../${directory}/package-lock.json`, import.meta.url), "utf8"),
+    );
+    assert.equal(
+      workspaceLock.packages["node_modules/@haircut/contracts"].dependencies.zod,
+      "^4.6.6",
+    );
     for (const [path, entry] of Object.entries(workspaceLock.packages)) {
       if (!path.endsWith("node_modules/zod") || entry.dev === true) continue;
       assert.match(entry.version, /^4\.\d+\.\d+$/);
