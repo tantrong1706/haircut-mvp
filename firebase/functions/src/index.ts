@@ -25,6 +25,7 @@ import { defineSecret } from "firebase-functions/params";
 import { HttpsError, onCall, onRequest } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { withdrawCustomerPhotoConsent } from "./domains/privacy/customerPhotoConsent";
+import { changeCustomerName } from "./domains/customers/customerName";
 import { onDocumentCreated, onDocumentUpdated } from "firebase-functions/v2/firestore";
 import {
   buildCustomerContactPatch,
@@ -199,6 +200,7 @@ const AUTHENTICATED_RATE_LIMITS = {
   submitPointRequest: 20,
   awardReturningCustomerPoints: 20,
   searchSalonCustomers: 30,
+  updateSalonCustomerName: 20,
   approvePointRequest: 60,
   rejectPointRequest: 60,
   lookupRewardCode: 60,
@@ -6666,6 +6668,17 @@ export const getManagerAuditEvents = onCall(functionOptions, async (request) => 
       };
     }),
   };
+});
+
+export const updateSalonCustomerName = onCall(functionOptions, async (request) => {
+  const uid = currentUid(request.auth);
+  const salonId = requireString(request.data?.salonId, "salonId");
+  const customerId = requireString(request.data?.customerId, "customerId");
+  await assertSalonRole(uid, salonId, ["owner", "staff"]);
+  await enforceAuthenticatedRateLimit("updateSalonCustomerName", uid, salonId);
+  return changeCustomerName(db, { uid, salonId, customerId, name: request.data?.name,
+    expectedName: request.data?.expectedName, pointRequestId: request.data?.pointRequestId,
+    activeRef: activeSessionRefFor(salonId, customerId) });
 });
 
 export const searchSalonCustomers = onCall(functionOptions, async (request) => {
