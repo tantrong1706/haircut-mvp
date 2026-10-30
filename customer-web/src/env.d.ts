@@ -21,7 +21,10 @@ interface ImportMetaEnv {
   readonly VITE_SENTRY_REPLAY_SAMPLE_RATE?: string;
   readonly VITE_SENTRY_REPLAY_ON_ERROR_SAMPLE_RATE?: string;
   readonly VITE_SUPPORT_EMAIL?: string;
+  readonly VITE_PUBLIC_SUPPORT_EMAIL?: string;
   readonly VITE_SUPPORT_PHONE?: string;
+  readonly VITE_OPERATOR_LEGAL_NAME?: string;
+  readonly VITE_OPERATOR_ADDRESS?: string;
 }
 
 interface ImportMeta {

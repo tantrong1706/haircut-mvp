@@ -1,6 +1,7 @@
-import { ExternalLink, LockKeyhole, LogOut, MapPin, ShieldCheck, UserRound } from "lucide-react";
+import { LockKeyhole, LogOut, MapPin, ShieldCheck, UserRound } from "lucide-react";
 import { useState } from "react";
 import { AccountDeletion } from "../../components/AccountDeletion";
+import { PublicSupportLinks } from "../../components/PublicSupportLinks";
 import { SecuritySettings } from "../../components/SecuritySettings";
 import {
   ActionRow,
@@ -69,7 +70,7 @@ export function StaffAccountScreen({
         ) : section === "data" ? (
           <AccountDeletion user={user} />
         ) : (
-          <SupportLinks />
+          <PublicSupportLinks />
         )}
       </div>
     );
@@ -119,31 +120,5 @@ export function StaffAccountScreen({
         Đăng xuất
       </button>
     </div>
-  );
-}
-
-function SupportLinks() {
-  const email = String(import.meta.env.VITE_SUPPORT_EMAIL || "tantrong1706@gmail.com");
-  const phone = String(import.meta.env.VITE_SUPPORT_PHONE || "0838098761");
-  const publicWebUrl = String(
-    import.meta.env.VITE_PUBLIC_WEB_URL || "https://haircut-c7d12.web.app",
-  ).replace(/\/+$/, "");
-  return (
-    <Section title="Hỗ trợ và pháp lý">
-      <div className="manager-link-list">
-        <a href={`${publicWebUrl}/privacy`} target="_blank" rel="noreferrer">
-          Chính sách quyền riêng tư <ExternalLink aria-hidden="true" />
-        </a>
-        <a href={`${publicWebUrl}/terms`} target="_blank" rel="noreferrer">
-          Điều khoản sử dụng <ExternalLink aria-hidden="true" />
-        </a>
-        <a href={`mailto:${email}`}>
-          Email: {email} <ExternalLink aria-hidden="true" />
-        </a>
-        <a href={`tel:${phone}`}>
-          Điện thoại: {phone} <ExternalLink aria-hidden="true" />
-        </a>
-      </div>
-    </Section>
   );
 }

@@ -16,6 +16,7 @@ import {
 import { getFirebaseApp, getFunctionWriteMode, isFirebaseConfigured } from "./firebase";
 import { parseQrContext } from "./qr";
 import { redactSensitiveText, redactSensitiveUrl } from "./monitoringPrivacy";
+import { hasOptionalMonitoringConsent } from "./privacyPreferences";
 
 type SentryModule = typeof import("@sentry/react");
 type MonitoringValue = string | number | boolean | null | undefined;
@@ -95,7 +96,7 @@ export function trackEvent(name: string, params: MonitoringParams = {}) {
   }
 
   void getAnalyticsClient().then((analytics) => {
-    if (!analytics) {
+    if (!analytics || isMonitoringDisabled()) {
       return;
     }
 
@@ -111,7 +112,7 @@ export function captureError(error: unknown, context: MonitoringParams = {}) {
   }
 
   void getSentryClient().then((sentry) => {
-    if (!sentry) {
+    if (!sentry || isMonitoringDisabled()) {
       return;
     }
 
@@ -155,7 +156,7 @@ export function setMonitoringUser(user: { uid: string; role: string; salonId: st
   }
 
   void getAnalyticsClient().then((analytics) => {
-    if (!analytics) {
+    if (!analytics || isMonitoringDisabled()) {
       return;
     }
 
@@ -167,7 +168,7 @@ export function setMonitoringUser(user: { uid: string; role: string; salonId: st
   });
 
   void getSentryClient().then((sentry) => {
-    if (!sentry) {
+    if (!sentry || isMonitoringDisabled()) {
       return;
     }
 
@@ -183,7 +184,7 @@ export function clearMonitoringUser() {
   }
 
   void getAnalyticsClient().then((analytics) => {
-    if (!analytics) {
+    if (!analytics || isMonitoringDisabled()) {
       return;
     }
 
@@ -195,7 +196,7 @@ export function clearMonitoringUser() {
   });
 
   void getSentryClient().then((sentry) => {
-    sentry?.setUser(null);
+    if (!isMonitoringDisabled()) sentry?.setUser(null);
   });
 }
 
@@ -208,7 +209,7 @@ async function getAnalyticsClient() {
 }
 
 async function createAnalyticsClient(): Promise<Analytics | null> {
-  if (!isFirebaseConfigured()) {
+  if (isMonitoringDisabled() || !isFirebaseConfigured()) {
     return null;
   }
 
@@ -223,6 +224,7 @@ async function createAnalyticsClient(): Promise<Analytics | null> {
       return null;
     }
 
+    if (isMonitoringDisabled()) return null;
     const analytics = getAnalytics(app);
     setAnalyticsCollectionEnabled(analytics, true);
     return analytics;
@@ -233,6 +235,7 @@ async function createAnalyticsClient(): Promise<Analytics | null> {
 }
 
 function getPerformanceClient() {
+  if (isMonitoringDisabled()) return null;
   if (performanceInstance || !isFirebaseConfigured()) {
     return performanceInstance;
   }
@@ -245,6 +248,8 @@ function getPerformanceClient() {
 
   try {
     performanceInstance = getPerformance(app);
+    performanceInstance.dataCollectionEnabled = true;
+    performanceInstance.instrumentationEnabled = true;
   } catch (error) {
     console.warn("Không bật được Firebase Performance.", error);
   }
@@ -296,6 +301,7 @@ async function createSentryClient(): Promise<SentryModule | null> {
 
   try {
     const sentry = await import("@sentry/react");
+    if (isMonitoringDisabled()) return null;
     sentry.init({
       dsn,
       environment: appEnvironment(),
@@ -307,6 +313,7 @@ async function createSentryClient(): Promise<SentryModule | null> {
         0,
       ),
       beforeSend(event) {
+        if (isMonitoringDisabled()) return null;
         if (event.user) {
           delete event.user.email;
           delete event.user.username;
@@ -327,6 +334,7 @@ async function createSentryClient(): Promise<SentryModule | null> {
         return event;
       },
       beforeBreadcrumb(breadcrumb) {
+        if (isMonitoringDisabled()) return null;
         if (breadcrumb.message) {
           breadcrumb.message = redactSensitiveText(breadcrumb.message);
         }
@@ -397,5 +405,33 @@ function appEnvironment() {
 }
 
 function isMonitoringDisabled() {
-  return String(import.meta.env.VITE_MONITORING_DISABLED || "").toLowerCase() === "true";
+  return String(import.meta.env.VITE_MONITORING_DISABLED || "").toLowerCase() === "true" ||
+    !hasOptionalMonitoringConsent();
+}
+
+export function applyMonitoringPrivacyPreference() {
+  if (isMonitoringDisabled()) {
+    const pendingAnalytics = analyticsPromise;
+    const pendingSentry = sentryPromise;
+    analyticsPromise = null;
+    sentryPromise = null;
+    if (performanceInstance) {
+      performanceInstance.dataCollectionEnabled = false;
+      performanceInstance.instrumentationEnabled = false;
+      performanceInstance = null;
+    }
+    void pendingAnalytics?.then((client) => {
+      if (client && isMonitoringDisabled()) setAnalyticsCollectionEnabled(client, false);
+    });
+    void pendingSentry?.then((client) => {
+      if (client && isMonitoringDisabled()) void client.close(0);
+    });
+    return;
+  }
+  if (!started) initMonitoring();
+  else {
+    void getAnalyticsClient();
+    getPerformanceClient();
+    void getSentryClient();
+  }
 }

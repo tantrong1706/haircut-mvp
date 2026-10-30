@@ -851,7 +851,7 @@ export function StaffPage({ currentUser }: Props) {
           />
         ) : null}
 
-        {currentUser.role === "staff" ? <a className="secondary-button" href="/delete-account">Quản lý tài khoản cá nhân</a> : null}
+        {currentUser.role === "staff" ? <a className="secondary-button" href="/delete-account/manage">Quản lý tài khoản cá nhân</a> : null}
 
         {message ? <p className="alert success">{message}</p> : null}
         {error ? <p className="alert error">{error}</p> : null}

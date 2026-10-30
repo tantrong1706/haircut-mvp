@@ -3,7 +3,10 @@
 Cập nhật 22/10/2026 (Asia/Saigon). Sản phẩm là Web trên Firebase tại
 https://app.chhaircutsalon.cc. Source trên GitHub và bản đang phục vụ được ghi riêng bên dưới.
 
-## Production hiện tại
+## Production — bằng chứng gần nhất được ghi tại đây (22/10)
+
+Thông tin bên dưới là biên bản phát hành ngày 22/10, không phải đối chiếu live ngày 30/10.
+Source mới hoặc CI PASS không tự chứng minh production đã nhận bản đó.
 
 - Source đã deploy: 5435256bec2be8284215836c7a4c56aa4ff3e32b, merge PR #74.
 - Hosting version: abd70bd7cb0765fe (site haircut-c7d12).
@@ -49,6 +52,9 @@ không cho deploy trong đợt dọn này. Website hiện vẫn chạy source PR
 Xem [ranh giới tương thích](LEGACY_COMPATIBILITY.md) và [bằng chứng dọn tên](testing/web-naming-cleanup.tdd.md).
 
 ## Giới hạn
+
+- Bản chuẩn bị `codex/privacy-readiness` ngày 30/10 chưa được merge/deploy. Không thay số liệu
+  phát hành 22/10 bằng kết quả local; xem [checklist quyền riêng tư](PRIVACY_CHECKLIST.md).
 
 - Browser viewport không thay thế kiểm thử iPhone/Android vật lý. Không gửi OTP thật trong
   canary 22/10; bằng chứng OTP thực trước đây nằm trong WEB_CUSTOMER_RELEASE_READINESS.md.

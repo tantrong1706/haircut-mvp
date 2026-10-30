@@ -1972,7 +1972,7 @@ function CustomerSearchPanel({
     onError("");
 
     try {
-      const result = await deleteCustomerData({ salonId, customerId: customer.id });
+      const result = await deleteCustomerData({ salonId, customerId: customer.id, expectedCreatedAtMs: customer.createdAtMs ?? undefined });
       setResults((current) => current.filter((item) => item.id !== customer.id));
       setTotalCount(current => current === null ? null : Math.max(0, current - 1));
       onMessage(

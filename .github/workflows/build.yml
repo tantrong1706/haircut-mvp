@@ -60,6 +60,10 @@ jobs:
         working-directory: firebase
         run: npx --yes firebase-tools@15.22.3 emulators:exec --project demo-haircut --only firestore,storage "npm --prefix functions run test:integration:emulator"
 
+      - name: Customer photo withdrawal coverage
+        working-directory: firebase
+        run: npx --yes firebase-tools@15.22.3 emulators:exec --project demo-haircut --only firestore "npm --prefix functions run test:privacy:coverage:emulator"
+
       - name: Admin support repair coverage
         working-directory: firebase
         run: npx --yes firebase-tools@15.22.3 emulators:exec --project demo-haircut --only firestore "npm --prefix functions run test:admin:coverage"
@@ -116,6 +120,10 @@ jobs:
       - name: Unit tests
         working-directory: customer-web
         run: npm run test:run
+
+      - name: Customer privacy controls and public policies coverage
+        working-directory: customer-web
+        run: npm run test:privacy:coverage
 
       - name: Shared client domain coverage
         working-directory: customer-web

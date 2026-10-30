@@ -103,7 +103,7 @@ describe("Web-only routing and Firebase session isolation", () => {
     expect(mocks.listenSessionLiveUpdates).not.toHaveBeenCalled();
   });
 
-  it.each(["/login", "/staff", "/owner", "/delete-account"])(
+  it.each(["/login", "/staff", "/owner", "/delete-account/manage"])(
     "keeps %s behind management authentication in any browser",
     async (path) => {
       vi.stubGlobal("ZJSBridge", {});
@@ -130,6 +130,10 @@ describe("Web-only routing and Firebase session isolation", () => {
   it.each([
     ["/privacy", "Chính sách quyền riêng tư"],
     ["/terms", "Điều khoản sử dụng"],
+    ["/cookies", "Cookie và lưu trữ trên thiết bị"],
+    ["/data-rights", "Quyền dữ liệu của bạn"],
+    ["/delete-account", "Quyền dữ liệu của bạn"],
+    ["/service-policy", "Chính sách dịch vụ"],
   ])("opens public %s independently", async (path, heading) => {
     window.history.replaceState({}, "", path);
     render(<App />);

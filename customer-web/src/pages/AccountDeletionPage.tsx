@@ -1,5 +1,6 @@
 import { BrandLogo } from "../components/BrandLogo";
 import { AccountDeletionPanel } from "../components/AccountDeletionPanel";
+import { PublicContact } from "../components/PublicContact";
 import type { AppUser } from "../services/auth";
 
 export function AccountDeletionPage({ currentUser }: { currentUser: AppUser }) {
@@ -14,9 +15,7 @@ export function AccountDeletionPage({ currentUser }: { currentUser: AppUser }) {
         </div>
       </header>
       <AccountDeletionPanel currentUser={currentUser} />
-      <p className="muted account-support">
-        Cần hỗ trợ: {import.meta.env.VITE_SUPPORT_EMAIL || "tantrong1706@gmail.com"}
-      </p>
+      <div className="muted account-support"><PublicContact /></div>
     </section>
   );
 }
