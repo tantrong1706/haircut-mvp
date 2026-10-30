@@ -1,7 +1,8 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ save: vi.fn(), confirm: vi.fn() }));
+const mocks = vi.hoisted(() => ({ save: vi.fn(), confirm: vi.fn(), rename: vi.fn() }));
+vi.mock("../services/customerName", () => ({ updateCustomerName: mocks.rename }));
 vi.mock("../services/ownerWorkspace", () => ({ savePendingVisitNote: mocks.save }));
 vi.mock("../services/operations", () => ({
   getBranchQrSettings: async () => ({ branches: [{ id: "branch-fixture", name: "Demo" }] }),
@@ -49,6 +50,19 @@ const currentUser = {
   branchIds: ["branch-fixture"],
 };
 describe("staff pending visit notes", () => {
+  it("renames the selected pending customer without confirming points or changing notes", async () => {
+    mocks.rename.mockResolvedValue({ customerId: "customer-A", name: "Tên khách đã hỏi" });
+    const user = userEvent.setup();
+    render(<StaffPage currentUser={currentUser} />);
+    await user.click(await screen.findByRole("button", { name: /Sửa tên khách Khách A/ }));
+    await user.clear(screen.getByRole("textbox", { name: "Tên khách" }));
+    await user.type(screen.getByRole("textbox", { name: "Tên khách" }), "Tên khách đã hỏi");
+    await user.click(screen.getByRole("button", { name: "Lưu tên" }));
+    expect(await screen.findByRole("heading", { name: "Tên khách đã hỏi" })).toBeVisible();
+    expect(mocks.rename).toHaveBeenCalledWith({ salonId: "salon-fixture", customerId: "customer-A", pointRequestId: "request-A", name: "Tên khách đã hỏi", expectedName: "Khách A" });
+    expect(mocks.confirm).not.toHaveBeenCalled();
+    expect(screen.getByPlaceholderText("Ví dụ: Fade thấp, giữ mái, không cắt quá cao")).toHaveValue("Saved A");
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.save.mockResolvedValue(undefined);

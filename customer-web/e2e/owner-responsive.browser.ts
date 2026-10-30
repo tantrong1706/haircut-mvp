@@ -11,6 +11,17 @@ test.beforeEach(async ({ page }) => {
   await expect(page.getByRole("button", { name: "Làm mới", exact: true })).toBeEnabled();
 });
 
+test("owner can save a directory name without changing points or overflowing", async ({ page }) => {
+  await page.getByRole("navigation", { name: "Chọn mục quản lý" }).getByRole("button", { name: "Khách hàng", exact: true }).click();
+  const card = page.locator(".customer-result-card").first();
+  await card.getByRole("button", { name: /Sửa tên khách/ }).click();
+  await card.getByRole("textbox", { name: "Tên khách" }).fill("Tên khách đã cập nhật");
+  await card.getByRole("button", { name: "Lưu tên" }).click();
+  await expect(card.getByText("Tên khách đã cập nhật", { exact: true })).toBeVisible();
+  await expect(card.locator(".pill").first()).toHaveText("7 điểm");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
 test("all owner menu items fit without horizontal scrolling", async ({ page }, info) => {
   await page.screenshot({ path: info.outputPath("owner-home.png"), fullPage: true });
   const menu = page.locator(".owner-tabs");
