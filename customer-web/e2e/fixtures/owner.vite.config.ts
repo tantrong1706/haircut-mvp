@@ -9,7 +9,7 @@ export default defineConfig({
     alias: [
       {
         // Match the same service modules from pages and extracted owner features.
-        find: /^(?:\.\.\/)+services\/(?:operations|ownerWorkspace|returningCustomerPoints)$/,
+        find: /^(?:\.\.\/)+services\/(?:operations|ownerWorkspace|returningCustomerPoints|customerName)$/,
         replacement: fileURLToPath(new URL("./owner-operations.ts", import.meta.url)),
       },
     ],

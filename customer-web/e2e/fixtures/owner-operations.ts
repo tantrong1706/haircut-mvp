@@ -81,11 +81,18 @@ export const listenStaffProfiles = (_salon: string, next: (items: unknown[]) => 
   return () => undefined;
 };
 export const searchSalonCustomers = async () => ({ customers: [], nextCursor: null });
+let directoryName = "Khách mẫu trong danh bạ";
+export const updateCustomerName = async (input: { customerId: string; name: string; expectedName: string }) => {
+  if (input.customerId !== "customer-fixture" || input.expectedName !== directoryName)
+    throw new Error("Fixture blocks edits to other customers or stale names");
+  directoryName = input.name.trim();
+  return { customerId: input.customerId, name: directoryName };
+};
 export const listSalonCustomerDirectory = async () => ({
   customers: [
     {
       id: "customer-fixture",
-      name: "Khách mẫu trong danh bạ",
+      name: directoryName,
       phoneLast4: "5678",
       points: 7,
       allowPhoto: false,

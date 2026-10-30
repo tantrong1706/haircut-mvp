@@ -33,6 +33,7 @@ import {
 import QRCode from "qrcode";
 import { BrandLogo } from "../components/BrandLogo";
 import { CustomerPointAction } from "../components/CustomerPointAction";
+import { CustomerNameEditor } from "../components/CustomerNameEditor";
 import { OwnerConfirmDialog, type OwnerConfirmation as ConfirmRequest } from "../components/OwnerConfirmDialog";
 import { APP_NAME } from "../config/branding";
 import { AccountDeletionPanel } from "../components/AccountDeletionPanel";
@@ -2044,6 +2045,10 @@ function CustomerSearchPanel({
                 <span className="pill">{customer.points} điểm</span>
               </div>
               <span>SĐT: {ownerPhoneLabel(customer)}</span>
+              <CustomerNameEditor key={`${salonId}:${customer.id}`} salonId={salonId}
+                customerId={customer.id} customerName={customer.name}
+                disabled={busyCustomerId === customer.id}
+                onSaved={name => setResults(current => current.map(item => item.id === customer.id ? { ...item, name } : item))} />
               <span>Lần ghé gần nhất: {formatDateTime(customer.lastVisitAtMs) || "Chưa có"}</span>
               <CustomerPointAction salonId={salonId} branchId={awardBranch?.id || ""} branchName={awardBranch?.name || ""} pointPerVisit={pointPerVisit} customer={customer} onAwarded={pointsAfter => setResults(current => current.map(item => item.id === customer.id ? { ...item, points: pointsAfter, detailsLoaded: false } : item))} />
 

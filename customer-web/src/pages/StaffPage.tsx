@@ -12,6 +12,7 @@ import { HaircutPhotoCapture } from "../components/HaircutPhotoCapture";
 import { RedeemRewardPanel } from "../components/RedeemRewardPanel";
 import { BrandLogo } from "../components/BrandLogo";
 import { ReturningCustomerPoints } from "../components/ReturningCustomerPoints";
+import { CustomerNameEditor } from "../components/CustomerNameEditor";
 import {
   StaffSession,
   cancelServiceSession,
@@ -665,6 +666,16 @@ export function StaffPage({ currentUser }: Props) {
               </div>
               <span className="pill">{selectedSession.customer?.points ?? 0} điểm</span>
             </div>
+
+            {canConfirmRequest && selectedSession.customer ? (
+              <CustomerNameEditor key={`${salonId}:${selectedSession.id}`}
+                salonId={salonId} customerId={selectedSession.customerId}
+                customerName={selectedSession.customer.name || ""} pointRequestId={selectedSession.id}
+                disabled={loading || photoBusy}
+                onSaved={name => setSessions(current => current.map(session =>
+                  session.customerId === selectedSession.customerId && session.customer
+                    ? { ...session, customer: { ...session.customer, name } } : session))} />
+            ) : null}
 
             <div className="summary-grid compact-summary">
               <div className="summary-item">
