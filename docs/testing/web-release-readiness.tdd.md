@@ -13,6 +13,10 @@ Hành trình và phạm vi được chốt trực tiếp với chủ dự án, k
 | Tên khách UI      | `4b1a219`: chưa có thao tác ở trang thật/fixture trình duyệt | `f756b51`: service/editor 14 ca, trang Staff 3 ca và browser Owner PASS; giữ ghi chú và điểm                                               |
 | Phát hành Web     | `3a995c7`: policy chưa tồn tại                               | `834418a`: 37/37 ca PASS, gồm chạy PowerShell thật trong fixture cô lập và xác nhận strict mặc định vẫn chặn thiếu App Check/Sentry/native |
 
+CodeQL PR #83 còn phát hiện regex hostname trong bộ quan sát mạng E2E khớp quá rộng.
+`d18215c` tái hiện sáu tên miền giả; `aeca289` sửa biên tên miền và 15/15 ca PASS.
+Regression này được thêm vào CI. Không đổi website, bỏ cảnh báo hoặc hạ mức quét bảo mật.
+
 Đã gặp một lần metadata của dependency `file:` vẫn dùng hợp đồng cũ dù cập nhật lock;
 bộ regression phát hiện 14 ca lỗi. Cài lại rõ đường dẫn hợp đồng, tạo lock rồi `npm ci` sạch đã sửa.
 Không sửa kiểm thử, hạ ngưỡng hoặc dùng `npm audit fix --force` để làm kết quả xanh.

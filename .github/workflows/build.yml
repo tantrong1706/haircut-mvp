@@ -327,7 +327,7 @@ jobs:
         run: node scripts/check-secrets.mjs
 
       - name: Verify scoped Web maintenance release gates
-        run: node --test --experimental-test-coverage --test-coverage-include='scripts/web-maintenance-policy.mjs' --test-coverage-lines=80 --test-coverage-branches=80 test/web-maintenance-release.test.mjs
+        run: node --test --experimental-test-coverage --test-coverage-include='scripts/web-maintenance-policy.mjs' --test-coverage-lines=80 --test-coverage-branches=80 test/web-maintenance-release.test.mjs test/privacy-monitoring-hosts.test.mjs
 
       - name: Verify CSP source synchronization
         run: node scripts/sync-csp.mjs --check
