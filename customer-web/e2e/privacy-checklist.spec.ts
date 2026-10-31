@@ -26,7 +26,7 @@ test("essential-only choice is keyboard usable and survives a reload", async ({ 
   const optionalHosts: string[] = [];
   page.on("request", (request) => {
     const host = new URL(request.url()).hostname;
-    if (/google-analytics\.com|googletagmanager\.com|sentry\.io/u.test(host))
+    if (/^(?:[a-z0-9-]+\.)*(?:google-analytics\.com|googletagmanager\.com|sentry\.io)$/u.test(host))
       optionalHosts.push(host);
   });
   await page.goto("/privacy");
