@@ -47,9 +47,9 @@ function snapshot() {
   };
 }
 
-test("maintenance produces only the reviewed 57 callable selectors and exact Hosting site", () => {
+test("maintenance produces only the reviewed 56 callable selectors and exact Hosting site", () => {
   const result = policy.validateWebMaintenance(snapshot(), scope);
-  assert.equal(result.functions.length, 57);
+  assert.equal(result.functions.length, 56);
   assert.ok(result.functions.includes("functions:updateSalonCustomerName"));
   assert.ok(result.functions.includes("functions:withdrawWebCustomerPhotoConsent"));
   assert.equal(result.hosting, "hosting:haircut-c7d12");
@@ -250,6 +250,17 @@ test("source exports match the explicitly reviewed Web-only callable inventory",
   );
   for (const name of scope.functions)
     assert.match(source, new RegExp(`export const ${name} = onCall\\(`));
+});
+
+test("Web maintenance excludes every entry point requiring system administrator access", () => {
+  assert.equal(scope.functions.includes("getSystemFeatureFlags"), false);
+  const source = readFileSync(new URL("../firebase/functions/src/index.ts", import.meta.url), "utf8");
+  for (const name of scope.functions) {
+    const start = source.indexOf(`export const ${name} =`);
+    const next = source.indexOf("export const ", start + 13);
+    const block = source.slice(start, next < 0 ? source.length : next);
+    assert.doesNotMatch(block, /assertSystemAdmin|getSystemAdminAccess|requireSystemAdminAccess/u, name);
+  }
 });
 test("full release remains strict; maintenance requires strict checks and forbids native release", () => {
   const source = readFileSync(
