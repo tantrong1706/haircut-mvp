@@ -40,6 +40,12 @@ tổng hợp **chỉ trong thư mục tạm**, không thay proof thật của re
 
 ## Giới hạn và cổng còn phải qua
 
+- Lần tổng thể đầu trên `9a340ec`: 18/19 bước PASS; integration 199/200, bài hai spin đồng thời
+  trả `INVALID_ARGUMENT: Transaction is invalid or closed` từ emulator. Không bỏ bài, tăng retry
+  kiểm thử hoặc sửa nghiệp vụ để ép xanh. Chạy cô lập đúng bài ba lần liên tiếp đều PASS
+  (mỗi lần chỉ 1 ca được chọn; 33 ca khác bị lọc, **không tính là full suite**).
+  Cần chạy lại toàn bộ trên HEAD cuối cùng; không coi ba lần thử riêng là thay thế proof đầy đủ.
+
 - Dev-tool dependency audit vẫn còn cảnh báo; không tuyên bố toàn bộ ecosystem không lỗ hổng.
   Không nâng major Vite/SDK hoặc native app trong đợt này. API runtime mới cần phát hành mới nhận thư viện đã vá.
 - Không có chứng nhận pháp lý/WCAG hay cam kết không còn lỗi. Ảnh minh họa AI do chủ dự án xác nhận;
