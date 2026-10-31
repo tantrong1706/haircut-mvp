@@ -117,6 +117,7 @@ Invoke-Step "Manager npm ci" (Join-Path $root "apps/manager-mobile") { npm ci }
 Invoke-Step "Manager checks" (Join-Path $root "apps/manager-mobile") { npm run check }
 
 Invoke-Step "Git diff check" $root { git diff --check }
+Invoke-Step "Repository regression tests" $root { node --test test/*.test.mjs }
 Invoke-Step "Tracked output and credential check" $root { Test-TrackedRepositorySafety }
 Invoke-Step "Tracked secret scan" $root { node scripts/check-secrets.mjs }
 Invoke-Step "CSP source synchronization" $root { node scripts/sync-csp.mjs --check }

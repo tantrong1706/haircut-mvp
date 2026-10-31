@@ -19,6 +19,34 @@ const db = getFirestore();
 const secret = "fixture-qr-signing-key-only-32-characters";
 
 describe("authenticated web customer platform", () => {
+  it("does not infer photo permission from a point request without a separate choice", async () => {
+    await seedSalon("salon-a", "branch-a");
+    const checked = await checkInWebCustomer.run(
+      phoneRequest("uid-no-photo", signedBranchQr("salon-a", "branch-a")),
+    );
+    const request = (await db.doc(`point_requests/${checked.sessionId}`).get()).data();
+    expect(checked.customer.allowPhoto).toBe(false);
+    expect(request?.photoConsentGranted).toBe(false);
+    expect(
+      (await db.doc(`chair_sessions/${checked.sessionId}`).get()).data()?.photoConsentGranted,
+    ).toBe(false);
+    expect(request?.status).toBe("pending");
+  });
+
+  it("records a distinct photo choice without treating a true-looking string as permission", async () => {
+    await seedSalon("salon-a", "branch-a");
+    const checked = await checkInWebCustomer.run(
+      phoneRequest("uid-string-photo", {
+        ...signedBranchQr("salon-a", "branch-a"),
+        allowPhoto: "true",
+      }),
+    );
+    expect(checked.customer.allowPhoto).toBe(false);
+    expect(
+      (await db.doc(`point_requests/${checked.sessionId}`).get()).data()?.photoConsentGranted,
+    ).toBe(false);
+  });
+
   beforeEach(async () => {
     vi.stubEnv("QR_SIGNING_SECRET", secret);
     const response = await fetch(

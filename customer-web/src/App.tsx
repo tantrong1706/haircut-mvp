@@ -34,6 +34,9 @@ const PrivacyPage = lazy(() =>
 const TermsPage = lazy(() =>
   import("./pages/TermsPage").then((module) => ({ default: module.TermsPage })),
 );
+const LegalInfoPage = lazy(() =>
+  import("./pages/LegalInfoPage").then((module) => ({ default: module.LegalInfoPage })),
+);
 const AccountDeletionPage = lazy(() =>
   import("./pages/AccountDeletionPage").then((module) => ({ default: module.AccountDeletionPage })),
 );
@@ -112,6 +115,10 @@ export default function App() {
     "/privacy",
     "/terms",
     "/delete-account",
+    "/cookies",
+    "/data-rights",
+    "/service-policy",
+    "/refund",
     "/app-check",
   ].some((route) => path.startsWith(route));
   const currentQr = useMemo(() => parseQrContext(), []);
@@ -304,7 +311,17 @@ export default function App() {
     );
   }
 
-  if (path.startsWith("/delete-account")) {
+  const legalPath = path.replace(/\/+$/u, "");
+  const publicLegalKind = legalPath === "/cookies" ? "cookies" :
+    ["/data-rights", "/delete-account"].includes(legalPath) ? "data-rights" :
+    ["/service-policy", "/refund"].includes(legalPath) ? "service" : null;
+  if (publicLegalKind) {
+    return <div className="app-shell ops-shell"><main className="app-main wide-main">
+      <Suspense fallback={<PageLoading />}><LegalInfoPage kind={publicLegalKind} /></Suspense>
+    </main></div>;
+  }
+
+  if (path.startsWith("/delete-account/manage")) {
     return (
       <div className="app-shell ops-shell">
         <main className="app-main wide-main">
@@ -333,7 +350,12 @@ export default function App() {
   let content = <WebCustomerEntryPage onReady={setSession} />;
 
   if (session && activeTab === "account" && session.identityProvider === "firebase") {
-    content = <CustomerAccountPage session={session} onLoggedOut={finishWebLogout} />;
+    content = <CustomerAccountPage session={session} onLoggedOut={finishWebLogout}
+      onPhotoRevoked={() => setSession(current =>
+        current?.identityProvider === "firebase" && Boolean(current.firebaseUid) &&
+        current.firebaseUid === session.firebaseUid && current.qr.salonId === session.qr.salonId
+          ? { ...current, customer: { ...current.customer, allowPhoto: false } } : current
+      )} />;
   } else if (session && activeTab === "history") {
     content = <HistoryPage session={session} />;
   } else if (session && activeTab === "wheel") {

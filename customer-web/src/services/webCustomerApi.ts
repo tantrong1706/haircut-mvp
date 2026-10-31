@@ -46,12 +46,12 @@ export async function resolveWebCustomerContext(qr: QrContext): Promise<WebCusto
   return callCustomerWebFunction<QrContext, WebCustomerContext>("getWebCustomerContext", qr);
 }
 
-export async function checkInWebCustomer(qr: QrContext): Promise<AppSession> {
-  if (testAdapterEnabled()) return mockWebCustomerCheckin(qr);
-  const result = await callCustomerWebFunction<QrContext, WebSessionResult>(
-    "checkInWebCustomer",
-    qr,
-  );
+export async function checkInWebCustomer(qr: QrContext, allowPhoto = false): Promise<AppSession> {
+  if (testAdapterEnabled()) return mockWebCustomerCheckin(qr, allowPhoto);
+  const result = await callCustomerWebFunction<
+    QrContext & { allowPhoto: boolean },
+    WebSessionResult
+  >("checkInWebCustomer", { ...qr, allowPhoto });
   return appSessionFromWebResult(qr, result);
 }
 
@@ -245,7 +245,7 @@ function mockWebCustomerContext(qr: QrContext): WebCustomerContext {
   };
 }
 
-function mockWebCustomerCheckin(qr: QrContext): AppSession {
+function mockWebCustomerCheckin(qr: QrContext, allowPhoto: boolean): AppSession {
   const context = mockWebCustomerContext(qr);
   if (context.activeSession) return context.activeSession;
   const session: AppSession = {
@@ -257,7 +257,7 @@ function mockWebCustomerCheckin(qr: QrContext): AppSession {
     branchAddress: context.qr.branchAddress,
     zaloUserId: "",
     sessionStatus: "pending_approval",
-    customer: { ...context.customer, allowPhoto: true },
+    customer: { ...context.customer, allowPhoto },
     features: { ...DEFAULT_SYSTEM_FEATURES },
   };
   localStorage.setItem(`haircut_test_web_session:${qr.salonId}`, JSON.stringify(session));

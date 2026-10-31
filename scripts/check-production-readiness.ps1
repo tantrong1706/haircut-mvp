@@ -2,12 +2,16 @@ param(
   [switch]$RunBuild,
   [switch]$CheckLiveUrls,
   [switch]$StrictRelease,
-  [switch]$ReleaseIncludesIos
+  [switch]$ReleaseIncludesIos,
+  [switch]$WebMaintenance
 )
 
 $ErrorActionPreference = "Stop"
 $env:FIREBASE_CLI_DISABLE_UPDATE_CHECK = "true"
 $root = Resolve-Path (Join-Path $PSScriptRoot "..")
+if ($WebMaintenance -and (-not $StrictRelease -or $ReleaseIncludesIos -or $RunBuild)) {
+  throw "Web maintenance requires strict evidence; native releases and quick-build substitution are not allowed"
+}
 
 $results = New-Object System.Collections.Generic.List[object]
 
@@ -72,6 +76,11 @@ Write-Host "Chế độ: $(if ($StrictRelease) { 'strict release' } else { 'loca
 Write-Host ""
 
 $headSha = (git -C $root rev-parse HEAD).Trim()
+if ($WebMaintenance) {
+  node (Join-Path $PSScriptRoot "check-web-maintenance.mjs") --sha $headSha
+  if ($LASTEXITCODE -ne 0) { throw "Web maintenance scope/SHA/CI gate failed" }
+  Add-Result "Web maintenance profile" "WARN" "Approved Web-only maintenance; App Check and optional monitoring configuration unchanged; no native release"
+}
 
 if (Test-CommandExists "node") {
   $nodeVersion = (node --version).Trim()
@@ -155,6 +164,7 @@ Merge-ProcessEnvironment $webEnv @(
   "VITE_FIREBASE_APP_CHECK_SITE_KEY",
   "VITE_MONITORING_DISABLED",
   "VITE_SENTRY_DSN",
+  "VITE_PUBLIC_SUPPORT_EMAIL",
   "VITE_SUPPORT_EMAIL",
   "VITE_SUPPORT_PHONE"
 )
@@ -207,12 +217,11 @@ if ($webEnv.Count -eq 0) {
 }
 
 if (
-  (-not (Test-PlaceholderValue $webEnv["VITE_SUPPORT_EMAIL"])) -or
-  (-not (Test-PlaceholderValue $webEnv["VITE_SUPPORT_PHONE"]))
+  (-not (Test-PlaceholderValue $webEnv["VITE_PUBLIC_SUPPORT_EMAIL"]))
 ) {
   Add-Result "Privacy contact" "OK" "Đã cấu hình ít nhất một kênh hỗ trợ"
 } else {
-  Add-Result "Privacy contact" "FAIL" "Thiếu VITE_SUPPORT_EMAIL hoặc VITE_SUPPORT_PHONE"
+  Add-Result "Privacy contact" "FAIL" "Thiếu VITE_PUBLIC_SUPPORT_EMAIL"
 }
 
 $liveRules = Join-Path $root "firebase\firestore.rules"
@@ -257,7 +266,7 @@ Merge-ProcessEnvironment $functionsEnv @(
 if ($functionsEnv["ENFORCE_APP_CHECK"] -eq "true") {
   Add-Result "Functions App Check chung" "OK" "Callable options đang enforcement"
 } else {
-  if ($StrictRelease) {
+  if ($StrictRelease -and -not $WebMaintenance) {
     Add-Result "Functions App Check chung" "FAIL" "Strict release yêu cầu ENFORCE_APP_CHECK=true"
   } else {
     Add-Result "Functions App Check chung" "WARN" "Source hỗ trợ nhưng chưa xác minh ENFORCE_APP_CHECK=true"
@@ -269,7 +278,7 @@ $managerFirebaseSource = Get-Content -Raw -LiteralPath (Join-Path $root "apps\ma
 $managerNativeSource = Get-Content -Raw -LiteralPath (Join-Path $root "apps\manager-mobile\src\nativeRuntime.ts")
 if ($managerFirebaseSource -match "VITE_FIREBASE_APP_CHECK_SITE_KEY" -and $managerNativeSource -match "FirebaseAppCheck\.initialize") {
   Add-Result "Manager App Check source" "OK" "Có web provider và native provider"
-  if ($StrictRelease) {
+  if ($StrictRelease -and -not $WebMaintenance) {
     if ($env:HAIRCUT_MANAGER_APP_CHECK_VERIFIED_SHA -eq $headSha) {
       Add-Result "Manager App Check thiết bị thật" "OK" "Bằng chứng Android/iPhone khớp HEAD"
     } else {
@@ -290,7 +299,7 @@ if ($adminFirebaseSource -match "VITE_FIREBASE_APP_CHECK_SITE_KEY") {
 }
 
 if ($webEnv["VITE_MONITORING_DISABLED"] -eq "true") {
-  if ($StrictRelease) {
+  if ($StrictRelease -and -not $WebMaintenance) {
     Add-Result "Frontend monitoring" "FAIL" "Strict release không cho phép tắt monitoring"
   } else {
     Add-Result "Frontend monitoring" "OK" "Đang tắt có chủ đích"
@@ -298,7 +307,7 @@ if ($webEnv["VITE_MONITORING_DISABLED"] -eq "true") {
 } elseif ($webEnv["VITE_SENTRY_DSN"]) {
   Add-Result "Frontend monitoring" "OK" "Sentry DSN đã cấu hình"
 } else {
-  if ($StrictRelease) {
+  if ($StrictRelease -and -not $WebMaintenance) {
     Add-Result "Frontend monitoring" "FAIL" "Thiếu VITE_SENTRY_DSN cho strict release"
   } else {
     Add-Result "Frontend monitoring" "WARN" "Monitoring không bị tắt có chủ đích nhưng chưa có Sentry DSN"

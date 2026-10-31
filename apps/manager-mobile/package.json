@@ -24,12 +24,12 @@
     "@aparajita/capacitor-secure-storage": "^8.0.0",
     "@capacitor-firebase/app-check": "^8.2.0",
     "@capacitor-firebase/messaging": "^8.2.0",
-    "@capacitor/android": "^8.0.0",
+    "@capacitor/android": "8.4.3",
     "@capacitor/app": "^8.0.0",
     "@capacitor/barcode-scanner": "^3.1.0",
     "@capacitor/core": "^8.0.0",
     "@capacitor/haptics": "^8.0.0",
-    "@capacitor/ios": "^8.0.0",
+    "@capacitor/ios": "8.4.3",
     "@capacitor/network": "^8.0.0",
     "@capacitor/share": "^8.0.0",
     "@capacitor/splash-screen": "^8.0.0",
@@ -40,6 +40,11 @@
     "qrcode": "^1.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
+  },
+  "overrides": {
+    "@firebase/firestore": {
+      "@grpc/grpc-js": "1.14.6"
+    }
   },
   "devDependencies": {
     "@capacitor/cli": "^8.0.0",

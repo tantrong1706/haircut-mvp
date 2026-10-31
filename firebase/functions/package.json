@@ -18,8 +18,10 @@
     "test:rules": "cd .. && npx --yes firebase-tools@15.22.3 emulators:exec --project demo-haircut --only firestore,storage \"npm --prefix functions run test:rules:emulator\"",
     "test:rules:emulator": "vitest run --hookTimeout=30000 --testTimeout=20000 test/firestore.rules.test.ts",
     "test:integration": "cd .. && npx --yes firebase-tools@15.22.3 emulators:exec --project demo-haircut --only firestore,storage \"npm --prefix functions run test:integration:emulator\"",
-    "test:integration:emulator": "vitest run --no-file-parallelism --testTimeout=20000 test/callables.integration.test.ts test/webCustomer.integration.test.ts test/salonBranding.integration.test.ts test/photoUploadOperations.integration.test.ts test/adversarial.audit.test.ts test/adminSupport.integration.test.ts test/privatePhotoAccess.integration.test.ts test/ownerWorkspace.integration.test.ts test/visitDetails.integration.test.ts",
+    "test:integration:emulator": "vitest run --no-file-parallelism --testTimeout=20000 test/callables.integration.test.ts test/webCustomer.integration.test.ts test/webCustomerPrivacy.integration.test.ts test/customerDeletionLifecycle.integration.test.ts test/customerName.integration.test.ts test/salonBranding.integration.test.ts test/photoUploadOperations.integration.test.ts test/adversarial.audit.test.ts test/adminSupport.integration.test.ts test/privatePhotoAccess.integration.test.ts test/ownerWorkspace.integration.test.ts test/visitDetails.integration.test.ts",
     "test:visits:coverage": "vitest run --config vitest.visit-details.config.ts --coverage",
+    "test:privacy:coverage:emulator": "vitest run --config vitest.privacy.config.ts --coverage",
+    "test:customer-name:coverage:emulator": "vitest run --config vitest.customer-name.config.ts --coverage",
     "test:admin:coverage": "vitest run --config vitest.admin.config.ts --coverage",
     "test:returning:coverage": "vitest run --config vitest.returning.config.ts --coverage",
     "test:photo-security:coverage": "vitest run --config vitest.photo-security.config.ts --coverage",
@@ -34,11 +36,24 @@
     "node": "22"
   },
   "dependencies": {
-    "@haircut/contracts": "file:./contracts",
+    "@haircut/contracts": "file:contracts",
     "firebase-admin": "^13.10.0",
     "firebase-functions": "^7.2.5",
     "sharp": "0.35.5",
-    "zod": "^4.4.3"
+    "zod": "^4.6.6"
+  },
+  "overrides": {
+    "body-parser@^1.0.0": "1.20.9",
+    "qs@^6.0.0": "6.16.2",
+    "gaxios@^6.0.0": {
+      "uuid": "11.1.1"
+    },
+    "google-gax@^4.0.0": {
+      "uuid": "11.1.1"
+    },
+    "teeny-request@^9.0.0": {
+      "uuid": "11.1.1"
+    }
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",

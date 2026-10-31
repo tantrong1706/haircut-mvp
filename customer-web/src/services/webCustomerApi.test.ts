@@ -129,7 +129,15 @@ describe("web customer callable adapter", () => {
       sessionId: "session-a",
       customer: { customerId: "customer-a" },
     });
-    expect(mocks.callCustomerWebFunction).toHaveBeenCalledWith("checkInWebCustomer", qr);
+    expect(mocks.callCustomerWebFunction).toHaveBeenCalledWith("checkInWebCustomer", {
+      ...qr,
+      allowPhoto: false,
+    });
+    await checkInWebCustomer(qr, true);
+    expect(mocks.callCustomerWebFunction).toHaveBeenLastCalledWith("checkInWebCustomer", {
+      ...qr,
+      allowPhoto: true,
+    });
   });
 
   it("session history rewards và spin đều dùng authenticated web callables", async () => {
@@ -187,7 +195,10 @@ describe("web customer callable adapter", () => {
       branchId: "branch-a",
       mirrorId: "",
     });
-    expect(mocks.callCustomerWebFunction).toHaveBeenCalledWith("checkInWebCustomer", salonQr);
+    expect(mocks.callCustomerWebFunction).toHaveBeenCalledWith("checkInWebCustomer", {
+      ...salonQr,
+      allowPhoto: false,
+    });
   });
 
   it("mở tài khoản chỉ đọc qua auth, không gửi customerId hay tạo check-in", async () => {
