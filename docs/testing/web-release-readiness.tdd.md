@@ -52,8 +52,10 @@ tổng hợp **chỉ trong thư mục tạm**, không thay proof thật của re
   quyền ảnh khách và vận hành inbox vẫn cần người phụ trách.
 - Privacy giữ email hỗ trợ đã duyệt, ẩn tên/SĐT/địa chỉ riêng. Lưu lâu dài khi mục đích còn hiệu lực,
   không vô hiệu OTP/link expiry hoặc dọn upload tạm. Chưa tạo lịch xóa dữ liệu khách thật.
-- GitHub main chưa có branch protection khi đọc API; không tự thay cấu hình. Cổng phát hành tự
-  yêu cầu đủ các CI tin cậy và mọi check trả success trên đúng SHA, không nhận skipped/pending.
+- API classic branch protection trả 404, nhưng kiểm tra tiếp rulesets xác nhận main **có bảo vệ**:
+  bắt buộc PR, giải quyết review thread và 9 status checks; cấm xóa/force push.
+  Không tự đổi cấu hình hoặc đẩy thẳng main để bỏ qua ruleset. Cổng phát hành còn yêu cầu
+  CI tin cậy và mọi check trả success trên đúng SHA, không nhận skipped/pending.
 - Phải chạy `scripts/check.ps1 -Full` trên **SHA main cuối cùng** để tạo proof thật, kiểm tra CI lại,
   sao lưu riêng cấu hình/artifact trước phát hành và chỉ dùng danh sách 57 callable đã duyệt.
 - Không deploy Zalo, Admin, native, trigger/schedule, Rules, IAM, TTL hoặc đổi App Check.
