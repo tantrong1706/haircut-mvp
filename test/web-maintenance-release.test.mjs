@@ -254,12 +254,19 @@ test("source exports match the explicitly reviewed Web-only callable inventory",
 
 test("Web maintenance excludes every entry point requiring system administrator access", () => {
   assert.equal(scope.functions.includes("getSystemFeatureFlags"), false);
-  const source = readFileSync(new URL("../firebase/functions/src/index.ts", import.meta.url), "utf8");
+  const source = readFileSync(
+    new URL("../firebase/functions/src/index.ts", import.meta.url),
+    "utf8",
+  );
   for (const name of scope.functions) {
     const start = source.indexOf(`export const ${name} =`);
     const next = source.indexOf("export const ", start + 13);
     const block = source.slice(start, next < 0 ? source.length : next);
-    assert.doesNotMatch(block, /assertSystemAdmin|getSystemAdminAccess|requireSystemAdminAccess/u, name);
+    assert.doesNotMatch(
+      block,
+      /assertSystemAdmin|getSystemAdminAccess|requireSystemAdminAccess/u,
+      name,
+    );
   }
 });
 test("full release remains strict; maintenance requires strict checks and forbids native release", () => {

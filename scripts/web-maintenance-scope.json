@@ -29,7 +29,6 @@
     "getSalonCustomerDetails",
     "getSalonDeletionStatus",
     "getSalonProfile",
-    "getSystemFeatureFlags",
     "getWebCustomerContext",
     "getWebCustomerHistory",
     "getWebCustomerRewards",

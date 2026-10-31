@@ -88,8 +88,8 @@ Code/test local không chứng minh website production đã nhận thay đổi.
 Chủ dự án đã cho phép merge và phát hành khi kiểm thử/CI đạt. Phạm vi gồm Hosting khách và đúng các API đã đổi:
 `checkInWebCustomer`, `withdrawWebCustomerPhotoConsent`, `searchSalonCustomers`,
 `getSalonCustomerDetails`, `deleteCustomerData`, và `updateSalonCustomerName` mới đã được chấp thuận riêng.
-Chủ dự án còn cho phép cập nhật thư viện đã vá cho 55 callable Web đang chạy; cùng hai API mới,
-danh sách đóng gồm 57 tên tại `scripts/web-maintenance-scope.json`. Không phát hành passkey/gói tháng.
+Chủ dự án còn cho phép cập nhật thư viện đã vá cho 54 callable Web đang chạy; cùng hai API mới,
+danh sách đóng gồm 56 tên tại `scripts/web-maintenance-scope.json`. Không phát hành passkey/gói tháng.
 Không deploy toàn bộ Functions/Admin/Zalo/native-device/mirror/schedule/trigger/Rules/TTL/Gateway,
 không đổi quyền tài khoản, App Check enforcement hoặc cấu hình giám sát.
 Chế độ bảo trì Web được chấp thuận riêng: bắt buộc clean main, đúng SHA/project/site,

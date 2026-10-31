@@ -72,8 +72,8 @@ export function validateWebMaintenance(state, scope) {
   );
   requireCondition(
     Array.isArray(scope.functions) &&
-      scope.functions.length === 57 &&
-      new Set(scope.functions).size === 57 &&
+      scope.functions.length === 56 &&
+      new Set(scope.functions).size === 56 &&
       scope.functions.every(
         (name) => approvedScope.functions.includes(name) && /^[A-Za-z][A-Za-z0-9]+$/u.test(name),
       ),

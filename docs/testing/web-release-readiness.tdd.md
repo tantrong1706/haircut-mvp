@@ -17,6 +17,11 @@ CodeQL PR #83 còn phát hiện regex hostname trong bộ quan sát mạng E2E k
 `d18215c` tái hiện sáu tên miền giả; `aeca289` sửa biên tên miền và 15/15 ca PASS.
 Regression này được thêm vào CI. Không đổi website, bỏ cảnh báo hoặc hạ mức quét bảo mật.
 
+Rà phạm vi bằng cả source và nơi gọi, không chỉ hậu tố tên: `getSystemFeatureFlags` chỉ dùng
+ở Admin và yêu cầu `assertSystemAdmin`. Checkpoint `b0a10f1` bắt lỗi danh sách ban đầu;
+sau loại API này, policy/runtime 38/38 PASS, coverage giữ 100% dòng và 97.06% nhánh.
+Danh sách cuối chỉ có 54 callable Web hiện hữu và hai callable mới, không phát hành API Admin.
+
 Đã gặp một lần metadata của dependency `file:` vẫn dùng hợp đồng cũ dù cập nhật lock;
 bộ regression phát hiện 14 ca lỗi. Cài lại rõ đường dẫn hợp đồng, tạo lock rồi `npm ci` sạch đã sửa.
 Không sửa kiểm thử, hạ ngưỡng hoặc dùng `npm audit fix --force` để làm kết quả xanh.
@@ -61,7 +66,7 @@ tổng hợp **chỉ trong thư mục tạm**, không thay proof thật của re
   Không tự đổi cấu hình hoặc đẩy thẳng main để bỏ qua ruleset. Cổng phát hành còn yêu cầu
   CI tin cậy và mọi check trả success trên đúng SHA, không nhận skipped/pending.
 - Phải chạy `scripts/check.ps1 -Full` trên **SHA main cuối cùng** để tạo proof thật, kiểm tra CI lại,
-  sao lưu riêng cấu hình/artifact trước phát hành và chỉ dùng danh sách 57 callable đã duyệt.
+  sao lưu riêng cấu hình/artifact trước phát hành và chỉ dùng danh sách 56 callable đã duyệt.
 - Không deploy Zalo, Admin, native, trigger/schedule, Rules, IAM, TTL hoặc đổi App Check.
   Không thử OTP/email/điểm/xóa hồ sơ khách thật để kiểm thử.
 - Biên bản phát hành thật phải ghi riêng SHA/Hosting version/API ACTIVE và kiểm tra HTTPS sau deploy.
