@@ -82,7 +82,11 @@ export const listenStaffProfiles = (_salon: string, next: (items: unknown[]) => 
 };
 export const searchSalonCustomers = async () => ({ customers: [], nextCursor: null });
 let directoryName = "Khách mẫu trong danh bạ";
-export const updateCustomerName = async (input: { customerId: string; name: string; expectedName: string }) => {
+export const updateCustomerName = async (input: {
+  customerId: string;
+  name: string;
+  expectedName: string;
+}) => {
   if (input.customerId !== "customer-fixture" || input.expectedName !== directoryName)
     throw new Error("Fixture blocks edits to other customers or stale names");
   directoryName = input.name.trim();

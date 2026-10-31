@@ -14,11 +14,20 @@ export async function updateCustomerName(input: CustomerNameChange) {
     throw new Error("Tên khách cần từ 1 đến 80 ký tự hợp lệ.");
   const result = await callFunction<CustomerNameChange, { customerId: string; name: string }>(
     "updateSalonCustomerName",
-    { salonId: input.salonId, customerId: input.customerId, name,
+    {
+      salonId: input.salonId,
+      customerId: input.customerId,
+      name,
       expectedName: input.expectedName,
-      ...(input.pointRequestId === undefined ? {} : { pointRequestId: input.pointRequestId }) },
+      ...(input.pointRequestId === undefined ? {} : { pointRequestId: input.pointRequestId }),
+    },
   );
-  if (!result || result.customerId !== input.customerId || typeof result.name !== "string" || !result.name.trim())
+  if (
+    !result ||
+    result.customerId !== input.customerId ||
+    typeof result.name !== "string" ||
+    !result.name.trim()
+  )
     throw new Error("Máy chủ chưa xác nhận tên khách. Vui lòng tải lại và kiểm tra.");
   return result;
 }

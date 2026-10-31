@@ -64,6 +64,10 @@ jobs:
         working-directory: firebase
         run: npx --yes firebase-tools@15.22.3 emulators:exec --project demo-haircut --only firestore "npm --prefix functions run test:privacy:coverage:emulator"
 
+      - name: Scoped customer name transaction coverage
+        working-directory: firebase
+        run: npx --yes firebase-tools@15.22.3 emulators:exec --project demo-haircut --only firestore "npm --prefix functions run test:customer-name:coverage:emulator"
+
       - name: Admin support repair coverage
         working-directory: firebase
         run: npx --yes firebase-tools@15.22.3 emulators:exec --project demo-haircut --only firestore "npm --prefix functions run test:admin:coverage"
@@ -124,6 +128,10 @@ jobs:
       - name: Customer privacy controls and public policies coverage
         working-directory: customer-web
         run: npm run test:privacy:coverage
+
+      - name: Explicit customer name editor coverage
+        working-directory: customer-web
+        run: npm run test:customer-name:coverage
 
       - name: Shared client domain coverage
         working-directory: customer-web
@@ -215,6 +223,9 @@ jobs:
         working-directory: apps/manager-mobile
         run: npm ci
 
+      - name: Manager dependency security regression
+        run: node --test test/manager-dependency-security.test.mjs
+
       - name: Typecheck, unit test and build
         working-directory: apps/manager-mobile
         run: npm run check
@@ -280,6 +291,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
+      - name: Setup Node for release policy checks
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: 22
+
       - name: Ensure hosting build output is not committed
         shell: bash
         run: |
@@ -309,6 +325,9 @@ jobs:
 
       - name: Scan tracked files for secrets
         run: node scripts/check-secrets.mjs
+
+      - name: Verify scoped Web maintenance release gates
+        run: node --test --experimental-test-coverage --test-coverage-include='scripts/web-maintenance-policy.mjs' --test-coverage-lines=80 --test-coverage-branches=80 test/web-maintenance-release.test.mjs
 
       - name: Verify CSP source synchronization
         run: node scripts/sync-csp.mjs --check

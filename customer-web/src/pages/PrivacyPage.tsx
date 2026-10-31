@@ -21,7 +21,7 @@ export function PrivacyPage({ onBack, onNavigate }: Props = {}) {
         <BrandLogo />
         <p className="eyebrow">CH Haircut Salon</p>
         <h1>Chính sách quyền riêng tư</h1>
-        <p className="muted">Cập nhật: 29/10/2026</p>
+        <p className="muted">Cập nhật: 30/10/2026</p>
       </header>
 
       <div className="panel privacy-content">
@@ -79,8 +79,11 @@ export function PrivacyPage({ onBack, onNavigate }: Props = {}) {
 
         <h2>7. Thời hạn lưu và bảo vệ dữ liệu</h2>
         <p>
-          Dữ liệu vận hành được giữ khi salon còn cần để cung cấp chương trình chăm sóc khách, cho
-          đến khi có yêu cầu xóa hợp lệ hoặc salon ngừng sử dụng dịch vụ. Dữ liệu được bảo vệ bằng
+          Hồ sơ, điểm, lịch sử và ảnh/ghi chú đã lưu được giữ lâu dài khi salon còn cần để phục vụ
+          khách; không tự xóa chỉ vì khách lâu không ghé. Việc lưu giữ vẫn có thể kết thúc khi có
+          yêu cầu xóa hợp lệ, hết mục đích xử lý hoặc salon ngừng sử dụng dịch vụ. Thời hạn của
+          OTP, liên kết ảnh và dữ liệu tải lên tạm không phải thời hạn lưu hồ sơ đã hoàn tất.
+          Dữ liệu được bảo vệ bằng
           đăng nhập, phân quyền theo salon/chi nhánh, token QR có thể xoay và quy tắc truy cập
           Firebase; không có phương thức truyền hoặc lưu trữ nào bảo đảm an toàn tuyệt đối.
         </p>

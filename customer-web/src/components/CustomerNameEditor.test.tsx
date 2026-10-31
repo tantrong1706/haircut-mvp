@@ -4,8 +4,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const save = vi.hoisted(() => vi.fn());
 vi.mock("../services/customerName", () => ({ updateCustomerName: save }));
 import { CustomerNameEditor } from "./CustomerNameEditor";
-const props = { salonId: "salon-a", customerId: "customer-a", customerName: "Khách 1028", onSaved: vi.fn() };
-beforeEach(() => { vi.clearAllMocks(); save.mockResolvedValue({ customerId: "customer-a", name: "Anh Minh" }); });
+const props = {
+  salonId: "salon-a",
+  customerId: "customer-a",
+  customerName: "Khách 1028",
+  onSaved: vi.fn(),
+};
+beforeEach(() => {
+  vi.clearAllMocks();
+  save.mockResolvedValue({ customerId: "customer-a", name: "Anh Minh" });
+});
 async function edit() {
   const user = userEvent.setup();
   await user.click(screen.getByRole("button", { name: /Sửa tên khách/ }));
@@ -25,7 +33,12 @@ describe("explicit customer name editing", () => {
     const user = await edit();
     await user.click(screen.getByRole("button", { name: "Lưu tên" }));
     expect(await screen.findByRole("status")).toHaveTextContent("Đã lưu tên khách.");
-    expect(save).toHaveBeenCalledWith({ salonId: "salon-a", customerId: "customer-a", name: "Anh Minh", expectedName: "Khách 1028" });
+    expect(save).toHaveBeenCalledWith({
+      salonId: "salon-a",
+      customerId: "customer-a",
+      name: "Anh Minh",
+      expectedName: "Khách 1028",
+    });
     expect(props.onSaved).toHaveBeenCalledWith("Anh Minh");
   });
   it("passes the pending request when used by a staff screen", async () => {
@@ -63,7 +76,11 @@ describe("explicit customer name editing", () => {
   });
   it("does not let an in-flight result update an unmounted editor", async () => {
     let finish!: (value: unknown) => void;
-    save.mockReturnValue(new Promise(resolve => { finish = resolve; }));
+    save.mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
     const view = render(<CustomerNameEditor {...props} />);
     const user = await edit();
     await user.dblClick(screen.getByRole("button", { name: "Lưu tên" }));

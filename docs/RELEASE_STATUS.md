@@ -1,7 +1,16 @@
 # Trạng thái CH Hair Web
 
-Cập nhật 22/10/2026 (Asia/Saigon). Sản phẩm là Web trên Firebase tại
+Cập nhật chuẩn bị 31/10/2026 (Asia/Saigon). Sản phẩm là Web trên Firebase tại
 https://app.chhaircutsalon.cc. Source trên GitHub và bản đang phục vụ được ghi riêng bên dưới.
+
+## Đợt bảo trì Web đang chuẩn bị — chưa xác nhận phát hành
+
+Nhánh `codex/web-release-readiness`: quyền riêng tư/email-only, tên khách có phân quyền,
+thư viện runtime đã vá và cổng phát hành bảo trì đúng phạm vi. Bằng chứng local mới tại
+[web-release-readiness.tdd.md](testing/web-release-readiness.tdd.md).
+Chủ dự án đã duyệt main + Customer Hosting + 57 callable Web sau full-suite/CI PASS trên đúng SHA.
+Không deploy Admin/Zalo/native/Rules/IAM/TTL hoặc đổi App Check. Chưa lấy kết quả local làm
+bằng chứng website thật đã nhận bản sửa; biên bản production bên dưới vẫn là lần 22/10.
 
 ## Production — bằng chứng gần nhất được ghi tại đây (22/10)
 

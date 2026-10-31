@@ -1,10 +1,11 @@
 # Quyền riêng tư và cổng phát hành CH Hair Web
 
-Nhánh chuẩn bị: `codex/privacy-readiness`, dựa trên main `89cee9a`.
+Nhánh phát hành sạch: `codex/web-release-readiness`, dựa trên main `89cee9a`.
+Nhánh thử cũ được giữ ở máy; không nhập các commit trung gian chứa thông tin đã rút quyền công khai.
 Đây là checklist kỹ thuật/vận hành, **không phải chứng nhận tuân thủ pháp luật**.
 Code/test local không chứng minh website production đã nhận thay đổi.
 
-## Còn cần chủ dự án xác nhận
+## Xác nhận và việc vận hành còn cần duy trì
 
 - Đã đồng ý công khai email hỗ trợ `tantrong1706@gmail.com`.
 - Theo xác nhận mới nhất, **chỉ công khai email hỗ trợ**. Chủ dự án rút quyền công khai tên,
@@ -15,15 +16,20 @@ Code/test local không chứng minh website production đã nhận thay đổi.
   thông tin; cần phân loại hoạt động thực tế và đối chiếu quy định áp dụng trước khi xác nhận tuân thủ.
   Chỉ email hỗ trợ có cấu hình riêng `VITE_PUBLIC_SUPPORT_EMAIL`; không đọc lại các biến liên hệ cá nhân cũ.
   Không bịa mã số thuế, thông tin đăng ký hoặc địa chỉ.
-- **Chưa có bằng chứng nguồn/quyền sử dụng:** `customer-web/public/assets/salon-hero.webp`.
-  Commit tạo asset `7997a7a` không tự chứng minh có giấy phép. Font Be Vietnam Pro có OFL tại
+- Chủ dự án xác nhận `customer-web/public/assets/salon-hero.webp` **do AI tạo**; ảnh dùng để minh họa,
+  không phải bằng chứng ảnh chụp chi nhánh thực tế. Đã xem lại: không có người hoặc thông tin cá nhân
+  của chủ dự án trong ảnh. Xác nhận nguồn không tự chứng minh mọi quyền từ nhà cung cấp AI hoặc bên thứ ba.
+  Font Be Vietnam Pro có OFL tại
   `customer-web/public/fonts/OFL.txt`; ảnh do salon tải lên cần quyền sử dụng phù hợp.
 - Cần người phụ trách theo dõi inbox, xác minh chủ thể, ghi thời điểm nhận/phản hồi/kết quả và xử lý yêu cầu.
   Link email không tự gửi thư hoặc hoàn tất xóa.
-- Lịch lưu từng nhóm dữ liệu, vai trò pháp lý, thỏa thuận với nhà cung cấp, địa điểm xử lý và nghĩa vụ
-  tương ứng cần chủ dự án/người tư vấn xác nhận. Không tự bật cron xóa dữ liệu cũ.
-- Bản vá dependency/auth ở PR #80/#82 và các thay đổi khác chưa merge/deploy là cổng riêng.
-  Không dùng CI của PR khác làm bằng chứng của nhánh này.
+- Chủ dự án chọn lưu lâu dài hồ sơ, điểm, lịch sử và ảnh/ghi chú đã hoàn tất, không tự xóa theo một
+  số tháng cố định. Yêu cầu xóa hợp lệ, kết thúc mục đích xử lý hoặc ngừng dịch vụ vẫn cần xử lý riêng.
+  Không vô hiệu thời hạn an toàn của OTP/link/token hoặc dọn dữ liệu upload tạm; không tự bật cron xóa khách.
+- Vai trò pháp lý, thỏa thuận với nhà cung cấp, địa điểm xử lý và nghĩa vụ tương ứng cần rà theo
+  hoạt động thực tế. Kiểm thử không thay thế thẩm định pháp luật hoặc vận hành inbox thực sự.
+- Nhánh này lấy phần kiểm thử/vá dependency đã rà từ PR #80/#82, không nhập passkey, chi phí OTP,
+  các gói tháng hoặc tính năng ngoài phạm vi. CI của nhánh này phải chạy riêng.
 
 ## Đối chiếu 20 mục của video
 
@@ -31,7 +37,7 @@ Code/test local không chứng minh website production đã nhận thay đổi.
 
 | #   | Mục                        | Bằng chứng và giới hạn                                                                                                                                                                   |
 | --- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Quyền riêng tư             | `/privacy`: dữ liệu, mục đích, ảnh nội bộ, dịch vụ kỹ thuật, quyền và liên hệ. Chờ thông tin vận hành/lịch lưu.                                                                          |
+| 1   | Quyền riêng tư             | `/privacy`: dữ liệu, mục đích, ảnh nội bộ, dịch vụ kỹ thuật, quyền và email hỗ trợ. Lưu lâu dài khi mục đích còn hiệu lực; inbox vẫn cần người vận hành.                                 |
 | 2   | Điều khoản                 | `/terms`: tài khoản, điểm/quà, trách nhiệm, quyền dữ liệu. Không coi tiếp tục dùng là đồng ý ảnh/thống kê.                                                                               |
 | 3   | Cookie                     | `/cookies`: phân biệt phiên/IndexedDB/QR cần thiết và giám sát tùy chọn; lựa chọn tối đa 180 ngày.                                                                                       |
 | 4   | Phí/hoàn tiền              | `/service-policy`, `/refund`: chưa nhận thanh toán trong app. Không thêm thu phí hoặc cam kết hoàn tiền giả. Cập nhật trước khi bán gói.                                                 |
@@ -40,7 +46,7 @@ Code/test local không chứng minh website production đã nhận thay đổi.
 | 7   | Thông báo mục đích         | Thông báo ảnh ngay tại check-in, liên kết chính sách; giải thích trước lựa chọn cookie. Thay đổi mục đích cần rà lại.                                                                    |
 | 8   | Quyền dữ liệu              | `/data-rights` và link trong tài khoản; email có xác minh. API rút ảnh dùng UID server, không nhận customerId client chọn. Không tự báo xóa xong khi chưa xử lý.                         |
 | 9   | Dịch vụ bên thứ ba         | Công khai Firebase/Auth/App Check/reCAPTCHA, Analytics/Performance/Sentry tùy chọn. Định danh giả danh không phải cam kết ẩn danh hoàn toàn.                                             |
-| 10  | Quyền dùng ảnh             | Font có OFL; nguồn/quyền ảnh nền và ảnh salon cung cấp còn phải xác minh. “Ảnh AI” không tự chứng minh mọi quyền.                                                                        |
+| 10  | Quyền dùng ảnh             | Chủ dự án xác nhận ảnh nền do AI tạo, dùng minh họa; font có OFL. Nguồn AI không tự chứng minh mọi quyền từ nhà cung cấp hoặc bên thứ ba; ảnh khách cần quyền sử dụng phù hợp.           |
 | 11  | Đánh giá không bịa         | Không phát hiện testimonial tĩnh giả trong frontend đã xét. Nội dung salon tự nhập phải được kiểm chứng.                                                                                 |
 | 12  | Tuyên bố có căn cứ         | Không phát hiện slogan tĩnh “số 1/tốt nhất” trong phạm vi đã xét. Không sinh chứng nhận/cam kết tuyệt đối.                                                                               |
 | 13  | Thông tin vận hành         | Chỉ email hỗ trợ được phép công khai. Tên, điện thoại và địa chỉ cá nhân không hiển thị hoặc lấy lại từ cấu hình cũ; nghĩa vụ công bố thông tin còn phải đối chiếu theo mô hình thực tế. |
@@ -79,10 +85,16 @@ Code/test local không chứng minh website production đã nhận thay đổi.
 
 ## Phát hành và rollback
 
-Chưa có quyền merge/deploy đợt này. Khi được phép, cần phối hợp Hosting khách và đúng các API đã đổi:
+Chủ dự án đã cho phép merge và phát hành khi kiểm thử/CI đạt. Phạm vi gồm Hosting khách và đúng các API đã đổi:
 `checkInWebCustomer`, `withdrawWebCustomerPhotoConsent`, `searchSalonCustomers`,
-`getSalonCustomerDetails`, `deleteCustomerData`.
-Không deploy toàn bộ Functions/Admin/Rules/TTL/Gateway hoặc đổi quyền tài khoản.
+`getSalonCustomerDetails`, `deleteCustomerData`, và `updateSalonCustomerName` mới đã được chấp thuận riêng.
+Chủ dự án còn cho phép cập nhật thư viện đã vá cho 55 callable Web đang chạy; cùng hai API mới,
+danh sách đóng gồm 57 tên tại `scripts/web-maintenance-scope.json`. Không phát hành passkey/gói tháng.
+Không deploy toàn bộ Functions/Admin/Zalo/native-device/mirror/schedule/trigger/Rules/TTL/Gateway,
+không đổi quyền tài khoản, App Check enforcement hoặc cấu hình giám sát.
+Chế độ bảo trì Web được chấp thuận riêng: bắt buộc clean main, đúng SHA/project/site,
+full-suite evidence và CI trên đúng SHA đều PASS. Chế độ strict đầy đủ vẫn giữ nguyên yêu cầu
+App Check/Sentry/bằng chứng native; không giả bằng chứng thiết bị để vượt cổng.
 Backend mặc định không cho lưu ảnh nếu client cũ thiếu boolean true. Không nới consent để rollback UI.
 Khách dùng UI cũ không có phiên bản hồ sơ phải tải lại trước khi xác nhận xóa một hồ sơ đã được tạo lại.
 

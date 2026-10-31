@@ -59,9 +59,17 @@ describe("staff pending visit notes", () => {
     await user.type(screen.getByRole("textbox", { name: "Tên khách" }), "Tên khách đã hỏi");
     await user.click(screen.getByRole("button", { name: "Lưu tên" }));
     expect(await screen.findByRole("heading", { name: "Tên khách đã hỏi" })).toBeVisible();
-    expect(mocks.rename).toHaveBeenCalledWith({ salonId: "salon-fixture", customerId: "customer-A", pointRequestId: "request-A", name: "Tên khách đã hỏi", expectedName: "Khách A" });
+    expect(mocks.rename).toHaveBeenCalledWith({
+      salonId: "salon-fixture",
+      customerId: "customer-A",
+      pointRequestId: "request-A",
+      name: "Tên khách đã hỏi",
+      expectedName: "Khách A",
+    });
     expect(mocks.confirm).not.toHaveBeenCalled();
-    expect(screen.getByPlaceholderText("Ví dụ: Fade thấp, giữ mái, không cắt quá cao")).toHaveValue("Saved A");
+    expect(screen.getByPlaceholderText("Ví dụ: Fade thấp, giữ mái, không cắt quá cao")).toHaveValue(
+      "Saved A",
+    );
   });
   beforeEach(() => {
     vi.clearAllMocks();
