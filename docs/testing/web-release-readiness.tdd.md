@@ -82,6 +82,12 @@ tổng hợp **chỉ trong thư mục tạm**, không thay proof thật của re
 Tổng kiểm thử sau toàn bộ thay đổi mới phải được chạy lại và ghi trên PR #83/CI; không dùng số
 31/10 thay cho source mới. Không merge/deploy chỉ vì các nhóm chọn lọc ở trên đã đạt.
 
+Full-suite trên `9c044e1` ngày 04/11 đạt 16/19 bước: 371 unit Web, 219 integration và 35 Rules
+đã PASS, nhưng format hai file test backend chưa đúng và một test RTL dùng nhầm tùy chọn `exact`
+của Playwright, làm TypeScript/build/E2E dừng. Đã sửa tùy chọn test (tên chuỗi của RTL vẫn khớp
+chính xác theo mặc định), dùng formatter của đúng workspace; không bỏ typecheck hoặc hạ assertion.
+Build test và format đã chạy lại PASS; full-suite trên SHA cuối vẫn bắt buộc chạy lại.
+
 ## Giới hạn vận hành và cổng còn phải qua
 
 - Lần tổng thể đầu trên `9a340ec`: 18/19 bước PASS; integration 199/200, bài hai spin đồng thời

@@ -42,14 +42,12 @@ describe("Web customer edits only their own display name", () => {
       activeSessionId: "session-a",
     });
     for (const collection of ["chair_sessions", "point_requests"])
-      await db
-        .doc(`${collection}/session-a`)
-        .set({
-          salonId: "salon-a",
-          customerId,
-          status: collection === "chair_sessions" ? "pending_approval" : "pending",
-          customerSummary: { name: "Khách 4567", points: 7 },
-        });
+      await db.doc(`${collection}/session-a`).set({
+        salonId: "salon-a",
+        customerId,
+        status: collection === "chair_sessions" ? "pending_approval" : "pending",
+        customerSummary: { name: "Khách 4567", points: 7 },
+      });
     await db
       .doc("haircut_records/finished-a")
       .set({ salonId: "salon-a", customerId, customerName: "Khách 4567", pointsAdded: 1 });
@@ -118,14 +116,12 @@ describe("Web customer edits only their own display name", () => {
     const other = db.doc(`customers/${customerIdForWeb("salon-b", "uid-a")}`);
     await other.set({ salonId: "salon-b", firebaseUid: "uid-a", name: "Salon B" });
     await customerRef.update({ activeSessionId: "cross-tenant" });
-    await db
-      .doc("point_requests/cross-tenant")
-      .set({
-        salonId: "salon-b",
-        customerId: other.id,
-        status: "pending",
-        customerSummary: { name: "Salon B" },
-      });
+    await db.doc("point_requests/cross-tenant").set({
+      salonId: "salon-b",
+      customerId: other.id,
+      status: "pending",
+      customerSummary: { name: "Salon B" },
+    });
     await updateWebCustomerName.run(request());
     expect((await other.get()).data()?.name).toBe("Salon B");
     expect((await db.doc("point_requests/cross-tenant").get()).data()?.customerSummary.name).toBe(

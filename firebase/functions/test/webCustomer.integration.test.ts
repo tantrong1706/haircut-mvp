@@ -21,7 +21,9 @@ const secret = "fixture-qr-signing-key-only-32-characters";
 describe("authenticated web customer platform", () => {
   it("keeps a 2-hour Web confirmation window without awarding points automatically", async () => {
     await seedSalon("salon-a", "branch-a");
-    const checked = await checkInWebCustomer.run(phoneRequest("uid-long-service", signedBranchQr("salon-a", "branch-a")));
+    const checked = await checkInWebCustomer.run(
+      phoneRequest("uid-long-service", signedBranchQr("salon-a", "branch-a")),
+    );
     const point = (await db.doc(`point_requests/${checked.sessionId}`).get()).data()!;
     const chair = (await db.doc(`chair_sessions/${checked.sessionId}`).get()).data()!;
     expect(point.expiresAt.toMillis() - point.createdAt.toMillis()).toBe(2 * 60 * 60_000);
@@ -33,18 +35,27 @@ describe("authenticated web customer platform", () => {
 
   it("confirms a 31-minute-old request inside its original 2-hour window, keeping cooldown", async () => {
     await seedSalon("salon-a", "branch-a");
-    await db.doc("users/staff-a").set({ salonId: "salon-a", role: "staff", isActive: true, branchIds: ["branch-a"] });
+    await db
+      .doc("users/staff-a")
+      .set({ salonId: "salon-a", role: "staff", isActive: true, branchIds: ["branch-a"] });
     const qr = signedBranchQr("salon-a", "branch-a");
     const checked = await checkInWebCustomer.run(phoneRequest("uid-long-service", qr));
     const pointRef = db.doc(`point_requests/${checked.sessionId}`);
     const point = (await pointRef.get()).data()!;
-    const shifted = { createdAt: Timestamp.fromMillis(point.createdAt.toMillis() - 31 * 60_000), expiresAt: Timestamp.fromMillis(point.expiresAt.toMillis() - 31 * 60_000) };
+    const shifted = {
+      createdAt: Timestamp.fromMillis(point.createdAt.toMillis() - 31 * 60_000),
+      expiresAt: Timestamp.fromMillis(point.expiresAt.toMillis() - 31 * 60_000),
+    };
     await pointRef.update(shifted);
     await db.doc(`chair_sessions/${checked.sessionId}`).update(shifted);
-    await approvePointRequest.run(requestFor("staff-a", {salonId:"salon-a",requestId:checked.sessionId}, {}));
+    await approvePointRequest.run(
+      requestFor("staff-a", { salonId: "salon-a", requestId: checked.sessionId }, {}),
+    );
     expect(await contextPoints(checked.customer.customerId)).toBe(1);
     expect((await db.collection("haircut_records").get()).size).toBe(1);
-    await expect(checkInWebCustomer.run(phoneRequest("uid-long-service", qr))).rejects.toMatchObject({code:"failed-precondition"});
+    await expect(
+      checkInWebCustomer.run(phoneRequest("uid-long-service", qr)),
+    ).rejects.toMatchObject({ code: "failed-precondition" });
   });
 
   it("does not infer photo permission from a point request without a separate choice", async () => {

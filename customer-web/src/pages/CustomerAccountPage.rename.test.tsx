@@ -57,7 +57,7 @@ it("supports empty display fields and saving without an optional parent callback
       onLoggedOut={vi.fn()}
     />,
   );
-  expect(screen.getByRole("heading", { name: "Khách hàng", exact: true })).toBeVisible();
+  expect(screen.getByRole("heading", { name: "Khách hàng" })).toBeVisible();
   expect(screen.getByText(/----/)).toBeVisible();
   await user.click(screen.getByRole("button", { name: /Sửa tên khách/ }));
   await user.type(screen.getByRole("textbox", { name: "Tên khách" }), "Anh Minh");
