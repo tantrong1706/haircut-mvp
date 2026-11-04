@@ -23,7 +23,7 @@ export function validateWebMaintenance(state, scope) {
   );
   requireCondition(state.branch === "main" && state.status === "", "Release requires clean main");
   requireCondition(
-    /^https:\/\/github\.com\/tanTrong1706\/haircut-mvp(?:\.git)?$/u.test(state.origin),
+    /^https:\/\/github\.com\/tanTrong1706\/haircut-mvp(?:\.git)?$/iu.test(state.origin),
     "Unexpected origin",
   );
   requireCondition(

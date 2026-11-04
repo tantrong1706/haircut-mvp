@@ -63,7 +63,11 @@ test("maintenance accepts the actual lowercase GitHub origin for the same reposi
   assert.equal(policy.validateWebMaintenance(state, scope).sha, sha);
 });
 
-for (const origin of ["https://github.com/tantrong1706/haircut-mvp-extra.git", "https://github.com/tantrong1706/haircut-mvp.git?other=repo", "https://attacker.test/tantrong1706/haircut-mvp.git"]) {
+for (const origin of [
+  "https://github.com/tantrong1706/haircut-mvp-extra.git",
+  "https://github.com/tantrong1706/haircut-mvp.git?other=repo",
+  "https://attacker.test/tantrong1706/haircut-mvp.git",
+]) {
   test(`origin normalization still rejects ${origin}`, () => {
     assert.throws(() => policy.validateWebMaintenance({ ...snapshot(), origin }, scope));
   });
