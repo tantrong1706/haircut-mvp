@@ -1,0 +1,87 @@
+.privacy-controls {
+  width: min(1120px, 100%);
+  margin: 0 auto;
+  padding: 12px 20px 0;
+  box-sizing: border-box;
+  color: #f0eee8;
+}
+.privacy-choice {
+  padding: 16px;
+  border: 1px solid #54574d;
+  border-radius: 14px;
+  background: #1c201a;
+}
+.privacy-choice h2 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 500;
+}
+.privacy-choice p {
+  margin: 8px 0 12px;
+  font-size: 0.875rem;
+  line-height: 1.65;
+  color: #dfdfd5;
+}
+.privacy-choice a,
+.privacy-settings-links a {
+  color: inherit;
+  text-decoration: underline;
+}
+.privacy-choice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.privacy-choice-actions button {
+  flex: 1 1 130px;
+  min-height: 44px;
+  padding: 8px 10px;
+  font-size: 0.875rem;
+}
+.privacy-settings-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  font-size: 0.8rem;
+}
+.privacy-settings-button {
+  min-height: 44px;
+  padding: 6px 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.privacy-controls button:focus-visible,
+.privacy-controls a:focus-visible {
+  outline: 2px solid #efd7a2;
+  outline-offset: 3px;
+}
+.photo-permission-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  line-height: 1.65;
+  text-align: left;
+}
+.photo-permission-choice input {
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  margin: 4px 0 0;
+}
+.data-rights-actions {
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  padding: 0;
+}
+.data-rights-actions a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}

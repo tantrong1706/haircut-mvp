@@ -1,5 +1,6 @@
 import { ArrowLeft } from "lucide-react";
 import { BrandLogo } from "../components/BrandLogo";
+import { PublicContact } from "../components/PublicContact";
 
 type Props = {
   onBack?: () => void;
@@ -7,8 +8,6 @@ type Props = {
 };
 
 export function TermsPage({ onBack, onNavigate }: Props = {}) {
-  const supportEmail = String(import.meta.env.VITE_SUPPORT_EMAIL || "").trim();
-  const supportPhone = String(import.meta.env.VITE_SUPPORT_PHONE || "").trim();
 
   return (
     <section className="privacy-page">
@@ -22,7 +21,7 @@ export function TermsPage({ onBack, onNavigate }: Props = {}) {
         <BrandLogo />
         <p className="eyebrow">CH Haircut Salon</p>
         <h1>Điều khoản sử dụng</h1>
-        <p className="muted">Cập nhật: 22/10/2026</p>
+        <p className="muted">Cập nhật: 29/10/2026</p>
       </header>
 
       <div className="panel privacy-content">
@@ -101,26 +100,13 @@ export function TermsPage({ onBack, onNavigate }: Props = {}) {
         <h2>9. Thay đổi điều khoản</h2>
         <p>
           Điều khoản có thể được cập nhật khi chức năng hoặc quy định pháp luật thay đổi. Phiên bản
-          hiện hành và ngày cập nhật luôn được công bố tại trang này; việc tiếp tục sử dụng sau khi
-          điều khoản có hiệu lực được xem là chấp nhận nội dung cập nhật.
+          hiện hành và ngày cập nhật được công bố tại trang này. Thay đổi đáng kể về xử lý dữ liệu
+          cần được thông báo và xin lựa chọn tương ứng; không coi việc tiếp tục dùng ứng dụng là
+          đồng ý lưu ảnh hoặc bật giám sát tùy chọn.
         </p>
 
         <h2>10. Liên hệ</h2>
-        <p>
-          {supportEmail ? (
-            <>
-              Email hỗ trợ: <a href={`mailto:${supportEmail}`}>{supportEmail}</a>
-            </>
-          ) : (
-            <>Vui lòng liên hệ salon đang sử dụng CH Haircut Salon.</>
-          )}
-          {supportPhone ? (
-            <>
-              <br />
-              Điện thoại hỗ trợ: <a href={`tel:${supportPhone}`}>{supportPhone}</a>
-            </>
-          ) : null}
-        </p>
+        <PublicContact />
         <p>
           <a
             href={onNavigate ? "#privacy" : "/privacy"}
@@ -135,7 +121,7 @@ export function TermsPage({ onBack, onNavigate }: Props = {}) {
           </a>
           <br />
           <a
-            href={onNavigate ? "#privacy" : "/privacy#data-rights"}
+            href={onNavigate ? "#privacy" : "/data-rights"}
             onClick={(event) => {
               if (onNavigate) {
                 event.preventDefault();
@@ -145,6 +131,8 @@ export function TermsPage({ onBack, onNavigate }: Props = {}) {
           >
             Hướng dẫn yêu cầu xem, sửa hoặc xóa dữ liệu
           </a>
+          <br /><a href="/cookies">Cookie và lựa chọn giám sát</a>
+          <br /><a href="/service-policy">Chính sách dịch vụ và phí</a>
         </p>
       </div>
     </section>

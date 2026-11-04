@@ -107,6 +107,8 @@ describe("extracted owner panels", () => {
     const props = approvalProps();
     const { rerender } = render(<ApprovalsPanel {...props} requests={[]} />);
     expect(screen.getByText("Chưa có yêu cầu cộng điểm")).toBeVisible();
+    expect(screen.getByText(/Chỉ hiển thị yêu cầu còn chờ xác nhận/)).toBeVisible();
+    expect(screen.getByText(/hồ sơ khách không đồng nghĩa đã được cộng điểm/i)).toBeVisible();
     rerender(<ApprovalsPanel {...props} />);
     expect(screen.getByText("Khách hàng")).toBeVisible();
     expect(screen.getByText("SĐT: Chưa có")).toBeVisible();

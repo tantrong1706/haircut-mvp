@@ -1,6 +1,5 @@
 import {
   Building2,
-  ExternalLink,
   Image as ImageIcon,
   LockKeyhole,
   LogOut,
@@ -11,6 +10,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AccountDeletion } from "../../components/AccountDeletion";
+import { PublicSupportLinks } from "../../components/PublicSupportLinks";
 import { BrandMark } from "../../components/BrandMark";
 import { InlineFeedback } from "../../components/Feedback";
 import { SecuritySettings } from "../../components/SecuritySettings";
@@ -87,7 +87,7 @@ export function OwnerSettingsScreen({
         ) : section === "data" ? (
           <AccountDeletion user={user} />
         ) : (
-          <SupportLinks />
+          <PublicSupportLinks />
         )}
       </div>
     );
@@ -455,35 +455,5 @@ function OwnerAvatarEditor({
         Đăng xuất
       </button>
     </>
-  );
-}
-
-function SupportLinks() {
-  const supportEmail = String(import.meta.env.VITE_SUPPORT_EMAIL || "tantrong1706@gmail.com");
-  const supportPhone = String(import.meta.env.VITE_SUPPORT_PHONE || "0838098761");
-  const publicWebUrl = String(
-    import.meta.env.VITE_PUBLIC_WEB_URL || "https://haircut-c7d12.web.app",
-  ).replace(/\/+$/, "");
-  return (
-    <Section title="Hỗ trợ và pháp lý">
-      <div className="manager-link-list">
-        <a href={`${publicWebUrl}/privacy`} target="_blank" rel="noreferrer">
-          Chính sách quyền riêng tư
-          <ExternalLink aria-hidden="true" />
-        </a>
-        <a href={`${publicWebUrl}/terms`} target="_blank" rel="noreferrer">
-          Điều khoản sử dụng
-          <ExternalLink aria-hidden="true" />
-        </a>
-        <a href={`mailto:${supportEmail}`}>
-          Email: {supportEmail}
-          <ExternalLink aria-hidden="true" />
-        </a>
-        <a href={`tel:${supportPhone}`}>
-          Điện thoại: {supportPhone}
-          <ExternalLink aria-hidden="true" />
-        </a>
-      </div>
-    </Section>
   );
 }

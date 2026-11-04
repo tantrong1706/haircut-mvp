@@ -1,3 +1,9 @@
+import { getApps, initializeApp } from "firebase-admin/app";
+import { getFirestore } from "firebase-admin/firestore";
+import { GoogleAuth, OAuth2Client } from "google-auth-library";
+
+const restConfigured = new WeakSet<object>();
+
 function requireLocalHost(name: string, value: string | undefined): string {
   const host = String(value || "").trim();
   if (!host) {
@@ -21,10 +27,24 @@ function requireDemoProject(): string {
 }
 
 export function requireFirestoreEmulator(): { emulatorHost: string; projectId: string } {
-  return {
-    emulatorHost: requireLocalHost("FIRESTORE_EMULATOR_HOST", process.env.FIRESTORE_EMULATOR_HOST),
-    projectId: requireDemoProject(),
-  };
+  const emulatorHost = requireLocalHost(
+    "FIRESTORE_EMULATOR_HOST",
+    process.env.FIRESTORE_EMULATOR_HOST,
+  );
+  const projectId = requireDemoProject();
+  if (process.env.FIRESTORE_PREFER_REST === "true") {
+    if (!getApps().length) initializeApp({ projectId });
+    const db = getFirestore();
+    if (!restConfigured.has(db)) {
+      // The emulator's documented administrative token, not a real account credential.
+      // REST fallback must not try ADC/metadata/OAuth against external services.
+      const client = new OAuth2Client();
+      client.setCredentials({ access_token: "owner", expiry_date: Date.now() + 3600000 });
+      db.settings({ preferRest: true, auth: new GoogleAuth({ projectId, authClient: client }) });
+      restConfigured.add(db);
+    }
+  }
+  return { emulatorHost, projectId };
 }
 
 export function requireRulesEmulators(): { projectId: string } {

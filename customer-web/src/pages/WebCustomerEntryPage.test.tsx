@@ -79,6 +79,24 @@ vi.mock("../services/monitoring", () => ({
 }));
 
 describe("WebCustomerEntryPage", () => {
+  it("keeps photo consent optional and unselected while allowing a point request", async () => {
+    render(<WebCustomerEntryPage onReady={vi.fn()} />);
+    act(() => mocks.authListener?.({ uid: "uid-a" }));
+    await screen.findByRole("heading", { name: "Salon A" });
+    expect(screen.getByRole("checkbox", { name: /Cho phép salon.*ảnh/i })).not.toBeChecked();
+    await userEvent.click(screen.getByRole("button", { name: "Yêu cầu tích điểm" }));
+    expect(mocks.checkInWebCustomer).toHaveBeenCalledWith(qr, false);
+  });
+
+  it("sends photo permission only after the customer selects it explicitly", async () => {
+    render(<WebCustomerEntryPage onReady={vi.fn()} />);
+    act(() => mocks.authListener?.({ uid: "uid-a" }));
+    await screen.findByRole("heading", { name: "Salon A" });
+    await userEvent.click(screen.getByRole("checkbox", { name: /Cho phép salon.*ảnh/i }));
+    await userEvent.click(screen.getByRole("button", { name: "Yêu cầu tích điểm" }));
+    expect(mocks.checkInWebCustomer).toHaveBeenCalledWith(qr, true);
+  });
+
   it("reloads context and hides old points when UID changes without an intermediate logout", async () => {
     const onReady = vi.fn();
     render(<WebCustomerEntryPage onReady={onReady} />);

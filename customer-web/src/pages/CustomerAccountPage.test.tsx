@@ -32,9 +32,12 @@ describe("CustomerAccountPage", () => {
     render(<CustomerAccountPage session={session} onLoggedOut={onLoggedOut} />);
 
     expect(screen.getByText(/4567/)).toBeVisible();
+    expect(screen.getByRole("link", { name: "Yêu cầu xem, sửa hoặc xóa dữ liệu" })).toHaveAttribute(
+      "href",
+      "/data-rights",
+    );
     await user.click(screen.getByRole("button", { name: "Đăng xuất khỏi thiết bị này" }));
     expect(mocks.signOutCustomerWeb).toHaveBeenCalledTimes(1);
     expect(onLoggedOut).toHaveBeenCalledTimes(1);
-    expect(screen.queryByText(/xóa dữ liệu/i)).not.toBeInTheDocument();
   });
 });

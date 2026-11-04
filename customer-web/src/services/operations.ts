@@ -255,6 +255,7 @@ export type CustomerBranchVisit = {
 
 export type CustomerLookupResult = CustomerSummary & {
   detailsLoaded: boolean;
+  createdAtMs?: number | null;
   lastVisitAtMs: number | null;
   recentRecords: CustomerRecordSummary[];
   rewardHistory: CustomerRewardSummary[];
@@ -1024,6 +1025,7 @@ export async function getSalonCustomerDetails(input: {
 export async function deleteCustomerData(input: {
   salonId: string;
   customerId: string;
+  expectedCreatedAtMs?: number;
 }): Promise<DeleteCustomerDataResult> {
   const customerId = input.customerId.trim();
 
@@ -1035,9 +1037,11 @@ export async function deleteCustomerData(input: {
     return deleteCustomerDataDirect(input.salonId, customerId);
   }
 
-  return callFunction<{ salonId: string; customerId: string }, DeleteCustomerDataResult>(
+  return callFunction<{ salonId: string; customerId: string; expectedCreatedAtMs?: number }, DeleteCustomerDataResult>(
     "deleteCustomerData",
-    { salonId: input.salonId, customerId },
+    { salonId: input.salonId, customerId,
+      ...(input.expectedCreatedAtMs !== undefined ? { expectedCreatedAtMs: input.expectedCreatedAtMs } : {}),
+    },
   );
 }
 

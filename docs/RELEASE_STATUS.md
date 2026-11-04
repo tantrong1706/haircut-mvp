@@ -1,9 +1,31 @@
 # Trạng thái CH Hair Web
 
-Cập nhật 22/10/2026 (Asia/Saigon). Sản phẩm là Web trên Firebase tại
+Cập nhật chuẩn bị 04/11/2026 (Asia/Saigon). Sản phẩm là Web trên Firebase tại
 https://app.chhaircutsalon.cc. Source trên GitHub và bản đang phục vụ được ghi riêng bên dưới.
 
-## Production hiện tại
+## Đợt bảo trì Web đang chuẩn bị — chưa xác nhận phát hành
+
+Đối chiếu API ngày 04/11: ba API mới `updateSalonCustomerName`, `updateWebCustomerName` và
+`withdrawWebCustomerPhotoConsent` chưa có trong danh sách Functions production. Có mã hoặc
+kiểm thử local PASS chưa có nghĩa website thật đã có nút/chức năng mới. PR #83 còn phải qua
+CI trên source cuối cùng và quy trình phát hành đã duyệt; không tự bỏ qua kiểm tra.
+
+Đợt này còn gồm khách tự đổi tên ở Tài khoản, guard salon bị tắt và thời gian chờ xác nhận
+Web mới 2 giờ. Không tự duyệt/cộng điểm, không đổi cooldown, không khôi phục yêu cầu đã hết hạn.
+Hồ sơ khách có thể xuất hiện trong danh bạ trước lần tích điểm đầu tiên; danh bạ không phải
+danh sách lượt đã được duyệt. Mục Duyệt điểm chỉ hiển thị yêu cầu còn trạng thái chờ.
+
+Nhánh `codex/web-release-readiness`: quyền riêng tư/email-only, tên khách có phân quyền,
+thư viện runtime đã vá và cổng phát hành bảo trì đúng phạm vi. Bằng chứng local mới tại
+[web-release-readiness.tdd.md](testing/web-release-readiness.tdd.md).
+Chủ dự án đã duyệt main + Customer Hosting + 57 callable Web sau full-suite/CI PASS trên đúng SHA.
+Không deploy Admin/Zalo/native/Rules/IAM/TTL hoặc đổi App Check. Chưa lấy kết quả local làm
+bằng chứng website thật đã nhận bản sửa; biên bản production bên dưới vẫn là lần 22/10.
+
+## Production — bằng chứng gần nhất được ghi tại đây (22/10)
+
+Thông tin bên dưới là biên bản phát hành ngày 22/10, không phải đối chiếu live ngày 30/10.
+Source mới hoặc CI PASS không tự chứng minh production đã nhận bản đó.
 
 - Source đã deploy: 5435256bec2be8284215836c7a4c56aa4ff3e32b, merge PR #74.
 - Hosting version: abd70bd7cb0765fe (site haircut-c7d12).
@@ -49,6 +71,9 @@ không cho deploy trong đợt dọn này. Website hiện vẫn chạy source PR
 Xem [ranh giới tương thích](LEGACY_COMPATIBILITY.md) và [bằng chứng dọn tên](testing/web-naming-cleanup.tdd.md).
 
 ## Giới hạn
+
+- Bản chuẩn bị `codex/privacy-readiness` ngày 30/10 chưa được merge/deploy. Không thay số liệu
+  phát hành 22/10 bằng kết quả local; xem [checklist quyền riêng tư](PRIVACY_CHECKLIST.md).
 
 - Browser viewport không thay thế kiểm thử iPhone/Android vật lý. Không gửi OTP thật trong
   canary 22/10; bằng chứng OTP thực trước đây nằm trong WEB_CUSTOMER_RELEASE_READINESS.md.

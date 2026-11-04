@@ -113,5 +113,7 @@ test("vòng quay chạy đủ timeline và dừng giữa ô backend chọn", asy
 
 test("trang quyền riêng tư mở độc lập", async ({ page }) => {
   await page.goto("/privacy");
-  await expect(page.getByRole("heading", { name: /Quyền riêng tư/i })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Chính sách quyền riêng tư", exact: true }),
+  ).toBeVisible();
 });

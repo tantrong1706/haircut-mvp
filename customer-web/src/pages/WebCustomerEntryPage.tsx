@@ -40,6 +40,7 @@ export function WebCustomerEntryPage({ onReady }: Props) {
   const [otp, setOtp] = useState("");
   const [confirmation, setConfirmation] = useState<CustomerPhoneConfirmation | null>(null);
   const [busy, setBusy] = useState(false);
+  const [allowPhoto, setAllowPhoto] = useState(false);
   const [error, setError] = useState("");
   const [resendSeconds, setResendSeconds] = useState(0);
   const [loadAttempt, setLoadAttempt] = useState(0);
@@ -80,6 +81,7 @@ export function WebCustomerEntryPage({ onReady }: Props) {
           setPhone("");
           setOtp("");
           setConfirmation(null);
+          setAllowPhoto(false);
           checkinStarted.current = false;
         }
         if (user) {
@@ -98,6 +100,7 @@ export function WebCustomerEntryPage({ onReady }: Props) {
         setAuthUid(null);
         setContext(null);
         setBusy(false);
+        setAllowPhoto(false);
         setAuthStatus("error");
         setError(customerPhoneAuthErrorMessage(authError));
         captureError(authError, { flow: "web_customer_auth_restore" });
@@ -201,7 +204,7 @@ export function WebCustomerEntryPage({ onReady }: Props) {
     setError("");
     trackEvent("web_checkin_started", { salon_id: qr.salonId, branch_id: qr.branchId });
     try {
-      const session = await checkInWebCustomer(qr);
+      const session = await checkInWebCustomer(qr, allowPhoto);
       if (generation !== authGeneration.current) return;
       trackEvent("web_checkin_success", { salon_id: qr.salonId, branch_id: qr.branchId });
       onReady(session);
@@ -370,7 +373,21 @@ export function WebCustomerEntryPage({ onReady }: Props) {
         <strong>{context.customer.points} điểm</strong>
         {!cooldownActive ? (
           <>
-            <p>Khi check-in, nhân viên có thể lưu tối đa 3 ảnh của lần cắt vào lịch sử phục vụ.</p>
+            <label className="photo-permission-choice">
+              <input
+                type="checkbox"
+                checked={allowPhoto}
+                disabled={busy}
+                onChange={(event) => setAllowPhoto(event.target.checked)}
+              />
+              <span>
+                Cho phép salon chụp và lưu tối đa 3 ảnh kiểu tóc cho lần này (không bắt buộc).
+              </span>
+            </label>
+            <p className="muted">
+              Không chọn vẫn được tích điểm. Ảnh chỉ dùng trong hồ sơ phục vụ nội bộ.{" "}
+              <a href="/privacy#photo-consent">Tìm hiểu về ảnh</a>.
+            </p>
             <button
               type="button"
               className="primary-button"

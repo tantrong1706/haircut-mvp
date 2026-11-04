@@ -3,14 +3,14 @@ import { buildNameSearchPrefixes, normalizeSearchText } from "../src/customerSea
 
 describe("customer search indexing", () => {
   it("chuẩn hóa dấu tiếng Việt và khoảng trắng", () => {
-    expect(normalizeSearchText("  Tấn   Trọng! ")).toBe("tan trong");
+    expect(normalizeSearchText("  Hoàng   Phúc! ")).toBe("hoang phuc");
   });
 
   it("tạo tiền tố cho từng phần của tên", () => {
-    const prefixes = buildNameSearchPrefixes("Anh Tấn Trọng");
+    const prefixes = buildNameSearchPrefixes("Anh Hoàng Phúc");
 
-    expect(prefixes).toEqual(expect.arrayContaining(["anh", "tan", "trong", "anh t"]));
-    expect(prefixes).not.toContain("t");
+    expect(prefixes).toEqual(expect.arrayContaining(["anh", "hoang", "phuc", "anh h"]));
+    expect(prefixes).not.toContain("p");
     expect(prefixes.length).toBeLessThanOrEqual(120);
   });
 });
