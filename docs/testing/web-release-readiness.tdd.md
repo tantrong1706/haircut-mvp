@@ -90,6 +90,18 @@ Build test và format đã chạy lại PASS; full-suite trên SHA cuối vẫn 
 
 ## Giới hạn vận hành và cổng còn phải qua
 
+### Fresh checkout trên Windows
+
+Sau khi PR #83 nhập main `660a865`, CI vẫn PASS nhưng full local đạt 16/19 do chuyển nhánh
+với `core.autocrlf=true`: package.json của hợp đồng nguồn thành CRLF, bản mirror giữ LF;
+ba file hỗ trợ Manager cũng bị CRLF. Đã xác nhận hai JSON bằng nhau sau chỉ chuẩn hóa EOL.
+Không sửa kiểm tra đồng bộ hoặc bỏ format để vượt cổng.
+
+Checkpoint `2be3c69` tạo hai ca RED bằng fresh clone riêng bật autocrlf. Thêm LF cho đúng
+`packages/contracts/**` và `apps/manager-mobile/src/**` làm cả hai ca GREEN; root 154/154 PASS,
+Functions 119 unit/typecheck/lint/format/build và Manager 87 test/build chạy lại PASS.
+Không renormalize toàn repo, không đổi nội dung/native resource, không sửa Git config toàn máy.
+
 - Lần tổng thể đầu trên `9a340ec`: 18/19 bước PASS; integration 199/200, bài hai spin đồng thời
   trả `INVALID_ARGUMENT: Transaction is invalid or closed` từ emulator. Không bỏ bài, tăng retry
   kiểm thử hoặc sửa nghiệp vụ để ép xanh. Chạy cô lập đúng bài ba lần liên tiếp đều PASS
