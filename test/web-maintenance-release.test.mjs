@@ -57,6 +57,18 @@ test("maintenance produces only the reviewed 57 callable selectors and exact Hos
   assert.equal(result.sha, sha);
 });
 
+test("maintenance accepts the actual lowercase GitHub origin for the same repository", () => {
+  const state = snapshot();
+  state.origin = "https://github.com/tantrong1706/haircut-mvp.git";
+  assert.equal(policy.validateWebMaintenance(state, scope).sha, sha);
+});
+
+for (const origin of ["https://github.com/tantrong1706/haircut-mvp-extra.git", "https://github.com/tantrong1706/haircut-mvp.git?other=repo", "https://attacker.test/tantrong1706/haircut-mvp.git"]) {
+  test(`origin normalization still rejects ${origin}`, () => {
+    assert.throws(() => policy.validateWebMaintenance({ ...snapshot(), origin }, scope));
+  });
+}
+
 for (const [label, change] of [
   [
     "invalid expected SHA",
