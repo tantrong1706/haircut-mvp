@@ -332,6 +332,9 @@ jobs:
       - name: Verify CSP source synchronization
         run: node scripts/sync-csp.mjs --check
 
+      - name: Verify fresh Windows checkout line endings
+        run: node --test test/windows-eol-boundaries.test.mjs
+
       - name: Verify Web workspace boundaries
         run: node --test test/web-workspace-boundary.test.mjs
 

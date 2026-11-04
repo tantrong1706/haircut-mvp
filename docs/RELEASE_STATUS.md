@@ -5,10 +5,15 @@ https://app.chhaircutsalon.cc. Source trên GitHub và bản đang phục vụ �
 
 ## Đợt bảo trì Web đang chuẩn bị — chưa xác nhận phát hành
 
+Mốc mã tính năng: PR #83 đã nhập `main` ngày 04/11, merge SHA
+`660a8655f8c46a62b868bae8fb6c846dc6bb795d`. Cả 9 kiểm tra PR và các workflow Build Web,
+CodeQL, Lighthouse trên merge SHA đều PASS. Đây là trạng thái source, **chưa deploy Firebase**.
+Các commit kiểm thử/tài liệu sau đó không được hiểu là phiên bản website đã đổi.
+
 Đối chiếu API ngày 04/11: ba API mới `updateSalonCustomerName`, `updateWebCustomerName` và
 `withdrawWebCustomerPhotoConsent` chưa có trong danh sách Functions production. Có mã hoặc
-kiểm thử local PASS chưa có nghĩa website thật đã có nút/chức năng mới. PR #83 còn phải qua
-CI trên source cuối cùng và quy trình phát hành đã duyệt; không tự bỏ qua kiểm tra.
+kiểm thử local PASS chưa có nghĩa website thật đã có nút/chức năng mới. Phát hành vẫn cần
+proof trên đúng SHA main và kiểm tra vận hành đã duyệt; không tự bỏ qua kiểm tra.
 
 Đợt này còn gồm khách tự đổi tên ở Tài khoản, guard salon bị tắt và thời gian chờ xác nhận
 Web mới 2 giờ. Không tự duyệt/cộng điểm, không đổi cooldown, không khôi phục yêu cầu đã hết hạn.
