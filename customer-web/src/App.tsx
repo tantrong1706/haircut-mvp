@@ -351,6 +351,11 @@ export default function App() {
 
   if (session && activeTab === "account" && session.identityProvider === "firebase") {
     content = <CustomerAccountPage session={session} onLoggedOut={finishWebLogout}
+      onNameSaved={name => setSession(current =>
+        current?.identityProvider === "firebase" && Boolean(current.firebaseUid) && current.firebaseUid === session.firebaseUid &&
+        current.qr.salonId === session.qr.salonId
+          ? { ...current, customer: { ...current.customer, name } } : current
+      )}
       onPhotoRevoked={() => setSession(current =>
         current?.identityProvider === "firebase" && Boolean(current.firebaseUid) &&
         current.firebaseUid === session.firebaseUid && current.qr.salonId === session.qr.salonId

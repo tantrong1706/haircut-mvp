@@ -47,9 +47,10 @@ function snapshot() {
   };
 }
 
-test("maintenance produces only the reviewed 56 callable selectors and exact Hosting site", () => {
+test("maintenance produces only the reviewed 57 callable selectors and exact Hosting site", () => {
   const result = policy.validateWebMaintenance(snapshot(), scope);
-  assert.equal(result.functions.length, 56);
+  assert.equal(result.functions.length, 57);
+  assert.ok(result.functions.includes("functions:updateWebCustomerName"));
   assert.ok(result.functions.includes("functions:updateSalonCustomerName"));
   assert.ok(result.functions.includes("functions:withdrawWebCustomerPhotoConsent"));
   assert.equal(result.hosting, "hosting:haircut-c7d12");

@@ -1,4 +1,4 @@
-import { callFunction } from "./firebase";
+import { callCustomerWebFunction, callFunction } from "./firebase";
 
 export type CustomerNameChange = {
   salonId: string;
@@ -7,6 +7,24 @@ export type CustomerNameChange = {
   expectedName: string;
   pointRequestId?: string;
 };
+
+export async function updateOwnCustomerName(input: CustomerNameChange) {
+  const name = input.name.trim();
+  if (!name || name.length > 80 || /\p{Cc}/u.test(name))
+    throw new Error("Tên cần từ 1 đến 80 ký tự hợp lệ.");
+  const result = await callCustomerWebFunction<
+    { salonId: string; name: string; expectedName: string },
+    { customerId: string; name: string }
+  >("updateWebCustomerName", { salonId: input.salonId, name, expectedName: input.expectedName });
+  if (
+    !result ||
+    result.customerId !== input.customerId ||
+    typeof result.name !== "string" ||
+    !result.name.trim()
+  )
+    throw new Error("Máy chủ chưa xác nhận tên của bạn. Vui lòng tải lại và kiểm tra.");
+  return result;
+}
 
 export async function updateCustomerName(input: CustomerNameChange) {
   const name = input.name.trim();

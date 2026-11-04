@@ -69,6 +69,8 @@ export async function changeCustomerName(
     )
       throw new HttpsError("permission-denied", "Tài khoản không còn quyền với salon này.");
     if (!salonSnap.exists) throw new HttpsError("not-found", "Không tìm thấy salon.");
+    if (salonSnap.data()?.isActive === false)
+      throw new HttpsError("failed-precondition", "Salon không còn hoạt động.");
     assertSalonIsOperational(salonSnap.data());
     if (!customer || customer.salonId !== salonId)
       throw new HttpsError("not-found", "Không tìm thấy khách trong salon này.");

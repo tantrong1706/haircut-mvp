@@ -26,6 +26,7 @@ import { HttpsError, onCall, onRequest } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { withdrawCustomerPhotoConsent } from "./domains/privacy/customerPhotoConsent";
 import { changeCustomerName } from "./domains/customers/customerName";
+import { changeOwnCustomerName } from "./domains/customers/ownCustomerName";
 import { onDocumentCreated, onDocumentUpdated } from "firebase-functions/v2/firestore";
 import {
   buildCustomerContactPatch,
@@ -173,6 +174,8 @@ const zaloQrFunctionOptions = {
 };
 const SESSION_POINT_REQUEST_WINDOW_MS = 12 * 60 * 60 * 1000;
 const POINT_REQUEST_CONFIRMATION_WINDOW_MS = 30 * 60 * 1000;
+// Web customers may request before the haircut; this is not the post-award cooldown.
+const WEB_POINT_REQUEST_CONFIRMATION_WINDOW_MS = 2 * 60 * 60 * 1000;
 const POINT_AWARD_COOLDOWN_MS = 2 * 60 * 60 * 1000;
 const OPEN_SESSION_STATUSES = ["waiting", "serving", "pending_approval"] as const;
 const SESSION_EXPIRY_BATCH_SIZE = 100;
@@ -201,6 +204,7 @@ const AUTHENTICATED_RATE_LIMITS = {
   awardReturningCustomerPoints: 20,
   searchSalonCustomers: 30,
   updateSalonCustomerName: 20,
+  updateWebCustomerName: 20,
   approvePointRequest: 60,
   rejectPointRequest: 60,
   lookupRewardCode: 60,
@@ -3115,7 +3119,7 @@ export const checkInWebCustomer = onCall(qrFunctionOptions, async (request) => {
   const newSessionRef = db.collection("chair_sessions").doc();
   const now = Timestamp.now();
   const expiresAt = Timestamp.fromMillis(
-    serviceSessionExpiresAtMs(now.toMillis(), POINT_REQUEST_CONFIRMATION_WINDOW_MS),
+    serviceSessionExpiresAtMs(now.toMillis(), WEB_POINT_REQUEST_CONFIRMATION_WINDOW_MS),
   );
   let returnedSessionId = newSessionRef.id;
 
@@ -6668,6 +6672,16 @@ export const getManagerAuditEvents = onCall(functionOptions, async (request) => 
       };
     }),
   };
+});
+
+export const updateWebCustomerName = onCall(functionOptions, async (request) => {
+  const principal = requireWebPhonePrincipal(request.auth);
+  const salonId = requireString(request.data?.salonId, "salonId");
+  await enforceAuthenticatedRateLimit("updateWebCustomerName", principal.uid, salonId);
+  return changeOwnCustomerName(db, {
+    uid: principal.uid, salonId, name: request.data?.name, expectedName: request.data?.expectedName,
+    activeRef: activeSessionRefFor(salonId, customerIdForWeb(salonId, principal.uid)),
+  });
 });
 
 export const updateSalonCustomerName = onCall(functionOptions, async (request) => {

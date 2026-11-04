@@ -1,14 +1,24 @@
 # Trạng thái CH Hair Web
 
-Cập nhật chuẩn bị 31/10/2026 (Asia/Saigon). Sản phẩm là Web trên Firebase tại
+Cập nhật chuẩn bị 04/11/2026 (Asia/Saigon). Sản phẩm là Web trên Firebase tại
 https://app.chhaircutsalon.cc. Source trên GitHub và bản đang phục vụ được ghi riêng bên dưới.
 
 ## Đợt bảo trì Web đang chuẩn bị — chưa xác nhận phát hành
 
+Đối chiếu API ngày 04/11: ba API mới `updateSalonCustomerName`, `updateWebCustomerName` và
+`withdrawWebCustomerPhotoConsent` chưa có trong danh sách Functions production. Có mã hoặc
+kiểm thử local PASS chưa có nghĩa website thật đã có nút/chức năng mới. PR #83 còn phải qua
+CI trên source cuối cùng và quy trình phát hành đã duyệt; không tự bỏ qua kiểm tra.
+
+Đợt này còn gồm khách tự đổi tên ở Tài khoản, guard salon bị tắt và thời gian chờ xác nhận
+Web mới 2 giờ. Không tự duyệt/cộng điểm, không đổi cooldown, không khôi phục yêu cầu đã hết hạn.
+Hồ sơ khách có thể xuất hiện trong danh bạ trước lần tích điểm đầu tiên; danh bạ không phải
+danh sách lượt đã được duyệt. Mục Duyệt điểm chỉ hiển thị yêu cầu còn trạng thái chờ.
+
 Nhánh `codex/web-release-readiness`: quyền riêng tư/email-only, tên khách có phân quyền,
 thư viện runtime đã vá và cổng phát hành bảo trì đúng phạm vi. Bằng chứng local mới tại
 [web-release-readiness.tdd.md](testing/web-release-readiness.tdd.md).
-Chủ dự án đã duyệt main + Customer Hosting + 56 callable Web sau full-suite/CI PASS trên đúng SHA.
+Chủ dự án đã duyệt main + Customer Hosting + 57 callable Web sau full-suite/CI PASS trên đúng SHA.
 Không deploy Admin/Zalo/native/Rules/IAM/TTL hoặc đổi App Check. Chưa lấy kết quả local làm
 bằng chứng website thật đã nhận bản sửa; biên bản production bên dưới vẫn là lần 22/10.
 

@@ -9,6 +9,7 @@ export function CustomerNameEditor({
   pointRequestId,
   disabled = false,
   onSaved,
+  saveName = updateCustomerName,
 }: {
   salonId: string;
   customerId: string;
@@ -16,6 +17,7 @@ export function CustomerNameEditor({
   pointRequestId?: string;
   disabled?: boolean;
   onSaved: (name: string) => void;
+  saveName?: typeof updateCustomerName;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(customerName);
@@ -47,7 +49,7 @@ export function CustomerNameEditor({
     setBusy(true);
     setError("");
     try {
-      const result = await updateCustomerName({
+      const result = await saveName({
         salonId,
         customerId,
         name: draft.trim(),

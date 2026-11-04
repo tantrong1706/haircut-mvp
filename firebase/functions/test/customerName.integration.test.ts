@@ -93,11 +93,18 @@ describe("customer display name changes", () => {
       "Khách 1028",
     );
   });
-  it.each(["owner-a", "staff-a"])("rejects name editing in an inactive salon for %s", async uid => {
-    await db.doc("salons/salon-a").update({ isActive: false });
-    await expect(updateSalonCustomerName.run(input(uid, uid === "staff-a" ? { pointRequestId: "request-a" } : {}))).rejects.toMatchObject({ code: "failed-precondition" });
-    expect((await db.doc("customers/customer-a").get()).data()?.name).toBe("Khách 1028");
-  });
+  it.each(["owner-a", "staff-a"])(
+    "rejects name editing in an inactive salon for %s",
+    async (uid) => {
+      await db.doc("salons/salon-a").update({ isActive: false });
+      await expect(
+        updateSalonCustomerName.run(
+          input(uid, uid === "staff-a" ? { pointRequestId: "request-a" } : {}),
+        ),
+      ).rejects.toMatchObject({ code: "failed-precondition" });
+      expect((await db.doc("customers/customer-a").get()).data()?.name).toBe("Khách 1028");
+    },
+  );
   it("staff can update the pending request summary in their assigned branch", async () => {
     await updateSalonCustomerName.run(
       input("staff-a", { pointRequestId: "request-a", uid: "owner-a" }),

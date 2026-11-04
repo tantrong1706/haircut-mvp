@@ -75,6 +75,24 @@ test("cookie page opens controls and withdrawal preserves other browser storage"
   );
 });
 
+test("signed-in customer can open and cancel their own name editor without another OTP", async ({
+  page,
+}) => {
+  await signIn(page);
+  await page.getByRole("button", { name: "Yêu cầu tích điểm" }).click();
+  await page
+    .getByRole("navigation", { name: "Điều hướng" })
+    .getByRole("button", { name: "Tài khoản", exact: true })
+    .click();
+  await expect(page.getByRole("heading", { name: "Tên của bạn" })).toBeVisible();
+  await page.getByRole("button", { name: /Sửa tên khách/ }).click();
+  await expect(page.getByRole("textbox", { name: "Tên khách" })).toHaveValue("Khách 4567");
+  await page.getByRole("button", { name: "Hủy đổi tên" }).click();
+  await expect(page.getByRole("button", { name: "Lưu tên", exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Mã OTP")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Khách 4567", exact: true })).toBeVisible();
+});
+
 test("customer can request points without photos and restore the remembered sign-in", async ({
   page,
 }) => {
