@@ -3,12 +3,11 @@ import { applyMonitoringPrivacyPreference } from "../services/monitoring";
 import {
   PRIVACY_PREFERENCES_EVENT,
   PRIVACY_PREFERENCES_KEY,
-  readPrivacyPreferences,
   savePrivacyPreferences,
 } from "../services/privacyPreferences";
 
 export function PrivacyConsentControls() {
-  const [open, setOpen] = useState(() => readPrivacyPreferences() === null);
+  const [open, setOpen] = useState(false);
   const [error, setError] = useState("");
   const settingsButton = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -19,7 +18,6 @@ export function PrivacyConsentControls() {
         event.key !== PRIVACY_PREFERENCES_KEY
       )
         return;
-      if (readPrivacyPreferences() === null) setOpen(true);
       if (event instanceof CustomEvent && event.detail?.open === true) setOpen(true);
       applyMonitoringPrivacyPreference();
     }
