@@ -25,7 +25,7 @@ async function signIn(page: Page) {
   ).toBeVisible();
 }
 
-test("privacy settings stay collapsed until the visitor opens them", async ({ page }) => {
+test("privacy settings stay collapsed until the visitor opens them", async ({ page }, testInfo) => {
   await page.goto("/owner");
   const settings = page.getByRole("button", { name: "Cài đặt quyền riêng tư" });
   const mainBounds = await page.getByRole("main").boundingBox();
@@ -38,10 +38,13 @@ test("privacy settings stay collapsed until the visitor opens them", async ({ pa
   await expect(settings).toHaveAttribute("aria-expanded", "false");
   await expect(page.getByRole("heading", { name: "Quyền riêng tư của bạn" })).toHaveCount(0);
   expect(await page.evaluate((key) => localStorage.getItem(key), choiceKey)).toBeNull();
+  await page.screenshot({ path: testInfo.outputPath("privacy-footer-closed.png"), fullPage: true });
   await settings.click();
   await expect(page.getByRole("heading", { name: "Quyền riêng tư của bạn" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Chỉ dùng thiết yếu" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Cho phép thống kê" })).toBeVisible();
+  expect((await new AxeBuilder({ page }).include("footer").analyze()).violations).toEqual([]);
+  await page.screenshot({ path: testInfo.outputPath("privacy-footer-open.png"), fullPage: true });
   await settings.click();
   await expect(settings).toHaveAttribute("aria-expanded", "false");
   expect(await page.evaluate((key) => localStorage.getItem(key), choiceKey)).toBeNull();
