@@ -79,6 +79,24 @@ vi.mock("../services/monitoring", () => ({
 }));
 
 describe("WebCustomerEntryPage", () => {
+  it("shows concise photo permission without a count or optional wording", async () => {
+    render(<WebCustomerEntryPage onReady={vi.fn()} />);
+    act(() => mocks.authListener?.({ uid: "uid-a" }));
+
+    const permission = await screen.findByRole("checkbox", {
+      name: "Cho phép salon chụp và lưu ảnh",
+      exact: true,
+    });
+    expect(permission).not.toBeChecked();
+    expect(
+      screen.queryByText(/tối đa 3 ảnh|không bắt buộc|Không chọn vẫn được tích điểm/iu),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Tìm hiểu về ảnh" })).toHaveAttribute(
+      "href",
+      "/privacy#photo-consent",
+    );
+  });
+
   it("keeps photo consent optional and unselected while allowing a point request", async () => {
     render(<WebCustomerEntryPage onReady={vi.fn()} />);
     act(() => mocks.authListener?.({ uid: "uid-a" }));
