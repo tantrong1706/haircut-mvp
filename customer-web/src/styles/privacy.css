@@ -1,9 +1,12 @@
 .privacy-controls {
   width: min(1120px, 100%);
   margin: 0 auto;
-  padding: 12px 20px 0;
+  padding: 12px 20px 20px;
   box-sizing: border-box;
   color: #f0eee8;
+}
+.app-shell:has(.web-customer-nav) + .privacy-controls {
+  padding-bottom: calc(96px + env(safe-area-inset-bottom));
 }
 .privacy-choice {
   padding: 16px;
@@ -37,6 +40,9 @@
   min-height: 44px;
   padding: 8px 10px;
   font-size: 0.875rem;
+  border: 1px solid #767b6a;
+  background: #262920;
+  color: #f0eee8;
 }
 .privacy-settings-links {
   display: flex;

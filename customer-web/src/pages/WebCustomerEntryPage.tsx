@@ -380,12 +380,10 @@ export function WebCustomerEntryPage({ onReady }: Props) {
                 disabled={busy}
                 onChange={(event) => setAllowPhoto(event.target.checked)}
               />
-              <span>
-                Cho phép salon chụp và lưu tối đa 3 ảnh kiểu tóc cho lần này (không bắt buộc).
-              </span>
+              <span>Cho phép salon chụp và lưu ảnh</span>
             </label>
             <p className="muted">
-              Không chọn vẫn được tích điểm. Ảnh chỉ dùng trong hồ sơ phục vụ nội bộ.{" "}
+              Ảnh chỉ dùng trong hồ sơ phục vụ nội bộ.{" "}
               <a href="/privacy#photo-consent">Tìm hiểu về ảnh</a>.
             </p>
             <button

@@ -3,12 +3,11 @@ import { applyMonitoringPrivacyPreference } from "../services/monitoring";
 import {
   PRIVACY_PREFERENCES_EVENT,
   PRIVACY_PREFERENCES_KEY,
-  readPrivacyPreferences,
   savePrivacyPreferences,
 } from "../services/privacyPreferences";
 
 export function PrivacyConsentControls() {
-  const [open, setOpen] = useState(() => readPrivacyPreferences() === null);
+  const [open, setOpen] = useState(false);
   const [error, setError] = useState("");
   const settingsButton = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -19,7 +18,6 @@ export function PrivacyConsentControls() {
         event.key !== PRIVACY_PREFERENCES_KEY
       )
         return;
-      if (readPrivacyPreferences() === null) setOpen(true);
       if (event instanceof CustomEvent && event.detail?.open === true) setOpen(true);
       applyMonitoringPrivacyPreference();
     }
@@ -43,7 +41,7 @@ export function PrivacyConsentControls() {
   }
 
   return (
-    <div className="privacy-controls">
+    <footer className="privacy-controls" aria-label="Quyền riêng tư và dữ liệu">
       {open && (
         <aside
           id="privacy-preferences-panel"
@@ -79,6 +77,6 @@ export function PrivacyConsentControls() {
         </button>
         <a href="/data-rights">Quyền dữ liệu</a>
       </nav>
-    </div>
+    </footer>
   );
 }
