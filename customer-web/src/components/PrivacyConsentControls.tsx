@@ -41,7 +41,7 @@ export function PrivacyConsentControls() {
   }
 
   return (
-    <div className="privacy-controls">
+    <footer className="privacy-controls" aria-label="Quyền riêng tư và dữ liệu">
       {open && (
         <aside
           id="privacy-preferences-panel"
@@ -77,6 +77,6 @@ export function PrivacyConsentControls() {
         </button>
         <a href="/data-rights">Quyền dữ liệu</a>
       </nav>
-    </div>
+    </footer>
   );
 }

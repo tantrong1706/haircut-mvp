@@ -27,8 +27,8 @@ if (!rootElement) {
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     <AppErrorBoundary>
-      <PrivacyConsentControls />
       <App />
+      <PrivacyConsentControls />
     </AppErrorBoundary>
   </React.StrictMode>,
 );
