@@ -15,6 +15,9 @@ afterEach(() => vi.restoreAllMocks());
 describe("clear, optional monitoring controls", () => {
   it("starts collapsed without recording a privacy choice", () => {
     render(<PrivacyConsentControls />);
+    expect(
+      screen.getByRole("contentinfo", { name: "Quyền riêng tư và dữ liệu" }),
+    ).toBeVisible();
     expect(screen.queryByRole("heading", { name: "Quyền riêng tư của bạn" })).toBeNull();
     expect(screen.getByRole("button", { name: "Cài đặt quyền riêng tư" })).toHaveAttribute(
       "aria-expanded",

@@ -28,6 +28,11 @@ async function signIn(page: Page) {
 test("privacy settings stay collapsed until the visitor opens them", async ({ page }) => {
   await page.goto("/owner");
   const settings = page.getByRole("button", { name: "Cài đặt quyền riêng tư" });
+  const mainBounds = await page.getByRole("main").boundingBox();
+  const privacyBounds = await page.getByRole("navigation", { name: "Quyền riêng tư", exact: true }).boundingBox();
+  expect(mainBounds).not.toBeNull();
+  expect(privacyBounds).not.toBeNull();
+  expect(privacyBounds!.y).toBeGreaterThanOrEqual(mainBounds!.y + mainBounds!.height);
   await expect(settings).toHaveAttribute("aria-expanded", "false");
   await expect(page.getByRole("heading", { name: "Quyền riêng tư của bạn" })).toHaveCount(0);
   expect(await page.evaluate((key) => localStorage.getItem(key), choiceKey)).toBeNull();
@@ -131,6 +136,15 @@ test("customer can request points without photos and restore the remembered sign
   await page.reload();
   await expect(page.getByRole("navigation", { name: "Điều hướng" })).toBeVisible();
   await expect(page.getByLabel("Số điện thoại")).toHaveCount(0);
+  await page.getByRole("button", { name: "Cài đặt quyền riêng tư" }).scrollIntoViewIfNeeded();
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await expect.poll(async () => {
+    const links = await page.getByRole("navigation", { name: "Quyền riêng tư", exact: true }).boundingBox();
+    const navigation = await page.getByRole("navigation", { name: "Điều hướng" }).boundingBox();
+    expect(links).not.toBeNull();
+    expect(navigation).not.toBeNull();
+    return links!.y + links!.height - navigation!.y;
+  }).toBeLessThanOrEqual(0);
 });
 
 test("explicit photo choice can be withdrawn without changing the displayed points", async ({

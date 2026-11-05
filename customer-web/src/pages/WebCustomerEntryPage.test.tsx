@@ -85,7 +85,6 @@ describe("WebCustomerEntryPage", () => {
 
     const permission = await screen.findByRole("checkbox", {
       name: "Cho phép salon chụp và lưu ảnh",
-      exact: true,
     });
     expect(permission).not.toBeChecked();
     expect(
