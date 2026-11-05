@@ -14,13 +14,31 @@ test.beforeEach(async ({ page }) => {
 
 async function signIn(page: Page) {
   await page.goto(qr);
+  await page.getByRole("button", { name: "Cài đặt quyền riêng tư" }).click();
   await page.getByRole("button", { name: "Chỉ dùng thiết yếu" }).click();
   await page.getByLabel("Số điện thoại").fill("0901234567");
   await page.getByRole("button", { name: "Gửi mã OTP" }).click();
   await page.getByLabel("Mã OTP").fill("123456");
   await page.getByRole("button", { name: "Xác nhận OTP" }).click();
-  await expect(page.getByRole("checkbox", { name: /Cho phép salon.*ảnh/i })).toBeVisible();
+  await expect(
+    page.getByRole("checkbox", { name: "Cho phép salon chụp và lưu ảnh", exact: true }),
+  ).toBeVisible();
 }
+
+test("privacy settings stay collapsed until the visitor opens them", async ({ page }) => {
+  await page.goto("/owner");
+  const settings = page.getByRole("button", { name: "Cài đặt quyền riêng tư" });
+  await expect(settings).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByRole("heading", { name: "Quyền riêng tư của bạn" })).toHaveCount(0);
+  expect(await page.evaluate((key) => localStorage.getItem(key), choiceKey)).toBeNull();
+  await settings.click();
+  await expect(page.getByRole("heading", { name: "Quyền riêng tư của bạn" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Chỉ dùng thiết yếu" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Cho phép thống kê" })).toBeVisible();
+  await settings.click();
+  await expect(settings).toHaveAttribute("aria-expanded", "false");
+  expect(await page.evaluate((key) => localStorage.getItem(key), choiceKey)).toBeNull();
+});
 
 test("essential-only choice is keyboard usable and survives a reload", async ({ page }) => {
   const optionalHosts: string[] = [];
@@ -30,6 +48,8 @@ test("essential-only choice is keyboard usable and survives a reload", async ({ 
       optionalHosts.push(host);
   });
   await page.goto("/privacy");
+  await expect(page.getByRole("heading", { name: "Quyền riêng tư của bạn" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Cài đặt quyền riêng tư" }).click();
   const decline = page.getByRole("button", { name: "Chỉ dùng thiết yếu" });
   await decline.focus();
   await page.keyboard.press("Enter");
@@ -53,6 +73,7 @@ test("cookie page opens controls and withdrawal preserves other browser storage"
 }) => {
   await page.goto("/cookies");
   await page.evaluate(() => localStorage.setItem("firebase:authUser:fixture", "preserve-fixture"));
+  await page.getByRole("button", { name: "Cài đặt quyền riêng tư" }).click();
   await page.getByRole("button", { name: "Chỉ dùng thiết yếu" }).click();
   await page.getByRole("button", { name: "Mở cài đặt cookie" }).click();
   await page.getByRole("button", { name: "Cho phép thống kê" }).click();
@@ -135,6 +156,7 @@ test("public policies and data-rights routes need no management login and fit th
   page,
 }, testInfo) => {
   await page.goto("/data-rights");
+  await page.getByRole("button", { name: "Cài đặt quyền riêng tư" }).click();
   await page.getByRole("button", { name: "Chỉ dùng thiết yếu" }).click();
   for (const [route, heading] of [
     ["/privacy", "Chính sách quyền riêng tư"],
