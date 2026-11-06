@@ -55,7 +55,7 @@ describe("scrub dữ liệu giám sát", () => {
         branch_id: "branch-a",
         session_status: "waiting",
         customer_name: "Không được gửi",
-        phone: "0838098761",
+        phone: "0900000000",
         note: "Fade thấp",
         reward_code: "HC-SECRET123",
       }),
@@ -90,7 +90,7 @@ describe("scrub dữ liệu giám sát", () => {
 
   it("che email, số điện thoại, mã quà và bearer token", () => {
     const safeText = redactSensitiveText(
-      "tantrong1706@gmail.com 0838098761 HC-SECRET123 Bearer eyJhbGciOiJIUzI1NiJ9",
+      "private.operator@example.invalid 0900000000 HC-SECRET123 Bearer eyJhbGciOiJIUzI1NiJ9",
     );
 
     expect(safeText).toContain("[email]");

@@ -8,7 +8,7 @@
 - Privacy Policy: <https://haircut-c7d12.web.app/privacy>
 - Terms of Service: <https://haircut-c7d12.web.app/terms>
 - Account deletion: <https://haircut-c7d12.web.app/delete-account>
-- Support: `tantrong1706@gmail.com` / `0838098761`
+- Support: chỉ email hỗ trợ đã được chủ dự án cho phép công khai; không dùng số cá nhân.
 
 Mô tả ngắn đề xuất: “Quản lý hàng chờ, chi nhánh, nhân viên, điểm và quà cho salon trên một ứng dụng bảo mật.”
 

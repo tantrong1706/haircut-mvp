@@ -17,7 +17,7 @@ describe("trang pháp lý công khai", () => {
     privacyLinks.forEach((link) => expect(link).toHaveAttribute("href", "/privacy"));
     expect(
       screen.getByRole("link", { name: "Hướng dẫn yêu cầu xem, sửa hoặc xóa dữ liệu" }),
-    ).toHaveAttribute("href", "/privacy#data-rights");
+    ).toHaveAttribute("href", "/data-rights");
     expect(
       screen.queryByRole("link", { name: /xóa tài khoản hoặc salon/i }),
     ).not.toBeInTheDocument();

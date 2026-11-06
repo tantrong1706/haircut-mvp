@@ -44,7 +44,10 @@ export function ApprovalsPanel({
         <div className="empty-state">
           <ClipboardCheck size={30} aria-hidden="true" />
           <strong>Chưa có yêu cầu cộng điểm</strong>
-          <p>Khi nhân viên gửi yêu cầu, chủ salon có thể bổ sung ảnh rồi duyệt tại đây.</p>
+          <p>
+            Chỉ hiển thị yêu cầu còn chờ xác nhận. Có hồ sơ khách không đồng nghĩa đã được cộng
+            điểm; yêu cầu hết hạn hoặc đã xử lý không còn ở đây.
+          </p>
         </div>
       ) : (
         requests.map((request) => (

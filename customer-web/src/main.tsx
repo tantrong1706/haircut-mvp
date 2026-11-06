@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import { AppErrorBoundary } from "./components/AppErrorBoundary";
+import { PrivacyConsentControls } from "./components/PrivacyConsentControls";
 import { APP_NAME } from "./config/branding";
 import { initMonitoring } from "./services/monitoring";
 import { registerServiceWorker } from "./services/pwa";
@@ -13,6 +14,7 @@ import "./styles/owner.css";
 import "./styles/rewards.css";
 import "./styles/barber-web.css";
 import "./styles/customer.css";
+import "./styles/privacy.css";
 
 initMonitoring();
 
@@ -26,6 +28,7 @@ ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     <AppErrorBoundary>
       <App />
+      <PrivacyConsentControls />
     </AppErrorBoundary>
   </React.StrictMode>,
 );

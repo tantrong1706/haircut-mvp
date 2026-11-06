@@ -12,6 +12,7 @@ import { HaircutPhotoCapture } from "../components/HaircutPhotoCapture";
 import { RedeemRewardPanel } from "../components/RedeemRewardPanel";
 import { BrandLogo } from "../components/BrandLogo";
 import { ReturningCustomerPoints } from "../components/ReturningCustomerPoints";
+import { CustomerNameEditor } from "../components/CustomerNameEditor";
 import {
   StaffSession,
   cancelServiceSession,
@@ -666,6 +667,16 @@ export function StaffPage({ currentUser }: Props) {
               <span className="pill">{selectedSession.customer?.points ?? 0} điểm</span>
             </div>
 
+            {canConfirmRequest && selectedSession.customer ? (
+              <CustomerNameEditor key={`${salonId}:${selectedSession.id}`}
+                salonId={salonId} customerId={selectedSession.customerId}
+                customerName={selectedSession.customer.name || ""} pointRequestId={selectedSession.id}
+                disabled={loading || photoBusy}
+                onSaved={name => setSessions(current => current.map(session =>
+                  session.customerId === selectedSession.customerId && session.customer
+                    ? { ...session, customer: { ...session.customer, name } } : session))} />
+            ) : null}
+
             <div className="summary-grid compact-summary">
               <div className="summary-item">
                 <span>SĐT</span>
@@ -851,7 +862,7 @@ export function StaffPage({ currentUser }: Props) {
           />
         ) : null}
 
-        {currentUser.role === "staff" ? <a className="secondary-button" href="/delete-account">Quản lý tài khoản cá nhân</a> : null}
+        {currentUser.role === "staff" ? <a className="secondary-button" href="/delete-account/manage">Quản lý tài khoản cá nhân</a> : null}
 
         {message ? <p className="alert success">{message}</p> : null}
         {error ? <p className="alert error">{error}</p> : null}

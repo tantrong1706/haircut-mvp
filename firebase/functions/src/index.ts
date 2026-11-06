@@ -24,6 +24,9 @@ import { getStorage } from "firebase-admin/storage";
 import { defineSecret } from "firebase-functions/params";
 import { HttpsError, onCall, onRequest } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
+import { withdrawCustomerPhotoConsent } from "./domains/privacy/customerPhotoConsent";
+import { changeCustomerName } from "./domains/customers/customerName";
+import { changeOwnCustomerName } from "./domains/customers/ownCustomerName";
 import { onDocumentCreated, onDocumentUpdated } from "firebase-functions/v2/firestore";
 import {
   buildCustomerContactPatch,
@@ -171,6 +174,8 @@ const zaloQrFunctionOptions = {
 };
 const SESSION_POINT_REQUEST_WINDOW_MS = 12 * 60 * 60 * 1000;
 const POINT_REQUEST_CONFIRMATION_WINDOW_MS = 30 * 60 * 1000;
+// Web customers may request before the haircut; this is not the post-award cooldown.
+const WEB_POINT_REQUEST_CONFIRMATION_WINDOW_MS = 2 * 60 * 60 * 1000;
 const POINT_AWARD_COOLDOWN_MS = 2 * 60 * 60 * 1000;
 const OPEN_SESSION_STATUSES = ["waiting", "serving", "pending_approval"] as const;
 const SESSION_EXPIRY_BATCH_SIZE = 100;
@@ -198,6 +203,8 @@ const AUTHENTICATED_RATE_LIMITS = {
   submitPointRequest: 20,
   awardReturningCustomerPoints: 20,
   searchSalonCustomers: 30,
+  updateSalonCustomerName: 20,
+  updateWebCustomerName: 20,
   approvePointRequest: 60,
   rejectPointRequest: 60,
   lookupRewardCode: 60,
@@ -205,6 +212,7 @@ const AUTHENTICATED_RATE_LIMITS = {
   spinLuckyWheel: 20,
   getWebCustomerContext: 30,
   checkInWebCustomer: 10,
+  withdrawWebCustomerPhotoConsent: 20,
   getWebCustomerSession: 60,
   getWebCustomerHistory: 30,
   getWebCustomerRewards: 30,
@@ -3095,6 +3103,7 @@ export const getWebCustomerContext = onCall(qrFunctionOptions, async (request) =
 export const checkInWebCustomer = onCall(qrFunctionOptions, async (request) => {
   const principal = requireWebPhonePrincipal(request.auth);
   const salonId = requireString(request.data?.salonId, "salonId");
+  const photoConsentGranted = request.data?.allowPhoto === true;
   await enforceAuthenticatedRateLimit("checkInWebCustomer", principal.uid, salonId);
   await assertFeatureEnabled(
     salonId,
@@ -3110,7 +3119,7 @@ export const checkInWebCustomer = onCall(qrFunctionOptions, async (request) => {
   const newSessionRef = db.collection("chair_sessions").doc();
   const now = Timestamp.now();
   const expiresAt = Timestamp.fromMillis(
-    serviceSessionExpiresAtMs(now.toMillis(), POINT_REQUEST_CONFIRMATION_WINDOW_MS),
+    serviceSessionExpiresAtMs(now.toMillis(), WEB_POINT_REQUEST_CONFIRMATION_WINDOW_MS),
   );
   let returnedSessionId = newSessionRef.id;
 
@@ -3196,7 +3205,7 @@ export const checkInWebCustomer = onCall(qrFunctionOptions, async (request) => {
       name: String(customerSnap.data()?.name || `Khách ${principal.phoneLast4}`),
       phoneLast4: principal.phoneLast4,
       points: Math.max(0, Number(customerSnap.data()?.points ?? 0)),
-      allowPhoto: true,
+      allowPhoto: photoConsentGranted,
     };
     tx.create(newSessionRef, {
       salonId,
@@ -3210,8 +3219,8 @@ export const checkInWebCustomer = onCall(qrFunctionOptions, async (request) => {
       approvalMode: "staff_confirmation",
       pointsRequested,
       isOpen: true,
-      photoConsentGranted: true,
-      photoConsentVersion: "web-checkin-v1",
+      photoConsentGranted,
+      photoConsentVersion: "web-checkin-v2",
       photoConsentAt: now,
       expiresAt,
       createdAt: now,
@@ -3237,7 +3246,7 @@ export const checkInWebCustomer = onCall(qrFunctionOptions, async (request) => {
       customerId, sessionId: newSessionRef.id, customerSummary,
       status: "pending", approvalMode: "staff_confirmation",
       pointsRequested, pointsAdded: pointsRequested,
-      photoConsentGranted: true, photoConsentVersion: "web-checkin-v1", photoConsentAt: now,
+      photoConsentGranted, photoConsentVersion: "web-checkin-v2", photoConsentAt: now,
       photoUrls: [], photoPaths: [], note: "", staffId: "", staffName: "",
       expiresAt, createdAt: now, updatedAt: now,
     });
@@ -3245,7 +3254,7 @@ export const checkInWebCustomer = onCall(qrFunctionOptions, async (request) => {
       customerRef,
       {
         activeSessionId: newSessionRef.id,
-        allowPhoto: true,
+        allowPhoto: photoConsentGranted,
         lastBranchId: resolution.branchId,
         lastBranchName: resolution.branchName,
         updatedAt: now,
@@ -3261,6 +3270,16 @@ export const checkInWebCustomer = onCall(qrFunctionOptions, async (request) => {
     `Khách ${principal.phoneLast4}`,
   );
   return webAppSessionResult(principal.uid, salonId, result);
+});
+
+export const withdrawWebCustomerPhotoConsent = onCall(qrFunctionOptions, async (request) => {
+  const principal = await requireWebPhonePrincipal(request.auth);
+  const salonId = requireString(request.data?.salonId, "salonId");
+  await enforceAuthenticatedRateLimit("withdrawWebCustomerPhotoConsent", principal.uid, salonId);
+  return withdrawCustomerPhotoConsent(db, {
+    uid: principal.uid, salonId,
+    activeRef: activeSessionRefFor(salonId, customerIdForWeb(salonId, principal.uid)),
+  });
 });
 
 export const getCustomerCheckinProfileFromZalo = onCall(
@@ -6655,6 +6674,27 @@ export const getManagerAuditEvents = onCall(functionOptions, async (request) => 
   };
 });
 
+export const updateWebCustomerName = onCall(functionOptions, async (request) => {
+  const principal = requireWebPhonePrincipal(request.auth);
+  const salonId = requireString(request.data?.salonId, "salonId");
+  await enforceAuthenticatedRateLimit("updateWebCustomerName", principal.uid, salonId);
+  return changeOwnCustomerName(db, {
+    uid: principal.uid, salonId, name: request.data?.name, expectedName: request.data?.expectedName,
+    activeRef: activeSessionRefFor(salonId, customerIdForWeb(salonId, principal.uid)),
+  });
+});
+
+export const updateSalonCustomerName = onCall(functionOptions, async (request) => {
+  const uid = currentUid(request.auth);
+  const salonId = requireString(request.data?.salonId, "salonId");
+  const customerId = requireString(request.data?.customerId, "customerId");
+  await assertSalonRole(uid, salonId, ["owner", "staff"]);
+  await enforceAuthenticatedRateLimit("updateSalonCustomerName", uid, salonId);
+  return changeCustomerName(db, { uid, salonId, customerId, name: request.data?.name,
+    expectedName: request.data?.expectedName, pointRequestId: request.data?.pointRequestId,
+    activeRef: activeSessionRefFor(salonId, customerId) });
+});
+
 export const searchSalonCustomers = onCall(functionOptions, async (request) => {
   const uid = currentUid(request.auth);
   const salonId = requireString(request.data?.salonId, "salonId");
@@ -6711,6 +6751,7 @@ export const searchSalonCustomers = onCall(functionOptions, async (request) => {
       points: Number(data.points ?? 0),
       allowPhoto: Boolean(data.allowPhoto),
       lastVisitAtMs: timestampMillis(data.lastVisitAt),
+      createdAtMs: timestampMillis(data.createdAt),
     };
   });
 
@@ -6805,6 +6846,7 @@ async function managerCustomerDetails(input: {
     points: Number(data.points ?? 0),
     allowPhoto: Boolean(data.allowPhoto),
     lastVisitAtMs: timestampMillis(data.lastVisitAt),
+    createdAtMs: timestampMillis(data.createdAt),
   };
   let recordsQuery = db
     .collection("haircut_records")
@@ -6924,12 +6966,18 @@ export const deleteCustomerData = onCall(functionOptions, async (request) => {
   const salonId = requireString(request.data?.salonId, "salonId");
   const customerId = requireString(request.data?.customerId, "customerId");
   await assertSalonRole(uid, salonId, ["owner"]);
+  const expectedCreatedAtMs = request.data?.expectedCreatedAtMs;
+  if (expectedCreatedAtMs !== undefined && (typeof expectedCreatedAtMs !== "number" ||
+    !Number.isFinite(expectedCreatedAtMs) || expectedCreatedAtMs <= 0)) {
+    throw new HttpsError("invalid-argument", "Phiên bản hồ sơ khách không hợp lệ.");
+  }
 
   return runCustomerDeletionJob({
     salonId,
     customerId,
     requestedBy: uid,
     requestSource: "owner",
+    expectedCreatedAtMs,
   });
 });
 
@@ -6939,6 +6987,7 @@ type CustomerDeletionJobInput = {
   requestedBy: string;
   requestSource: "owner" | "zalo_privacy_webhook";
   sourceEventId?: string;
+  expectedCreatedAtMs?: number;
 };
 
 const CUSTOMER_DELETION_COLLECTION_PAGE_SIZE = 250;
@@ -6949,13 +6998,26 @@ const CUSTOMER_DELETION_STORAGE_CONCURRENCY = 10;
 const CUSTOMER_DELETION_STORAGE_DELETE_ATTEMPTS = 3;
 
 async function runCustomerDeletionJob(input: CustomerDeletionJobInput) {
-  const { salonId, customerId, requestedBy, requestSource, sourceEventId } = input;
+  const { salonId, customerId, requestedBy, requestSource, sourceEventId, expectedCreatedAtMs } = input;
   await ensureSalonCustomerCount(salonId);
 
   const customerRef = db.collection("customers").doc(customerId);
   const jobRef = customerDeletionJobRefFor(salonId, customerId);
   const [customerSnap, jobSnap] = await Promise.all([customerRef.get(), jobRef.get()]);
-  const existingJob = jobSnap.data() ?? {};
+  const storedJob = jobSnap.data() ?? {};
+  const currentCreatedAtMs = timestampMillis(customerSnap.data()?.createdAt);
+  const previousCreatedAtMs = typeof storedJob.customerCreatedAtMs === "number" ? storedJob.customerCreatedAtMs : null;
+  const profileChanged = customerSnap.exists && previousCreatedAtMs !== null && currentCreatedAtMs !== previousCreatedAtMs;
+  if (requestSource === "owner" && customerSnap.exists && customerSnap.data()?.salonId === salonId && (
+    (expectedCreatedAtMs !== undefined && expectedCreatedAtMs !== currentCreatedAtMs) ||
+    ((storedJob.status === "completed" || profileChanged) && (expectedCreatedAtMs === undefined || currentCreatedAtMs === null))
+  )) {
+    throw new HttpsError("failed-precondition", "Hồ sơ khách đã thay đổi. Hãy tải lại thẻ khách và xác nhận yêu cầu xóa mới.", { errorCode: "CUSTOMER_PROFILE_CHANGED" });
+  }
+  const restartingCompletedJob = (storedJob.status === "completed" || profileChanged) && requestSource === "owner" &&
+    customerSnap.exists && customerSnap.data()?.salonId === salonId && expectedCreatedAtMs !== undefined;
+  const existingJob: DocumentData = restartingCompletedJob ? {} : storedJob;
+  const boundCreatedAtMs = typeof existingJob.customerCreatedAtMs === "number" ? existingJob.customerCreatedAtMs : currentCreatedAtMs;
 
   if (existingJob.status === "completed") {
     return customerDeletionResult(customerId, existingJob);
@@ -6972,6 +7034,14 @@ async function runCustomerDeletionJob(input: CustomerDeletionJobInput) {
       salonId,
       customerId,
       kind: "customer_deletion",
+      customerCreatedAtMs: boundCreatedAtMs,
+      ...(restartingCompletedJob ? {
+        deletedRecords: 0, deletedRewards: 0, deletedRequests: 0, deletedSessions: 0,
+        deletedPhotoOperations: 0, deletedStorageFiles: 0,
+        remainingDocuments: 0, remainingStorageFiles: 0, failedStorageFiles: 0,
+        collectionCursors: {}, collectionProgress: {}, storagePageToken: null,
+        previousCompletedAt: storedJob.completedAt ?? null, completedAt: FieldValue.delete(),
+      } : {}),
       requestedBy: existingJob.requestedBy ?? requestedBy,
       requestSource: existingJob.requestSource ?? requestSource,
       lastRequestedBy: requestedBy,
@@ -7053,6 +7123,10 @@ async function runCustomerDeletionJob(input: CustomerDeletionJobInput) {
         }
         if (!salonSnap.exists || currentCustomer.data()?.salonId !== salonId) {
           throw new Error("customer ownership changed during deletion");
+        }
+        if (requestSource === "owner" && boundCreatedAtMs !== null &&
+          timestampMillis(currentCustomer.data()?.createdAt) !== boundCreatedAtMs) {
+          throw new Error("customer profile changed during deletion");
         }
         const customerCount = Math.max(0, Math.floor(Number(salonSnap.data()?.customerCount ?? 1)));
         tx.delete(customerRef);

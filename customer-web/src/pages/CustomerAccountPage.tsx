@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { ShieldCheck } from "lucide-react";
 import { BrandLogo } from "../components/BrandLogo";
+import { CustomerPrivacyPanel } from "../components/CustomerPrivacyPanel";
+import { CustomerNameEditor } from "../components/CustomerNameEditor";
+import { updateOwnCustomerName } from "../services/customerName";
 import { signOutCustomerWeb } from "../services/customerWebAuth";
 import { captureError, trackEvent } from "../services/monitoring";
 import type { AppSession } from "../services/types";
@@ -8,9 +11,11 @@ import type { AppSession } from "../services/types";
 type Props = {
   session: AppSession;
   onLoggedOut: () => void;
+  onPhotoRevoked?: () => void;
+  onNameSaved?: (name: string) => void;
 };
 
-export function CustomerAccountPage({ session, onLoggedOut }: Props) {
+export function CustomerAccountPage({ session, onLoggedOut, onPhotoRevoked, onNameSaved }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -40,6 +45,20 @@ export function CustomerAccountPage({ session, onLoggedOut }: Props) {
           Số điện thoại đã xác thực •••• {session.customer.phoneLast4 || "----"}
         </p>
       </header>
+      <div className="panel">
+        <h2>Tên của bạn</h2>
+        <p className="muted">
+          Bạn có thể sửa tên hiển thị. Số điện thoại, điểm và lịch sử không thay đổi.
+        </p>
+        <CustomerNameEditor
+          key={`${session.firebaseUid}:${session.qr.salonId}`}
+          salonId={session.qr.salonId}
+          customerId={session.customer.customerId}
+          customerName={session.customer.name}
+          saveName={updateOwnCustomerName}
+          onSaved={(name) => onNameSaved?.(name)}
+        />
+      </div>
       <div className="account-balance">
         <span>Điểm hiện có</span>
         <strong>
@@ -53,6 +72,11 @@ export function CustomerAccountPage({ session, onLoggedOut }: Props) {
           <p>Phiên đăng nhập được ghi nhớ an toàn trên thiết bị và trình duyệt này.</p>
         </div>
       </div>
+      <CustomerPrivacyPanel
+        key={`${session.firebaseUid}:${session.qr.salonId}:${session.sessionId}`}
+        session={session}
+        onPhotoRevoked={onPhotoRevoked}
+      />
       <div className="account-session-actions">
         <button
           type="button"
