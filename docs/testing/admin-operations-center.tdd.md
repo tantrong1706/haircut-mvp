@@ -1,5 +1,22 @@
 # Admin operations center — test evidence
 
+## Follow-up: real callable transport cursor — 06/11/2026
+
+Authenticated post-deploy checks of the first Admin release found a queue read error that the
+fixture browser suite did not reproduce. The Firebase Functions SDK encoder converts undefined
+object values to null. The client included `cursor: undefined` on the first page, while the new
+strict handler rejected null instead of treating it as an absent optional cursor.
+
+- RED checkpoint `5d7cd01`: client 1 FAIL / 3 PASS, Admin emulator 1 FAIL / 62 PASS. No test
+  assertion was relaxed; the new cases cover omission on the client and null compatibility on the server.
+- Minimal fix omits only the absent cursor and accepts undefined/null as no cursor. Nonempty
+  invalid/path-like/cross-salon cursors remain rejected. No identity, authorization, page limit,
+  point/photo behavior or capability flag changes.
+- GREEN: Admin check 95 tests plus types/lint/build PASS; Admin emulator 63 cases PASS;
+  both Admin modules coverage 96.13% lines / 95.27% statements / 100% functions / 87.93% branches.
+- Existing production runtime is not called PASS from these local tests. Final CI and authenticated
+  smoke results for the fix are recorded on its PR after execution; no production mutation is used.
+
 ## Current extension — 06/11/2026, not deployed
 
 The owner requested a project-wide review and a clearer Admin monitoring center, then explicitly

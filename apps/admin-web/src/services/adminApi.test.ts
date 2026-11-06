@@ -7,6 +7,14 @@ vi.mock("./firebase", () => ({ callAdminFunction: vi.fn() }));
 const mockedCall = vi.mocked(callAdminFunction);
 
 describe("adminApi", () => {
+  it("omits the optional cursor on the first page instead of sending Firebase an undefined property", async () => {
+    await adminApi.salonOperations("salon-a");
+    expect(mockedCall).toHaveBeenCalledWith("getSystemAdminSalonOperations", {
+      salonId: "salon-a",
+      pageSize: 50,
+    });
+    expect(Object.prototype.hasOwnProperty.call(mockedCall.mock.calls[0][1], "cursor")).toBe(false);
+  });
   beforeEach(() => mockedCall.mockReset());
 
   it("giới hạn trang danh sách salon và gọi đúng callable", async () => {

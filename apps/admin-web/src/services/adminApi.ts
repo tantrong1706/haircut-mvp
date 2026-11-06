@@ -123,7 +123,7 @@ export const adminApi = {
   salonOperations: (salonId: string, cursor?: string) =>
     callAdminFunction<{ salonId: string; cursor?: string; pageSize: number }, AdminSalonOperations>(
       "getSystemAdminSalonOperations",
-      { salonId, cursor, pageSize: 50 },
+      { salonId, ...(cursor === undefined ? {} : { cursor }), pageSize: 50 },
     ),
   manageSalon: (input: AdminManagementInput) =>
     callAdminFunction<AdminManagementInput, { changed: boolean; operationId: string }>(

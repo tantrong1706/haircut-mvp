@@ -86,7 +86,7 @@ export function createAdminSupervision(
     const size = data.pageSize ?? 50;
     if (typeof size !== "number" || !Number.isInteger(size) || size < 1 || size > 50)
       throw new HttpsError("invalid-argument", "Số yêu cầu mỗi trang không hợp lệ");
-    const cursor = data.cursor === undefined ? undefined : id(data.cursor);
+    const cursor = data.cursor === undefined || data.cursor === null ? undefined : id(data.cursor);
     await rateLimit(uid, "read");
     const salon = await db.doc(`salons/${salonId}`).get();
     if (!salon.exists) throw new HttpsError("not-found", "Không tìm thấy salon");

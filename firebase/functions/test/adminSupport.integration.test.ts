@@ -359,6 +359,13 @@ const manage = (data: Record<string, unknown> = {}, identity: unknown = auth(ADM
   );
 
 describe("bounded Admin supervision", () => {
+  it("accepts a null optional cursor produced by the Firebase callable serializer", async () => {
+    await seedPendingRequest();
+    await expect(operations({ cursor: null })).resolves.toMatchObject({
+      salonId: SALON,
+      requests: [expect.objectContaining({ id: "queue-request-a" })],
+    });
+  });
   it("queries audit events for the selected salon before applying the page limit", async () => {
     const batch = db.batch();
     for (let i = 0; i < 45; i++)
