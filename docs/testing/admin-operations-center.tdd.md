@@ -1,5 +1,57 @@
 # Admin operations center — test evidence
 
+## Current extension — 06/11/2026, not deployed
+
+The owner requested a project-wide review and a clearer Admin monitoring center, then explicitly
+selected suspend/reactivate salon and cancel pending requests, with history retained and no permanent
+deletion. Authorized delivery is updating existing PR #79 and running CI **after local PASS**;
+not merge, deployment, live mutations or enabling legacy writes. Earlier approvals below are historical.
+
+Baseline: main `b5be748` was merged normally into the existing Admin branch (`6db640f`), preserving
+prior checkpoints and main fixes. Reinstalled Admin from its lockfile; baseline check: 72 tests,
+typecheck/lint/build PASS. No new dependency, Firebase config, Rules/IAM or customer UI changes.
+
+| Journey / guarantee                                                                               | RED checkpoint and execution                                                                                                                                       | GREEN evidence                                                                                          |
+| ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| Bounded selected-salon queue; no private customer content; isolated gated controls                | `51d392c`: emulator target 28 existing PASS / 33 new FAIL because new exports were missing; UI target failed to import missing component, zero test cases executed | `cc69a5a`: same backend 61/61 PASS, UI 8/8 PASS                                                         |
+| Show hidden overview counts and expose queue on explicit request; retain older salon audit events | `9dd5816`: dashboard 2 FAIL / 12 PASS; backend 1 FAIL / 61 PASS, reproducing cross-tenant noise hiding selected events                                             | `f119952`: backend 62 PASS, Admin 92 PASS; targeted coverage included both admin domains and the new UI |
+| Server-scoped audit selector; ignore late response after switching salon                          | `9bd62c6`: dashboard 2 FAIL / 14 PASS for missing selector                                                                                                         | `0497064`: Admin 94 PASS, lint/types/build PASS, browser 21/21 PASS                                     |
+
+Additional coverage verifies recent-login requirements, exact name/reason/acknowledgement,
+disabled capability, actor authorization, receipt replay, conflicting operation IDs, stale state,
+pending-deletion blocking, completed/cross-tenant request refusal, pointer protection, unchanged
+points/rewards/photos, pagination failures, tenant-response mismatch, offline retry and unmount cleanup.
+
+Executed commands:
+
+- `npm --prefix apps/admin-web run check`: 94 tests PASS plus types/lint/build.
+- `npm --prefix apps/admin-web run test:coverage`: 97.55% lines, 94.49% statements, 95.27%
+  functions, 88.96% branches. New operations panel: 100% lines, 97.14% statements, 100% functions,
+  92.15% branches. Thresholds remain 80%; no tests skipped or suppressed.
+- From `firebase/`, `firebase emulators:exec --project demo-haircut --only firestore "npm --prefix functions run test:admin:coverage"`:
+  62 PASS; both admin domains 96.13% lines / 95.27% statements / 100% functions / 87.84% branches.
+  New supervision domain: 97.29% lines / 96.58% statements / 100% functions / 89.51% branches.
+- `npm --prefix firebase/functions run check`: types/lint/format and 119 unit tests PASS.
+- `npm --prefix apps/admin-web run test:e2e`: 21 PASS, desktop Chromium/mobile Chromium/mobile
+  WebKit, including axe, navigation at 320px, cancellation preview, disabled writes and offline states.
+- Runtime dependency audits in Admin/Customer Web/Functions/Manager: 0 advisory on 06/11.
+  Historical findings below are not the current source state; dev tooling and old deployed revisions
+  are not certified clean by these audits.
+- Screenshots of the desktop overview and iPhone-sized confirmed-control flow were inspected locally.
+
+One initial full check caught unsupported `Array.at` for the existing TypeScript lib target;
+indexed access replaced it without widening config. React lint caught effect-driven state resets;
+keyed per-salon state and explicit-event refresh replaced them. Two tests initially used Playwright's
+`exact` option in RTL `getByRole`; removed the unsupported option, retaining exact string names.
+These are actual check failures and corrections, not business-logic RED claims.
+
+All business tests use isolated demo/fixture data; non-loopback browser requests are blocked.
+No real OTP, operator impersonation, live suspension/cancellation, photo deletion or customer-data
+change was used. Full repository and GitHub CI results are recorded on PR #79 for the final SHA
+after execution; do not infer PASS from this pre-CI checkpoint. No production acceptance is claimed.
+
+## Historical evidence — previous releases and 27/10 UI work
+
 ## Owner-approved scope
 
 Extend the existing Admin app, not Customer Web. The human selected an existing verified operator
@@ -10,14 +62,14 @@ API deployment is authorized by this task. The operator's owner role must remain
 
 ## Journeys and checkpoints
 
-| Guarantee | RED | GREEN / evidence |
-|---|---|---|
-| Separate admin authority; tenant-safe diagnostic/repairs; concurrency, stale preview and audit safeguards | `e71b227`: 28 intended emulator failures for missing endpoints / missing grant support | `02cefdf`: same 28 PASS |
-| List pagination, independent load errors, repair confirmation, stale auth/diagnostic response isolation | `797f07d`: 8 intended UI failures, 9 passes | `f07c5b4`: 42 UI/service tests PASS |
-| Accessible text contrast in all browser engines | `ecc1994`: 3 failures / 6 passes | `3841bde`: 9/9 browser tests PASS |
-| Mobile salon identity stays visible and logout remains accessible | `0e4867e`: 2 mobile failures / 1 desktop pass | `d1cb105`: full browser gate passed before commit |
-| Admin Node Firestore dependency is patched without upgrading Firebase SDK | `a066aae`: gRPC 1.9.16 failed the 1.14.6 guard | `f4b5d07`: guard and actual SDK/emulator compatibility PASS; production Admin audit 0 alerts |
-| Production Admin build never copies private config or targets the wrong Firebase project | `27a7d6b`: 2 intended missing-helper failures | `8489cd2`: both guard tests PASS |
+| Guarantee                                                                                                 | RED                                                                                    | GREEN / evidence                                                                             |
+| --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Separate admin authority; tenant-safe diagnostic/repairs; concurrency, stale preview and audit safeguards | `e71b227`: 28 intended emulator failures for missing endpoints / missing grant support | `02cefdf`: same 28 PASS                                                                      |
+| List pagination, independent load errors, repair confirmation, stale auth/diagnostic response isolation   | `797f07d`: 8 intended UI failures, 9 passes                                            | `f07c5b4`: 42 UI/service tests PASS                                                          |
+| Accessible text contrast in all browser engines                                                           | `ecc1994`: 3 failures / 6 passes                                                       | `3841bde`: 9/9 browser tests PASS                                                            |
+| Mobile salon identity stays visible and logout remains accessible                                         | `0e4867e`: 2 mobile failures / 1 desktop pass                                          | `d1cb105`: full browser gate passed before commit                                            |
+| Admin Node Firestore dependency is patched without upgrading Firebase SDK                                 | `a066aae`: gRPC 1.9.16 failed the 1.14.6 guard                                         | `f4b5d07`: guard and actual SDK/emulator compatibility PASS; production Admin audit 0 alerts |
+| Production Admin build never copies private config or targets the wrong Firebase project                  | `27a7d6b`: 2 intended missing-helper failures                                          | `8489cd2`: both guard tests PASS                                                             |
 
 ## Commands actually run
 
@@ -91,21 +143,21 @@ The earlier release evidence above is historical and is not evidence that this U
 
 ### Executed checkpoints
 
-| Check | Result |
-|---|---|
-| Original Admin baseline | PASS: 42/42 tests |
-| Guided UI RED, `e1a8915` | Expected FAIL: 8 new requirements; 13 existing focused tests passed |
-| Missing presentation helper RED | Import failed before tests ran; not counted as executed assertion failures |
-| Focused UI/helper GREEN, `363598d` | PASS: 38/38 tests and typecheck |
-| Narrow navigation RED, `0210f27` | Expected FAIL: 3/3 engines reproduced overflow at 320px |
-| Failed next-page status RED, `c9efd6c` | Expected FAIL: 1; 11 dashboard tests passed |
-| Locked installation | PASS: `npm --prefix apps/admin-web ci`; no package/lockfile diff |
-| Final `npm --prefix apps/admin-web run check` | PASS: typecheck, lint, 72/72 tests and production build |
+| Check                                                                   | Result                                                                                                                                                    |
+| ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Original Admin baseline                                                 | PASS: 42/42 tests                                                                                                                                         |
+| Guided UI RED, `e1a8915`                                                | Expected FAIL: 8 new requirements; 13 existing focused tests passed                                                                                       |
+| Missing presentation helper RED                                         | Import failed before tests ran; not counted as executed assertion failures                                                                                |
+| Focused UI/helper GREEN, `363598d`                                      | PASS: 38/38 tests and typecheck                                                                                                                           |
+| Narrow navigation RED, `0210f27`                                        | Expected FAIL: 3/3 engines reproduced overflow at 320px                                                                                                   |
+| Failed next-page status RED, `c9efd6c`                                  | Expected FAIL: 1; 11 dashboard tests passed                                                                                                               |
+| Locked installation                                                     | PASS: `npm --prefix apps/admin-web ci`; no package/lockfile diff                                                                                          |
+| Final `npm --prefix apps/admin-web run check`                           | PASS: typecheck, lint, 72/72 tests and production build                                                                                                   |
 | Final `npm --prefix apps/admin-web run test:coverage -- --maxWorkers=1` | PASS: 72/72; 99.17% lines, 96.69% statements, 96.62% functions, 90.25% branches in the configured Admin support/presentation scope; thresholds remain 80% |
-| Final `npm --prefix apps/admin-web run test:e2e` | PASS: 15/15 on desktop Chromium, mobile Chromium and mobile WebKit; includes 320px targets, cancellation, partial-failure display and axe WCAG checks |
-| `node --test test/*.test.mjs` | PASS: 40/40 repository regressions |
-| Tracked secret scan / CSP synchronization / diff whitespace | PASS |
-| Screenshot inspection | PASS: desktop and iPhone-sized diagnostic viewport images inspected locally using fictitious Salon A |
+| Final `npm --prefix apps/admin-web run test:e2e`                        | PASS: 15/15 on desktop Chromium, mobile Chromium and mobile WebKit; includes 320px targets, cancellation, partial-failure display and axe WCAG checks     |
+| `node --test test/*.test.mjs`                                           | PASS: 40/40 repository regressions                                                                                                                        |
+| Tracked secret scan / CSP synchronization / diff whitespace             | PASS                                                                                                                                                      |
+| Screenshot inspection                                                   | PASS: desktop and iPhone-sized diagnostic viewport images inspected locally using fictitious Salon A                                                      |
 
 One additional clipboard test initially used an unsupported asymmetric `toHaveValue` matcher. The
 assertion was corrected to inspect the textarea value, then the full suite passed. This harness error

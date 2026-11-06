@@ -890,6 +890,13 @@ describe("admin support grants and receipts are server-only", () => {
           result: { changed: true },
         }),
       );
+      await assertFails(
+        setDoc(doc(db, "admin_supervision_operations", "forged"), {
+          actorId: uid,
+          result: { changed: true },
+        }),
+      );
+      await assertFails(getDoc(doc(db, "admin_supervision_operations", "forged")));
     }
   });
   it("does not expose the privilege registry to client reads", async () => {

@@ -2,6 +2,7 @@
 
 Các tài liệu bắt đầu nên đọc:
 
+- [Tổng hợp toàn dự án và Admin mới](PROJECT_OVERVIEW.md)
 - [Trạng thái source và bản đang phục vụ](RELEASE_STATUS.md)
 - [Luồng sản phẩm hiện tại](PRODUCT_SPEC.md)
 - [Kiến trúc Web/Firebase](architecture.md)

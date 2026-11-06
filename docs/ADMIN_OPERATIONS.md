@@ -4,7 +4,52 @@
 https://haircut-c7d12-admin.web.app ngày 2026-10-14. Xem bằng chứng và giới hạn hậu kiểm
 trong [ADMIN_RELEASE_STATUS.md](ADMIN_RELEASE_STATUS.md).
 
-## Phạm vi
+## Bổ sung source 06/11/2026 — PR #79, chưa phát hành
+
+Chủ dự án đã chốt thêm **khóa/mở salon và hủy yêu cầu đang chờ**, không xóa vĩnh viễn.
+Đã cho phép cập nhật PR #79 và CI khi local PASS, **chưa cho phép merge/deploy** đợt này.
+Phạm vi live 14/10 ở phần dưới không tự có các chức năng mới chỉ vì source đã được sửa.
+
+- Tổng quan có tám chỉ số; chỉ số pending gồm cả yêu cầu hết hạn chưa được đóng.
+- Trong Salon → chọn salon → “Yêu cầu chờ và quản lý salon”, API đọc trả tối đa 50 yêu cầu
+  mỗi trang, không kèm điện thoại/tên khách, ảnh, ghi chú hoặc token. Phân biệt hết hạn và
+  dữ liệu không nhất quán; dữ liệu không khớp không được hủy.
+- `getSystemAdminSalonOperations` chỉ đọc; `manageSystemAdminSalon` chỉ chấp nhận
+  `suspend_salon`, `reactivate_salon`, `cancel_point_request`.
+- `ADMIN_SUPERVISION_WRITES_ENABLED=true` là cờ riêng **mặc định tắt**. Cần xác minh cờ
+  đồng nhất trên cả hai API mới nếu sau này được phép bật. Không dùng hoặc bật
+  `ADMIN_WRITE_OPERATIONS_ENABLED`; không đổi cờ hai repair cũ.
+- Mọi thay đổi cần đăng nhập trong mười phút gần nhất, nhập đúng tên salon, lý do 10–300
+  ký tự, xác nhận rõ ràng và mã thao tác chống trùng. API kiểm tra lại grant trong transaction;
+  audit và biên nhận `admin_supervision_operations` được ghi cùng thay đổi.
+- Khóa salon chỉ đổi trạng thái vận hành, giữ tài khoản và dữ liệu. Mở lại không cấp quyền
+  hoặc khôi phục yêu cầu cũ. Không thao tác salon đang chờ xóa.
+- Hủy chỉ áp dụng yêu cầu pending gắn đúng lượt pending_approval đang mở cùng salon/chi nhánh/
+  khách. Transaction đánh dấu yêu cầu rejected và lượt cancelled; chỉ gỡ pointer nếu còn
+  trỏ chính xác lượt đó. Không cộng/trừ điểm, xóa ảnh/ghi chú, hồ sơ, quà hoặc lịch sử.
+- Hủy yêu cầu không có nút hoàn tác. Nếu khách cần tạo lượt mới, dùng lại luồng Web thông thường
+  và mọi điều kiện hiện có; không khôi phục yêu cầu hoặc bỏ cooldown để chữa lỗi.
+- Nhật ký lọc salon **trước** giới hạn trên server, dùng index salonId/createdAt đã có trong
+  source. Hiện tối đa 50 bản ghi gần nhất, không khẳng định đã hiển thị toàn bộ lịch sử.
+
+Hai API mới giới hạn 3 instances, dùng lại giới hạn đọc/sửa Admin (20/6 lần mỗi phút).
+Không quét nền hoặc tải tất cả hồ sơ khách. Lỗi mạng/thiếu endpoint/thiếu index phải hiện rõ,
+không giả số 0. Không in payload cấu hình hay token ra báo cáo.
+
+Nếu được duyệt phát hành riêng, chỉ Admin Hosting và ba API
+`getSystemAdminSalonOperations`, `manageSystemAdminSalon`, `listSystemAdminAuditEvents`.
+Cần hậu kiểm read-only và khả năng fail-closed bằng tài khoản operator; không khóa/hủy salon
+thật để thử. Chưa có phép phát hành thì không chạy lệnh deploy hoặc đổi env.
+Rollback khả năng ghi mới bằng tắt cờ trên hai API mới, giữ các cờ repair cũ và grant owner;
+không xóa biên nhận/audit. Có thể trả Hosting Admin về release trước, không thay website khách.
+
+Query queue dùng các điều kiện equality và thứ tự document ID; tham khảo
+[Firestore index merging](https://firebase.google.com/docs/firestore/query-data/index-overview#use_index_merging).
+Không coi test emulator là bằng chứng chỉ mục live đã được kiểm tra.
+
+Xem [tổng hợp dự án](PROJECT_OVERVIEW.md) và [TDD](testing/admin-operations-center.tdd.md).
+
+## Phạm vi đã phát hành 14/10
 
 - Tổng quan hệ thống; danh sách salon có phân trang và bộ lọc trên dữ liệu đã tải.
 - Chọn một salon để đối chiếu bộ đếm khách, hồ sơ chủ salon, chi nhánh hoạt động,
