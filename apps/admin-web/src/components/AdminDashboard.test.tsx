@@ -12,6 +12,8 @@ const mock = vi.hoisted(() => ({
   diagnostics: vi.fn(),
   repair: vi.fn(),
   access: vi.fn(),
+  salonOperations: vi.fn(),
+  manageSalon: vi.fn(),
 }));
 vi.mock("../services/adminApi", () => ({ adminApi: mock }));
 vi.mock("../services/firebase", () => ({ auth: {}, firebaseProjectId: "fixture-project" }));
@@ -73,6 +75,34 @@ beforeEach(() => {
     changed: true,
     action: "reconcile_customer_count",
     salonId: "salon-a",
+  });
+  mock.salonOperations.mockResolvedValue({
+    salonId: "salon-a",
+    salonName: "Salon A",
+    status: "active",
+    checkedAtMs: 1000,
+    writesEnabled: false,
+    requests: [],
+    totalPending: 0,
+    nextCursor: null,
+  });
+});
+
+describe("complete operational overview", () => {
+  it("shows pending-deletion salons and separate owner/staff counts", async () => {
+    render(<AdminDashboard user={user} />);
+    expect(await screen.findByText("Salon chờ xóa")).toBeVisible();
+    expect(screen.getByText("Chủ salon", { exact: true })).toBeVisible();
+    expect(screen.getByText("Nhân viên", { exact: true })).toBeVisible();
+    expect(screen.getByText(/bao gồm yêu cầu hết hạn chưa được đóng/)).toBeVisible();
+  });
+  it("loads the selected salon queue only when the admin explicitly opens it", async () => {
+    const actor = await openSalon();
+    expect(mock.salonOperations).not.toHaveBeenCalled();
+    await actor.click(screen.getByRole("button", { name: "Yêu cầu chờ và quản lý salon" }));
+    expect(await screen.findByText("Không có yêu cầu đang chờ.")).toBeVisible();
+    expect(mock.salonOperations).toHaveBeenCalledWith("salon-a");
+    expect(mock.manageSalon).not.toHaveBeenCalled();
   });
 });
 

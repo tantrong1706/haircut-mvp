@@ -359,6 +359,25 @@ const manage = (data: Record<string, unknown> = {}, identity: unknown = auth(ADM
   );
 
 describe("bounded Admin supervision", () => {
+  it("queries audit events for the selected salon before applying the page limit", async () => {
+    const batch = db.batch();
+    for (let i = 0; i < 45; i++)
+      batch.set(db.doc(`audit_events/noise-${i}`), {
+        salonId: OTHER,
+        action: "fixture",
+        createdAt: Timestamp.fromMillis(100 + i),
+      });
+    batch.set(db.doc("audit_events/selected-salon-event"), {
+      salonId: SALON,
+      action: "fixture.selected",
+      createdAt: Timestamp.fromMillis(1),
+    });
+    await batch.commit();
+    const result = await invoke("listSystemAdminAuditEvents", { salonId: SALON, pageSize: 10 });
+    expect(result.events).toEqual([
+      expect.objectContaining({ id: "selected-salon-event", salonId: SALON }),
+    ]);
+  });
   it("returns the selected salon queue without private customer content", async () => {
     await seedPendingRequest();
     await seedPendingRequest("other-request", OTHER);
