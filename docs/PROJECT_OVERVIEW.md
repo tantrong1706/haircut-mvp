@@ -25,9 +25,10 @@ giao dịch nghiệp vụ trong đợt làm Admin.
 - `main` trước đợt Admin: `b5be74886e68119d66c97cdf5eb98c29b2f9303f`.
 - Customer Hosting gần nhất đã đối chiếu: `86906d689d90731c`, source `8667226`.
 - API Web bảo trì gần nhất: source `12132a0`; không deploy lại cùng đợt tài liệu #86.
-- Admin live được ghi nhận ở [biên bản riêng](ADMIN_RELEASE_STATUS.md): source `4c30ce1`, ngày 14/10.
-- Admin mới nằm trong PR #79, **chưa merge/deploy**. Cần đọc CI theo đúng PR head; kết quả
-  của main hoặc PR cũ không thay thế kết quả của source mới.
+- Admin live theo [biên bản riêng](ADMIN_RELEASE_STATUS.md): source `91a599b`, Hosting
+  `95a492122200b8e7`, ngày 06/11; PR #79 và bản vá giao tiếp #87 đã merge/phát hành.
+- Commit tài liệu sau source này không đòi hỏi redeploy. CI theo từng SHA và giới hạn hậu kiểm
+  được ghi riêng; không dùng HTTP 200 hoặc kết quả của PR cũ thay bằng chứng đăng nhập thật.
 
 ## Vấn đề đã xác minh và xử lý trong source Admin
 
@@ -57,8 +58,8 @@ phạm vi đã tải; không suy ra số lỗi toàn hệ thống từ một tra
 
 ## Bằng chứng và phần chưa thể khẳng định
 
-Trong đợt triển khai source này đã chạy: Admin 94 unit/component test; Admin browser 21 ca
-trên desktop Chromium, mobile Chromium và mobile WebKit, gồm axe; Admin backend emulator 62 ca;
+Trong đợt triển khai source này đã chạy: Admin 95 unit/component test; Admin browser 21 ca
+trên desktop Chromium, mobile Chromium và mobile WebKit, gồm axe; Admin backend emulator 63 ca;
 Functions typecheck/lint/format và 119 unit test. Các nhóm trên đều PASS trước lượt kiểm tra
 toàn repository cuối. Coverage và TDD tại [bằng chứng Admin](testing/admin-operations-center.tdd.md).
 Biên bản full suite và CI cuối được ghi trong PR #79 theo đúng SHA sau khi thực thi, không
@@ -69,7 +70,9 @@ mọi revision cũ đã deploy hoặc các dịch vụ ngoài phạm vi là đã
 
 Các giới hạn còn giữ rõ:
 
-- Chưa nghiệm thu Admin mới bằng đăng nhập operator trên production vì chưa được phép phát hành.
+- Admin đã hậu kiểm bằng phiên operator thật: đọc dữ liệu, hàng đợi, lọc nhật ký và đóng preview
+  không gửi thay đổi. Không chạy khóa/hủy thật chỉ để thử. Lượt headless ban đầu có App Check
+  403 và được giữ trạng thái FAIL, không hạ bảo vệ để làm xanh.
 - OTP/camera/lượt cắt trên điện thoại thật của release khách hiện tại chưa được chạy lại đầy đủ;
   các test tự động dùng fixture/emulator, không gửi SMS hoặc đổi điểm khách thật.
 - App Check enforcement, Sentry/optional monitoring vẫn giữ policy hiện có; Admin không có
@@ -81,12 +84,14 @@ Các giới hạn còn giữ rõ:
 Đánh giá kỹ thuật từ bằng chứng hiện có: **84/100, có thể tiếp tục kiểm thử có kiểm soát**;
 không dùng điểm này để thay quyền merge/deploy hoặc nghiệm thu thiết bị thật.
 
-## Bước phát hành tiếp theo cần phê duyệt riêng
+## Ranh giới phát hành tiếp theo
 
-Hiện chỉ được cập nhật PR #79 và chạy CI sau khi local PASS. Nếu sau đó được duyệt phát hành:
-chỉ Admin Hosting, hai API mới và API nhật ký cần sửa; kiểm tra cờ khả năng trên cả API đọc/ghi,
-giữ các Admin writes cũ khóa. Không deploy Customer Hosting, API nghiệp vụ khách, Rules/IAM,
-đổi App Check hoặc thử hủy/khóa salon thật chỉ để lấy PASS.
+Đợt Admin đã được phê duyệt và phát hành đúng phạm vi: Admin Hosting, hai API mới và API nhật ký;
+bản vá sau đó chỉ queue-read API + Admin Hosting. Hai cờ mới đã đối chiếu, legacy writes vẫn khóa.
+Yêu cầu mới về bắt buộc đồng ý ảnh chỉ áp dụng cho yêu cầu điểm QR mới; đọc lịch sử/quyền dữ liệu
+vẫn giữ. Đây là thay đổi Customer Web riêng, không được coi là đã deploy bởi đợt Admin này.
+Không tự deploy Customer Hosting/API nghiệp vụ khách, Rules/IAM hoặc đổi App Check từ quyền
+phát hành Admin; không hủy/khóa dữ liệu thật để lấy PASS.
 
 Xem [hướng dẫn Admin](ADMIN_OPERATIONS.md), [trạng thái Web](RELEASE_STATUS.md) và
 [xử lý sự cố](incident-runbook.md).

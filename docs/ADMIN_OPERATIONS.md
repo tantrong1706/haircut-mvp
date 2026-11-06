@@ -1,14 +1,15 @@
 # Trung tâm quản trị salon
 
 Ứng dụng riêng tại `apps/admin-web`, tách khỏi website khách. Đã phát hành tại
-https://haircut-c7d12-admin.web.app ngày 2026-10-14. Xem bằng chứng và giới hạn hậu kiểm
+https://haircut-c7d12-admin.web.app; bản Admin mới đã phát hành ngày 06/11/2026. Xem bằng chứng và giới hạn hậu kiểm
 trong [ADMIN_RELEASE_STATUS.md](ADMIN_RELEASE_STATUS.md).
 
-## Bổ sung source 06/11/2026 — PR #79, chưa phát hành
+## Bổ sung đã phát hành 06/11/2026 — PR #79 và #87
 
 Chủ dự án đã chốt thêm **khóa/mở salon và hủy yêu cầu đang chờ**, không xóa vĩnh viễn.
-Đã cho phép cập nhật PR #79 và CI khi local PASS, **chưa cho phép merge/deploy** đợt này.
-Phạm vi live 14/10 ở phần dưới không tự có các chức năng mới chỉ vì source đã được sửa.
+Sau kiểm thử/CI, chủ dự án đã cho phép main + Admin Hosting + đúng ba API và bật các thao tác
+đã chốt. Đã hậu kiểm đăng nhập thật ở chế độ chỉ đọc/xem trước, không khóa/hủy salon thật.
+Source/version đang phục vụ và các giới hạn test được ghi tại `ADMIN_RELEASE_STATUS.md`.
 
 - Tổng quan có tám chỉ số; chỉ số pending gồm cả yêu cầu hết hạn chưa được đóng.
 - Trong Salon → chọn salon → “Yêu cầu chờ và quản lý salon”, API đọc trả tối đa 50 yêu cầu
@@ -36,10 +37,10 @@ Hai API mới giới hạn 3 instances, dùng lại giới hạn đọc/sửa Ad
 Không quét nền hoặc tải tất cả hồ sơ khách. Lỗi mạng/thiếu endpoint/thiếu index phải hiện rõ,
 không giả số 0. Không in payload cấu hình hay token ra báo cáo.
 
-Nếu được duyệt phát hành riêng, chỉ Admin Hosting và ba API
+Đợt phát hành chỉ gồm Admin Hosting và ba API
 `getSystemAdminSalonOperations`, `manageSystemAdminSalon`, `listSystemAdminAuditEvents`.
 Cần hậu kiểm read-only và khả năng fail-closed bằng tài khoản operator; không khóa/hủy salon
-thật để thử. Chưa có phép phát hành thì không chạy lệnh deploy hoặc đổi env.
+thật để thử. Các đợt thay đổi/phát hành tiếp theo vẫn cần phê duyệt phạm vi riêng.
 Rollback khả năng ghi mới bằng tắt cờ trên hai API mới, giữ các cờ repair cũ và grant owner;
 không xóa biên nhận/audit. Có thể trả Hosting Admin về release trước, không thay website khách.
 
