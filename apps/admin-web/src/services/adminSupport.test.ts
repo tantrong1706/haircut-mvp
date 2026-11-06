@@ -7,6 +7,7 @@ describe("safe support messages and links", () => {
     ["RECENT_LOGIN_REQUIRED", "đăng xuất"],
     ["ADMIN_PREVIEW_STALE", "Dữ liệu vừa thay đổi"],
     ["ADMIN_SUPPORT_REPAIRS_DISABLED", "chưa bật"],
+    ["ADMIN_SUPERVISION_DISABLED", "chưa bật"],
   ])("explains %s without printing server details", (errorCode, message) => {
     expect(adminErrorMessage({ details: { errorCode }, message: "PRIVATE_SECRET" })).toContain(
       message,

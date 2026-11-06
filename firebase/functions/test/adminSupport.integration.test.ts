@@ -311,3 +311,245 @@ async function seedPointer(status: string, isOpen: boolean) {
     .doc("chair_sessions/session-a")
     .set({ salonId: SALON, customerId: "customer-a", status, isOpen });
 }
+
+async function seedPendingRequest(requestId = "queue-request-a", salonId = SALON) {
+  const now = Timestamp.now();
+  const data = {
+    salonId,
+    branchId: "branch-a",
+    branchName: "Chi nhánh A",
+    customerId: "customer-a",
+    sessionId: requestId,
+    status: "pending",
+    approvalMode: "staff_confirmation",
+    createdAt: now,
+    expiresAt: Timestamp.fromMillis(now.toMillis() + 600_000),
+    photoUrls: ["PRIVATE_PHOTO_FIXTURE"],
+    note: "PRIVATE_NOTE_FIXTURE",
+    customerSummary: { phone: "PRIVATE_PHONE_FIXTURE", name: "PRIVATE_NAME_FIXTURE" },
+  };
+  await db.doc(`point_requests/${requestId}`).set(data);
+  await db.doc(`chair_sessions/${requestId}`).set({
+    ...data,
+    status: "pending_approval",
+    isOpen: true,
+  });
+  await db.doc(`active_service_sessions/${pointerId()}`).set({
+    salonId,
+    customerId: "customer-a",
+    sessionId: requestId,
+  });
+}
+
+const operations = (data: Record<string, unknown> = {}, identity: unknown = auth(ADMIN)) =>
+  invoke("getSystemAdminSalonOperations", { salonId: SALON, ...data }, identity);
+const manage = (data: Record<string, unknown> = {}, identity: unknown = auth(ADMIN)) =>
+  invoke(
+    "manageSystemAdminSalon",
+    {
+      salonId: SALON,
+      action: "suspend_salon",
+      expectedStatus: "active",
+      confirmedSalonName: "Salon Support A",
+      reason: "Kiểm tra thao tác quản trị được xác nhận",
+      operationId: "supervision-operation-0001",
+      ...data,
+    },
+    identity,
+  );
+
+describe("bounded Admin supervision", () => {
+  it("queries audit events for the selected salon before applying the page limit", async () => {
+    const batch = db.batch();
+    for (let i = 0; i < 45; i++)
+      batch.set(db.doc(`audit_events/noise-${i}`), {
+        salonId: OTHER,
+        action: "fixture",
+        createdAt: Timestamp.fromMillis(100 + i),
+      });
+    batch.set(db.doc("audit_events/selected-salon-event"), {
+      salonId: SALON,
+      action: "fixture.selected",
+      createdAt: Timestamp.fromMillis(1),
+    });
+    await batch.commit();
+    const result = await invoke("listSystemAdminAuditEvents", { salonId: SALON, pageSize: 10 });
+    expect(result.events).toEqual([
+      expect.objectContaining({ id: "selected-salon-event", salonId: SALON }),
+    ]);
+  });
+  it("returns the selected salon queue without private customer content", async () => {
+    await seedPendingRequest();
+    await seedPendingRequest("other-request", OTHER);
+    const result = await operations();
+    expect(result).toMatchObject({ salonId: SALON, writesEnabled: false, nextCursor: null });
+    expect(result.requests).toEqual([
+      expect.objectContaining({ id: "queue-request-a", state: "waiting", cancellable: true }),
+    ]);
+    expect(JSON.stringify(result)).not.toMatch(/PRIVATE_|other-request|customerSummary|photoUrls/);
+  });
+  it("distinguishes expired and inconsistent requests without mutating them", async () => {
+    await seedPendingRequest();
+    await db.doc("point_requests/queue-request-a").update({ expiresAt: Timestamp.fromMillis(1) });
+    expect((await operations()).requests).toEqual([
+      expect.objectContaining({ state: "expired", cancellable: true }),
+    ]);
+    await db.doc("chair_sessions/queue-request-a").update({ salonId: OTHER });
+    expect((await operations()).requests).toEqual([
+      expect.objectContaining({ state: "inconsistent", cancellable: false }),
+    ]);
+    expect((await db.doc("point_requests/queue-request-a").get()).data()?.status).toBe("pending");
+  });
+  it("paginates a bounded page and rejects a cursor from another salon", async () => {
+    for (const requestId of ["queue-a", "queue-b", "queue-c"]) await seedPendingRequest(requestId);
+    const first = await operations({ pageSize: 2 });
+    expect((first.requests as unknown[]).length).toBe(2);
+    expect(first.nextCursor).toBe("queue-b");
+    expect((await operations({ pageSize: 2, cursor: first.nextCursor })).requests).toEqual([
+      expect.objectContaining({ id: "queue-c" }),
+    ]);
+    await seedPendingRequest("other-cursor", OTHER);
+    await expect(operations({ cursor: "other-cursor" })).rejects.toMatchObject({
+      code: "invalid-argument",
+    });
+  });
+  it.each([null, auth("ordinary-owner"), auth("unknown-user")])(
+    "denies unprivileged queue reads %#",
+    async (identity) => {
+      await expect(operations({}, identity)).rejects.toMatchObject({
+        code: identity ? "permission-denied" : "unauthenticated",
+      });
+    },
+  );
+  it.each([
+    { salonId: "a/b" },
+    { pageSize: 0 },
+    { pageSize: 51 },
+    { pageSize: 1.5 },
+    { cursor: "a/b" },
+  ])("rejects unsafe read inputs %#", async (data) => {
+    await expect(operations(data)).rejects.toMatchObject({ code: "invalid-argument" });
+  });
+  it("does not make a missing salon look like an empty queue", async () => {
+    await expect(operations({ salonId: "missing" })).rejects.toMatchObject({ code: "not-found" });
+  });
+});
+
+describe("confirmed and isolated Admin controls", () => {
+  beforeEach(() => vi.stubEnv("ADMIN_SUPERVISION_WRITES_ENABLED", "true"));
+  it("keeps the new controls off unless explicitly enabled, without opening legacy writes", async () => {
+    vi.stubEnv("ADMIN_SUPERVISION_WRITES_ENABLED", "false");
+    await expect(manage()).rejects.toMatchObject({
+      details: { errorCode: "ADMIN_SUPERVISION_DISABLED" },
+    });
+    expect((await db.doc(`salons/${SALON}`).get()).data()?.status).toBe("active");
+  });
+  it.each([null, auth("ordinary-owner"), auth("unknown-user")])(
+    "rejects unprivileged changes %#",
+    async (identity) => {
+      await expect(manage({}, identity)).rejects.toMatchObject({
+        code: identity ? "permission-denied" : "unauthenticated",
+      });
+    },
+  );
+  it("suspends and reactivates only the confirmed salon, with a receipt and audit", async () => {
+    await expect(manage()).resolves.toMatchObject({ changed: true, status: "suspended" });
+    expect((await db.doc(`salons/${SALON}`).get()).data()).toMatchObject({
+      status: "suspended",
+      isActive: false,
+      customerCount: 99,
+    });
+    expect((await db.doc(`salons/${OTHER}`).get()).data()?.isActive).toBe(true);
+    expect((await db.doc("customers/customer-a").get()).data()?.points).toBe(7);
+    expect((await db.collection("audit_events").get()).size).toBe(1);
+    await expect(manage()).resolves.toMatchObject({ changed: true, status: "suspended" });
+    expect((await db.collection("audit_events").get()).size).toBe(1);
+    await expect(
+      manage({
+        action: "reactivate_salon",
+        expectedStatus: "suspended",
+        operationId: "supervision-operation-0002",
+      }),
+    ).resolves.toMatchObject({ status: "active" });
+  });
+  it.each([{ confirmedSalonName: "Wrong salon" }, { expectedStatus: "suspended" }])(
+    "refuses a stale or mismatched confirmation %#",
+    async (data) => {
+      await expect(manage(data)).rejects.toMatchObject({ code: "failed-precondition" });
+    },
+  );
+  it.each([
+    { action: "delete_salon" },
+    { action: "set_points" },
+    { reason: "" },
+    { operationId: "short" },
+    { salonId: "a/b" },
+  ])("never accepts deletion, point changes or malformed controls %#", async (data) => {
+    await expect(manage(data)).rejects.toMatchObject({ code: "invalid-argument" });
+  });
+  it("requires recent login and rechecks revoked grants before receipt replay", async () => {
+    await expect(manage({}, { uid: ADMIN, token: { auth_time: 1 } })).rejects.toMatchObject({
+      details: { errorCode: "RECENT_LOGIN_REQUIRED" },
+    });
+    await manage();
+    await db.doc(`system_admin_access/${ADMIN}`).update({ isActive: false });
+    await expect(manage()).rejects.toMatchObject({ code: "permission-denied" });
+  });
+  it("rejects a reused operation id with another action", async () => {
+    await manage();
+    await expect(
+      manage({ action: "reactivate_salon", expectedStatus: "suspended" }),
+    ).rejects.toMatchObject({ code: "already-exists" });
+  });
+  it("cannot reactivate a salon pending deletion", async () => {
+    await db.doc(`salons/${SALON}`).update({ status: "pending_deletion" });
+    await expect(
+      manage({ action: "reactivate_salon", expectedStatus: "pending_deletion" }),
+    ).rejects.toMatchObject({ code: "failed-precondition" });
+  });
+  it("cancels only a pending request atomically, without points, reward or photo deletion", async () => {
+    await seedPendingRequest();
+    const input = { action: "cancel_point_request", requestId: "queue-request-a" };
+    await expect(manage(input)).resolves.toMatchObject({
+      changed: true,
+      requestId: "queue-request-a",
+    });
+    expect((await db.doc("point_requests/queue-request-a").get()).data()).toMatchObject({
+      status: "rejected",
+      photoUrls: ["PRIVATE_PHOTO_FIXTURE"],
+    });
+    expect((await db.doc("chair_sessions/queue-request-a").get()).data()).toMatchObject({
+      status: "cancelled",
+      isOpen: false,
+    });
+    expect((await db.doc(`active_service_sessions/${pointerId()}`).get()).exists).toBe(false);
+    expect((await db.doc("customers/customer-a").get()).data()?.points).toBe(7);
+    expect((await db.doc("reward_history/reward-a").get()).data()?.status).toBe("unused");
+    await expect(manage(input)).resolves.toMatchObject({ changed: true });
+    expect((await db.collection("audit_events").get()).size).toBe(1);
+  });
+  it.each([
+    ["point_requests/queue-request-a", { salonId: OTHER }],
+    ["point_requests/queue-request-a", { status: "approved" }],
+    ["chair_sessions/queue-request-a", { status: "completed" }],
+    ["chair_sessions/queue-request-a", { customerId: "customer-b" }],
+  ])(
+    "refuses requests processed concurrently or belonging to another tenant %#",
+    async (path, patch) => {
+      await seedPendingRequest();
+      await db.doc(path).update(patch);
+      await expect(
+        manage({ action: "cancel_point_request", requestId: "queue-request-a" }),
+      ).rejects.toMatchObject({ code: "failed-precondition" });
+      expect((await db.collection("audit_events").get()).empty).toBe(true);
+    },
+  );
+  it("preserves an active pointer now referencing another session", async () => {
+    await seedPendingRequest();
+    await db.doc(`active_service_sessions/${pointerId()}`).update({ sessionId: "new-session" });
+    await manage({ action: "cancel_point_request", requestId: "queue-request-a" });
+    expect((await db.doc(`active_service_sessions/${pointerId()}`).get()).data()?.sessionId).toBe(
+      "new-session",
+    );
+  });
+});

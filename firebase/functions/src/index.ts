@@ -117,6 +117,7 @@ import {
 import { auditEventData } from "./domains/audit/auditEvent";
 import { createReturningCustomerPointAward } from "./domains/points/returningCustomerPoints";
 import { createAdminSupport } from "./domains/admin/support";
+import { createAdminSupervision } from "./domains/admin/supervision";
 import {
   PHOTO_UPLOAD_MAX_BYTES,
   PHOTO_UPLOAD_OPERATION_TTL_MS,
@@ -8300,6 +8301,12 @@ export const getSystemAdminAccess = onCall({ ...functionOptions, maxInstances: 3
 export const getSystemAdminSalonDiagnostics = onCall({ ...functionOptions, maxInstances: 3 }, adminSupport.diagnose);
 export const repairSystemAdminSalon = onCall({ ...functionOptions, maxInstances: 3 }, adminSupport.repair);
 
+const adminSupervision = createAdminSupervision(db, (uid, mode) =>
+  enforceAuthenticatedRateLimit(mode === "read" ? "adminSupportRead" : "adminSupportRepair", uid, "__system__"),
+);
+export const getSystemAdminSalonOperations = onCall({ ...functionOptions, maxInstances: 3 }, adminSupervision.operations);
+export const manageSystemAdminSalon = onCall({ ...functionOptions, maxInstances: 3 }, adminSupervision.manage);
+
 export const getSystemAdminOverview = onCall(functionOptions, async (request) => {
   const uid = currentUid(request.auth);
   await assertSystemAdmin(uid);
@@ -8634,10 +8641,12 @@ export const listSystemAdminAuditEvents = onCall(functionOptions, async (request
   await assertSystemAdmin(uid);
   const salonId = optionalLimitedString(request.data?.salonId, "salonId", 128);
   const pageSize = Math.min(Math.max(Math.floor(Number(request.data?.pageSize ?? 30)), 10), 100);
-  const snapshot = await db
-    .collection("audit_events")
+  const auditQuery = salonId
+    ? db.collection("audit_events").where("salonId", "==", salonId)
+    : db.collection("audit_events");
+  const snapshot = await auditQuery
     .orderBy("createdAt", "desc")
-    .limit(salonId ? Math.min(pageSize * 4, 300) : pageSize)
+    .limit(pageSize)
     .get();
   const events = snapshot.docs
     .filter((eventDoc) => !salonId || eventDoc.data().salonId === salonId)

@@ -8,6 +8,8 @@ export function adminErrorMessage(error: unknown): string {
   } | null;
   const code = String(value?.code || value?.message || "").replace(/^functions\//, "");
   const detail = value?.details?.errorCode;
+  if (detail === "ADMIN_SUPERVISION_DISABLED")
+    return "Máy chủ chưa bật khóa/mở salon và hủy yêu cầu. Bạn vẫn có thể xem dữ liệu.";
   if (detail === "RECENT_LOGIN_REQUIRED")
     return "Phiên xác nhận đã cũ. Hãy đăng xuất và đăng nhập lại trước khi sửa.";
   if (detail === "ADMIN_PREVIEW_STALE")
