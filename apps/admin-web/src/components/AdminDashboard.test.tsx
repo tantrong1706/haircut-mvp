@@ -89,6 +89,25 @@ beforeEach(() => {
 });
 
 describe("complete operational overview", () => {
+  it("filters the audit through the server rather than only the last globally loaded rows", async () => {
+    const actor = userEvent.setup(); render(<AdminDashboard user={user} />);
+    await actor.click(screen.getByRole("button", { name: "Nhật ký", exact: true }));
+    await actor.selectOptions(await screen.findByLabelText("Nhật ký của salon"), "salon-a");
+    await waitFor(() => expect(mock.auditEvents).toHaveBeenLastCalledWith("salon-a"));
+  });
+  it("does not show an earlier salon's late audit response under a newly selected salon", async () => {
+    let finish!: (value: unknown) => void;
+    mock.salons.mockResolvedValue({ salons: [salon, { ...salon, id: "salon-b", name: "Salon B" }], nextCursor: null });
+    mock.auditEvents.mockImplementation((id?: string) => id === "salon-a" ? new Promise(resolve => { finish = resolve; }) : Promise.resolve({ events: [] }));
+    const actor = userEvent.setup(); render(<AdminDashboard user={user} />);
+    await actor.click(screen.getByRole("button", { name: "Nhật ký", exact: true }));
+    const filter = await screen.findByLabelText("Nhật ký của salon");
+    await actor.selectOptions(filter, "salon-a");
+    await actor.selectOptions(filter, "salon-b");
+    await act(async () => finish({ events: [{ id: "late-event", salonId: "salon-a", action: "admin.support.reconcile_customer_count", createdAtMs: 1000 }] }));
+    expect(screen.queryByText("Salon: salon-a")).not.toBeInTheDocument();
+    expect(mock.auditEvents).toHaveBeenLastCalledWith("salon-b");
+  });
   it("shows pending-deletion salons and separate owner/staff counts", async () => {
     render(<AdminDashboard user={user} />);
     expect(await screen.findByText("Salon chờ xóa")).toBeVisible();
