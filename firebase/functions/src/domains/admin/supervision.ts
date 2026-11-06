@@ -22,7 +22,7 @@ function text(value: unknown, min: number, max: number) {
     typeof value !== "string" ||
     value.trim().length < min ||
     value.trim().length > max ||
-    /[\u0000-\u001f]/u.test(value)
+    [...value].some((character) => character.charCodeAt(0) < 32)
   )
     throw new HttpsError("invalid-argument", "Tên xác nhận hoặc lý do không hợp lệ");
   return value.trim();
@@ -140,7 +140,7 @@ export function createAdminSupervision(
           cancellable: valid && status !== "pending_deletion",
         };
       }),
-      nextCursor: page.size > size ? rows.at(-1)!.id : null,
+      nextCursor: page.size > size ? rows[rows.length - 1]!.id : null,
     };
   }
   async function manage(request: Request) {

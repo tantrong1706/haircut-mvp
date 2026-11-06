@@ -30,6 +30,10 @@ export function SalonOperationsPanel({
   salonId: string;
   onChanged: () => void;
 }) {
+  return <SalonOperationsState key={salonId} salonId={salonId} onChanged={onChanged} />;
+}
+
+function SalonOperationsState({ salonId, onChanged }: { salonId: string; onChanged: () => void }) {
   const [data, setData] = useState<AdminSalonOperations | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -50,13 +54,6 @@ export function SalonOperationsPanel({
   }, []);
   useEffect(() => {
     let cancelled = false;
-    generation.current++;
-    pageBusy.current = false;
-    setPaging(false);
-    setData(null);
-    setDraft(null);
-    setError("");
-    setLoading(true);
     void adminApi
       .salonOperations(salonId)
       .then((result) => {
@@ -71,9 +68,18 @@ export function SalonOperationsPanel({
       });
     return () => {
       cancelled = true;
-      generation.current++;
     };
   }, [salonId, revision]);
+  function reload() {
+    generation.current++;
+    pageBusy.current = false;
+    setPaging(false);
+    setData(null);
+    setDraft(null);
+    setError("");
+    setLoading(true);
+    setRevision((value) => value + 1);
+  }
   async function loadMore() {
     if (!data?.nextCursor || pageBusy.current || writeBusy.current) return;
     const current = generation.current,
@@ -127,7 +133,7 @@ export function SalonOperationsPanel({
           ? "Đã thực hiện và ghi nhật ký. Đang tải lại dữ liệu."
           : "Không có thay đổi cần ghi. Đang tải lại dữ liệu.",
       );
-      setRevision((value) => value + 1);
+      reload();
       onChanged();
     } catch (caught) {
       if (alive.current && generation.current === current) setError(adminErrorMessage(caught));
@@ -145,11 +151,7 @@ export function SalonOperationsPanel({
             <ClipboardList aria-hidden="true" /> Yêu cầu chờ & trạng thái salon
           </h3>
         </div>
-        <button
-          className="secondary"
-          disabled={loading || saving || paging}
-          onClick={() => setRevision((value) => value + 1)}
-        >
+        <button className="secondary" disabled={loading || saving || paging} onClick={reload}>
           <RefreshCcw aria-hidden="true" /> Tải lại yêu cầu
         </button>
       </div>

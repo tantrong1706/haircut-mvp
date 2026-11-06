@@ -16,6 +16,7 @@ import {
   type RepairAction,
 } from "../services/adminApi";
 import { adminErrorMessage, makeRepairInput } from "../services/adminSupport";
+import { SalonOperationsPanel } from "./SalonOperationsPanel";
 import {
   diagnosticSummary,
   formatDiagnosticReport,
@@ -46,6 +47,7 @@ export function SalonSupportPanel({
   const [saving, setSaving] = useState(false);
   const [copyMessage, setCopyMessage] = useState("");
   const [showCopyFallback, setShowCopyFallback] = useState(false);
+  const [showOperations, setShowOperations] = useState(false);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const alive = useRef(true);
   useEffect(() => {
@@ -172,12 +174,33 @@ export function SalonSupportPanel({
             ánh các quy tắc bên dưới, không thay thế nhật ký hạ tầng.
           </p>
           <div className="diagnostic-tools">
+            <button
+              className="secondary"
+              disabled={saving}
+              aria-expanded={showOperations}
+              aria-controls={`salon-operations-${salon.id}`}
+              onClick={() => setShowOperations((value) => !value)}
+            >
+              Yêu cầu chờ và quản lý salon
+            </button>
             <button className="secondary" disabled={saving} onClick={() => void copyReport()}>
               <Copy aria-hidden="true" />
               Sao chép kết quả
             </button>
             <span className="quiet-label">Không kèm tên khách, ảnh, token hoặc mã quà</span>
           </div>
+          {showOperations ? (
+            <div id={`salon-operations-${salon.id}`}>
+              <SalonOperationsPanel
+                salonId={salon.id}
+                onChanged={() => {
+                  setMessage("Đã thực hiện thao tác quản trị. Đang đối chiếu lại salon.");
+                  refresh();
+                  onRepaired();
+                }}
+              />
+            </div>
+          ) : null}
           {copyMessage ? (
             <p role="status" className="copy-feedback">
               {copyMessage}

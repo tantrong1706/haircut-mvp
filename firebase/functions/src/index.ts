@@ -8641,10 +8641,12 @@ export const listSystemAdminAuditEvents = onCall(functionOptions, async (request
   await assertSystemAdmin(uid);
   const salonId = optionalLimitedString(request.data?.salonId, "salonId", 128);
   const pageSize = Math.min(Math.max(Math.floor(Number(request.data?.pageSize ?? 30)), 10), 100);
-  const snapshot = await db
-    .collection("audit_events")
+  const auditQuery = salonId
+    ? db.collection("audit_events").where("salonId", "==", salonId)
+    : db.collection("audit_events");
+  const snapshot = await auditQuery
     .orderBy("createdAt", "desc")
-    .limit(salonId ? Math.min(pageSize * 4, 300) : pageSize)
+    .limit(pageSize)
     .get();
   const events = snapshot.docs
     .filter((eventDoc) => !salonId || eventDoc.data().salonId === salonId)

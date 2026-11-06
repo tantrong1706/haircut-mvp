@@ -35,6 +35,148 @@ const renderPanel = (onChanged = vi.fn()) =>
   render(<SalonOperationsPanel salonId="salon-a" onChanged={onChanged} />);
 
 describe("salon supervision and confirmed controls", () => {
+  async function confirmAction(actor: ReturnType<typeof userEvent.setup>) {
+    await actor.type(screen.getByLabelText("Tên salon xác nhận thao tác"), "Salon A");
+    await actor.type(
+      screen.getByLabelText("Lý do thao tác"),
+      "Đã đối chiếu phạm vi trên dữ liệu thử",
+    );
+    await actor.click(screen.getByRole("checkbox", { name: /Tôi hiểu phạm vi thao tác/ }));
+    await actor.click(screen.getByRole("button", { name: "Xác nhận thao tác" }));
+  }
+  it("loads additional pages without duplicating rows and stops repeated cursors", async () => {
+    mock.salonOperations
+      .mockResolvedValueOnce({ ...snapshot, nextCursor: "request-a", totalPending: 2 })
+      .mockResolvedValueOnce({
+        ...snapshot,
+        nextCursor: "request-a",
+        totalPending: 2,
+        requests: [
+          snapshot.requests[0],
+          { ...snapshot.requests[0], id: "request-b", state: "unknown" },
+        ],
+      });
+    const actor = userEvent.setup();
+    renderPanel();
+    await actor.click(await screen.findByRole("button", { name: "Tải thêm yêu cầu" }));
+    expect(await screen.findByText("Chưa rõ hạn chờ")).toBeVisible();
+    expect(screen.getAllByRole("button", { name: "Hủy yêu cầu request-a" })).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "Tải thêm yêu cầu" })).not.toBeInTheDocument();
+    expect(mock.salonOperations).toHaveBeenLastCalledWith("salon-a", "request-a");
+  });
+  it("keeps existing rows when another page fails, allowing an explicit retry", async () => {
+    mock.salonOperations
+      .mockResolvedValueOnce({ ...snapshot, nextCursor: "request-a" })
+      .mockRejectedValueOnce({ code: "functions/unavailable" })
+      .mockResolvedValue(snapshot);
+    const actor = userEvent.setup();
+    renderPanel();
+    await actor.click(await screen.findByRole("button", { name: "Tải thêm yêu cầu" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Chưa tải được trang tiếp theo");
+    expect(screen.getByRole("button", { name: "Hủy yêu cầu request-a" })).toBeVisible();
+    await actor.click(screen.getByRole("button", { name: "Tải thêm yêu cầu" }));
+    await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+  });
+  it("does not append another tenant's response from a later page", async () => {
+    mock.salonOperations
+      .mockResolvedValueOnce({ ...snapshot, nextCursor: "request-a" })
+      .mockResolvedValueOnce({
+        ...snapshot,
+        salonId: "salon-b",
+        requests: [{ ...snapshot.requests[0], id: "private-other-request" }],
+      });
+    const actor = userEvent.setup();
+    renderPanel();
+    await actor.click(await screen.findByRole("button", { name: "Tải thêm yêu cầu" }));
+    await screen.findByRole("alert");
+    expect(screen.queryByText("private-other-request")).not.toBeInTheDocument();
+  });
+  it("reactivates only a suspended salon and explains that requests are not resurrected", async () => {
+    mock.salonOperations.mockResolvedValue({ ...snapshot, status: "suspended" });
+    mock.manageSalon.mockResolvedValue({ changed: false });
+    const actor = userEvent.setup();
+    renderPanel();
+    await actor.click(await screen.findByRole("button", { name: "Mở lại salon" }));
+    expect(screen.getByRole("region", { name: "Xem trước thao tác quản trị" })).toHaveTextContent(
+      "Không khôi phục yêu cầu đã hủy",
+    );
+    await confirmAction(actor);
+    expect(await screen.findByText(/Không có thay đổi cần ghi/)).toBeVisible();
+    expect(mock.manageSalon).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "reactivate_salon", expectedStatus: "suspended" }),
+    );
+  });
+  it("retains the same operation id when retrying a transport failure", async () => {
+    mock.manageSalon
+      .mockRejectedValueOnce({ code: "functions/unavailable" })
+      .mockResolvedValueOnce({ changed: true });
+    const actor = userEvent.setup(),
+      changed = vi.fn();
+    renderPanel(changed);
+    await actor.click(await screen.findByRole("button", { name: "Khóa salon" }));
+    await confirmAction(actor);
+    await screen.findByRole("alert");
+    expect(changed).not.toHaveBeenCalled();
+    const first = mock.manageSalon.mock.calls[0][0];
+    await actor.click(screen.getByRole("button", { name: "Xác nhận thao tác" }));
+    await waitFor(() => expect(changed).toHaveBeenCalledOnce());
+    expect(mock.manageSalon.mock.calls[1][0]).toEqual(first);
+  });
+  it("locks confirmation and refresh while a write is pending", async () => {
+    let finish!: (value: unknown) => void;
+    mock.manageSalon.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const actor = userEvent.setup();
+    renderPanel();
+    await actor.click(await screen.findByRole("button", { name: "Khóa salon" }));
+    await confirmAction(actor);
+    expect(screen.getByRole("button", { name: "Đang thực hiện…" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Tải lại yêu cầu" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Đóng, không thực hiện" })).toBeDisabled();
+    await act(async () => finish({ changed: true }));
+    expect(mock.manageSalon).toHaveBeenCalledOnce();
+  });
+  it("does not run old completion callbacks after the operator changes salons", async () => {
+    let finish!: (value: unknown) => void;
+    mock.manageSalon.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const actor = userEvent.setup(),
+      changed = vi.fn();
+    const view = renderPanel(changed);
+    await actor.click(await screen.findByRole("button", { name: "Khóa salon" }));
+    await confirmAction(actor);
+    view.unmount();
+    await act(async () => finish({ changed: true }));
+    expect(changed).not.toHaveBeenCalled();
+  });
+  it("retries an initial read and ignores a pending old page after refresh", async () => {
+    let finish!: (value: unknown) => void;
+    mock.salonOperations
+      .mockRejectedValueOnce(new Error("fixture offline"))
+      .mockResolvedValueOnce({ ...snapshot, nextCursor: "request-a" })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      );
+    const actor = userEvent.setup();
+    const view = renderPanel();
+    await screen.findByRole("alert");
+    await actor.click(screen.getByRole("button", { name: "Tải lại yêu cầu" }));
+    await actor.click(await screen.findByRole("button", { name: "Tải thêm yêu cầu" }));
+    view.unmount();
+    await act(async () => finish(snapshot));
+    expect(mock.manageSalon).not.toHaveBeenCalled();
+  });
   it("shows queue scope and expired rows separately without claiming they were automatically fixed", async () => {
     mock.salonOperations.mockResolvedValue({
       ...snapshot,

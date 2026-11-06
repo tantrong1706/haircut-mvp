@@ -15,6 +15,7 @@ export default defineConfig({
         "src/components/AdminSections.tsx",
         "src/components/SalonDirectory.tsx",
         "src/components/SupportGuide.tsx",
+        "src/components/SalonOperationsPanel.tsx",
       ],
       reporter: ["text", "json-summary"],
       thresholds: { lines: 80, statements: 80, functions: 80, branches: 80 },

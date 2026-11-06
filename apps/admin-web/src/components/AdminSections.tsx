@@ -40,7 +40,9 @@ export function Overview({
     ["Tổng số salon", overview.salons.total, Building2],
     ["Salon hoạt động", overview.salons.active, Building2],
     ["Salon đang khóa", overview.salons.suspended, CirclePause],
-    ["Chủ salon và nhân viên", overview.users.owners + overview.users.staff, Users],
+    ["Salon chờ xóa", overview.salons.pendingDeletion, ClipboardCheck],
+    ["Chủ salon", overview.users.owners, Users],
+    ["Nhân viên", overview.users.staff, Users],
     ["Yêu cầu điểm chờ", overview.operations.pendingPointRequests, Activity],
     ["Lượt đang mở", overview.operations.openSessions, Gauge],
   ] as const;
@@ -55,6 +57,10 @@ export function Overview({
           </article>
         ))}
       </section>
+      <p className="overview-data-note">
+        Số yêu cầu chờ bao gồm yêu cầu hết hạn chưa được đóng. Mở từng salon để đối chiếu hạn chờ và
+        lượt cắt trước khi xử lý. Số hồ sơ chủ/thợ không phải số người đang online.
+      </p>
       <section className="overview-workbench surface">
         <div>
           <p className="eyebrow">Bắt đầu xử lý</p>
@@ -71,8 +77,8 @@ export function Overview({
           <ClipboardCheck aria-hidden="true" />
           <h3>Công cụ hỗ trợ có giới hạn</h3>
           <p>
-            Chỉ đồng bộ bộ đếm khách hoặc gỡ liên kết lượt cũ được máy chủ cho phép. Không sửa điểm,
-            quà hay lịch sử.
+            Đối chiếu bộ đếm, liên kết lượt, trạng thái salon và yêu cầu chờ. Chỉ thao tác máy chủ
+            cho phép mới được xác nhận; không sửa điểm, quà hay xóa lịch sử.
           </p>
           <span className="quiet-label">Có xem trước · Có xác nhận · Có nhật ký</span>
         </div>

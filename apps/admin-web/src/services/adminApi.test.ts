@@ -29,6 +29,16 @@ describe("adminApi", () => {
       "auditEvents",
       "diagnostics",
       "repair",
+      "salonOperations",
+      "manageSalon",
     ]);
+  });
+  it("scopes pending requests to one salon and one bounded page", async () => {
+    await adminApi.salonOperations("salon-a", "request-cursor");
+    expect(mockedCall).toHaveBeenCalledWith("getSystemAdminSalonOperations", {
+      salonId: "salon-a",
+      cursor: "request-cursor",
+      pageSize: 50,
+    });
   });
 });

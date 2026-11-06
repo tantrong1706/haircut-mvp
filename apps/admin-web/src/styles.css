@@ -1374,3 +1374,108 @@ button.danger {
     animation: none !important;
   }
 }
+
+.overview-data-note {
+  margin: -8px 0 24px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.65;
+}
+.salon-operations {
+  margin: 24px 0;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #ffffff;
+}
+.salon-operations h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.salon-operations svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+.operation-list {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0;
+}
+.operation-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--line);
+}
+.operation-list li > div {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.operation-list code {
+  overflow-wrap: anywhere;
+}
+.operation-list small {
+  color: var(--muted);
+  line-height: 1.6;
+}
+.operation-list .state-pill {
+  justify-self: start;
+}
+.management-preview {
+  margin-top: 18px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.management-preview h4 {
+  margin: 0;
+  font-size: 17px;
+}
+.management-preview p {
+  font-size: 14px;
+  line-height: 1.65;
+}
+.management-preview form {
+  display: grid;
+  gap: 16px;
+}
+.management-preview label {
+  display: grid;
+  gap: 8px;
+  font-size: 14px;
+}
+.management-preview textarea {
+  min-height: 90px;
+  resize: vertical;
+}
+.management-preview .confirmation-check {
+  display: flex;
+  align-items: start;
+  line-height: 1.6;
+}
+.management-preview .confirmation-check input {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+}
+@media (max-width: 600px) {
+  .salon-operations {
+    padding: 14px;
+  }
+  .salon-operations .section-heading,
+  .operation-list li {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .management-preview {
+    padding: 14px;
+  }
+  .management-preview .button-row {
+    flex-direction: column;
+  }
+}
