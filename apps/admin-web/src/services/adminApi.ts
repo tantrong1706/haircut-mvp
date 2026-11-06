@@ -58,6 +58,36 @@ export type AdminRepairInput = {
   expectedSessionId?: string;
 };
 
+export type AdminManagementAction = "suspend_salon" | "reactivate_salon" | "cancel_point_request";
+export type AdminSalonOperations = {
+  salonId: string;
+  salonName: string;
+  status: SalonStatus;
+  checkedAtMs: number;
+  writesEnabled: boolean;
+  totalPending: number;
+  requests: Array<{
+    id: string;
+    sessionId: string;
+    branchId: string;
+    branchName: string;
+    state: "waiting" | "expired" | "inconsistent" | "unknown";
+    cancellable: boolean;
+    createdAtMs: number | null;
+    expiresAtMs: number | null;
+  }>;
+  nextCursor: string | null;
+};
+export type AdminManagementInput = {
+  salonId: string;
+  action: AdminManagementAction;
+  expectedStatus: SalonStatus;
+  confirmedSalonName: string;
+  reason: string;
+  operationId: string;
+  requestId?: string;
+};
+
 export const adminApi = {
   access: () =>
     callAdminFunction<Record<string, never>, { authorized: boolean; repairsEnabled: boolean }>(
@@ -90,4 +120,14 @@ export const adminApi = {
       AdminRepairInput,
       { changed: boolean; salonId: string; action: RepairAction; operationId: string }
     >("repairSystemAdminSalon", input),
+  salonOperations: (salonId: string, cursor?: string) =>
+    callAdminFunction<{ salonId: string; cursor?: string; pageSize: number }, AdminSalonOperations>(
+      "getSystemAdminSalonOperations",
+      { salonId, cursor, pageSize: 50 },
+    ),
+  manageSalon: (input: AdminManagementInput) =>
+    callAdminFunction<AdminManagementInput, { changed: boolean; operationId: string }>(
+      "manageSystemAdminSalon",
+      input,
+    ),
 };

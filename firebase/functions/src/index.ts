@@ -117,6 +117,7 @@ import {
 import { auditEventData } from "./domains/audit/auditEvent";
 import { createReturningCustomerPointAward } from "./domains/points/returningCustomerPoints";
 import { createAdminSupport } from "./domains/admin/support";
+import { createAdminSupervision } from "./domains/admin/supervision";
 import {
   PHOTO_UPLOAD_MAX_BYTES,
   PHOTO_UPLOAD_OPERATION_TTL_MS,
@@ -8299,6 +8300,12 @@ const adminSupport = createAdminSupport(db, (uid, mode) =>
 export const getSystemAdminAccess = onCall({ ...functionOptions, maxInstances: 3 }, adminSupport.access);
 export const getSystemAdminSalonDiagnostics = onCall({ ...functionOptions, maxInstances: 3 }, adminSupport.diagnose);
 export const repairSystemAdminSalon = onCall({ ...functionOptions, maxInstances: 3 }, adminSupport.repair);
+
+const adminSupervision = createAdminSupervision(db, (uid, mode) =>
+  enforceAuthenticatedRateLimit(mode === "read" ? "adminSupportRead" : "adminSupportRepair", uid, "__system__"),
+);
+export const getSystemAdminSalonOperations = onCall({ ...functionOptions, maxInstances: 3 }, adminSupervision.operations);
+export const manageSystemAdminSalon = onCall({ ...functionOptions, maxInstances: 3 }, adminSupervision.manage);
 
 export const getSystemAdminOverview = onCall(functionOptions, async (request) => {
   const uid = currentUid(request.auth);
