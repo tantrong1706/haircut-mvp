@@ -110,6 +110,9 @@ export function formatDiagnosticReport(data: AdminDiagnostics) {
   ].join("\n");
 }
 export function auditActionLabel(action: string) {
+  if (action === "admin.supervision.suspend_salon") return "Khóa salon";
+  if (action === "admin.supervision.reactivate_salon") return "Mở lại salon";
+  if (action === "admin.supervision.cancel_point_request") return "Hủy yêu cầu tích điểm";
   if (action === "admin.support.reconcile_customer_count") return "Đồng bộ bộ đếm khách";
   if (action === "admin.support.clear_stale_session_pointer") return "Gỡ liên kết lượt cũ";
   return "Thao tác quản trị";

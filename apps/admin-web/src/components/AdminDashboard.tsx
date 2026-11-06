@@ -40,6 +40,9 @@ export function AdminDashboard({ user }: { user: User }) {
   const [salons, setSalons] = useState<AdminSalon[] | null>(null);
   const [features, setFeatures] = useState<SystemFeatures | null>(null);
   const [auditEvents, setAuditEvents] = useState<AdminAuditEvent[] | null>(null);
+  const [auditSalonId, setAuditSalonId] = useState("");
+  const [auditLoading, setAuditLoading] = useState(false);
+  const auditGeneration = useRef(0);
   const [loading, setLoading] = useState(true);
   const [errors, setErrors] = useState<Partial<Record<AdminTab, string>>>({});
   const [revision, setRevision] = useState(0);
@@ -56,6 +59,9 @@ export function AdminDashboard({ user }: { user: User }) {
     };
   }, []);
   const refresh = () => {
+    auditGeneration.current++;
+    setAuditSalonId("");
+    setAuditLoading(false);
     pageGeneration.current++;
     paging.current = false;
     setLoadingMore(false);
@@ -71,6 +77,7 @@ export function AdminDashboard({ user }: { user: User }) {
 
   useEffect(() => {
     let cancelled = false;
+    const auditRequest = ++auditGeneration.current;
     const failure = (section: AdminTab, prefix: string) => (caught: unknown) => {
       if (!cancelled)
         setErrors((previous) => ({
@@ -103,9 +110,12 @@ export function AdminDashboard({ user }: { user: User }) {
       adminApi
         .auditEvents()
         .then((result) => {
-          if (!cancelled) setAuditEvents(result.events);
+          if (!cancelled && auditRequest === auditGeneration.current) setAuditEvents(result.events);
         })
-        .catch(failure("audit", "Chưa tải được nhật ký")),
+        .catch((caught) => {
+          if (auditRequest === auditGeneration.current)
+            failure("audit", "Chưa tải được nhật ký")(caught);
+        }),
     ]).finally(() => {
       if (!cancelled) setLoading(false);
     });
@@ -113,6 +123,26 @@ export function AdminDashboard({ user }: { user: User }) {
       cancelled = true;
     };
   }, [revision]);
+
+  async function filterAudit(salonId: string) {
+    const current = ++auditGeneration.current;
+    setAuditSalonId(salonId);
+    setAuditLoading(true);
+    setAuditEvents(null);
+    setErrors((previous) => ({ ...previous, audit: undefined }));
+    try {
+      const result = await adminApi.auditEvents(salonId || undefined);
+      if (alive.current && current === auditGeneration.current) setAuditEvents(result.events);
+    } catch (caught) {
+      if (alive.current && current === auditGeneration.current)
+        setErrors((previous) => ({
+          ...previous,
+          audit: `Chưa tải được nhật ký. ${adminErrorMessage(caught)}`,
+        }));
+    } finally {
+      if (alive.current && current === auditGeneration.current) setAuditLoading(false);
+    }
+  }
 
   async function loadMore() {
     if (!nextCursor || paging.current) return;
@@ -277,7 +307,15 @@ export function AdminDashboard({ user }: { user: User }) {
           </>
         ) : null}
         {tab === "features" && features ? <FeaturePanel features={features} /> : null}
-        {tab === "audit" && auditEvents ? <AuditPanel events={auditEvents} /> : null}
+        {tab === "audit" ? (
+          <AuditPanel
+            events={auditEvents}
+            salons={salons || []}
+            salonId={auditSalonId}
+            loading={auditLoading || loading}
+            onFilter={(id) => void filterAudit(id)}
+          />
+        ) : null}
         {tab === "support" ? (
           <SupportGuide projectId={firebaseProjectId} onOpenSalons={() => setTab("salons")} />
         ) : null}

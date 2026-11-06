@@ -8,7 +8,7 @@ import {
   Users,
 } from "lucide-react";
 import type { SystemFeatures } from "@haircut/contracts";
-import type { AdminAuditEvent, AdminOverview } from "../services/adminApi";
+import type { AdminAuditEvent, AdminOverview, AdminSalon } from "../services/adminApi";
 import { ADMIN_FEATURE_LABELS, auditActionLabel } from "../services/adminPresentation";
 
 export function SupportSteps() {
@@ -131,7 +131,19 @@ export function FeaturePanel({ features }: { features: SystemFeatures }) {
   );
 }
 
-export function AuditPanel({ events }: { events: AdminAuditEvent[] }) {
+export function AuditPanel({
+  events,
+  salons,
+  salonId,
+  loading,
+  onFilter,
+}: {
+  events: AdminAuditEvent[] | null;
+  salons: AdminSalon[];
+  salonId: string;
+  loading: boolean;
+  onFilter: (id: string) => void;
+}) {
   return (
     <section className="content-section">
       <div className="section-heading">
@@ -142,13 +154,29 @@ export function AuditPanel({ events }: { events: AdminAuditEvent[] }) {
             Tối đa 50 bản ghi được tải. Dùng mã salon, thời điểm và mã thao tác để đối chiếu.
           </p>
         </div>
-        <span className="quiet-label">{events.length} bản ghi</span>
+        <span className="quiet-label">{events ? `${events.length} bản ghi` : "Chưa tải xong"}</span>
       </div>
+      <label className="audit-filter">
+        Nhật ký của salon
+        <select value={salonId} onChange={(event) => onFilter(event.target.value)}>
+          <option value="">Toàn hệ thống</option>
+          {salons.map((salon) => (
+            <option key={salon.id} value={salon.id}>
+              {salon.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <p className="muted">
+        Danh sách chọn gồm các salon đã tải. Nhật ký được lọc trên máy chủ; tối đa 50 sự kiện gần
+        nhất của phạm vi đã chọn, không phải toàn bộ lịch sử.
+      </p>
+      {loading ? <p role="status">Đang tải nhật ký…</p> : null}
       <div className="audit-list">
-        {events.length === 0 ? (
+        {events?.length === 0 && !loading ? (
           <p className="empty">Chưa có thao tác quản trị.</p>
         ) : (
-          events.map((event) => (
+          events?.map((event) => (
             <article key={event.id}>
               <span className="audit-dot" aria-hidden="true" />
               <div>
@@ -160,6 +188,7 @@ export function AuditPanel({ events }: { events: AdminAuditEvent[] }) {
                   <small>
                     {event.targetType} · {event.targetId}
                   </small>
+                  <small>Người thực hiện: {event.actorId || "Chưa rõ"}</small>
                 </details>
               </div>
               <time>{formatDate(event.createdAtMs)}</time>

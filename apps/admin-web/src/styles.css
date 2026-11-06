@@ -1381,6 +1381,12 @@ button.danger {
   font-size: 13px;
   line-height: 1.65;
 }
+.audit-filter {
+  display: grid;
+  gap: 8px;
+  max-width: 420px;
+  margin-bottom: 12px;
+}
 .salon-operations {
   margin: 24px 0;
   padding: 20px;

@@ -7,6 +7,58 @@ test.beforeEach(async ({ page }) => {
   );
 });
 
+test("selected salon operations require explicit confirmation and stay usable on mobile", async ({
+  page,
+}, info) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Salon", exact: true }).click();
+  await page.getByRole("button", { name: "Kiểm tra Salon A" }).click();
+  await page.getByRole("button", { name: "Yêu cầu chờ và quản lý salon" }).click();
+  await expect(page.getByText("Đã hết hạn chờ", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Hủy yêu cầu fixture-request-a" }).click();
+  await expect(page.getByRole("button", { name: "Xác nhận thao tác" })).toBeDisabled();
+  await page.getByLabel("Tên salon xác nhận thao tác").fill("Salon A");
+  await page.getByLabel("Lý do thao tác").fill("Hủy yêu cầu giả trong kiểm thử trình duyệt");
+  await page.getByRole("checkbox", { name: /Tôi hiểu phạm vi thao tác/ }).check();
+  await page.getByRole("button", { name: "Xác nhận thao tác" }).scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: info.outputPath("admin-supervision-confirmation.png"),
+    fullPage: true,
+  });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(
+    true,
+  );
+  const violations = await new AxeBuilder({ page }).analyze();
+  expect(violations.violations).toEqual([]);
+  await page.getByRole("button", { name: "Xác nhận thao tác" }).click();
+  await expect(page.getByText("Không có yêu cầu đang chờ.", { exact: true })).toBeVisible();
+  expect(
+    await page.evaluate(
+      () =>
+        (
+          window as typeof window & {
+            lastFixtureManagement?: { action: string; requestId: string };
+          }
+        ).lastFixtureManagement,
+    ),
+  ).toMatchObject({ action: "cancel_point_request", requestId: "fixture-request-a" });
+});
+
+test("queue failure and a disabled write capability fail closed", async ({ page }) => {
+  await page.goto("/?scenario=queue-offline");
+  await page.getByRole("button", { name: "Salon", exact: true }).click();
+  await page.getByRole("button", { name: "Kiểm tra Salon A" }).click();
+  await page.getByRole("button", { name: "Yêu cầu chờ và quản lý salon" }).click();
+  await expect(page.getByRole("alert")).toContainText("Chưa tải được yêu cầu");
+  await expect(page.getByText("Không có yêu cầu đang chờ.", { exact: true })).toHaveCount(0);
+  await page.goto("/?scenario=readonly");
+  await page.getByRole("button", { name: "Salon", exact: true }).click();
+  await page.getByRole("button", { name: "Kiểm tra Salon A" }).click();
+  await page.getByRole("button", { name: "Yêu cầu chờ và quản lý salon" }).click();
+  await expect(page.getByRole("button", { name: "Khóa salon", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Hủy yêu cầu fixture-request-a" })).toBeDisabled();
+});
+
 test("narrow Admin navigation fits and keeps every target usable at 320px", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 780 });
   await page.goto("/");
