@@ -62,6 +62,7 @@ test("Web barber: Phone login, dark pages, no narrow-screen overflow or serious 
   await page.getByRole("button", { name: "Gửi mã OTP" }).click();
   await page.getByLabel("Mã OTP").fill("123456");
   await page.getByRole("button", { name: "Xác nhận OTP" }).click();
+  await page.getByRole("checkbox", { name: /Cho phép salon.*ảnh/i }).check();
   await page.getByRole("button", { name: "Yêu cầu tích điểm" }).click();
   await expect(page.getByRole("status").filter({ hasText: "Chờ xác nhận điểm" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Thẻ thành viên" })).toBeVisible();

@@ -27,6 +27,8 @@ type Props = {
 };
 
 type AuthStatus = "initializing" | "signed_out" | "authenticated" | "error";
+const PHOTO_CONSENT_REQUIRED_MESSAGE =
+  "Vui lòng tích đồng ý cho salon chụp và lưu ảnh trước khi yêu cầu tích điểm. Nếu không đồng ý, bạn có thể nhờ nhân viên hỗ trợ.";
 
 export function WebCustomerEntryPage({ onReady }: Props) {
   const qr = useMemo(resolveInitialQr, []);
@@ -41,6 +43,7 @@ export function WebCustomerEntryPage({ onReady }: Props) {
   const [confirmation, setConfirmation] = useState<CustomerPhoneConfirmation | null>(null);
   const [busy, setBusy] = useState(false);
   const [allowPhoto, setAllowPhoto] = useState(false);
+  const photoChoice = useRef<HTMLInputElement>(null);
   const [error, setError] = useState("");
   const [resendSeconds, setResendSeconds] = useState(0);
   const [loadAttempt, setLoadAttempt] = useState(0);
@@ -198,6 +201,11 @@ export function WebCustomerEntryPage({ onReady }: Props) {
 
   async function checkIn() {
     if (!activeUid.current || busy || cooldownActive || checkinStarted.current) return;
+    if (!allowPhoto) {
+      setError(PHOTO_CONSENT_REQUIRED_MESSAGE);
+      photoChoice.current?.focus();
+      return;
+    }
     const generation = authGeneration.current;
     checkinStarted.current = true;
     setBusy(true);
@@ -375,15 +383,22 @@ export function WebCustomerEntryPage({ onReady }: Props) {
           <>
             <label className="photo-permission-choice">
               <input
+                ref={photoChoice}
                 type="checkbox"
                 checked={allowPhoto}
                 disabled={busy}
-                onChange={(event) => setAllowPhoto(event.target.checked)}
+                aria-describedby="qr-photo-consent-help"
+                onChange={(event) => {
+                  setAllowPhoto(event.target.checked);
+                  if (event.target.checked && error === PHOTO_CONSENT_REQUIRED_MESSAGE)
+                    setError("");
+                }}
               />
               <span>Cho phép salon chụp và lưu ảnh</span>
             </label>
-            <p className="muted">
-              Ảnh chỉ dùng trong hồ sơ phục vụ nội bộ.{" "}
+            <p className="muted" id="qr-photo-consent-help">
+              Cần đồng ý ảnh để gửi yêu cầu điểm mới từ QR. Ảnh chỉ dùng trong hồ sơ nội bộ; nếu
+              không đồng ý, bạn có thể nhờ nhân viên hỗ trợ.{" "}
               <a href="/privacy#photo-consent">Tìm hiểu về ảnh</a>.
             </p>
             <button

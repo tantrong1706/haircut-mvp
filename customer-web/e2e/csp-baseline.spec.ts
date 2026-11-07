@@ -63,6 +63,7 @@ test("baseline leaves Web OTP, session restore and account navigation usable", a
   await page.getByRole("button", { name: "Gửi mã OTP" }).click();
   await page.getByLabel("Mã OTP").fill("123456");
   await page.getByRole("button", { name: "Xác nhận OTP" }).click();
+  await page.getByRole("checkbox", { name: /Cho phép salon.*ảnh/i }).check();
   await page.getByRole("button", { name: "Yêu cầu tích điểm" }).click();
   await expect(page.getByRole("navigation", { name: "Điều hướng" })).toBeVisible();
   await page.reload();

@@ -43,7 +43,7 @@ describe("authenticated web customer platform", () => {
   it("keeps a 2-hour Web confirmation window without awarding points automatically", async () => {
     await seedSalon("salon-a", "branch-a");
     const checked = await checkInWebCustomer.run(
-      phoneRequest("uid-long-service", signedBranchQr("salon-a", "branch-a")),
+      checkinRequest("uid-long-service", signedBranchQr("salon-a", "branch-a")),
     );
     const point = (await db.doc(`point_requests/${checked.sessionId}`).get()).data()!;
     const chair = (await db.doc(`chair_sessions/${checked.sessionId}`).get()).data()!;
@@ -60,7 +60,7 @@ describe("authenticated web customer platform", () => {
       .doc("users/staff-a")
       .set({ salonId: "salon-a", role: "staff", isActive: true, branchIds: ["branch-a"] });
     const qr = signedBranchQr("salon-a", "branch-a");
-    const checked = await checkInWebCustomer.run(phoneRequest("uid-long-service", qr));
+    const checked = await checkInWebCustomer.run(checkinRequest("uid-long-service", qr));
     const pointRef = db.doc(`point_requests/${checked.sessionId}`);
     const point = (await pointRef.get()).data()!;
     const shifted = {
@@ -75,36 +75,27 @@ describe("authenticated web customer platform", () => {
     expect(await contextPoints(checked.customer.customerId)).toBe(1);
     expect((await db.collection("haircut_records").get()).size).toBe(1);
     await expect(
-      checkInWebCustomer.run(phoneRequest("uid-long-service", qr)),
+      checkInWebCustomer.run(checkinRequest("uid-long-service", qr)),
     ).rejects.toMatchObject({ code: "failed-precondition" });
   });
 
-  it("does not infer photo permission from a point request without a separate choice", async () => {
+  it("records explicit consent for the new request without requiring an uploaded photo", async () => {
     await seedSalon("salon-a", "branch-a");
     const checked = await checkInWebCustomer.run(
-      phoneRequest("uid-no-photo", signedBranchQr("salon-a", "branch-a")),
+      checkinRequest("uid-photo-consented", signedBranchQr("salon-a", "branch-a")),
     );
-    const request = (await db.doc(`point_requests/${checked.sessionId}`).get()).data();
-    expect(checked.customer.allowPhoto).toBe(false);
-    expect(request?.photoConsentGranted).toBe(false);
-    expect(
-      (await db.doc(`chair_sessions/${checked.sessionId}`).get()).data()?.photoConsentGranted,
-    ).toBe(false);
-    expect(request?.status).toBe("pending");
-  });
-
-  it("records a distinct photo choice without treating a true-looking string as permission", async () => {
-    await seedSalon("salon-a", "branch-a");
-    const checked = await checkInWebCustomer.run(
-      phoneRequest("uid-string-photo", {
-        ...signedBranchQr("salon-a", "branch-a"),
-        allowPhoto: "true",
-      }),
-    );
-    expect(checked.customer.allowPhoto).toBe(false);
-    expect(
-      (await db.doc(`point_requests/${checked.sessionId}`).get()).data()?.photoConsentGranted,
-    ).toBe(false);
+    expect(checked.customer.allowPhoto).toBe(true);
+    const point = (await db.doc(`point_requests/${checked.sessionId}`).get()).data();
+    expect(point).toMatchObject({
+      status: "pending",
+      photoConsentGranted: true,
+      photoConsentVersion: "web-checkin-v3",
+      photoPaths: [],
+    });
+    expect((await db.doc(`chair_sessions/${checked.sessionId}`).get()).data()).toMatchObject({
+      photoConsentGranted: true,
+      photoConsentVersion: "web-checkin-v3",
+    });
   });
 
   beforeEach(async () => {
@@ -245,10 +236,10 @@ describe("authenticated web customer platform", () => {
     await getWebCustomerContext.run(phoneRequest("uid-global", qr));
 
     const [first, second] = await Promise.all([
-      checkInWebCustomer.run(phoneRequest("uid-global", qr)),
-      checkInWebCustomer.run(phoneRequest("uid-global", qr)),
+      checkInWebCustomer.run(checkinRequest("uid-global", qr)),
+      checkInWebCustomer.run(checkinRequest("uid-global", qr)),
     ]);
-    const retry = await checkInWebCustomer.run(phoneRequest("uid-global", qr));
+    const retry = await checkInWebCustomer.run(checkinRequest("uid-global", qr));
 
     expect(second.sessionId).toBe(first.sessionId);
     expect(retry.sessionId).toBe(first.sessionId);
@@ -285,7 +276,7 @@ describe("authenticated web customer platform", () => {
     ];
 
     const sessions = await Promise.all(
-      visitors.map(({ uid, phone }) => checkInWebCustomer.run(phoneRequest(uid, qr, phone))),
+      visitors.map(({ uid, phone }) => checkInWebCustomer.run(checkinRequest(uid, qr, phone))),
     );
     expect(new Set(sessions.map((session) => session.sessionId)).size).toBe(3);
     expect(new Set(sessions.map((session) => session.customer.customerId)).size).toBe(3);
@@ -313,7 +304,7 @@ describe("authenticated web customer platform", () => {
     }
 
     const firstRetry = await checkInWebCustomer.run(
-      phoneRequest(visitors[0].uid, qr, visitors[0].phone),
+      checkinRequest(visitors[0].uid, qr, visitors[0].phone),
     );
     expect(firstRetry.sessionId).toBe(sessions[0].sessionId);
     expect((await db.collection("point_requests").get()).size).toBe(3);
@@ -332,7 +323,7 @@ describe("authenticated web customer platform", () => {
       expect(customer?.nextPointEligibleAt.toMillis()).toBeGreaterThan(Date.now());
     }
     await expect(
-      checkInWebCustomer.run(phoneRequest(visitors[0].uid, qr, visitors[0].phone)),
+      checkInWebCustomer.run(checkinRequest(visitors[0].uid, qr, visitors[0].phone)),
     ).rejects.toMatchObject({
       code: "failed-precondition",
       details: { errorCode: "POINT_COOLDOWN" },
@@ -354,7 +345,7 @@ describe("authenticated web customer platform", () => {
         canAwardPointsDirectly: false,
       });
     const qr = signedBranchQr("salon-a", "branch-a");
-    const checkedIn = await checkInWebCustomer.run(phoneRequest("uid-global", qr));
+    const checkedIn = await checkInWebCustomer.run(checkinRequest("uid-global", qr));
     const confirmation = requestFor(
       "staff-a",
       { salonId: "salon-a", requestId: checkedIn.sessionId },
@@ -371,12 +362,12 @@ describe("authenticated web customer platform", () => {
     expect(state.sessionStatus).toBe("completed");
     expect(state.customer.points).toBe(1);
     expect(state.customer.nextPointEligibleAtMs).toBeGreaterThan(Date.now() + 119 * 60_000);
-    await expect(checkInWebCustomer.run(phoneRequest("uid-global", qr))).rejects.toMatchObject({
+    await expect(checkInWebCustomer.run(checkinRequest("uid-global", qr))).rejects.toMatchObject({
       code: "failed-precondition",
       details: { errorCode: "POINT_COOLDOWN" },
     });
     await expect(
-      checkInWebCustomer.run(phoneRequest("uid-global", signedBranchQr("salon-a", "branch-b"))),
+      checkInWebCustomer.run(checkinRequest("uid-global", signedBranchQr("salon-a", "branch-b"))),
     ).rejects.toMatchObject({
       code: "failed-precondition",
       details: { errorCode: "POINT_COOLDOWN" },
@@ -423,9 +414,9 @@ describe("authenticated web customer platform", () => {
     const qrA = signedBranchQr("salon-a", "branch-a");
     const qrB = signedBranchQr("salon-a", "branch-b");
     await getWebCustomerContext.run(phoneRequest("uid-global", qrA));
-    await checkInWebCustomer.run(phoneRequest("uid-global", qrA));
+    await checkInWebCustomer.run(checkinRequest("uid-global", qrA));
 
-    await expect(checkInWebCustomer.run(phoneRequest("uid-global", qrB))).rejects.toMatchObject({
+    await expect(checkInWebCustomer.run(checkinRequest("uid-global", qrB))).rejects.toMatchObject({
       code: "failed-precondition",
     });
   });
@@ -434,7 +425,7 @@ describe("authenticated web customer platform", () => {
     await seedSalon("salon-a", "branch-a");
     const oldQr = signedBranchQr("salon-a", "branch-a");
     const context = await getWebCustomerContext.run(phoneRequest("uid-global", oldQr));
-    const first = await checkInWebCustomer.run(phoneRequest("uid-global", oldQr));
+    const first = await checkInWebCustomer.run(checkinRequest("uid-global", oldQr));
 
     await db.collection("branches").doc("branch-a").update({ qrVersion: 2 });
     await expect(
@@ -458,7 +449,7 @@ describe("authenticated web customer platform", () => {
     ]);
 
     const currentQr = signedBranchQr("salon-a", "branch-a", 2);
-    const replacement = await checkInWebCustomer.run(phoneRequest("uid-global", currentQr));
+    const replacement = await checkInWebCustomer.run(checkinRequest("uid-global", currentQr));
     expect(replacement.sessionId).not.toBe(first.sessionId);
     expect((await db.collection("chair_sessions").doc(first.sessionId).get()).data()?.status).toBe(
       "cancelled",
@@ -477,7 +468,7 @@ describe("authenticated web customer platform", () => {
     const qr = signedBranchQr("salon-a", "branch-a");
     const owner = await getWebCustomerContext.run(phoneRequest("uid-owner", qr));
     const other = await getWebCustomerContext.run(phoneRequest("uid-other", qr, "+84909999999"));
-    const checkedIn = await checkInWebCustomer.run(phoneRequest("uid-owner", qr));
+    const checkedIn = await checkInWebCustomer.run(checkinRequest("uid-owner", qr));
     await Promise.all([
       db.collection("haircut_records").add({
         salonId: "salon-a",
@@ -682,6 +673,10 @@ function signedSalonQr(salonId: string) {
     branchId: "",
     qrToken: createSignedQrToken(secret, { kind: "salon", salonId, version: 1 }),
   };
+}
+
+function checkinRequest(uid: string, qr: Record<string, unknown>, phone?: string) {
+  return phoneRequest(uid, { ...qr, allowPhoto: true }, phone);
 }
 
 function phoneRequest(uid: string, data: Record<string, unknown>, phone = "+84901234567") {

@@ -3105,6 +3105,11 @@ export const checkInWebCustomer = onCall(qrFunctionOptions, async (request) => {
   const principal = requireWebPhonePrincipal(request.auth);
   const salonId = requireString(request.data?.salonId, "salonId");
   const photoConsentGranted = request.data?.allowPhoto === true;
+  if (!photoConsentGranted) {
+    throw new HttpsError("failed-precondition", "Vui lòng đồng ý cho salon chụp và lưu ảnh trước khi yêu cầu tích điểm.", {
+      errorCode: "PHOTO_CONSENT_REQUIRED",
+    });
+  }
   await enforceAuthenticatedRateLimit("checkInWebCustomer", principal.uid, salonId);
   await assertFeatureEnabled(
     salonId,
@@ -3221,7 +3226,7 @@ export const checkInWebCustomer = onCall(qrFunctionOptions, async (request) => {
       pointsRequested,
       isOpen: true,
       photoConsentGranted,
-      photoConsentVersion: "web-checkin-v2",
+      photoConsentVersion: "web-checkin-v3",
       photoConsentAt: now,
       expiresAt,
       createdAt: now,
@@ -3247,7 +3252,7 @@ export const checkInWebCustomer = onCall(qrFunctionOptions, async (request) => {
       customerId, sessionId: newSessionRef.id, customerSummary,
       status: "pending", approvalMode: "staff_confirmation",
       pointsRequested, pointsAdded: pointsRequested,
-      photoConsentGranted, photoConsentVersion: "web-checkin-v2", photoConsentAt: now,
+      photoConsentGranted, photoConsentVersion: "web-checkin-v3", photoConsentAt: now,
       photoUrls: [], photoPaths: [], note: "", staffId: "", staffName: "",
       expiresAt, createdAt: now, updatedAt: now,
     });

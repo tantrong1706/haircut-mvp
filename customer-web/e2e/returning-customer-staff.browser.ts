@@ -25,7 +25,7 @@ test("search, disambiguate and confirm once on a real browser", async ({ page },
     submissions.push(route.request().postDataJSON());
     return route.fulfill({ json: { pointsAdded: 1, pointsAfter: 8, alreadyProcessed: false } });
   });
-  await page.getByLabel("4 số cuối điện thoại").fill("5678");
+  await page.getByLabel("Tên khách hoặc 4 số cuối điện thoại").fill("5678");
   await page.getByRole("button", { name: "Tìm khách" }).click();
   await expect(page.getByText(/Nhiều khách trùng 4 số/)).toBeVisible();
   await page.getByRole("button", { name: /Chọn Quốc Bình/ }).click();
@@ -96,7 +96,7 @@ test("a lost response retries with the same operation ID", async ({ page }) => {
       ? route.fulfill({ status: 503, body: "fixture-unavailable" })
       : route.fulfill({ json: { pointsAdded: 1, pointsAfter: 5, alreadyProcessed: true } });
   });
-  await page.getByLabel("4 số cuối điện thoại").fill("5678");
+  await page.getByLabel("Tên khách hoặc 4 số cuối điện thoại").fill("5678");
   await page.getByRole("button", { name: "Tìm khách" }).click();
   await page.getByRole("button", { name: /Chọn Minh An/ }).click();
   await page.getByRole("button", { name: "Xác nhận cộng 1 điểm" }).click();
@@ -105,4 +105,24 @@ test("a lost response retries with the same operation ID", async ({ page }) => {
   await expect(page.getByRole("status")).toContainText("Lượt này đã được ghi nhận");
   expect(operations).toHaveLength(2);
   expect(operations[0]).toBe(operations[1]);
+});
+
+test("staff can search a Vietnamese name on mobile and must verify the suffix", async ({
+  page,
+}) => {
+  const lookup = page.getByLabel("Tên khách hoặc 4 số cuối điện thoại");
+  await expect(lookup).toHaveAttribute("inputmode", "text");
+  await lookup.fill("Quốc Bình");
+  const pending = page.waitForRequest((request) => request.url().endsWith("/__fixture/search"));
+  await page.getByRole("button", { name: "Tìm khách" }).click();
+  expect((await pending).postDataJSON()).toMatchObject({ term: "Quốc Bình" });
+  await page.getByRole("button", { name: /Chọn Quốc Bình/ }).click();
+  const confirmation = page.getByRole("button", { name: "Xác nhận cộng 1 điểm" });
+  const suffix = page.getByLabel("Xác nhận 4 số cuối điện thoại");
+  await expect(confirmation).toBeDisabled();
+  await suffix.fill("1234");
+  await expect(confirmation).toBeDisabled();
+  await suffix.fill("5678");
+  await expect(confirmation).toBeEnabled();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });

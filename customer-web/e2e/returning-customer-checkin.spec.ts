@@ -14,6 +14,7 @@ test("khách cũ dùng phiên Firebase: QR quyết định chi nhánh, không nh
   await expect(page.getByRole("textbox", { name: /^Số điện thoại/ })).toHaveCount(0);
   await expect(page.getByRole("textbox", { name: /Mã OTP/ })).toHaveCount(0);
   await expect(page.getByRole("combobox", { name: "Chọn chi nhánh" })).toHaveCount(0);
+  await page.getByRole("checkbox", { name: /Cho phép salon.*ảnh/i }).check();
   await page.getByRole("button", { name: "Yêu cầu tích điểm" }).click();
   await expect(
     page.getByText("Đã gửi yêu cầu. Nhân viên chi nhánh sẽ xác nhận điểm."),

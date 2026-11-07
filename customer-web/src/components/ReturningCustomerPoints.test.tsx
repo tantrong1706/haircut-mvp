@@ -24,7 +24,7 @@ const props = {
 };
 async function search() {
   const user = userEvent.setup();
-  await user.type(screen.getByLabelText("4 số cuối điện thoại"), "5678");
+  await user.type(screen.getByLabelText("Tên khách hoặc 4 số cuối điện thoại"), "5678");
   await user.click(screen.getByRole("button", { name: "Tìm khách" }));
   await screen.findByRole("button", { name: /Chọn An/ });
   return user;
@@ -113,16 +113,16 @@ describe("ReturningCustomerPoints", () => {
   });
   it("fails closed without a branch or permission", () => {
     const { rerender } = render(<ReturningCustomerPoints {...props} branchId="" />);
-    expect(screen.queryByLabelText("4 số cuối điện thoại")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Tên khách hoặc 4 số cuối điện thoại")).not.toBeInTheDocument();
     rerender(<ReturningCustomerPoints {...props} canAward={false} />);
-    expect(screen.queryByLabelText("4 số cuối điện thoại")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Tên khách hoặc 4 số cuối điện thoại")).not.toBeInTheDocument();
     expect(mocks.search).not.toHaveBeenCalled();
   });
   it("clears the selection when the search term changes", async () => {
     render(<ReturningCustomerPoints {...props} />);
     const user = await search();
     await user.click(screen.getByRole("button", { name: /Chọn An/ }));
-    await user.clear(screen.getByLabelText("4 số cuối điện thoại"));
+    await user.clear(screen.getByLabelText("Tên khách hoặc 4 số cuối điện thoại"));
     expect(screen.queryByRole("button", { name: "Xác nhận cộng 2 điểm" })).not.toBeInTheDocument();
   });
   it("keeps the same operation ID for a failed-response retry and prevents double click", async () => {
@@ -141,7 +141,7 @@ describe("ReturningCustomerPoints", () => {
     mocks.search.mockResolvedValue({ customers: [], nextCursor: null });
     render(<ReturningCustomerPoints {...props} />);
     const user = userEvent.setup();
-    await user.type(screen.getByLabelText("4 số cuối điện thoại"), "5678");
+    await user.type(screen.getByLabelText("Tên khách hoặc 4 số cuối điện thoại"), "5678");
     await user.click(screen.getByRole("button", { name: "Tìm khách" }));
     expect(await screen.findByText(/Chưa tìm thấy khách/)).toBeInTheDocument();
     expect(mocks.award).not.toHaveBeenCalled();
@@ -153,7 +153,7 @@ describe("ReturningCustomerPoints", () => {
     await user.click(screen.getByRole("button", { name: /Chọn An/ }));
     rerender(<ReturningCustomerPoints {...props} branchId="branch-b" branchName="Chi nhánh B" />);
     expect(screen.queryByRole("button", { name: "Xác nhận cộng 2 điểm" })).not.toBeInTheDocument();
-    expect(screen.getByLabelText("4 số cuối điện thoại")).toHaveValue("");
+    expect(screen.getByLabelText("Tên khách hoặc 4 số cuối điện thoại")).toHaveValue("");
   });
 
   it("does not display stale search results after the suffix changes", async () => {
@@ -166,9 +166,9 @@ describe("ReturningCustomerPoints", () => {
     );
     render(<ReturningCustomerPoints {...props} />);
     const user = userEvent.setup();
-    await user.type(screen.getByLabelText("4 số cuối điện thoại"), "5678");
+    await user.type(screen.getByLabelText("Tên khách hoặc 4 số cuối điện thoại"), "5678");
     await user.click(screen.getByRole("button", { name: "Tìm khách" }));
-    await user.clear(screen.getByLabelText("4 số cuối điện thoại"));
+    await user.clear(screen.getByLabelText("Tên khách hoặc 4 số cuối điện thoại"));
     complete({ customers, nextCursor: null });
     await waitFor(() =>
       expect(screen.queryByRole("button", { name: /Chọn An/ })).not.toBeInTheDocument(),
@@ -179,7 +179,7 @@ describe("ReturningCustomerPoints", () => {
     mocks.search.mockRejectedValueOnce(new Error("Không tìm được khách"));
     render(<ReturningCustomerPoints {...props} />);
     const user = userEvent.setup();
-    await user.type(screen.getByLabelText("4 số cuối điện thoại"), "5678");
+    await user.type(screen.getByLabelText("Tên khách hoặc 4 số cuối điện thoại"), "5678");
     await user.click(screen.getByRole("button", { name: "Tìm khách" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Không tìm được khách");
     await user.click(screen.getByRole("button", { name: "Tìm khách" }));
