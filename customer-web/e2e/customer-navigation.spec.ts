@@ -45,6 +45,7 @@ test.beforeEach(async ({ page }) => {
           staffName: "Nam",
           note: "Fade thấp",
           photoUrls: [],
+          hasCustomerPhotos: true,
           pointsAdded: 1,
         },
       ]),
@@ -83,6 +84,28 @@ test("khách chuyển qua điểm, lịch sử, vòng quay và quà", async ({ p
 
   await page.getByRole("button", { name: "Mã quà" }).click();
   await expect(page.getByRole("heading", { name: "Quà của tôi" })).toBeVisible();
+});
+
+test("khách mở và đóng ảnh của lượt cắt trong Lịch sử", async ({ page }) => {
+  const photoUrl = "https://storage.googleapis.com/demo-haircut/photo.jpg?X-Goog-Signature=fixture";
+  await page.addInitScript(({ salonId, url }) => {
+    localStorage.setItem(`haircut_test_web_visit_photos:${salonId}`, JSON.stringify({ "record-e2e": [url] }));
+  }, { salonId: qr.salonId, url: photoUrl });
+  await page.route(photoUrl, (route) => route.fulfill({
+    contentType: "image/png",
+    body: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jPioAAAAASUVORK5CYII=", "base64"),
+  }));
+  await page.goto(`/?${new URLSearchParams(qr)}`);
+  await page.getByRole("button", { name: "Lịch sử" }).last().click();
+  await expect(page.getByRole("img", { name: "Ảnh kiểu tóc 1" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Xem ảnh ngày 20/06/2026" }).click();
+  const photo = page.getByRole("img", { name: "Ảnh kiểu tóc 1" });
+  await expect(photo).toBeVisible();
+  await expect.poll(() => photo.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(1);
+  await expect(page.getByText("Fade thấp")).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
+  await page.getByRole("button", { name: "Ẩn ảnh ngày 20/06/2026" }).click();
+  await expect(photo).toHaveCount(0);
 });
 
 test("giao diện mobile không tràn ngang", async ({ page }) => {
