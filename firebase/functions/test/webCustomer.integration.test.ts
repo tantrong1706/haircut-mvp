@@ -12,6 +12,7 @@ import {
   spinWebLuckyWheel,
 } from "../src/index";
 import { createSignedQrToken } from "../src/security";
+import * as privatePhotos from "../src/domains/photos/privatePhotoAccess";
 import { requireFirestoreEmulator } from "./emulatorEnvironment";
 
 const { emulatorHost, projectId } = requireFirestoreEmulator();
@@ -112,7 +113,7 @@ describe("authenticated web customer platform", () => {
     await Promise.all(getApps().map((app) => deleteApp(app)));
   });
 
-  it("customer history never returns internal notes or images even when storage consent exists", async () => {
+  it("customer history never returns internal notes, storage paths or legacy image URLs", async () => {
     await seedSalon("salon-a", "branch-a");
     const context = await getWebCustomerContext.run(
       phoneRequest("uid-private", signedBranchQr("salon-a", "branch-a")),
@@ -139,6 +140,67 @@ describe("authenticated web customer platform", () => {
     expect((await db.doc("haircut_records/private-record").get()).data()?.note).toBe(
       "Synthetic internal formula",
     );
+  });
+
+  it("only issues a temporary photo link to the authenticated customer for a consented completed visit", async () => {
+    await seedSalon("salon-a", "branch-a");
+    const qr = signedBranchQr("salon-a", "branch-a");
+    const own = await checkInWebCustomer.run(checkinRequest("uid-photos", qr));
+    const other = await getWebCustomerContext.run(phoneRequest("uid-other-photos", qr));
+    const customerId = own.customer.customerId;
+    const sessionId = own.sessionId;
+    const path = `salons/salon-a/customers/${customerId}/sessions/${sessionId}/op-${"a".repeat(40)}.jpg`;
+    const otherPath = path.replace(customerId, other.customer.customerId);
+    const visit = db.doc("haircut_records/photo-visit");
+    await db.doc(`chair_sessions/${sessionId}`).update({ status: "completed" });
+    await db.doc(`point_requests/${sessionId}`).update({ status: "approved" });
+    await visit.set({
+      salonId: "salon-a",
+      customerId,
+      branchId: "branch-a",
+      pointRequestId: sessionId,
+      createdAt: Timestamp.now(),
+      pointsAdded: 1,
+      note: "Private formula",
+      photoUrls: ["https://example.invalid/not-a-salon-photo.jpg"],
+      photoPaths: [path, otherPath],
+    });
+    const link = "https://storage.googleapis.com/demo-haircut/fixture.jpg?X-Goog-Signature=fixture";
+    const sign = vi.spyOn(privatePhotos, "privatePhotoUrl").mockResolvedValue(link);
+    const request = { salonId: "salon-a", photoRecordId: visit.id };
+    try {
+      const list = await getWebCustomerHistory.run(phoneRequest("uid-photos", { salonId: "salon-a" }));
+      expect(list.records[0]).toMatchObject({ id: visit.id, hasCustomerPhotos: true });
+      expect(list.records[0]).not.toHaveProperty("note");
+      expect(list.records[0]).not.toHaveProperty("photoPaths");
+      expect(sign).not.toHaveBeenCalled();
+      await expect(getWebCustomerHistory.run(phoneRequest("uid-other-photos", {
+        ...request, customerId,
+      }))).rejects.toMatchObject({ code: "not-found" });
+      await expect(getWebCustomerHistory.run(phoneRequest("uid-photos", {
+        ...request, salonId: "salon-b",
+      }))).rejects.toMatchObject({ code: "not-found" });
+      await expect(getWebCustomerHistory.run(requestFor("", request, {})))
+        .rejects.toMatchObject({ code: "unauthenticated" });
+      const photo = await getWebCustomerHistory.run(phoneRequest("uid-photos", request));
+      expect(photo).toMatchObject({ records: [], customerPhotoUrls: [link] });
+      expect(sign).toHaveBeenCalledExactlyOnceWith(expect.anything(), path, expect.any(Number));
+      await db.doc(`customers/${customerId}`).update({ allowPhoto: false });
+      await expect(getWebCustomerHistory.run(phoneRequest("uid-photos", request)))
+        .resolves.toMatchObject({ customerPhotoUrls: [] });
+      await db.doc(`customers/${customerId}`).update({
+        allowPhoto: true, photoConsentRevokedAt: Timestamp.fromMillis(Date.now() + 1000),
+      });
+      await expect(getWebCustomerHistory.run(phoneRequest("uid-photos", request)))
+        .resolves.toMatchObject({ customerPhotoUrls: [] });
+      await db.doc(`customers/${customerId}`).update({ photoConsentRevokedAt: null });
+      await db.doc(`chair_sessions/${sessionId}`).update({ photoConsentGranted: false });
+      await expect(getWebCustomerHistory.run(phoneRequest("uid-photos", request)))
+        .resolves.toMatchObject({ customerPhotoUrls: [] });
+      expect(sign).toHaveBeenCalledTimes(1);
+    } finally {
+      sign.mockRestore();
+    }
   });
 
   it("cùng UID tạo profile riêng cho từng salon và retry không tạo trùng", async () => {

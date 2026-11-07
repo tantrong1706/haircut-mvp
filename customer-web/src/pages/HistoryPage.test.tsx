@@ -3,8 +3,11 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppSession } from "../services/types";
 import { HistoryPage } from "./HistoryPage";
-const mocks = vi.hoisted(() => ({ getHaircutHistory: vi.fn() }));
+const mocks = vi.hoisted(() => ({ getHaircutHistory: vi.fn(), getWebCustomerVisitPhotos: vi.fn() }));
 vi.mock("../services/api", () => ({ getHaircutHistory: mocks.getHaircutHistory }));
+vi.mock("../services/webCustomerApi", () => ({
+  getWebCustomerVisitPhotos: mocks.getWebCustomerVisitPhotos,
+}));
 const session = { qr: { salonId: "synthetic-salon" } } as AppSession;
 describe("customer history", () => {
   beforeEach(() => vi.clearAllMocks());
@@ -20,6 +23,23 @@ describe("customer history", () => {
     render(<HistoryPage session={session} />);
     expect(await screen.findByText("Mạng đang gián đoạn")).toBeInTheDocument();
     await userEvent.setup().click(screen.getByRole("button", {name: "Thử lại"}));
+    expect(await screen.findByText("Chưa có lịch sử cắt tóc")).toBeInTheDocument();
+  });
+  it("opens only the selected visit photo and clears it when switching customer", async () => {
+    mocks.getHaircutHistory.mockResolvedValueOnce([
+      { id: "photo-visit", createdAt: "24/10/2026", pointsAdded: 1, hasCustomerPhotos: true },
+      { id: "no-photo", createdAt: "18/10/2026", pointsAdded: 1 },
+    ]).mockResolvedValueOnce([]);
+    mocks.getWebCustomerVisitPhotos.mockResolvedValue(["https://storage.googleapis.com/demo/fixture.jpg"]);
+    const user = userEvent.setup();
+    const { rerender } = render(<HistoryPage session={session} />);
+    await screen.findByText("24/10/2026");
+    expect(mocks.getWebCustomerVisitPhotos).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Xem ảnh ngày 24/10/2026" }));
+    expect(await screen.findByRole("img", { name: "Ảnh kiểu tóc 1" })).toBeInTheDocument();
+    expect(mocks.getWebCustomerVisitPhotos).toHaveBeenCalledWith(session, "photo-visit");
+    rerender(<HistoryPage session={{ ...session, firebaseUid: "different-customer" }} />);
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
     expect(await screen.findByText("Chưa có lịch sử cắt tóc")).toBeInTheDocument();
   });
 });
