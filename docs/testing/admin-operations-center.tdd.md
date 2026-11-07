@@ -1,5 +1,9 @@
 # Admin operations center — test evidence
 
+Current release and exact production smoke limits are recorded in
+[ADMIN_RELEASE_STATUS.md](../ADMIN_RELEASE_STATUS.md). PR #79 and corrective #87 are published;
+the checkpoint sections below retain the authorization/state at the time of each TDD phase.
+
 ## Follow-up: real callable transport cursor — 06/11/2026
 
 Authenticated post-deploy checks of the first Admin release found a queue read error that the
@@ -17,7 +21,7 @@ strict handler rejected null instead of treating it as an absent optional cursor
 - Existing production runtime is not called PASS from these local tests. Final CI and authenticated
   smoke results for the fix are recorded on its PR after execution; no production mutation is used.
 
-## Current extension — 06/11/2026, not deployed
+## Pre-deploy extension checkpoint — 06/11/2026
 
 The owner requested a project-wide review and a clearer Admin monitoring center, then explicitly
 selected suspend/reactivate salon and cancel pending requests, with history retained and no permanent
