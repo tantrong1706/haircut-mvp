@@ -36,6 +36,32 @@ describe("ReturningCustomerPoints", () => {
     mocks.details.mockResolvedValue({ ...customers[0], recentRecords: [] });
     mocks.award.mockResolvedValue({ pointsAdded: 2, pointsAfter: 6, alreadyProcessed: false });
   });
+  it("accepts a pasted Vietnamese name, but requires the customer's suffix before awarding", async () => {
+    const user = userEvent.setup();
+    render(<ReturningCustomerPoints {...props} />);
+    const lookup = screen.getByRole("textbox", { name: "Tên khách hoặc 4 số cuối điện thoại" });
+    expect(lookup).not.toHaveAttribute("inputmode", "numeric");
+    await user.click(lookup);
+    await user.paste("Bình");
+    expect(lookup).toHaveValue("Bình");
+    await user.click(screen.getByRole("button", { name: "Tìm khách" }));
+    expect(mocks.search).toHaveBeenCalledWith(
+      expect.objectContaining({ term: "Bình", branchId: "branch-a" }),
+    );
+    await user.click(await screen.findByRole("button", { name: /Chọn Bình/ }));
+    const confirm = screen.getByRole("button", { name: "Xác nhận cộng 2 điểm" });
+    const suffix = screen.getByLabelText("Xác nhận 4 số cuối điện thoại");
+    expect(confirm).toBeDisabled();
+    await user.type(suffix, "1234");
+    expect(confirm).toBeDisabled();
+    expect(mocks.award).not.toHaveBeenCalled();
+    await user.clear(suffix);
+    await user.type(suffix, "5678");
+    await user.click(confirm);
+    expect(mocks.award).toHaveBeenCalledWith(
+      expect.objectContaining({ customerId: "customer-b", phoneLast4: "5678" }),
+    );
+  });
   it("requires selecting a customer and confirming; never awards from a suffix alone", async () => {
     render(<ReturningCustomerPoints {...props} />);
     expect(screen.getByRole("button", { name: "Tìm khách" })).toBeDisabled();

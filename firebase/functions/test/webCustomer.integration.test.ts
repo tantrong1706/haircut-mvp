@@ -19,6 +19,27 @@ const db = getFirestore();
 const secret = "fixture-qr-signing-key-only-32-characters";
 
 describe("authenticated web customer platform", () => {
+  it.each([undefined, false, null, "true"])(
+    "blocks a new request without explicit photo consent (%s)",
+    async (allowPhoto) => {
+      await seedSalon("salon-a", "branch-a");
+      const qr = signedBranchQr("salon-a", "branch-a");
+      await expect(
+        checkInWebCustomer.run(
+          phoneRequest("uid-photo-required", {
+            ...qr,
+            ...(allowPhoto === undefined ? {} : { allowPhoto }),
+          }),
+        ),
+      ).rejects.toMatchObject({
+        code: "failed-precondition",
+        details: { errorCode: "PHOTO_CONSENT_REQUIRED" },
+      });
+      expect((await db.collection("point_requests").get()).empty).toBe(true);
+      expect((await db.collection("chair_sessions").get()).empty).toBe(true);
+      expect((await db.collection("customers").get()).empty).toBe(true);
+    },
+  );
   it("keeps a 2-hour Web confirmation window without awarding points automatically", async () => {
     await seedSalon("salon-a", "branch-a");
     const checked = await checkInWebCustomer.run(
