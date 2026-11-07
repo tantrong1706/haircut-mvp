@@ -96,13 +96,16 @@ describe("WebCustomerEntryPage", () => {
     );
   });
 
-  it("keeps photo consent optional and unselected while allowing a point request", async () => {
+  it("blocks a new point request without photo consent but keeps account access", async () => {
     render(<WebCustomerEntryPage onReady={vi.fn()} />);
     act(() => mocks.authListener?.({ uid: "uid-a" }));
     await screen.findByRole("heading", { name: "Salon A" });
     expect(screen.getByRole("checkbox", { name: /Cho phép salon.*ảnh/i })).not.toBeChecked();
     await userEvent.click(screen.getByRole("button", { name: "Yêu cầu tích điểm" }));
-    expect(mocks.checkInWebCustomer).toHaveBeenCalledWith(qr, false);
+    expect(mocks.checkInWebCustomer).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent(/đồng ý.*ảnh/i);
+    await userEvent.click(screen.getByRole("button", { name: "Xem điểm, lịch sử và quà" }));
+    expect(mocks.getWebCustomerAccount).toHaveBeenCalledWith("salon-a");
   });
 
   it("sends photo permission only after the customer selects it explicitly", async () => {
@@ -143,11 +146,19 @@ describe("WebCustomerEntryPage", () => {
       const onReady = vi.fn();
       render(<WebCustomerEntryPage onReady={onReady} />);
       act(() => mocks.authListener?.({ uid: "uid-a" }));
+      if (operation === "checkin") {
+        await userEvent.click(
+          await screen.findByRole("checkbox", { name: /Cho phép salon.*ảnh/i }),
+        );
+      }
       await userEvent.click(
         await screen.findByRole("button", {
           name: operation === "checkin" ? "Yêu cầu tích điểm" : "Xem điểm, lịch sử và quà",
         }),
       );
+      expect(
+        operation === "checkin" ? mocks.checkInWebCustomer : mocks.getWebCustomerAccount,
+      ).toHaveBeenCalledOnce();
       act(() => mocks.authListener?.(null));
       await screen.findByLabelText("Số điện thoại");
       await act(async () => {
@@ -187,7 +198,9 @@ describe("WebCustomerEntryPage", () => {
     const onReady = vi.fn();
     const view = render(<WebCustomerEntryPage onReady={onReady} />);
     act(() => mocks.authListener?.({ uid: "uid-a" }));
+    await userEvent.click(await screen.findByRole("checkbox", { name: /Cho phép salon.*ảnh/i }));
     await userEvent.click(await screen.findByRole("button", { name: "Yêu cầu tích điểm" }));
+    expect(mocks.checkInWebCustomer).toHaveBeenCalledOnce();
     view.unmount();
     await act(async () => {
       finish(session);
@@ -331,6 +344,7 @@ describe("WebCustomerEntryPage", () => {
     await screen.findByRole("heading", { name: "Salon A" });
 
     const button = screen.getByRole("button", { name: "Yêu cầu tích điểm" });
+    await user.click(screen.getByRole("checkbox", { name: /Cho phép salon.*ảnh/i }));
     await user.dblClick(button);
     expect(mocks.checkInWebCustomer).toHaveBeenCalledTimes(1);
     expect(button).toBeDisabled();

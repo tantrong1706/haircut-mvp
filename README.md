@@ -17,7 +17,7 @@ Push `main` chạy GitHub Actions **Build Web** và **CodeQL**, không tự depl
 
 1. Khách quét QR **của chi nhánh**. Không có bước chọn lại chi nhánh.
 2. Lần đầu xác thực số điện thoại bằng OTP. Lần sau, cùng trình duyệt còn phiên hợp lệ sẽ nhớ đăng nhập.
-3. Khách bấm **Yêu cầu tích điểm**; nhân viên đúng chi nhánh xác nhận và có thể chụp/lưu ảnh theo sự đồng ý của khách.
+3. Với yêu cầu mới từ QR, khách tích đồng ý chụp/lưu ảnh rồi bấm **Yêu cầu tích điểm**. Chưa tích thì không tạo yêu cầu; vẫn xem được tài khoản và có thể nhờ nhân viên hỗ trợ. Nhân viên đúng chi nhánh xác nhận, không bắt buộc tải ảnh để cộng điểm.
 4. Điểm được cộng một lần. Trong hai giờ sau khi cộng điểm, nút yêu cầu mới được ẩn; không hiện đồng hồ đếm ngược.
 5. Khách xem ngày cắt, điểm và quà. Ảnh/ghi chú là hồ sơ nội bộ: chủ salon và thợ được phân công cùng chi nhánh mới được xem. Khi đủ điều kiện, khách quay thưởng; nhân viên xác nhận dùng quà.
 
@@ -29,7 +29,9 @@ Không tự gộp hồ sơ hoặc đổi ID khách khi dọn mã nguồn.
 Đăng xuất, xóa dữ liệu trình duyệt, đổi thiết bị hoặc phiên hết hiệu lực có thể yêu cầu OTP lại.
 QR phải do hệ thống ký; **không thêm `env=TESTING` hoặc số version Zalo** vào QR Web.
 
-Chủ salon có danh bạ và tìm nhanh theo tên/4 số cuối. Tích điểm khách quen cần chọn đúng hồ sơ;
+Chủ salon có danh bạ và tìm nhanh theo tên/4 số cuối. Nhân viên có thể gõ hoặc dán tên khi tìm
+khách quen; nếu tìm theo tên, xác nhận 4 số cuối khách đọc trước khi cộng điểm. Tích điểm khách
+quen cần chọn đúng hồ sơ;
 ảnh/ghi chú được lưu trong lượt chờ hoặc bổ sung vào lượt cắt gần nhất đã cộng điểm, ngay tại thẻ khách; không tạo lượt hoặc cộng thêm điểm.
 
 ## Cấu trúc

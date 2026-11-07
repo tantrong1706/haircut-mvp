@@ -25,6 +25,7 @@ test("thiết bị mới: QR web -> Phone OTP -> check-in", async ({ page }) => 
   await page.getByLabel("Mã OTP").fill("123456");
   await page.getByRole("button", { name: "Xác nhận OTP" }).click();
   await expect(page.getByRole("button", { name: "Yêu cầu tích điểm" })).toBeVisible();
+  await page.getByRole("checkbox", { name: /Cho phép salon.*ảnh/i }).check();
   await page.getByRole("button", { name: "Yêu cầu tích điểm" }).click();
   await expect(
     page.getByText("Đã gửi yêu cầu. Nhân viên chi nhánh sẽ xác nhận điểm."),
@@ -52,6 +53,7 @@ test("thiết bị quay lại: Firebase session restore và không hiện OTP", 
 
 test("cùng UID sang salon thứ hai không OTP và có profile tenant riêng", async ({ page }) => {
   await completeTestPhoneLogin(page, qrA);
+  await page.getByRole("checkbox", { name: /Cho phép salon.*ảnh/i }).check();
   await page.getByRole("button", { name: "Yêu cầu tích điểm" }).click();
   await expect(
     page.getByText("Đã gửi yêu cầu. Nhân viên chi nhánh sẽ xác nhận điểm."),
@@ -65,6 +67,7 @@ test("cùng UID sang salon thứ hai không OTP và có profile tenant riêng", 
 
 test("đăng xuất customer chỉ làm thiết bị yêu cầu OTP lại", async ({ page }) => {
   await completeTestPhoneLogin(page, qrA);
+  await page.getByRole("checkbox", { name: /Cho phép salon.*ảnh/i }).check();
   await page.getByRole("button", { name: "Yêu cầu tích điểm" }).click();
   await page.getByRole("button", { name: "Tài khoản" }).click();
   await page.getByRole("button", { name: "Đăng xuất khỏi thiết bị này" }).click();

@@ -1,5 +1,31 @@
 # Quyền riêng tư CH Hair Web — bằng chứng kiểm thử
 
+## Yêu cầu QR mới và ô tìm khách của nhân viên — 07/11/2026
+
+Phạm vi đã chốt: phải tự tích đồng ý ảnh trước khi **gửi yêu cầu điểm mới từ QR**. Chưa tích
+thì báo lỗi, không tạo yêu cầu. Không khóa điểm/lịch sử/quà hoặc quyền dữ liệu, không tự tích,
+không đổi đồng ý của lượt cũ và không bắt buộc nhân viên phải tải ảnh để xác nhận điểm.
+Khách không đồng ý có thể nhờ nhân viên hỗ trợ. Đồng ý ảnh không bao gồm quảng cáo hay theo
+dõi tùy chọn. Xem [giới thiệu Điều 9 Luật Bảo vệ dữ liệu cá nhân](https://sav.gov.vn/vi/bai-viet/tai-lieu-gioi-thieu-luat-bao-ve-du-lieu-ca-nhan)
+về tính tự nguyện và mục đích cụ thể; kiểm thử không phải chứng nhận tuân thủ pháp lý.
+
+Ô khách quen của Nhân viên nhận tên gõ/dán hoặc đúng 4 số cuối. Khi tìm theo tên, phải xác
+nhận 4 số cuối khớp khách đã chọn trước khi gọi API cộng điểm. Dùng lại API tìm hiện có,
+không đổi vai trò, phạm vi chi nhánh, giao dịch điểm hay API Nhân viên.
+
+- RED `cfda558`: hai suite UI 2 FAIL / 26 PASS; Web emulator 4 FAIL / 20 PASS. Điều kiện
+  thiếu/false/null/chuỗi `"true"` trước đây vẫn tạo yêu cầu; ô Nhân viên không nhận tên.
+- GREEN: hai suite UI 28/28 PASS; Web emulator 23/23 PASS. Ca cũ cho phép gửi yêu cầu không
+  ảnh được thay bằng ca kiểm tra từ chối và ca đồng ý hợp lệ nhưng chưa tải ảnh. Các ca kiểm
+  tra cooldown, QR và race giữ nguyên mục tiêu, nhập consent thật trong fixture thành công.
+- `npm --prefix customer-web run test:returning:coverage`: 13/13 PASS; 96.66% lines và
+  86.73% branches, không hạ ngưỡng. Kiểm tra dán tên có dấu, sai 4 số và chọn đúng hồ sơ.
+- Backend lưu `web-checkin-v3` và thời điểm đồng ý chỉ trên yêu cầu/lượt mới thành công.
+  Các test dùng demo/fixture, không gửi SMS hoặc tạo lượt/ảnh thật để lấy kết quả PASS.
+
+Full suite, CI và phát hành nếu thực thi sẽ ghi riêng theo SHA; không coi checkpoint này
+là bằng chứng đã deploy. Phần dưới là bằng chứng lịch sử của đợt 30/10.
+
 Ngày kiểm tra: 30/10/2026. Base `89cee9a6b9febac888bd27f7511698969fb8f16e`;
 nhánh `codex/privacy-readiness`. Đây là bằng chứng local, chưa phải CI hoặc production.
 Không merge, deploy, đổi Rules/IAM/TTL hoặc chạy thử bằng dữ liệu/OTP/email khách thật.

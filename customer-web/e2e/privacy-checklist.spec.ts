@@ -110,6 +110,7 @@ test("signed-in customer can open and cancel their own name editor without anoth
   page,
 }) => {
   await signIn(page);
+  await page.getByRole("checkbox", { name: /Cho phép salon.*ảnh/i }).check();
   await page.getByRole("button", { name: "Yêu cầu tích điểm" }).click();
   await page
     .getByRole("navigation", { name: "Điều hướng" })
@@ -124,12 +125,17 @@ test("signed-in customer can open and cancel their own name editor without anoth
   await expect(page.getByRole("heading", { name: "Khách 4567", exact: true })).toBeVisible();
 });
 
-test("customer can request points without photos and restore the remembered sign-in", async ({
+test("unchecked photo choice blocks new requests but keeps account access and remembered sign-in", async ({
   page,
 }) => {
   await signIn(page);
   await expect(page.getByRole("checkbox", { name: /Cho phép salon.*ảnh/i })).not.toBeChecked();
   await page.getByRole("button", { name: "Yêu cầu tích điểm" }).click();
+  await expect(page.getByRole("alert")).toContainText("đồng ý cho salon chụp và lưu ảnh");
+  await expect(page.getByText("Đã gửi yêu cầu. Nhân viên chi nhánh sẽ xác nhận điểm.")).toHaveCount(
+    0,
+  );
+  await page.getByRole("button", { name: "Xem điểm, lịch sử và quà" }).click();
   await page
     .getByRole("navigation", { name: "Điều hướng" })
     .getByRole("button", { name: "Tài khoản", exact: true })

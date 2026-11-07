@@ -21,7 +21,7 @@ export function PrivacyPage({ onBack, onNavigate }: Props = {}) {
         <BrandLogo />
         <p className="eyebrow">CH Haircut Salon</p>
         <h1>Chính sách quyền riêng tư</h1>
-        <p className="muted">Cập nhật: 30/10/2026</p>
+        <p className="muted">Cập nhật: 07/11/2026</p>
       </header>
 
       <div className="panel privacy-content">
@@ -45,9 +45,11 @@ export function PrivacyPage({ onBack, onNavigate }: Props = {}) {
 
         <h2 id="photo-consent">3. Ảnh kiểu tóc và sự đồng ý</h2>
         <p>
-          Quyền lưu ảnh là lựa chọn riêng, mặc định không chọn. Khách vẫn được yêu cầu tích điểm
-          khi không cho lưu ảnh. Nếu chọn cho phép, nhân viên có thể chụp và lưu tối đa 3 ảnh cho
-          lượt phục vụ đó. Ảnh và ghi chú chỉ dành cho chủ salon và nhân viên được phân quyền;
+          Quyền lưu ảnh là lựa chọn riêng, mặc định không chọn. Luồng tự quét QR yêu cầu khách
+          đồng ý ảnh trước khi gửi yêu cầu tích điểm mới. Nếu không đồng ý, khách có thể nhờ nhân
+          viên hỗ trợ và vẫn xem được điểm, lịch sử, quà và dùng quyền dữ liệu. Khi đồng ý, nhân
+          viên có thể chụp và lưu tối đa 3 ảnh cho lượt phục vụ đó; không bắt buộc phải có ảnh để
+          nhân viên xác nhận điểm. Ảnh và ghi chú chỉ dành cho chủ salon và nhân viên được phân quyền;
           trang khách hiển thị ngày cắt và điểm đã cộng. Khách có thể ngừng cho phép ảnh hoặc yêu cầu
           xóa theo mục 8; việc này không đồng nghĩa xóa điểm hoặc tài khoản.
         </p>
