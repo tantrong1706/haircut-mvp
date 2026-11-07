@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   overview: vi.fn(),
   branches: vi.fn(),
   profile: vi.fn(),
+  updateProfile: vi.fn(),
   wheel: vi.fn(),
   saveWheel: vi.fn(),
   saveNote: vi.fn(),
@@ -30,6 +31,7 @@ vi.mock("../services/operations", () => ({
   getOwnerOverview: mocks.overview,
   getBranchQrSettings: mocks.branches,
   getSalonProfile: mocks.profile,
+  updateSalonProfile: mocks.updateProfile,
   getLuckyWheelConfig: mocks.wheel,
   saveLuckyWheelConfig: mocks.saveWheel,
   approvePointRequest: mocks.approve,
@@ -182,6 +184,30 @@ describe("OwnerPage behavior before extraction", () => {
     expect(
       screen.queryByRole("navigation", { name: "Thiết lập vận hành" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("saves salon display name, public hotline and opening hours from Settings", async () => {
+    await openPage();
+    await openTab("Cài đặt");
+    const user = userEvent.setup();
+    const name = screen.getByRole("textbox", { name: "Tên hiển thị" });
+    const hotline = screen.getByRole("textbox", { name: /Hotline hiển thị cho khách/i });
+    const hours = screen.getByRole("textbox", { name: /Giờ mở cửa/i });
+    expect(hotline).toHaveValue("");
+    await user.clear(name);
+    await user.type(name, "Salon mới");
+    await user.type(hotline, "028 0000 0000");
+    await user.type(hours, "Thứ 2–CN, 09:00–20:00");
+    mocks.updateProfile.mockResolvedValue({
+      ...(await mocks.profile()), name: "Salon mới", hotline: "028 0000 0000",
+      openingHours: "Thứ 2–CN, 09:00–20:00",
+    });
+    await user.click(screen.getByRole("button", { name: "Lưu thông tin salon" }));
+    expect(mocks.updateProfile).toHaveBeenCalledWith({
+      salonId: "salon-fixture", name: "Salon mới", address: "", phone: "", pointPerVisit: 2,
+      hotline: "028 0000 0000", openingHours: "Thứ 2–CN, 09:00–20:00",
+    });
+    expect(await screen.findByText("Đã cập nhật thông tin salon.")).toBeVisible();
   });
 
   it("keeps trimmed salon/branch scope and disposes subscriptions on filter change and unmount", async () => {

@@ -79,6 +79,24 @@ vi.mock("../services/monitoring", () => ({
 }));
 
 describe("WebCustomerEntryPage", () => {
+  it("shows the salon logo, public hotline and hours after resolving a valid QR", async () => {
+    mocks.resolveWebCustomerContext.mockResolvedValue({
+      qr: {
+        ...qr, salonName: "Salon A", branchName: "Chi nhánh Trung tâm",
+        branchAddress: "123 Nguyễn Huệ",
+        salonAvatarUrl: "https://firebasestorage.googleapis.com/fixture",
+        salonHotline: "028 0000 0000", salonOpeningHours: "Thứ 2–CN, 09:00–20:00",
+      },
+      customer: session.customer, activeSession: null,
+    });
+    render(<WebCustomerEntryPage onReady={vi.fn()} />);
+    act(() => mocks.authListener?.({ uid: "uid-a" }));
+    expect(await screen.findByRole("heading", { name: "Salon A" })).toBeVisible();
+    expect(screen.getByRole("img", { name: "Logo Salon A" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "028 0000 0000" })).toHaveAttribute("href", "tel:0280000000");
+    expect(screen.getByText("Thứ 2–CN, 09:00–20:00")).toBeVisible();
+    expect(screen.getByText("123 Nguyễn Huệ")).toBeVisible();
+  });
   it("shows concise photo permission without a count or optional wording", async () => {
     render(<WebCustomerEntryPage onReady={vi.fn()} />);
     act(() => mocks.authListener?.({ uid: "uid-a" }));
