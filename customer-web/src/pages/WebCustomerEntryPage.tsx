@@ -397,8 +397,8 @@ export function WebCustomerEntryPage({ onReady }: Props) {
               <span>Cho phép salon chụp và lưu ảnh</span>
             </label>
             <p className="muted" id="qr-photo-consent-help">
-              Cần đồng ý ảnh để gửi yêu cầu điểm mới từ QR. Ảnh chỉ dùng trong hồ sơ nội bộ; nếu
-              không đồng ý, bạn có thể nhờ nhân viên hỗ trợ.{" "}
+              Cần đồng ý ảnh để gửi yêu cầu điểm mới từ QR. Bạn có thể xem ảnh của mình trong Lịch
+              sử; nếu không đồng ý, bạn có thể nhờ nhân viên hỗ trợ.{" "}
               <a href="/privacy#photo-consent">Tìm hiểu về ảnh</a>.
             </p>
             <button

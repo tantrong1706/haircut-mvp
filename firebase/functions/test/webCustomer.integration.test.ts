@@ -169,34 +169,51 @@ describe("authenticated web customer platform", () => {
     const sign = vi.spyOn(privatePhotos, "privatePhotoUrl").mockResolvedValue(link);
     const request = { salonId: "salon-a", photoRecordId: visit.id };
     try {
-      const list = await getWebCustomerHistory.run(phoneRequest("uid-photos", { salonId: "salon-a" }));
+      const list = await getWebCustomerHistory.run(
+        phoneRequest("uid-photos", { salonId: "salon-a" }),
+      );
       expect(list.records[0]).toMatchObject({ id: visit.id, hasCustomerPhotos: true });
       expect(list.records[0]).not.toHaveProperty("note");
       expect(list.records[0]).not.toHaveProperty("photoPaths");
       expect(sign).not.toHaveBeenCalled();
-      await expect(getWebCustomerHistory.run(phoneRequest("uid-other-photos", {
-        ...request, customerId,
-      }))).rejects.toMatchObject({ code: "not-found" });
-      await expect(getWebCustomerHistory.run(phoneRequest("uid-photos", {
-        ...request, salonId: "salon-b",
-      }))).rejects.toMatchObject({ code: "not-found" });
-      await expect(getWebCustomerHistory.run(requestFor("", request, {})))
-        .rejects.toMatchObject({ code: "unauthenticated" });
+      await expect(
+        getWebCustomerHistory.run(
+          phoneRequest("uid-other-photos", {
+            ...request,
+            customerId,
+          }),
+        ),
+      ).rejects.toMatchObject({ code: "not-found" });
+      await expect(
+        getWebCustomerHistory.run(
+          phoneRequest("uid-photos", {
+            ...request,
+            salonId: "salon-b",
+          }),
+        ),
+      ).rejects.toMatchObject({ code: "not-found" });
+      await expect(getWebCustomerHistory.run(requestFor("", request, {}))).rejects.toMatchObject({
+        code: "unauthenticated",
+      });
       const photo = await getWebCustomerHistory.run(phoneRequest("uid-photos", request));
       expect(photo).toMatchObject({ records: [], customerPhotoUrls: [link] });
       expect(sign).toHaveBeenCalledExactlyOnceWith(expect.anything(), path, expect.any(Number));
       await db.doc(`customers/${customerId}`).update({ allowPhoto: false });
-      await expect(getWebCustomerHistory.run(phoneRequest("uid-photos", request)))
-        .resolves.toMatchObject({ customerPhotoUrls: [] });
+      await expect(
+        getWebCustomerHistory.run(phoneRequest("uid-photos", request)),
+      ).resolves.toMatchObject({ customerPhotoUrls: [] });
       await db.doc(`customers/${customerId}`).update({
-        allowPhoto: true, photoConsentRevokedAt: Timestamp.fromMillis(Date.now() + 1000),
+        allowPhoto: true,
+        photoConsentRevokedAt: Timestamp.fromMillis(Date.now() + 1000),
       });
-      await expect(getWebCustomerHistory.run(phoneRequest("uid-photos", request)))
-        .resolves.toMatchObject({ customerPhotoUrls: [] });
+      await expect(
+        getWebCustomerHistory.run(phoneRequest("uid-photos", request)),
+      ).resolves.toMatchObject({ customerPhotoUrls: [] });
       await db.doc(`customers/${customerId}`).update({ photoConsentRevokedAt: null });
       await db.doc(`chair_sessions/${sessionId}`).update({ photoConsentGranted: false });
-      await expect(getWebCustomerHistory.run(phoneRequest("uid-photos", request)))
-        .resolves.toMatchObject({ customerPhotoUrls: [] });
+      await expect(
+        getWebCustomerHistory.run(phoneRequest("uid-photos", request)),
+      ).resolves.toMatchObject({ customerPhotoUrls: [] });
       expect(sign).toHaveBeenCalledTimes(1);
     } finally {
       sign.mockRestore();

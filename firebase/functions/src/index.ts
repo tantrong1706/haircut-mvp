@@ -133,6 +133,7 @@ import { apiError } from "./shared/errors";
 import { publicRequestPeer } from "./security";
 import { revokeHaircutDownloadTokens } from "./domains/photos/photoDownloadTokens";
 import { createPrivatePhotoReader, privatePhotoUrl, PRIVATE_PHOTO_URL_TTL_MS } from "./domains/photos/privatePhotoAccess";
+import { customerMayViewVisitPhotos, hasCustomerVisitPhotos, readCustomerVisitPhotos } from "./domains/photos/customerVisitPhotos";
 import { createVisitDetailsApi, assertLatestCompletedPhotoVisit } from "./domains/photos/visitDetails";
 
 initializeApp();
@@ -6155,8 +6156,8 @@ export const getCustomerSessionFromZalo = onCall(zaloFunctionOptions, async (req
   };
 });
 
-async function customerHistoryResult(salonId: string, customerId: string, limit: number) {
-  const [recordsSnap, salonSnap] = await Promise.all([
+async function customerHistoryResult(salonId: string, customerId: string, limit: number, webUid?: string) {
+  const [recordsSnap, salonSnap, customerSnap] = await Promise.all([
     db
       .collection("haircut_records")
       .where("salonId", "==", salonId)
@@ -6165,7 +6166,12 @@ async function customerHistoryResult(salonId: string, customerId: string, limit:
       .limit(limit)
       .get(),
     db.collection("salons").doc(salonId).get(),
+    webUid ? db.collection("customers").doc(customerId).get() : undefined,
   ]);
+  const canViewPhotos = webUid && customerMayViewVisitPhotos(customerSnap?.data(), {
+    uid: webUid, salonId, customerId,
+  });
+  const bucketName = canViewPhotos ? storage.bucket().name : "";
 
   const staffIds = [
     ...new Set(
@@ -6203,7 +6209,8 @@ async function customerHistoryResult(salonId: string, customerId: string, limit:
             (typeof data.staffName === "string" ? data.staffName : ""),
           serviceName: typeof data.serviceName === "string" ? data.serviceName : "",
           rewardName: typeof data.rewardName === "string" ? data.rewardName : "",
-          // Notes and photos are internal salon records, not customer history fields.
+          // Never include notes, Storage paths or photo links in a history listing.
+          ...(bucketName && hasCustomerVisitPhotos(data, bucketName) ? { hasCustomerPhotos: true } : {}),
           pointsAdded: data.pointsAdded ?? 0,
         };
       }),
@@ -6216,10 +6223,20 @@ export const getWebCustomerHistory = onCall(functionOptions, async (request) => 
   const salonId = requireString(request.data?.salonId, "salonId");
   await enforceAuthenticatedRateLimit("getWebCustomerHistory", principal.uid, salonId);
   const customerId = customerIdForWeb(salonId, principal.uid);
+  if (request.data?.photoRecordId !== undefined) {
+    await assertDedicatedWebCustomerUid(principal.uid);
+    return {
+      records: [],
+      customerPhotoUrls: await readCustomerVisitPhotos(db, storage.bucket(), {
+        uid: principal.uid, salonId, customerId,
+      }, request.data.photoRecordId),
+    };
+  }
   return customerHistoryResult(
     salonId,
     customerId,
     boundedQueryLimit(request.data?.limit, 20, 50),
+    principal.uid,
   );
 });
 

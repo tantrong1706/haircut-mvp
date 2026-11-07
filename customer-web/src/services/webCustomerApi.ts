@@ -117,6 +117,7 @@ export async function getWebCustomerHistory(session: AppSession): Promise<Haircu
         rewardName?: string;
         note?: string;
         photoUrls?: string[];
+        hasCustomerPhotos?: boolean;
         pointsAdded?: number;
       }>;
     }
@@ -133,8 +134,46 @@ export async function getWebCustomerHistory(session: AppSession): Promise<Haircu
     // Ignore private fields from older backend responses during rolling upgrades.
     note: "",
     photoUrls: [],
+    ...(record.hasCustomerPhotos === true ? { hasCustomerPhotos: true } : {}),
     pointsAdded: Number(record.pointsAdded ?? 0),
   }));
+}
+
+export async function getWebCustomerVisitPhotos(
+  session: AppSession,
+  recordId: string,
+): Promise<string[]> {
+  const result = testAdapterEnabled()
+    ? {
+        customerPhotoUrls: testFixture<Record<string, string[]>>("visit_photos", session, {})[
+          recordId
+        ],
+      }
+    : await callCustomerWebFunction<
+        { salonId: string; photoRecordId: string },
+        { customerPhotoUrls?: unknown }
+      >("getWebCustomerHistory", { salonId: session.qr.salonId, photoRecordId: recordId });
+  return Array.isArray(result.customerPhotoUrls)
+    ? [
+        ...new Set(
+          result.customerPhotoUrls.slice(0, 3).filter((value): value is string => {
+            if (typeof value !== "string") return false;
+            try {
+              const url = new URL(value);
+              return (
+                url.origin === "https://storage.googleapis.com" &&
+                !url.username &&
+                !url.password &&
+                !url.searchParams.has("token") &&
+                Boolean(url.searchParams.get("X-Goog-Signature"))
+              );
+            } catch {
+              return false;
+            }
+          }),
+        ),
+      ]
+    : [];
 }
 
 export async function getWebCustomerRewards(session: AppSession): Promise<Reward[]> {

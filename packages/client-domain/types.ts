@@ -48,6 +48,7 @@ export type HaircutRecord = {
   rewardName?: string;
   note: string;
   photoUrls: string[];
+  hasCustomerPhotos?: boolean;
   pointsAdded: number;
 };
 
