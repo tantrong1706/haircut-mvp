@@ -40,6 +40,20 @@ test("all owner menu items fit without horizontal scrolling", async ({ page }, i
   }
 });
 
+test("settings groups salon setup and opens the existing wheel form", async ({ page }) => {
+  await page
+    .getByRole("navigation", { name: "Chọn mục quản lý" })
+    .getByRole("button", { name: "Cài đặt", exact: true })
+    .click();
+  await expect(page.getByRole("region", { name: "Hồ sơ salon" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Tài khoản chủ salon" })).toBeVisible();
+  const setup = page.getByRole("navigation", { name: "Thiết lập vận hành" });
+  expect(await setup.getByRole("button").count()).toBe(3);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await setup.getByRole("button", { name: /Vòng quay/ }).click();
+  await expect(page.getByRole("heading", { name: "Cấu hình vòng quay" })).toBeVisible();
+});
+
 test("daily numbers have readable labels and quick actions precede retention", async ({ page }) => {
   const sizes = await page
     .locator(".overview-metric > span")

@@ -168,7 +168,9 @@ describe("OwnerPage behavior before extraction", () => {
 
   it("groups salon setup in Settings and links to the existing management forms", async () => {
     await openPage();
-    expect(screen.queryByRole("navigation", { name: "Thiết lập vận hành" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("navigation", { name: "Thiết lập vận hành" }),
+    ).not.toBeInTheDocument();
     await openTab("Cài đặt");
     expect(screen.getByRole("region", { name: "Hồ sơ salon" })).toBeVisible();
     expect(screen.getByRole("region", { name: "Tài khoản chủ salon" })).toBeVisible();
@@ -177,7 +179,9 @@ describe("OwnerPage behavior before extraction", () => {
     expect(within(operations).getByRole("button", { name: /Nhân viên và quyền/ })).toBeVisible();
     await userEvent.setup().click(within(operations).getByRole("button", { name: /Vòng quay/ }));
     expect(screen.getByRole("heading", { name: "Cấu hình vòng quay" })).toBeVisible();
-    expect(screen.queryByRole("navigation", { name: "Thiết lập vận hành" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("navigation", { name: "Thiết lập vận hành" }),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps trimmed salon/branch scope and disposes subscriptions on filter change and unmount", async () => {

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { OverviewPanel } from "../features/owner/OverviewPanel";
 import { ApprovalsPanel } from "../features/owner/ApprovalsPanel";
 import { WheelConfigPanel } from "../features/owner/WheelConfigPanel";
+import { OwnerSetupLinks } from "../features/owner/OwnerSetupLinks";
 import { ownerPhoneLabel } from "../features/owner/ownerFormatters";
 import { useOwnerNavigation } from "../features/owner/useOwnerNavigation";
 import type { ReactNode } from "react";
@@ -794,26 +795,31 @@ export function OwnerPage({ currentUser }: Props) {
         />
       ) : (
         <>
-          <SalonProfilePanel
-            profile={salonProfile}
-            saving={savingSalonProfile}
-            onSave={saveSalonProfile}
-          />
-          <SalonBrandingPanel
-            salonName={salonProfile?.name || "Salon"}
-            avatarUrl={salonProfile?.avatarUrl || ""}
-            saving={savingSalonAvatar}
-            onUpload={uploadSalonAvatar}
-            onClear={clearSalonAvatar}
-          />
-          <OwnerProfilePanel
-            currentUser={currentUser}
-            avatarUrl={ownerAvatarUrl}
-            saving={savingAvatar}
-            onUpload={uploadOwnerAvatar}
-            onClear={() => saveOwnerAvatar("")}
-          />
-          <AccountDeletionPanel currentUser={currentUser} />
+          <OwnerSetupLinks onOpenTab={setActiveTab} />
+          <section className="owner-settings-group" aria-label="Hồ sơ salon">
+            <SalonProfilePanel
+              profile={salonProfile}
+              saving={savingSalonProfile}
+              onSave={saveSalonProfile}
+            />
+            <SalonBrandingPanel
+              salonName={salonProfile?.name || "Salon"}
+              avatarUrl={salonProfile?.avatarUrl || ""}
+              saving={savingSalonAvatar}
+              onUpload={uploadSalonAvatar}
+              onClear={clearSalonAvatar}
+            />
+          </section>
+          <section className="owner-settings-group" aria-label="Tài khoản chủ salon">
+            <OwnerProfilePanel
+              currentUser={currentUser}
+              avatarUrl={ownerAvatarUrl}
+              saving={savingAvatar}
+              onUpload={uploadOwnerAvatar}
+              onClear={() => saveOwnerAvatar("")}
+            />
+            <AccountDeletionPanel currentUser={currentUser} />
+          </section>
         </>
       )}
 
