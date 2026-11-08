@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { DEFAULT_SYSTEM_FEATURES } from "@haircut/contracts";
@@ -18,6 +18,35 @@ const profile = {
 };
 
 describe("salon public profile form", () => {
+  it("previews the selected branch and unsaved visibility settings without submitting or opening external links", async () => {
+    const onSave = vi.fn();
+    const user = userEvent.setup();
+    const branches = [
+      { id: "first", salonId: profile.id, name: "Chi nhánh Một", address: "Đường Một", isActive: true },
+      { id: "second", salonId: profile.id, name: "Chi nhánh Hai", address: "Đường Hai", isActive: true },
+      { id: "inactive", salonId: profile.id, name: "Đã đóng", address: "Địa chỉ cũ", isActive: false },
+      { id: "other", salonId: "other-salon", name: "Salon khác", address: "Địa chỉ khác", isActive: true },
+    ];
+    render(<SalonProfilePanel profile={{ ...profile, showDirections: true }} branches={branches} saving={false} onSave={onSave} />);
+    expect(screen.queryByRole("region", { name: "Xem trước thông tin khách" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Xem trước thông tin khách" }));
+    const preview = within(screen.getByRole("region", { name: "Xem trước thông tin khách" }));
+    await user.selectOptions(preview.getByRole("combobox"), "second");
+    expect(preview.queryByRole("option", { name: "Đã đóng" })).not.toBeInTheDocument();
+    expect(preview.queryByRole("option", { name: "Salon khác" })).not.toBeInTheDocument();
+    expect(preview.getByText("Đường Hai")).toBeVisible();
+    expect(preview.getByText("Chỉ đường")).toBeVisible();
+    expect(preview.queryByRole("link")).not.toBeInTheDocument();
+    expect(preview.queryByText(profile.phone)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("switch", { name: "Hiện địa chỉ chi nhánh" }));
+    await user.click(screen.getByRole("switch", { name: "Hiện hotline" }));
+    expect(preview.queryByText("Đường Hai")).not.toBeInTheDocument();
+    expect(preview.queryByText("Chỉ đường")).not.toBeInTheDocument();
+    expect(preview.queryByText(profile.hotline)).not.toBeInTheDocument();
+    expect(preview.getByText(profile.openingHours)).toBeVisible();
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
   it("offers separate location and operation switches and saves the changed choices", async () => {
     const onSave = vi.fn();
     render(<SalonProfilePanel profile={profile} saving={false} onSave={onSave} />);

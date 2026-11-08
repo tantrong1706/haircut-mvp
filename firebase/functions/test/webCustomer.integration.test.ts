@@ -24,6 +24,24 @@ const db = getFirestore();
 const secret = "fixture-qr-signing-key-only-32-characters";
 
 describe("authenticated web customer platform", () => {
+  it("uses the current address for directions in an existing visit and suppresses a closed branch", async () => {
+    await seedSalon("salon-a", "branch-a");
+    await db.doc("salons/salon-a").update({ showDirections: true });
+    const qr = signedBranchQr("salon-a", "branch-a");
+    const uid = "uid-current-directions";
+    const checked = await checkInWebCustomer.run(checkinRequest(uid, qr));
+    expect(checked).toMatchObject({ branchAddress: "1 Đường A", branchDirectionsEnabled: true });
+    const sessionInput = { salonId: "salon-a", sessionId: checked.sessionId };
+    await db.doc("branches/branch-a").update({ address: "Địa chỉ chi nhánh mới" });
+    expect((await getWebCustomerContext.run(phoneRequest(uid, qr))).activeSession)
+      .toMatchObject({ branchAddress: "Địa chỉ chi nhánh mới", branchDirectionsEnabled: true });
+    await expect(getWebCustomerSession.run(phoneRequest(uid, sessionInput)))
+      .resolves.toMatchObject({ branchAddress: "Địa chỉ chi nhánh mới", branchDirectionsEnabled: true });
+    await db.doc("branches/branch-a").update({ isActive: false });
+    await expect(getWebCustomerSession.run(phoneRequest(uid, sessionInput)))
+      .resolves.toMatchObject({ branchAddress: "", branchDirectionsEnabled: false, sessionStatus: "pending_approval" });
+  });
+
   it("enforces owner location and operation settings without changing existing requests or overriding admin", async () => {
     await seedSalon("salon-a", "branch-a");
     await seedSalon("salon-b", "branch-b");
