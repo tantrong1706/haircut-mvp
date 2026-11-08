@@ -1,4 +1,5 @@
 import { deleteApp, getApps } from "firebase-admin/app";
+import { getStorage } from "firebase-admin/storage";
 import { Timestamp, getFirestore } from "firebase-admin/firestore";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -11,6 +12,7 @@ import {
   getSalonProfile,
   listBranches,
   spinWebLuckyWheel,
+  resolveCustomerQr,
   updateSalonProfile,
 } from "../src/index";
 import { createSignedQrToken } from "../src/security";
@@ -22,6 +24,41 @@ const db = getFirestore();
 const secret = "fixture-qr-signing-key-only-32-characters";
 
 describe("authenticated web customer platform", () => {
+  it("hides only opted-out public fields without deleting their values", async () => {
+    await seedSalon("salon-a", "branch-a");
+    await db.doc("users/owner-a").set({ salonId: "salon-a", role: "owner", isActive: true });
+    await db.doc("users/staff-a").set({ salonId: "salon-a", role: "staff", isActive: true });
+    const bucket = getStorage().bucket().name;
+    const avatarUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket}/o/salons%2Fsalon-a%2Fbranding%2Favatar.webp?alt=media`;
+    const saved = { avatarUrl, hotline: "028 0000 0000", openingHours: "09:00–20:00" };
+    await db.doc("salons/salon-a").update({ name: "Salon A", ...saved });
+    const qr = signedBranchQr("salon-a", "branch-a");
+    const uid = "uid-contact-visibility";
+    const ownerProfile = { salonId: "salon-a", name: "Salon A", pointPerVisit: 1 };
+    const visible = { salonName: "Salon A", salonAvatarUrl: avatarUrl, salonHotline: saved.hotline, salonOpeningHours: saved.openingHours };
+    expect((await getWebCustomerContext.run(phoneRequest(uid, qr))).qr).toMatchObject(visible);
+    const allHidden = { showLogo: false, showHotline: false, showOpeningHours: false };
+    await expect(updateSalonProfile.run(requestFor("staff-a", { ...ownerProfile, ...allHidden }, {})))
+      .rejects.toMatchObject({ code: "permission-denied" });
+    await expect(updateSalonProfile.run(requestFor("owner-a", { ...ownerProfile, showLogo: "false" }, {})))
+      .rejects.toMatchObject({ code: "invalid-argument" });
+    await expect(updateSalonProfile.run(requestFor("owner-a", { ...ownerProfile, ...allHidden }, {})))
+      .resolves.toMatchObject({ ...saved, ...allHidden });
+    await updateSalonProfile.run(requestFor("owner-a", ownerProfile, {}));
+    await expect(getSalonProfile.run(requestFor("owner-a", { salonId: "salon-a" }, {})))
+      .resolves.toMatchObject({ ...saved, ...allHidden });
+    const hidden = { salonName: "Salon A", salonAvatarUrl: "", salonHotline: "", salonOpeningHours: "" };
+    await expect(resolveCustomerQr.run(requestFor("", qr, {}))).resolves.toMatchObject(hidden);
+    expect((await getWebCustomerContext.run(phoneRequest(uid, qr))).qr).toMatchObject(hidden);
+    await expect(checkInWebCustomer.run(checkinRequest(uid, qr))).resolves.toMatchObject(hidden);
+    await expect(getWebCustomerSession.run(phoneRequest(uid, { salonId: "salon-a" }))).resolves.toMatchObject(hidden);
+    await updateSalonProfile.run(requestFor("owner-a", { ...ownerProfile, showHotline: true }, {}));
+    expect((await getWebCustomerContext.run(phoneRequest(uid, qr))).qr)
+      .toMatchObject({ ...hidden, salonHotline: saved.hotline });
+    await updateSalonProfile.run(requestFor("owner-a", { ...ownerProfile, showLogo: true, showOpeningHours: true }, {}));
+    expect((await getWebCustomerContext.run(phoneRequest(uid, qr))).qr).toMatchObject(visible);
+  });
+
   it("publishes only explicitly set salon contact details and keeps them across older client edits", async () => {
     await seedSalon("salon-a", "branch-a");
     await seedSalon("salon-b", "branch-b");

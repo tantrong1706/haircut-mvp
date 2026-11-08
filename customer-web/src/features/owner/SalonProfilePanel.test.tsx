@@ -18,6 +18,28 @@ const profile = {
 };
 
 describe("salon public profile form", () => {
+  it("saves only the visibility switches changed and keeps the saved contact values", async () => {
+    const onSave = vi.fn();
+    render(<SalonProfilePanel profile={profile} saving={false} onSave={onSave} />);
+    const user = userEvent.setup();
+    const logo = screen.getByRole("switch", { name: "Hiện logo" });
+    const hotline = screen.getByRole("switch", { name: "Hiện hotline" });
+    const hours = screen.getByRole("switch", { name: "Hiện giờ mở cửa" });
+    expect(logo).toBeChecked();
+    expect(hotline).toBeChecked();
+    expect(hours).toBeChecked();
+    await user.click(logo);
+    await user.click(hotline);
+    await user.click(hours);
+    await user.click(screen.getByRole("button", { name: "Lưu thông tin salon" }));
+    expect(onSave).toHaveBeenCalledWith({
+      name: profile.name, phone: profile.phone, address: profile.address, pointPerVisit: 1,
+      showLogo: false, showHotline: false, showOpeningHours: false,
+    });
+    expect(screen.getByRole("textbox", { name: /Hotline hiển thị cho khách/ })).toHaveValue(profile.hotline);
+    expect(screen.getByRole("textbox", { name: /Giờ mở cửa/ })).toHaveValue(profile.openingHours);
+  });
+
   it("sends explicit blanks only for the public fields the owner clears", async () => {
     const onSave = vi.fn();
     render(<SalonProfilePanel profile={profile} saving={false} onSave={onSave} />);
