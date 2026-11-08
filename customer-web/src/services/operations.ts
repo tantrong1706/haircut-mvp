@@ -153,7 +153,13 @@ export type InactiveCustomer = {
   daysSinceLastVisit: number;
 };
 
-export type SalonProfile = {
+export type SalonProfileVisibility = {
+  showLogo?: boolean;
+  showHotline?: boolean;
+  showOpeningHours?: boolean;
+};
+
+export type SalonProfile = SalonProfileVisibility & {
   id: string;
   name: string;
   address: string;
@@ -490,7 +496,7 @@ export async function getSalonProfile(salonId: string): Promise<SalonProfile> {
   );
 }
 
-export type SalonProfileUpdate = {
+export type SalonProfileUpdate = SalonProfileVisibility & {
   salonId: string;
   name: string;
   address?: string;
@@ -511,18 +517,21 @@ export async function updateSalonProfile(input: SalonProfileUpdate): Promise<Sal
   }
 
   const base = { salonId: input.salonId, name, address, phone, pointPerVisit };
-  if (input.hotline !== undefined || input.openingHours !== undefined) {
-    const contact = {
-      ...(input.hotline !== undefined ? { hotline: input.hotline.trim() } : {}),
-      ...(input.openingHours !== undefined ? { openingHours: input.openingHours.trim() } : {}),
-    };
+  const publicChanges = {
+    ...(input.hotline !== undefined ? { hotline: input.hotline.trim() } : {}),
+    ...(input.openingHours !== undefined ? { openingHours: input.openingHours.trim() } : {}),
+    ...(input.showLogo !== undefined ? { showLogo: input.showLogo } : {}),
+    ...(input.showHotline !== undefined ? { showHotline: input.showHotline } : {}),
+    ...(input.showOpeningHours !== undefined ? { showOpeningHours: input.showOpeningHours } : {}),
+  };
+  if (Object.keys(publicChanges).length > 0) {
     // Public contact edits must be confirmed by the authorized callable, never a test fallback.
     const result = await callFunction<SalonProfileUpdate, SalonProfile>("updateSalonProfile", {
       ...base,
-      ...contact,
+      ...publicChanges,
     });
-    if (Object.entries(contact).some(([key, value]) => result[key as keyof typeof contact] !== value)) {
-      throw new Error("Máy chủ chưa xác nhận lưu hotline hoặc giờ mở cửa. Vui lòng tải lại và thử lại.");
+    if (Object.entries(publicChanges).some(([key, value]) => result[key as keyof typeof publicChanges] !== value)) {
+      throw new Error("Máy chủ chưa xác nhận lưu cài đặt hiển thị. Vui lòng tải lại và thử lại.");
     }
     return result;
   }
@@ -695,6 +704,9 @@ async function getSalonProfileDirect(salonId: string): Promise<SalonProfile> {
     phone: String(data.phone || ""),
     hotline: typeof data.hotline === "string" ? data.hotline : "",
     openingHours: typeof data.openingHours === "string" ? data.openingHours : "",
+    showLogo: data.showLogo === undefined || data.showLogo === true,
+    showHotline: data.showHotline === undefined || data.showHotline === true,
+    showOpeningHours: data.showOpeningHours === undefined || data.showOpeningHours === true,
     avatarUrl: String(data.avatarUrl || ""),
     pointPerVisit: Number(data.pointPerVisit ?? 1),
     freeCustomerLimit: Number(data.freeCustomerLimit ?? 50),

@@ -35,27 +35,47 @@ describe("authenticated web customer platform", () => {
     const qr = signedBranchQr("salon-a", "branch-a");
     const uid = "uid-contact-visibility";
     const ownerProfile = { salonId: "salon-a", name: "Salon A", pointPerVisit: 1 };
-    const visible = { salonName: "Salon A", salonAvatarUrl: avatarUrl, salonHotline: saved.hotline, salonOpeningHours: saved.openingHours };
+    const visible = {
+      salonName: "Salon A",
+      salonAvatarUrl: avatarUrl,
+      salonHotline: saved.hotline,
+      salonOpeningHours: saved.openingHours,
+    };
     expect((await getWebCustomerContext.run(phoneRequest(uid, qr))).qr).toMatchObject(visible);
     const allHidden = { showLogo: false, showHotline: false, showOpeningHours: false };
-    await expect(updateSalonProfile.run(requestFor("staff-a", { ...ownerProfile, ...allHidden }, {})))
-      .rejects.toMatchObject({ code: "permission-denied" });
-    await expect(updateSalonProfile.run(requestFor("owner-a", { ...ownerProfile, showLogo: "false" }, {})))
-      .rejects.toMatchObject({ code: "invalid-argument" });
-    await expect(updateSalonProfile.run(requestFor("owner-a", { ...ownerProfile, ...allHidden }, {})))
-      .resolves.toMatchObject({ ...saved, ...allHidden });
+    await expect(
+      updateSalonProfile.run(requestFor("staff-a", { ...ownerProfile, ...allHidden }, {})),
+    ).rejects.toMatchObject({ code: "permission-denied" });
+    await expect(
+      updateSalonProfile.run(requestFor("owner-a", { ...ownerProfile, showLogo: "false" }, {})),
+    ).rejects.toMatchObject({ code: "invalid-argument" });
+    await expect(
+      updateSalonProfile.run(requestFor("owner-a", { ...ownerProfile, ...allHidden }, {})),
+    ).resolves.toMatchObject({ ...saved, ...allHidden });
     await updateSalonProfile.run(requestFor("owner-a", ownerProfile, {}));
-    await expect(getSalonProfile.run(requestFor("owner-a", { salonId: "salon-a" }, {})))
-      .resolves.toMatchObject({ ...saved, ...allHidden });
-    const hidden = { salonName: "Salon A", salonAvatarUrl: "", salonHotline: "", salonOpeningHours: "" };
+    await expect(
+      getSalonProfile.run(requestFor("owner-a", { salonId: "salon-a" }, {})),
+    ).resolves.toMatchObject({ ...saved, ...allHidden });
+    const hidden = {
+      salonName: "Salon A",
+      salonAvatarUrl: "",
+      salonHotline: "",
+      salonOpeningHours: "",
+    };
     await expect(resolveCustomerQr.run(requestFor("", qr, {}))).resolves.toMatchObject(hidden);
     expect((await getWebCustomerContext.run(phoneRequest(uid, qr))).qr).toMatchObject(hidden);
     await expect(checkInWebCustomer.run(checkinRequest(uid, qr))).resolves.toMatchObject(hidden);
-    await expect(getWebCustomerSession.run(phoneRequest(uid, { salonId: "salon-a" }))).resolves.toMatchObject(hidden);
+    await expect(
+      getWebCustomerSession.run(phoneRequest(uid, { salonId: "salon-a" })),
+    ).resolves.toMatchObject(hidden);
     await updateSalonProfile.run(requestFor("owner-a", { ...ownerProfile, showHotline: true }, {}));
-    expect((await getWebCustomerContext.run(phoneRequest(uid, qr))).qr)
-      .toMatchObject({ ...hidden, salonHotline: saved.hotline });
-    await updateSalonProfile.run(requestFor("owner-a", { ...ownerProfile, showLogo: true, showOpeningHours: true }, {}));
+    expect((await getWebCustomerContext.run(phoneRequest(uid, qr))).qr).toMatchObject({
+      ...hidden,
+      salonHotline: saved.hotline,
+    });
+    await updateSalonProfile.run(
+      requestFor("owner-a", { ...ownerProfile, showLogo: true, showOpeningHours: true }, {}),
+    );
     expect((await getWebCustomerContext.run(phoneRequest(uid, qr))).qr).toMatchObject(visible);
   });
 

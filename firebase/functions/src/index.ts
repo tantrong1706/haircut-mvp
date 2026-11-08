@@ -134,7 +134,7 @@ import { publicRequestPeer } from "./security";
 import { revokeHaircutDownloadTokens } from "./domains/photos/photoDownloadTokens";
 import { createPrivatePhotoReader, privatePhotoUrl, PRIVATE_PHOTO_URL_TTL_MS } from "./domains/photos/privatePhotoAccess";
 import { customerMayViewVisitPhotos, hasCustomerVisitPhotos, readCustomerVisitPhotos } from "./domains/photos/customerVisitPhotos";
-import { parseSalonPublicContactPatch, salonPublicContact } from "./domains/salons/publicContact";
+import { parseSalonPublicContactPatch, parseSalonVisibilityPatch, salonPublicContact, salonVisibility } from "./domains/salons/publicContact";
 import { createVisitDetailsApi, assertLatestCompletedPhotoVisit } from "./domains/photos/visitDetails";
 
 initializeApp();
@@ -2775,6 +2775,7 @@ export const getSalonProfile = onCall(functionOptions, async (request) => {
     address: salon?.address ?? "",
     phone: salon?.phone ?? "",
     ...salonPublicContact(salon),
+    ...salonVisibility(salon),
     avatarUrl: trustedStoredSalonAvatarUrl(salon?.avatarUrl, salonId),
     pointPerVisit: Number(salon?.pointPerVisit ?? 1),
     freeCustomerLimit: Number(salon?.freeCustomerLimit ?? 50),
@@ -2793,6 +2794,11 @@ export const updateSalonProfile = onCall(functionOptions, async (request) => {
   const contactPatch = parseSalonPublicContactPatch({
     hotline: request.data?.hotline,
     openingHours: request.data?.openingHours,
+  });
+  const visibilityPatch = parseSalonVisibilityPatch({
+    showLogo: request.data?.showLogo,
+    showHotline: request.data?.showHotline,
+    showOpeningHours: request.data?.showOpeningHours,
   });
   const pointPerVisit = requireBoundedPositiveNumber(
     request.data?.pointPerVisit,
@@ -2815,6 +2821,7 @@ export const updateSalonProfile = onCall(functionOptions, async (request) => {
       address: address ?? null,
       phone: phone ?? null,
       ...contactPatch,
+      ...visibilityPatch,
       pointPerVisit,
       updatedAt: now,
     },
@@ -2846,6 +2853,7 @@ export const updateSalonProfile = onCall(functionOptions, async (request) => {
     phone: phone ?? "",
     avatarUrl: trustedStoredSalonAvatarUrl(salonSnap.data()?.avatarUrl, salonId),
     ...salonPublicContact({ ...salonSnap.data(), ...contactPatch }),
+    ...salonVisibility({ ...salonSnap.data(), ...visibilityPatch }),
     pointPerVisit,
     freeCustomerLimit: Number(salonSnap.data()?.freeCustomerLimit ?? 50),
     features,
@@ -3045,11 +3053,12 @@ async function getOrCreateWebCustomer(
 
 function webSalonDetails(salonId: string, salon: DocumentData | undefined) {
   const contact = salonPublicContact(salon);
+  const visibility = salonVisibility(salon);
   return {
     salonName: String(salon?.name || "Salon"),
-    salonAvatarUrl: trustedStoredSalonAvatarUrl(salon?.avatarUrl, salonId),
-    salonHotline: contact.hotline,
-    salonOpeningHours: contact.openingHours,
+    salonAvatarUrl: visibility.showLogo ? trustedStoredSalonAvatarUrl(salon?.avatarUrl, salonId) : "",
+    salonHotline: visibility.showHotline ? contact.hotline : "",
+    salonOpeningHours: visibility.showOpeningHours ? contact.openingHours : "",
   };
 }
 

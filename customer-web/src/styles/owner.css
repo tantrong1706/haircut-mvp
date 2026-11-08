@@ -652,6 +652,39 @@
   min-inline-size: 0;
 }
 
+.salon-visibility {
+  margin-block: 1rem;
+}
+
+.salon-visibility legend {
+  font-weight: 700;
+}
+
+.salon-visibility-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+  gap: 0.55rem;
+}
+
+.salon-visibility-options .salon-visibility-switch {
+  justify-content: space-between;
+  min-height: 44px;
+  text-align: start;
+}
+
+.salon-visibility-status {
+  padding: 0.2rem 0.6rem;
+  border-radius: 99px;
+  border: 1px solid currentColor;
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+
+.salon-visibility-switch[aria-checked="true"] .salon-visibility-status {
+  background: #ddaa72;
+  color: #181410;
+}
+
 .owner-setup-links {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));

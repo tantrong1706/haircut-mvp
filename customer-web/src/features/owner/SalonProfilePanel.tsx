@@ -8,6 +8,12 @@ type Props = {
   onSave: (input: Omit<SalonProfileUpdate, "salonId">) => void;
 };
 
+const visibilityOptions = [
+  ["showLogo", "Hiện logo"],
+  ["showHotline", "Hiện hotline"],
+  ["showOpeningHours", "Hiện giờ mở cửa"],
+] as const;
+
 export function SalonProfilePanel({ profile, saving, onSave }: Props) {
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
@@ -15,6 +21,11 @@ export function SalonProfilePanel({ profile, saving, onSave }: Props) {
   const [hotline, setHotline] = useState("");
   const [openingHours, setOpeningHours] = useState("");
   const [pointPerVisit, setPointPerVisit] = useState(1);
+  const [visibility, setVisibility] = useState({
+    showLogo: true,
+    showHotline: true,
+    showOpeningHours: true,
+  });
 
   const savedName = profile?.name ?? "";
   const savedAddress = profile?.address ?? "";
@@ -22,6 +33,9 @@ export function SalonProfilePanel({ profile, saving, onSave }: Props) {
   const savedHotline = profile?.hotline ?? "";
   const savedHours = profile?.openingHours ?? "";
   const savedPoints = profile?.pointPerVisit ?? 1;
+  const savedShowLogo = profile?.showLogo ?? true;
+  const savedShowHotline = profile?.showHotline ?? true;
+  const savedShowOpeningHours = profile?.showOpeningHours ?? true;
   useEffect(() => {
     setName(savedName);
     setAddress(savedAddress);
@@ -29,16 +43,40 @@ export function SalonProfilePanel({ profile, saving, onSave }: Props) {
     setHotline(savedHotline);
     setOpeningHours(savedHours);
     setPointPerVisit(savedPoints);
-  }, [profile?.id, savedName, savedAddress, savedPhone, savedHotline, savedHours, savedPoints]);
+    setVisibility({
+      showLogo: savedShowLogo,
+      showHotline: savedShowHotline,
+      showOpeningHours: savedShowOpeningHours,
+    });
+  }, [
+    profile?.id,
+    savedName,
+    savedAddress,
+    savedPhone,
+    savedHotline,
+    savedHours,
+    savedPoints,
+    savedShowLogo,
+    savedShowHotline,
+    savedShowOpeningHours,
+  ]);
 
   const hotlineChanged = hotline.trim() !== savedHotline;
   const hoursChanged = openingHours.trim() !== savedHours;
+  const visibilityPatch = {
+    ...(visibility.showLogo !== savedShowLogo ? { showLogo: visibility.showLogo } : {}),
+    ...(visibility.showHotline !== savedShowHotline ? { showHotline: visibility.showHotline } : {}),
+    ...(visibility.showOpeningHours !== savedShowOpeningHours
+      ? { showOpeningHours: visibility.showOpeningHours }
+      : {}),
+  };
   const changed =
     name.trim() !== savedName ||
     address.trim() !== savedAddress ||
     phone.trim() !== savedPhone ||
     hotlineChanged ||
     hoursChanged ||
+    Object.keys(visibilityPatch).length > 0 ||
     pointPerVisit !== savedPoints;
   const canSave = Boolean(profile && !saving && name.trim() && changed);
 
@@ -55,6 +93,7 @@ export function SalonProfilePanel({ profile, saving, onSave }: Props) {
           pointPerVisit,
           ...(hotlineChanged ? { hotline: hotline.trim() } : {}),
           ...(hoursChanged ? { openingHours: openingHours.trim() } : {}),
+          ...visibilityPatch,
         });
       }}
     >
@@ -135,6 +174,27 @@ export function SalonProfilePanel({ profile, saving, onSave }: Props) {
             placeholder="Địa chỉ để nhận diện salon"
           />
         </label>
+      </fieldset>
+      <fieldset className="salon-profile-fields salon-visibility" disabled={saving || !profile}>
+        <legend>Hiển thị với khách</legend>
+        <p className="muted">Tắt để ẩn mà vẫn giữ nội dung. Thay đổi áp dụng sau khi lưu.</p>
+        <div className="salon-visibility-options">
+          {visibilityOptions.map(([key, label]) => (
+            <button
+              className="secondary-button salon-visibility-switch"
+              key={key}
+              type="button"
+              role="switch"
+              aria-checked={visibility[key]}
+              onClick={() => setVisibility((current) => ({ ...current, [key]: !current[key] }))}
+            >
+              {label}
+              <span className="salon-visibility-status" aria-hidden="true">
+                {visibility[key] ? "Bật" : "Tắt"}
+              </span>
+            </button>
+          ))}
+        </div>
       </fieldset>
       <div className="button-row wrap-row">
         <button type="submit" className="primary-button" disabled={!canSave}>

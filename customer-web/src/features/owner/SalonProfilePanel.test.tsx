@@ -33,10 +33,17 @@ describe("salon public profile form", () => {
     await user.click(hours);
     await user.click(screen.getByRole("button", { name: "Lưu thông tin salon" }));
     expect(onSave).toHaveBeenCalledWith({
-      name: profile.name, phone: profile.phone, address: profile.address, pointPerVisit: 1,
-      showLogo: false, showHotline: false, showOpeningHours: false,
+      name: profile.name,
+      phone: profile.phone,
+      address: profile.address,
+      pointPerVisit: 1,
+      showLogo: false,
+      showHotline: false,
+      showOpeningHours: false,
     });
-    expect(screen.getByRole("textbox", { name: /Hotline hiển thị cho khách/ })).toHaveValue(profile.hotline);
+    expect(screen.getByRole("textbox", { name: /Hotline hiển thị cho khách/ })).toHaveValue(
+      profile.hotline,
+    );
     expect(screen.getByRole("textbox", { name: /Giờ mở cửa/ })).toHaveValue(profile.openingHours);
   });
 

@@ -10,8 +10,13 @@ beforeEach(() => vi.resetAllMocks());
 
 it("requires confirmation of visibility changes, including false", async () => {
   mocks.call.mockResolvedValueOnce({ showHotline: false }).mockResolvedValueOnce(base);
-  await expect(updateSalonProfile({ ...base, showHotline: false })).resolves.toMatchObject({ showHotline: false });
-  expect(mocks.call).toHaveBeenCalledWith("updateSalonProfile", expect.objectContaining({ showHotline: false }));
+  await expect(updateSalonProfile({ ...base, showHotline: false })).resolves.toMatchObject({
+    showHotline: false,
+  });
+  expect(mocks.call).toHaveBeenCalledWith(
+    "updateSalonProfile",
+    expect.objectContaining({ showHotline: false }),
+  );
   await expect(updateSalonProfile({ ...base, showLogo: false })).rejects.toThrow("chưa xác nhận");
   expect(mocks.fallback).not.toHaveBeenCalled();
 });

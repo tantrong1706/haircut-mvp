@@ -1,6 +1,32 @@
 import { HttpsError } from "firebase-functions/v2/https";
 
 type Fields = { hotline?: unknown; openingHours?: unknown };
+const visibilityKeys = ["showLogo", "showHotline", "showOpeningHours"] as const;
+type VisibilityKey = (typeof visibilityKeys)[number];
+type VisibilityFields = Partial<Record<VisibilityKey, unknown>>;
+type Visibility = Record<VisibilityKey, boolean>;
+
+export function parseSalonVisibilityPatch(input: VisibilityFields): Partial<Visibility> {
+  const patch: Partial<Visibility> = {};
+  for (const key of visibilityKeys) {
+    const value = input[key];
+    if (value === undefined) continue;
+    if (typeof value !== "boolean") {
+      throw new HttpsError("invalid-argument", "Cài đặt hiển thị phải là Bật hoặc Tắt.");
+    }
+    patch[key] = value;
+  }
+  return patch;
+}
+
+export function salonVisibility(data: VisibilityFields | undefined): Visibility {
+  const enabled = (key: VisibilityKey) => data?.[key] === undefined || data[key] === true;
+  return {
+    showLogo: enabled("showLogo"),
+    showHotline: enabled("showHotline"),
+    showOpeningHours: enabled("showOpeningHours"),
+  };
+}
 
 function hotlineValid(value: string) {
   return (
