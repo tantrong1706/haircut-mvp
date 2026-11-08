@@ -18,6 +18,27 @@ const profile = {
 };
 
 describe("salon public profile form", () => {
+  it("offers separate location and operation switches and saves the changed choices", async () => {
+    const onSave = vi.fn();
+    render(<SalonProfilePanel profile={profile} saving={false} onSave={onSave} />);
+    const user = userEvent.setup();
+    const address = screen.getByRole("switch", { name: "Hiện địa chỉ chi nhánh" });
+    const directions = screen.getByRole("switch", { name: "Hiện nút Chỉ đường" });
+    const checkin = screen.getByRole("switch", { name: "Nhận yêu cầu tích điểm mới" });
+    const wheel = screen.getByRole("switch", { name: "Cho phép quay thưởng" });
+    expect(address).toBeChecked();
+    expect(directions).not.toBeChecked();
+    expect(checkin).toBeChecked();
+    expect(wheel).toBeChecked();
+    await user.click(directions);
+    await user.click(checkin);
+    await user.click(wheel);
+    await user.click(screen.getByRole("button", { name: "Lưu thông tin salon" }));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
+      showDirections: true, acceptWebPointRequests: false, allowWebWheel: false,
+    }));
+  });
+
   it("saves only the visibility switches changed and keeps the saved contact values", async () => {
     const onSave = vi.fn();
     render(<SalonProfilePanel profile={profile} saving={false} onSave={onSave} />);
