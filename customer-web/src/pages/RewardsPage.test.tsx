@@ -30,6 +30,24 @@ describe("RewardsPage", () => {
     mocks.toDataURL.mockResolvedValue("data:image/png;base64,reward-qr");
   });
 
+  it("updates a redeemed reward on demand and removes its active QR and copy button", async () => {
+    const reward = {
+      id: "reward-update", rewardName: "Gội đầu", rewardCode: "HC-UPDATE",
+      status: "unused", redemptionScope: "salon", allowedBranchIds: [],
+    };
+    mocks.getRewards
+      .mockResolvedValueOnce([reward])
+      .mockResolvedValueOnce([{ ...reward, status: "used", usedBranchName: "Chi nhánh Một" }]);
+    render(<RewardsPage session={session} />);
+    expect(await screen.findByRole("img", { name: "QR quà Gội đầu" })).toBeVisible();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Cập nhật mã quà" }));
+    const history = await screen.findByRole("region", { name: "Lịch sử quà" });
+    expect(within(history).getByText("Đã dùng")).toBeVisible();
+    expect(within(history).getByText("Đã dùng tại: Chi nhánh Một")).toBeVisible();
+    expect(screen.queryByRole("img", { name: "QR quà Gội đầu" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Sao chép mã quà" })).not.toBeInTheDocument();
+  });
+
   it("tải lại danh sách quà sau lỗi tạm thời", async () => {
     const user = userEvent.setup();
     mocks.getRewards

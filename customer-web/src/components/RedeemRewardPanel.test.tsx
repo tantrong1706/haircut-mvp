@@ -41,6 +41,32 @@ describe("RedeemRewardPanel", () => {
     });
   });
 
+  it("requires an explicit branch and invalidates the checked code when the owner switches branches", async () => {
+    const user = userEvent.setup();
+    render(<RedeemRewardPanel salonId="salon-a" allowRestore branchChoices={[
+      { id: "branch-a1", name: "Chi nhánh Một" },
+      { id: "branch-a2", name: "Chi nhánh Hai" },
+    ]} />);
+    const branch = screen.getByRole("combobox", { name: "Chi nhánh đổi quà" });
+    const check = screen.getByRole("button", { name: "Kiểm tra mã" });
+    expect(check).toBeDisabled();
+    await user.selectOptions(branch, "branch-a1");
+    await user.type(screen.getByLabelText("Mã quà"), "HC-TEST");
+    await user.click(check);
+    expect(await screen.findByText("Mã còn hiệu lực")).toBeVisible();
+    expect(mocks.lookupRewardCode).toHaveBeenLastCalledWith({
+      salonId: "salon-a", branchId: "branch-a1", rewardCode: "HC-TEST",
+    });
+    await user.selectOptions(branch, "branch-a2");
+    expect(screen.queryByText("Mã còn hiệu lực")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Xác nhận khách đã dùng" })).toBeDisabled();
+    await user.click(check);
+    expect(mocks.lookupRewardCode).toHaveBeenLastCalledWith({
+      salonId: "salon-a", branchId: "branch-a2", rewardCode: "HC-TEST",
+    });
+    expect(mocks.redeemRewardCode).not.toHaveBeenCalled();
+  });
+
   it("chỉ đổi quà sau bước xác nhận", async () => {
     const user = userEvent.setup();
     render(<RedeemRewardPanel salonId="salon-a" branchId="branch-a1" />);
