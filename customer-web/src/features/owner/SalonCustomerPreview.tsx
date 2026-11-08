@@ -3,27 +3,17 @@ import { SalonContactDetails } from "../../components/SalonContactDetails";
 import type { SalonBranch } from "../../services/operations";
 import type { SalonPublicDetails } from "../../services/types";
 
-export type PreviewBranch = Pick<SalonBranch, "id" | "salonId" | "name" | "address" | "isActive">;
+export type PreviewBranch = Pick<SalonBranch, "id" | "salonId" | "name" | "isActive">;
 
 type Props = SalonPublicDetails & {
   salonId: string;
   branches: readonly PreviewBranch[];
-  showAddress: boolean;
-  showDirections: boolean;
 };
 
-export function SalonCustomerPreview({
-  salonId,
-  branches,
-  salonName,
-  showAddress,
-  showDirections,
-  ...contact
-}: Props) {
+export function SalonCustomerPreview({ salonId, branches, salonName, ...contact }: Props) {
   const [branchId, setBranchId] = useState("");
   const activeBranches = branches.filter((branch) => branch.salonId === salonId && branch.isActive);
   const branch = activeBranches.find((option) => option.id === branchId) ?? activeBranches[0];
-  const branchAddress = showAddress ? branch?.address.trim() : undefined;
 
   return (
     <>
@@ -43,14 +33,7 @@ export function SalonCustomerPreview({
       <div className="salon-preview-card">
         <strong>{salonName?.trim() || "Tên salon"}</strong>
         {branch ? <p>{branch.name}</p> : <p className="muted">Chưa có chi nhánh để xem trước.</p>}
-        {branchAddress ? <p>{branchAddress}</p> : null}
-        <SalonContactDetails
-          {...contact}
-          salonName={salonName}
-          branchAddress={branchAddress}
-          branchDirectionsEnabled={showDirections}
-          preview
-        />
+        <SalonContactDetails {...contact} salonName={salonName} preview />
       </div>
     </>
   );

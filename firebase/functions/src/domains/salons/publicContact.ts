@@ -5,8 +5,6 @@ const switchKeys = [
   "showLogo",
   "showHotline",
   "showOpeningHours",
-  "showBranchAddress",
-  "showDirections",
   "acceptWebPointRequests",
   "allowWebWheel",
 ] as const;
@@ -33,18 +31,8 @@ export function salonOwnerSwitches(data: SwitchFields | undefined): SalonOwnerSw
     showLogo: enabled("showLogo"),
     showHotline: enabled("showHotline"),
     showOpeningHours: enabled("showOpeningHours"),
-    showBranchAddress: enabled("showBranchAddress"),
-    showDirections: data?.showDirections === true,
     acceptWebPointRequests: enabled("acceptWebPointRequests"),
     allowWebWheel: enabled("allowWebWheel"),
-  };
-}
-
-export function webBranchLocation(address: string, settings: SalonOwnerSwitches) {
-  return {
-    branchAddress: settings.showBranchAddress ? address : "",
-    branchDirectionsEnabled:
-      settings.showBranchAddress && settings.showDirections && Boolean(address.trim()),
   };
 }
 

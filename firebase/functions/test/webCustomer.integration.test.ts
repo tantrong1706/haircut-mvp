@@ -43,8 +43,12 @@ describe("authenticated web customer platform", () => {
     await expect(getWebCustomerSession.run(phoneRequest(uid, sessionInput))).resolves.toMatchObject(
       { branchAddress: "", sessionStatus: "pending_approval" },
     );
-    const managed = await listBranches.run(requestFor("owner-location", { salonId: "salon-a" }, {}));
-    expect(managed.branches).toContainEqual(expect.objectContaining({ id: "branch-a", address: "1 Đường A" }));
+    const managed = await listBranches.run(
+      requestFor("owner-location", { salonId: "salon-a" }, {}),
+    );
+    expect(managed.branches).toContainEqual(
+      expect.objectContaining({ id: "branch-a", address: "1 Đường A" }),
+    );
   });
 
   it("enforces owner operation settings without changing existing requests or overriding admin", async () => {

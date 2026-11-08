@@ -99,12 +99,7 @@ export function HomePage({
               ? "Cảm ơn bạn đã ghé salon."
               : shortStatusText(status, session.assignedStaffName)}
         </p>
-        {session.identityProvider === "firebase" ? (
-          <>
-            {session.branchAddress ? <p className="muted">{session.branchAddress}</p> : null}
-            <SalonContactDetails {...session} />
-          </>
-        ) : null}
+        {session.identityProvider === "firebase" ? <SalonContactDetails {...session} /> : null}
       </header>
 
       {syncStatus === "error" ? (
@@ -207,11 +202,7 @@ export function HomePage({
             done
             icon={<CheckCircle2 size={20} />}
             title="Đã gửi yêu cầu"
-            text={
-              session.branchAddress
-                ? `${branchLabel(session)} · ${session.branchAddress}`
-                : branchLabel(session)
-            }
+            text={branchLabel(session)}
           />
           <StatusStep
             done={

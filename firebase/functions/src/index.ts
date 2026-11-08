@@ -134,7 +134,7 @@ import { publicRequestPeer } from "./security";
 import { revokeHaircutDownloadTokens } from "./domains/photos/photoDownloadTokens";
 import { createPrivatePhotoReader, privatePhotoUrl, PRIVATE_PHOTO_URL_TTL_MS } from "./domains/photos/privatePhotoAccess";
 import { customerMayViewVisitPhotos, hasCustomerVisitPhotos, readCustomerVisitPhotos } from "./domains/photos/customerVisitPhotos";
-import { parseSalonPublicContactPatch, parseSalonSwitchPatch, salonPublicContact, salonOwnerSwitches, webBranchLocation, type SalonOwnerSwitches } from "./domains/salons/publicContact";
+import { parseSalonPublicContactPatch, parseSalonSwitchPatch, salonPublicContact, salonOwnerSwitches, type SalonOwnerSwitches } from "./domains/salons/publicContact";
 import { createVisitDetailsApi, assertLatestCompletedPhotoVisit } from "./domains/photos/visitDetails";
 
 initializeApp();
@@ -2809,8 +2809,6 @@ export const updateSalonProfile = onCall(functionOptions, async (request) => {
     showLogo: request.data?.showLogo,
     showHotline: request.data?.showHotline,
     showOpeningHours: request.data?.showOpeningHours,
-    showBranchAddress: request.data?.showBranchAddress,
-    showDirections: request.data?.showDirections,
     acceptWebPointRequests: request.data?.acceptWebPointRequests,
     allowWebWheel: request.data?.allowWebWheel,
   });
@@ -2971,9 +2969,10 @@ export const resolveCustomerQr = onCall(qrFunctionOptions, async (request) => {
   const { ownerSwitches, ...resolution } = assertBranchOnlyCustomerQr(await resolveCustomerQrData(request.data));
   return {
     ...resolution,
-    ...webBranchLocation(resolution.branchAddress, ownerSwitches),
+    // Keep the older response shape, but addresses stay in salon management.
+    branchAddress: "",
     branches: resolution.branches.map((branch) => ({
-      ...branch, address: ownerSwitches.showBranchAddress ? branch.address : "",
+      ...branch, address: "",
     })),
     features: webOwnerFeatures(resolution.features, ownerSwitches),
   };
@@ -3101,7 +3100,7 @@ function webQrView(resolution: CustomerQrResolution) {
     salonOpeningHours: resolution.salonOpeningHours,
     branchId: resolution.branchId,
     branchName: resolution.branchName,
-    ...webBranchLocation(resolution.branchAddress, resolution.ownerSwitches),
+    branchAddress: "",
     acceptingPointRequests: webOwnerFeatures(resolution.features, resolution.ownerSwitches).checkinEnabled,
   };
 }
@@ -6159,29 +6158,7 @@ async function customerSessionResult(
   };
 }
 
-async function webVisitLocation(
-  salonId: string,
-  visit: { branchId: string; branchAddress: string },
-  switches: SalonOwnerSwitches,
-  resolvedQr?: { branchId: string | null; branchAddress: string },
-) {
-  if (!switches.showBranchAddress || !/^[A-Za-z0-9_-]{1,128}$/.test(visit.branchId)) {
-    return webBranchLocation("", switches);
-  }
-  if (resolvedQr?.branchId === visit.branchId) {
-    return webBranchLocation(resolvedQr.branchAddress, switches);
-  }
-  if (!switches.showDirections) {
-    return webBranchLocation(visit.branchAddress, switches);
-  }
-  // Directions must use the current record, not the address copied onto an earlier visit.
-  const branch = (await db.collection("branches").doc(visit.branchId).get()).data();
-  const address = branch?.salonId === salonId && branch.isActive === true
-    ? String(branch.address ?? "") : "";
-  return webBranchLocation(address, switches);
-}
-
-async function webAppSessionResult(
+function webAppSessionResult(
   firebaseUid: string,
   resolution: CustomerQrResolution,
   result: Awaited<ReturnType<typeof customerSessionResult>>,
@@ -6201,7 +6178,7 @@ async function webAppSessionResult(
     },
     sessionId: result.sessionId,
     branchName: result.branchName,
-    ...await webVisitLocation(resolution.salonId, result, resolution.ownerSwitches, resolution),
+    branchAddress: "",
     mirrorName: result.mirrorName,
     zaloUserId: "",
     sessionStatus: result.sessionStatus,
@@ -6228,7 +6205,7 @@ export const getWebCustomerSession = onCall(functionOptions, async (request) => 
     ...result,
     firebaseUid: principal.uid,
     ...webSalonDetails(salonId, salon.data()),
-    ...await webVisitLocation(salonId, result, switches),
+    branchAddress: "",
     features: webOwnerFeatures(result.features, switches),
   };
 });

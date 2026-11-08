@@ -17,8 +17,6 @@ type WebQrView = SalonPublicDetails & {
   salonAvatarUrl: string;
   branchId: string;
   branchName: string;
-  branchAddress: string;
-  branchDirectionsEnabled?: boolean;
   acceptingPointRequests?: boolean;
 };
 
@@ -35,8 +33,6 @@ type WebSessionResult = SalonPublicDetails & {
   sessionStatus: AppSession["sessionStatus"];
   branchId?: string;
   branchName?: string;
-  branchAddress?: string;
-  branchDirectionsEnabled?: boolean;
   assignedStaffName?: string;
   claimedAtMs?: number | null;
   customer: CustomerProfile;
@@ -94,8 +90,6 @@ export async function getWebCustomerSessionState(session: AppSession) {
       sessionStatus: session.sessionStatus,
       branchId: session.qr.branchId,
       branchName: session.branchName,
-      branchAddress: session.branchAddress,
-      branchDirectionsEnabled: session.branchDirectionsEnabled,
       assignedStaffName: session.assignedStaffName,
       claimedAtMs: session.claimedAtMs,
       customer: session.customer,
@@ -263,8 +257,6 @@ function appSessionFromWebResult(qr: QrContext, result: WebSessionResult): AppSe
     },
     sessionId: result.sessionId,
     branchName: result.branchName || "",
-    branchAddress: result.branchAddress || "",
-    branchDirectionsEnabled: result.branchDirectionsEnabled,
     zaloUserId: "",
     sessionStatus: result.sessionId ? result.sessionStatus || "pending_approval" : undefined,
     assignedStaffName: result.assignedStaffName || "",
@@ -292,7 +284,6 @@ function mockWebCustomerContext(qr: QrContext): WebCustomerContext {
       salonAvatarUrl: "",
       branchId: qr.branchId || "demo-branch-main",
       branchName: "Chi nhánh chính",
-      branchAddress: "1 Đường kiểm thử",
     },
     customer,
     activeSession: activeRaw ? (JSON.parse(activeRaw) as AppSession) : null,
@@ -308,7 +299,6 @@ function mockWebCustomerCheckin(qr: QrContext, allowPhoto: boolean): AppSession 
     qr: { ...qr, qrType: "branch", branchId: context.qr.branchId },
     sessionId: `web-test-session-${qr.salonId}`,
     branchName: context.qr.branchName,
-    branchAddress: context.qr.branchAddress,
     zaloUserId: "",
     sessionStatus: "pending_approval",
     customer: { ...context.customer, allowPhoto },

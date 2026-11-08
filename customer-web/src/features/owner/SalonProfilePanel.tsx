@@ -18,8 +18,6 @@ const visibilityOptions = [
   ["showLogo", "Hiện logo"],
   ["showHotline", "Hiện hotline"],
   ["showOpeningHours", "Hiện giờ mở cửa"],
-  ["showBranchAddress", "Hiện địa chỉ chi nhánh"],
-  ["showDirections", "Hiện nút Chỉ đường"],
 ] as const;
 const operationOptions = [
   ["acceptWebPointRequests", "Nhận yêu cầu tích điểm mới"],
@@ -29,7 +27,6 @@ type SwitchKey = keyof SalonProfileSwitches;
 
 export function SalonProfilePanel({ profile, branches = [], saving, onSave }: Props) {
   const [name, setName] = useState("");
-  const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
   const [hotline, setHotline] = useState("");
   const [openingHours, setOpeningHours] = useState("");
@@ -46,7 +43,6 @@ export function SalonProfilePanel({ profile, branches = [], saving, onSave }: Pr
   const savedPoints = profile?.pointPerVisit ?? 1;
   useEffect(() => {
     setName(savedName);
-    setAddress(savedAddress);
     setPhone(savedPhone);
     setHotline(savedHotline);
     setOpeningHours(savedHours);
@@ -55,7 +51,6 @@ export function SalonProfilePanel({ profile, branches = [], saving, onSave }: Pr
   }, [
     profile?.id,
     savedName,
-    savedAddress,
     savedPhone,
     savedHotline,
     savedHours,
@@ -63,15 +58,13 @@ export function SalonProfilePanel({ profile, branches = [], saving, onSave }: Pr
     profile?.showLogo,
     profile?.showHotline,
     profile?.showOpeningHours,
-    profile?.showBranchAddress,
-    profile?.showDirections,
     profile?.acceptWebPointRequests,
     profile?.allowWebWheel,
   ]);
 
   const hotlineChanged = hotline.trim() !== savedHotline;
   const hoursChanged = openingHours.trim() !== savedHours;
-  const savedSwitch = (key: SwitchKey) => profile?.[key] ?? key !== "showDirections";
+  const savedSwitch = (key: SwitchKey) => profile?.[key] ?? true;
   const draftSwitch = (key: SwitchKey) => switchDraft[key] ?? savedSwitch(key);
   const switchPatch: SalonProfileSwitches = {};
   for (const [key] of [...visibilityOptions, ...operationOptions]) {
@@ -80,7 +73,6 @@ export function SalonProfilePanel({ profile, branches = [], saving, onSave }: Pr
   }
   const changed =
     name.trim() !== savedName ||
-    address.trim() !== savedAddress ||
     phone.trim() !== savedPhone ||
     hotlineChanged ||
     hoursChanged ||
@@ -126,7 +118,7 @@ export function SalonProfilePanel({ profile, branches = [], saving, onSave }: Pr
         if (!canSave) return;
         onSave({
           name,
-          address,
+          address: savedAddress,
           phone,
           pointPerVisit,
           ...(hotlineChanged ? { hotline: hotline.trim() } : {}),
@@ -203,21 +195,11 @@ export function SalonProfilePanel({ profile, branches = [], saving, onSave }: Pr
           />
           <small>Nhân viên sẽ gửi yêu cầu cộng đúng số điểm này cho mỗi lượt cắt.</small>
         </label>
-        <label className="field wide-field">
-          <span>Địa chỉ hồ sơ salon</span>
-          <input
-            value={address}
-            onChange={(event) => setAddress(event.target.value)}
-            maxLength={200}
-            placeholder="Địa chỉ chung của salon"
-          />
-          <small>Địa chỉ khách xem được chỉnh riêng trong Chi nhánh và QR.</small>
-        </label>
       </fieldset>
       <fieldset className="salon-profile-fields salon-visibility" disabled={saving || !profile}>
         <legend>Hiển thị với khách</legend>
         <p className="muted">
-          Tắt để ẩn mà vẫn giữ nội dung. Chỉ đường cần có địa chỉ chi nhánh đang hiển thị.
+          Tắt để ẩn mà vẫn giữ nội dung. Tên chi nhánh vẫn hiện để khách đối chiếu QR.
         </p>
         {renderSwitches(visibilityOptions)}
       </fieldset>
@@ -261,8 +243,6 @@ export function SalonProfilePanel({ profile, branches = [], saving, onSave }: Pr
             salonAvatarUrl={draftSwitch("showLogo") ? profile.avatarUrl : ""}
             salonHotline={draftSwitch("showHotline") ? hotline.trim() : ""}
             salonOpeningHours={draftSwitch("showOpeningHours") ? openingHours.trim() : ""}
-            showAddress={draftSwitch("showBranchAddress")}
-            showDirections={draftSwitch("showDirections")}
           />
         ) : null}
       </section>

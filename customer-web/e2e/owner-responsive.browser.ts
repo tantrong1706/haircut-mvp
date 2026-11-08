@@ -58,8 +58,8 @@ test("settings groups salon setup and opens the existing wheel form", async ({ p
   await expect(page.getByRole("button", { name: "Lưu thông tin salon" })).toBeEnabled();
   await logoSwitch.click();
   await expect(page.getByRole("button", { name: "Lưu thông tin salon" })).toBeDisabled();
-  await expect(page.getByRole("switch", { name: "Hiện địa chỉ chi nhánh" })).toBeChecked();
-  await expect(page.getByRole("switch", { name: "Hiện nút Chỉ đường" })).not.toBeChecked();
+  await expect(page.getByRole("switch", { name: "Hiện địa chỉ chi nhánh" })).toHaveCount(0);
+  await expect(page.getByRole("switch", { name: "Hiện nút Chỉ đường" })).toHaveCount(0);
   const requestSwitch = page.getByRole("switch", { name: "Nhận yêu cầu tích điểm mới" });
   await expect(requestSwitch).toBeChecked();
   await requestSwitch.click();

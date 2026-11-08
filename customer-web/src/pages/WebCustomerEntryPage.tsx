@@ -134,8 +134,6 @@ export function WebCustomerEntryPage({ onReady }: Props) {
             salonAvatarUrl: "",
             branchId: account.qr.branchId,
             branchName: account.branchName || "",
-            branchAddress: account.branchAddress || "",
-            branchDirectionsEnabled: account.branchDirectionsEnabled,
             acceptingPointRequests: account.features?.checkinEnabled,
           },
           customer: account.customer,
@@ -379,7 +377,6 @@ export function WebCustomerEntryPage({ onReady }: Props) {
         <p className="eyebrow">Check-in</p>
         <h1>{context.qr.salonName}</h1>
         <p className="muted">{context.qr.branchName}</p>
-        {context.qr.branchAddress ? <p>{context.qr.branchAddress}</p> : null}
         <SalonContactDetails {...context.qr} />
       </header>
       <div className="panel web-customer-summary">

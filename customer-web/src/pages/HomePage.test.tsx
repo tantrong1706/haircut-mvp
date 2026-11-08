@@ -31,7 +31,7 @@ describe("HomePage", () => {
   it("shows paused operations without hiding the account or exposing an unavailable map", () => {
     render(<HomePage session={{
       ...session, identityProvider: "firebase", sessionId: "",
-      branchAddress: "", branchDirectionsEnabled: false,
+      branchAddress: "Địa chỉ đã lưu từ phiên cũ",
       features: { ...DEFAULT_SYSTEM_FEATURES, checkinEnabled: false, luckyWheelEnabled: false },
     }} onTabChange={vi.fn()} onResetSession={vi.fn()} />);
     expect(screen.getByText("Vòng quay đang tạm dừng.")).toBeVisible();
@@ -39,6 +39,7 @@ describe("HomePage", () => {
     expect(screen.getByRole("button", { name: "Xem vòng quay" })).toBeVisible();
     expect(screen.queryByRole("button", { name: "Quay ngay" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Chỉ đường" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Địa chỉ đã lưu từ phiên cũ")).not.toBeInTheDocument();
   });
 
   it.each([

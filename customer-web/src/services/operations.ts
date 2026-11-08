@@ -157,8 +157,6 @@ export type SalonProfileSwitches = {
   showLogo?: boolean;
   showHotline?: boolean;
   showOpeningHours?: boolean;
-  showBranchAddress?: boolean;
-  showDirections?: boolean;
   acceptWebPointRequests?: boolean;
   allowWebWheel?: boolean;
 };
@@ -527,8 +525,6 @@ export async function updateSalonProfile(input: SalonProfileUpdate): Promise<Sal
     ...(input.showLogo !== undefined ? { showLogo: input.showLogo } : {}),
     ...(input.showHotline !== undefined ? { showHotline: input.showHotline } : {}),
     ...(input.showOpeningHours !== undefined ? { showOpeningHours: input.showOpeningHours } : {}),
-    ...(input.showBranchAddress !== undefined ? { showBranchAddress: input.showBranchAddress } : {}),
-    ...(input.showDirections !== undefined ? { showDirections: input.showDirections } : {}),
     ...(input.acceptWebPointRequests !== undefined ? { acceptWebPointRequests: input.acceptWebPointRequests } : {}),
     ...(input.allowWebWheel !== undefined ? { allowWebWheel: input.allowWebWheel } : {}),
   };
@@ -715,8 +711,6 @@ async function getSalonProfileDirect(salonId: string): Promise<SalonProfile> {
     showLogo: data.showLogo === undefined || data.showLogo === true,
     showHotline: data.showHotline === undefined || data.showHotline === true,
     showOpeningHours: data.showOpeningHours === undefined || data.showOpeningHours === true,
-    showBranchAddress: data.showBranchAddress === undefined || data.showBranchAddress === true,
-    showDirections: data.showDirections === true,
     acceptWebPointRequests: data.acceptWebPointRequests === undefined || data.acceptWebPointRequests === true,
     allowWebWheel: data.allowWebWheel === undefined || data.allowWebWheel === true,
     avatarUrl: String(data.avatarUrl || ""),

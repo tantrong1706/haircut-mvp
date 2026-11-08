@@ -77,10 +77,8 @@ test("khách chuyển qua điểm, lịch sử, vòng quay và quà", async ({ p
   await expect(page.getByRole("heading", { name: "Khách Web" })).toBeVisible();
   await expect(page.getByRole("link", { name: "028 0000 0000" })).toHaveAttribute("href", "tel:02800000000");
   await expect(page.getByText("Thứ 2–CN, 09:00–20:00")).toBeVisible();
-  await expect(page.getByRole("link", { name: "Chỉ đường" })).toHaveAttribute(
-    "href",
-    "https://www.google.com/maps/dir/?api=1&destination=123+Nguy%E1%BB%85n+Hu%E1%BB%87",
-  );
+  await expect(page.getByText("123 Nguyễn Huệ")).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Chỉ đường" })).toHaveCount(0);
   await page.getByRole("button", { name: "Lịch sử" }).last().click();
   await expect(page.getByRole("heading", { name: "Lịch sử cắt tóc" })).toBeVisible();
   await expect(page.getByText("20/06/2026")).toBeVisible();
