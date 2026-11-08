@@ -21,7 +21,7 @@ describe("salon public profile form", () => {
   it("does not fall back to the salon's private address when no branch is available", async () => {
     render(
       <SalonProfilePanel
-        profile={{ ...profile, showDirections: true }}
+        profile={profile}
         saving={false}
         onSave={vi.fn()}
       />,
@@ -70,7 +70,7 @@ describe("salon public profile form", () => {
     ];
     render(
       <SalonProfilePanel
-        profile={{ ...profile, showDirections: true }}
+        profile={profile}
         branches={branches}
         saving={false}
         onSave={onSave}
@@ -84,11 +84,11 @@ describe("salon public profile form", () => {
     await user.selectOptions(preview.getByRole("combobox"), "second");
     expect(preview.queryByRole("option", { name: "Đã đóng" })).not.toBeInTheDocument();
     expect(preview.queryByRole("option", { name: "Salon khác" })).not.toBeInTheDocument();
-    expect(preview.getByText("Đường Hai")).toBeVisible();
-    expect(preview.getByText("Chỉ đường")).toBeVisible();
+    expect(preview.getByText("Chi nhánh Hai", { selector: "p" })).toBeVisible();
+    expect(preview.queryByText("Đường Hai")).not.toBeInTheDocument();
+    expect(preview.queryByText("Chỉ đường")).not.toBeInTheDocument();
     expect(preview.queryByRole("link")).not.toBeInTheDocument();
     expect(preview.queryByText(profile.phone)).not.toBeInTheDocument();
-    await user.click(screen.getByRole("switch", { name: "Hiện địa chỉ chi nhánh" }));
     await user.click(screen.getByRole("switch", { name: "Hiện hotline" }));
     expect(preview.queryByText("Đường Hai")).not.toBeInTheDocument();
     expect(preview.queryByText("Chỉ đường")).not.toBeInTheDocument();
@@ -97,25 +97,22 @@ describe("salon public profile form", () => {
     expect(onSave).not.toHaveBeenCalled();
   });
 
-  it("offers separate location and operation switches and saves the changed choices", async () => {
+  it("keeps operation switches without asking for customer location", async () => {
     const onSave = vi.fn();
     render(<SalonProfilePanel profile={profile} saving={false} onSave={onSave} />);
     const user = userEvent.setup();
-    const address = screen.getByRole("switch", { name: "Hiện địa chỉ chi nhánh" });
-    const directions = screen.getByRole("switch", { name: "Hiện nút Chỉ đường" });
+    expect(screen.queryByRole("switch", { name: "Hiện địa chỉ chi nhánh" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("switch", { name: "Hiện nút Chỉ đường" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: /Địa chỉ hồ sơ salon/ })).not.toBeInTheDocument();
     const checkin = screen.getByRole("switch", { name: "Nhận yêu cầu tích điểm mới" });
     const wheel = screen.getByRole("switch", { name: "Cho phép quay thưởng" });
-    expect(address).toBeChecked();
-    expect(directions).not.toBeChecked();
     expect(checkin).toBeChecked();
     expect(wheel).toBeChecked();
-    await user.click(directions);
     await user.click(checkin);
     await user.click(wheel);
     await user.click(screen.getByRole("button", { name: "Lưu thông tin salon" }));
     expect(onSave).toHaveBeenCalledWith(
       expect.objectContaining({
-        showDirections: true,
         acceptWebPointRequests: false,
         allowWebWheel: false,
       }),
@@ -174,15 +171,13 @@ describe("salon public profile form", () => {
     const user = userEvent.setup();
     const phone = screen.getByRole("textbox", { name: "Số liên hệ nội bộ" });
     await user.clear(phone);
-    const address = screen.getByRole("textbox", { name: /Địa chỉ hồ sơ salon/ });
-    await user.clear(address);
     const points = screen.getByRole("spinbutton", { name: /Điểm cộng mỗi lượt cắt/ });
     fireEvent.change(points, { target: { value: "2" } });
     await user.click(screen.getByRole("button", { name: "Lưu thông tin salon" }));
     expect(onSave).toHaveBeenCalledWith({
       name: profile.name,
       phone: "",
-      address: "",
+      address: profile.address,
       pointPerVisit: 2,
     });
   });

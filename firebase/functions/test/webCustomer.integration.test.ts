@@ -24,29 +24,30 @@ const db = getFirestore();
 const secret = "fixture-qr-signing-key-only-32-characters";
 
 describe("authenticated web customer platform", () => {
-  it("uses the current address for directions in an existing visit and suppresses a closed branch", async () => {
+  it("does not send saved branch addresses to Web customers even with old visibility flags", async () => {
     await seedSalon("salon-a", "branch-a");
-    await db.doc("salons/salon-a").update({ showDirections: true });
+    await db.doc("salons/salon-a").update({ showBranchAddress: true, showDirections: true });
+    await db.doc("users/owner-location").set({ salonId: "salon-a", role: "owner", isActive: true });
     const qr = signedBranchQr("salon-a", "branch-a");
-    const uid = "uid-current-directions";
+    const uid = "uid-private-branch-address";
     const checked = await checkInWebCustomer.run(checkinRequest(uid, qr));
-    expect(checked).toMatchObject({ branchAddress: "1 Đường A", branchDirectionsEnabled: true });
+    expect(checked).toMatchObject({ branchAddress: "", branchName: expect.any(String) });
+    expect(checked).not.toHaveProperty("branchDirectionsEnabled");
     const sessionInput = { salonId: "salon-a", sessionId: checked.sessionId };
-    await db.doc("branches/branch-a").update({ address: "Địa chỉ chi nhánh mới" });
-    expect((await getWebCustomerContext.run(phoneRequest(uid, qr))).activeSession).toMatchObject({
-      branchAddress: "Địa chỉ chi nhánh mới",
-      branchDirectionsEnabled: true,
-    });
+    const context = await getWebCustomerContext.run(phoneRequest(uid, qr));
+    expect(context.qr.branchAddress).toBe("");
+    expect(context.activeSession).toMatchObject({ branchAddress: "" });
+    const resolved = await resolveCustomerQr.run(requestFor("", qr, {}));
+    expect(resolved.branchAddress).toBe("");
+    expect(resolved.branches[0].address).toBe("");
     await expect(getWebCustomerSession.run(phoneRequest(uid, sessionInput))).resolves.toMatchObject(
-      { branchAddress: "Địa chỉ chi nhánh mới", branchDirectionsEnabled: true },
+      { branchAddress: "", sessionStatus: "pending_approval" },
     );
-    await db.doc("branches/branch-a").update({ isActive: false });
-    await expect(getWebCustomerSession.run(phoneRequest(uid, sessionInput))).resolves.toMatchObject(
-      { branchAddress: "", branchDirectionsEnabled: false, sessionStatus: "pending_approval" },
-    );
+    const managed = await listBranches.run(requestFor("owner-location", { salonId: "salon-a" }, {}));
+    expect(managed.branches).toContainEqual(expect.objectContaining({ id: "branch-a", address: "1 Đường A" }));
   });
 
-  it("enforces owner location and operation settings without changing existing requests or overriding admin", async () => {
+  it("enforces owner operation settings without changing existing requests or overriding admin", async () => {
     await seedSalon("salon-a", "branch-a");
     await seedSalon("salon-b", "branch-b");
     await db.doc("users/owner-a").set({ salonId: "salon-a", role: "owner", isActive: true });
@@ -59,15 +60,12 @@ describe("authenticated web customer platform", () => {
     const customer = db.doc(`customers/${existing.customer.customerId}`);
     await customer.update({ points: 8 });
     await set({
-      showBranchAddress: false,
-      showDirections: true,
       acceptWebPointRequests: false,
       allowWebWheel: false,
     });
     const context = await getWebCustomerContext.run(phoneRequest(uid, qr));
     expect(context.qr).toMatchObject({
       branchAddress: "",
-      branchDirectionsEnabled: false,
       acceptingPointRequests: false,
     });
     expect(context.activeSession).toMatchObject({
@@ -118,10 +116,9 @@ describe("authenticated web customer platform", () => {
       ),
     ).resolves.toMatchObject({ sessionStatus: "pending_approval" });
     await db.doc("system_config/features").set({ luckyWheelEnabled: false });
-    await set({ showBranchAddress: true, acceptWebPointRequests: true, allowWebWheel: true });
+    await set({ acceptWebPointRequests: true, allowWebWheel: true });
     expect((await getWebCustomerContext.run(phoneRequest(uid, qr))).qr).toMatchObject({
-      branchAddress: "1 Đường A",
-      branchDirectionsEnabled: true,
+      branchAddress: "",
       acceptingPointRequests: true,
     });
     await expect(

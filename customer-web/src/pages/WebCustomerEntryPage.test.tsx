@@ -79,7 +79,7 @@ vi.mock("../services/monitoring", () => ({
 }));
 
 describe("WebCustomerEntryPage", () => {
-  it("shows directions for the scanned branch but leaves account access when requests are paused", async () => {
+  it("shows the scanned branch without its old address and leaves account access when paused", async () => {
     mocks.resolveWebCustomerContext.mockResolvedValue({
       qr: {
         ...qr,
@@ -94,11 +94,9 @@ describe("WebCustomerEntryPage", () => {
     });
     render(<WebCustomerEntryPage onReady={vi.fn()} />);
     act(() => mocks.authListener?.({ uid: "uid-a" }));
-    const link = await screen.findByRole("link", { name: "Chỉ đường" });
-    expect(link).toHaveAttribute(
-      "href",
-      "https://www.google.com/maps/dir/?api=1&destination=123+Nguy%E1%BB%85n+Hu%E1%BB%87",
-    );
+    expect(await screen.findByText("Chi nhánh Trung tâm")).toBeVisible();
+    expect(screen.queryByText("123 Nguyễn Huệ")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Chỉ đường" })).not.toBeInTheDocument();
     expect(screen.getByText(/tạm dừng nhận yêu cầu tích điểm/)).toBeVisible();
     expect(screen.queryByRole("button", { name: "Yêu cầu tích điểm" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Xem điểm, lịch sử và quà" })).toBeEnabled();
@@ -127,7 +125,7 @@ describe("WebCustomerEntryPage", () => {
       "tel:02800000000",
     );
     expect(screen.getByText("Thứ 2–CN, 09:00–20:00")).toBeVisible();
-    expect(screen.getByText("123 Nguyễn Huệ")).toBeVisible();
+    expect(screen.queryByText("123 Nguyễn Huệ")).not.toBeInTheDocument();
   });
   it("shows concise photo permission without a count or optional wording", async () => {
     render(<WebCustomerEntryPage onReady={vi.fn()} />);
