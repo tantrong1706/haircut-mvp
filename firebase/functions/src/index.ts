@@ -134,6 +134,7 @@ import { publicRequestPeer } from "./security";
 import { revokeHaircutDownloadTokens } from "./domains/photos/photoDownloadTokens";
 import { createPrivatePhotoReader, privatePhotoUrl, PRIVATE_PHOTO_URL_TTL_MS } from "./domains/photos/privatePhotoAccess";
 import { customerMayViewVisitPhotos, hasCustomerVisitPhotos, readCustomerVisitPhotos } from "./domains/photos/customerVisitPhotos";
+import { parseSalonPublicContactPatch, salonPublicContact } from "./domains/salons/publicContact";
 import { createVisitDetailsApi, assertLatestCompletedPhotoVisit } from "./domains/photos/visitDetails";
 
 initializeApp();
@@ -1512,6 +1513,8 @@ type CustomerQrResolution = {
   salonId: string;
   salonName: string;
   salonAvatarUrl: string;
+  salonHotline: string;
+  salonOpeningHours: string;
   branchId: string | null;
   branchName: string;
   branchAddress: string;
@@ -1540,9 +1543,9 @@ async function resolveCustomerQrData(data: unknown): Promise<CustomerQrResolutio
     throw new HttpsError("not-found", "Salon không tồn tại hoặc đã ngừng hoạt động");
   }
 
-  const salonName = String(salonSnap.data()?.name || "Salon");
-  const salonAvatarUrl = trustedStoredSalonAvatarUrl(salonSnap.data()?.avatarUrl, salonId);
-  assertSalonIsOperational(salonSnap.data());
+  const salon = salonSnap.data();
+  const publicDetails = webSalonDetails(salonId, salon);
+  assertSalonIsOperational(salon);
   const features = await getSystemFeatures(salonId);
   const secret = qrSigningSecret.value();
   if (secret.length < 32) {
@@ -1575,8 +1578,7 @@ async function resolveCustomerQrData(data: unknown): Promise<CustomerQrResolutio
     return {
       qrType,
       salonId,
-      salonName,
-      salonAvatarUrl,
+      ...publicDetails,
       branchId: branch.id,
       branchName: branch.name,
       branchAddress: branch.address,
@@ -1614,8 +1616,7 @@ async function resolveCustomerQrData(data: unknown): Promise<CustomerQrResolutio
     return {
       qrType,
       salonId,
-      salonName,
-      salonAvatarUrl,
+      ...publicDetails,
       branchId: branch.id,
       branchName: branch.name,
       branchAddress: branch.address,
@@ -1652,8 +1653,7 @@ async function resolveCustomerQrData(data: unknown): Promise<CustomerQrResolutio
   return {
     qrType,
     salonId,
-    salonName,
-    salonAvatarUrl,
+    ...publicDetails,
     branchId: selected?.id ?? null,
     branchName: selected?.name ?? "",
     branchAddress: selected?.address ?? "",
@@ -2774,6 +2774,7 @@ export const getSalonProfile = onCall(functionOptions, async (request) => {
     name: salon?.name ?? "Salon",
     address: salon?.address ?? "",
     phone: salon?.phone ?? "",
+    ...salonPublicContact(salon),
     avatarUrl: trustedStoredSalonAvatarUrl(salon?.avatarUrl, salonId),
     pointPerVisit: Number(salon?.pointPerVisit ?? 1),
     freeCustomerLimit: Number(salon?.freeCustomerLimit ?? 50),
@@ -2789,6 +2790,10 @@ export const updateSalonProfile = onCall(functionOptions, async (request) => {
   const name = limitedString(request.data?.name, "name", 120);
   const address = optionalLimitedString(request.data?.address, "address", 200);
   const phone = optionalLimitedString(request.data?.phone, "phone", 30);
+  const contactPatch = parseSalonPublicContactPatch({
+    hotline: request.data?.hotline,
+    openingHours: request.data?.openingHours,
+  });
   const pointPerVisit = requireBoundedPositiveNumber(
     request.data?.pointPerVisit,
     "pointPerVisit",
@@ -2809,6 +2814,7 @@ export const updateSalonProfile = onCall(functionOptions, async (request) => {
       name,
       address: address ?? null,
       phone: phone ?? null,
+      ...contactPatch,
       pointPerVisit,
       updatedAt: now,
     },
@@ -2838,6 +2844,8 @@ export const updateSalonProfile = onCall(functionOptions, async (request) => {
     name,
     address: address ?? "",
     phone: phone ?? "",
+    avatarUrl: trustedStoredSalonAvatarUrl(salonSnap.data()?.avatarUrl, salonId),
+    ...salonPublicContact({ ...salonSnap.data(), ...contactPatch }),
     pointPerVisit,
     freeCustomerLimit: Number(salonSnap.data()?.freeCustomerLimit ?? 50),
     features,
@@ -3035,11 +3043,23 @@ async function getOrCreateWebCustomer(
   return { customerId, customer: customerSnap.data() ?? {} };
 }
 
+function webSalonDetails(salonId: string, salon: DocumentData | undefined) {
+  const contact = salonPublicContact(salon);
+  return {
+    salonName: String(salon?.name || "Salon"),
+    salonAvatarUrl: trustedStoredSalonAvatarUrl(salon?.avatarUrl, salonId),
+    salonHotline: contact.hotline,
+    salonOpeningHours: contact.openingHours,
+  };
+}
+
 function webQrView(resolution: CustomerQrResolution) {
   return {
     salonId: resolution.salonId,
     salonName: resolution.salonName,
     salonAvatarUrl: resolution.salonAvatarUrl,
+    salonHotline: resolution.salonHotline,
+    salonOpeningHours: resolution.salonOpeningHours,
     branchId: resolution.branchId,
     branchName: resolution.branchName,
     branchAddress: resolution.branchAddress,
@@ -3075,7 +3095,7 @@ async function activeWebSessionView(
     sessionId,
     `Khách ${principal.phoneLast4}`,
   );
-  return webAppSessionResult(principal.uid, resolution.salonId, result);
+  return webAppSessionResult(principal.uid, resolution, result);
 }
 
 export const getWebCustomerContext = onCall(qrFunctionOptions, async (request) => {
@@ -3276,7 +3296,7 @@ export const checkInWebCustomer = onCall(qrFunctionOptions, async (request) => {
     returnedSessionId,
     `Khách ${principal.phoneLast4}`,
   );
-  return webAppSessionResult(principal.uid, salonId, result);
+  return webAppSessionResult(principal.uid, resolution, result);
 });
 
 export const withdrawWebCustomerPhotoConsent = onCall(qrFunctionOptions, async (request) => {
@@ -6094,15 +6114,19 @@ async function customerSessionResult(
 
 function webAppSessionResult(
   firebaseUid: string,
-  salonId: string,
+  resolution: CustomerQrResolution,
   result: Awaited<ReturnType<typeof customerSessionResult>>,
 ) {
   return {
     identityProvider: "firebase" as const,
     firebaseUid,
+    salonName: resolution.salonName,
+    salonAvatarUrl: resolution.salonAvatarUrl,
+    salonHotline: resolution.salonHotline,
+    salonOpeningHours: resolution.salonOpeningHours,
     qr: {
       qrType: "branch" as const,
-      salonId,
+      salonId: resolution.salonId,
       branchId: result.branchId || "",
       mirrorId: "",
     },
@@ -6130,7 +6154,7 @@ export const getWebCustomerSession = onCall(functionOptions, async (request) => 
   const result = await customerSessionResult(salonId, customerId, sessionId, `Khách ${principal.phoneLast4}`);
   const salon = await db.collection("salons").doc(salonId).get();
   assertSalonIsOperational(salon.data());
-  return { ...result, firebaseUid: principal.uid, salonName: String(salon.data()?.name || "Salon") };
+  return { ...result, firebaseUid: principal.uid, ...webSalonDetails(salonId, salon.data()) };
 });
 
 export const getCustomerSessionFromZalo = onCall(zaloFunctionOptions, async (request) => {

@@ -1,0 +1,67 @@
+import { fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
+import { DEFAULT_SYSTEM_FEATURES } from "@haircut/contracts";
+import { SalonProfilePanel } from "./SalonProfilePanel";
+
+const profile = {
+  id: "fixture-salon",
+  name: "Salon mẫu",
+  phone: "0900000000",
+  address: "Địa chỉ mẫu",
+  hotline: "028 0000 0000",
+  openingHours: "09:00–20:00",
+  avatarUrl: "",
+  pointPerVisit: 1,
+  freeCustomerLimit: 50,
+  features: DEFAULT_SYSTEM_FEATURES,
+};
+
+describe("salon public profile form", () => {
+  it("sends explicit blanks only for the public fields the owner clears", async () => {
+    const onSave = vi.fn();
+    render(<SalonProfilePanel profile={profile} saving={false} onSave={onSave} />);
+    const user = userEvent.setup();
+    const save = screen.getByRole("button", { name: "Lưu thông tin salon" });
+    expect(save).toBeDisabled();
+    await user.clear(screen.getByRole("textbox", { name: /Hotline hiển thị cho khách/ }));
+    await user.click(save);
+    expect(onSave).toHaveBeenCalledWith({
+      name: profile.name,
+      phone: profile.phone,
+      address: profile.address,
+      pointPerVisit: 1,
+      hotline: "",
+    });
+  });
+
+  it("keeps private settings editable without resending public fields", async () => {
+    const onSave = vi.fn();
+    render(<SalonProfilePanel profile={profile} saving={false} onSave={onSave} />);
+    const user = userEvent.setup();
+    const phone = screen.getByRole("textbox", { name: "Số liên hệ nội bộ" });
+    await user.clear(phone);
+    const address = screen.getByRole("textbox", { name: "Địa chỉ" });
+    await user.clear(address);
+    const points = screen.getByRole("spinbutton", { name: /Điểm cộng mỗi lượt cắt/ });
+    fireEvent.change(points, { target: { value: "2" } });
+    await user.click(screen.getByRole("button", { name: "Lưu thông tin salon" }));
+    expect(onSave).toHaveBeenCalledWith({
+      name: profile.name,
+      phone: "",
+      address: "",
+      pointPerVisit: 2,
+    });
+  });
+
+  it("disables the form while loading or saving", () => {
+    const onSave = vi.fn();
+    const { rerender } = render(
+      <SalonProfilePanel profile={null} saving={false} onSave={onSave} />,
+    );
+    expect(screen.getByRole("textbox", { name: "Tên hiển thị" })).toBeDisabled();
+    rerender(<SalonProfilePanel profile={profile} saving onSave={onSave} />);
+    expect(screen.getByRole("button", { name: "Đang lưu..." })).toBeDisabled();
+    expect(onSave).not.toHaveBeenCalled();
+  });
+});

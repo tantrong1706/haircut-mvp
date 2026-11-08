@@ -3,6 +3,7 @@ import { OverviewPanel } from "../features/owner/OverviewPanel";
 import { ApprovalsPanel } from "../features/owner/ApprovalsPanel";
 import { WheelConfigPanel } from "../features/owner/WheelConfigPanel";
 import { OwnerSetupLinks } from "../features/owner/OwnerSetupLinks";
+import { SalonProfilePanel } from "../features/owner/SalonProfilePanel";
 import { ownerPhoneLabel } from "../features/owner/ownerFormatters";
 import { useOwnerNavigation } from "../features/owner/useOwnerNavigation";
 import type { ReactNode } from "react";
@@ -49,6 +50,7 @@ import {
   OwnerOverview,
   PointRequest,
   SalonProfile,
+  type SalonProfileUpdate,
   StaffProfile,
   approvePointRequest,
   createBranch,
@@ -227,12 +229,7 @@ export function OwnerPage({ currentUser }: Props) {
     }
   }
 
-  async function saveSalonProfile(input: {
-    name: string;
-    address: string;
-    phone: string;
-    pointPerVisit: number;
-  }) {
+  async function saveSalonProfile(input: Omit<SalonProfileUpdate, "salonId">) {
     setSavingSalonProfile(true);
     setMessage("");
     setError("");
@@ -795,7 +792,6 @@ export function OwnerPage({ currentUser }: Props) {
         />
       ) : (
         <>
-          <OwnerSetupLinks onOpenTab={setActiveTab} />
           <section className="owner-settings-group" aria-label="Hồ sơ salon">
             <SalonProfilePanel
               profile={salonProfile}
@@ -810,6 +806,7 @@ export function OwnerPage({ currentUser }: Props) {
               onClear={clearSalonAvatar}
             />
           </section>
+          <OwnerSetupLinks onOpenTab={setActiveTab} />
           <section className="owner-settings-group" aria-label="Tài khoản chủ salon">
             <OwnerProfilePanel
               currentUser={currentUser}
@@ -960,108 +957,6 @@ function formatUploadSize(size: number) {
   }
 
   return `${Math.max(1, Math.round(size / 1024))}KB`;
-}
-
-function SalonProfilePanel({
-  profile,
-  saving,
-  onSave,
-}: {
-  profile: SalonProfile | null;
-  saving: boolean;
-  onSave: (input: { name: string; address: string; phone: string; pointPerVisit: number }) => void;
-}) {
-  const [name, setName] = useState(profile?.name || "");
-  const [address, setAddress] = useState(profile?.address || "");
-  const [phone, setPhone] = useState(profile?.phone || "");
-  const [pointPerVisit, setPointPerVisit] = useState(profile?.pointPerVisit || 1);
-
-  useEffect(() => {
-    setName(profile?.name || "");
-    setAddress(profile?.address || "");
-    setPhone(profile?.phone || "");
-    setPointPerVisit(profile?.pointPerVisit || 1);
-  }, [profile?.id, profile?.name, profile?.address, profile?.phone, profile?.pointPerVisit]);
-
-  const changed = profile
-    ? name.trim() !== profile.name ||
-      address.trim() !== profile.address ||
-      phone.trim() !== profile.phone ||
-      Number(pointPerVisit) !== profile.pointPerVisit
-    : false;
-
-  return (
-    <div className="panel salon-profile-panel">
-      <div className="dashboard-heading">
-        <div>
-          <p className="eyebrow">Thiết lập salon</p>
-          <h2>Thông tin vận hành</h2>
-        </div>
-        <span className="pill muted-pill">
-          {profile ? `${profile.freeCustomerLimit} khách miễn phí` : "Đang tải"}
-        </span>
-      </div>
-
-      <div className="salon-profile-grid">
-        <label className="field">
-          <span>Tên salon</span>
-          <input
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            placeholder="Ví dụ: HAIRCUT Studio"
-          />
-        </label>
-        <label className="field">
-          <span>Số điện thoại salon</span>
-          <input
-            value={phone}
-            onChange={(event) => setPhone(event.target.value)}
-            inputMode="tel"
-            placeholder="Số điện thoại liên hệ"
-          />
-        </label>
-        <label className="field wide-field">
-          <span>Địa chỉ</span>
-          <input
-            value={address}
-            onChange={(event) => setAddress(event.target.value)}
-            placeholder="Địa chỉ để khách nhận diện đúng salon"
-          />
-        </label>
-        <label className="field">
-          <span>Điểm cộng mỗi lượt cắt</span>
-          <input
-            type="number"
-            min={1}
-            max={100}
-            value={pointPerVisit}
-            onChange={(event) =>
-              setPointPerVisit(Math.min(100, Math.max(1, Number(event.target.value || 1))))
-            }
-          />
-          <small>Nhân viên sẽ gửi yêu cầu cộng đúng số điểm này cho mỗi lượt cắt.</small>
-        </label>
-      </div>
-
-      <div className="button-row wrap-row">
-        <button
-          className="primary-button"
-          disabled={saving || !profile || !name.trim() || !changed}
-          onClick={() =>
-            onSave({
-              name,
-              address,
-              phone,
-              pointPerVisit,
-            })
-          }
-        >
-          <Save size={18} aria-hidden="true" />
-          {saving ? "Đang lưu..." : "Lưu thông tin salon"}
-        </button>
-      </div>
-    </div>
-  );
 }
 
 function OwnerAvatar({

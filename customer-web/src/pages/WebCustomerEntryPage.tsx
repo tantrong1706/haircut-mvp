@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BrandLogo } from "../components/BrandLogo";
+import { SalonContactDetails } from "../components/SalonContactDetails";
 import {
   beginCustomerPhoneSignIn,
   clearPendingWebQr,
@@ -375,6 +376,7 @@ export function WebCustomerEntryPage({ onReady }: Props) {
         <h1>{context.qr.salonName}</h1>
         <p className="muted">{context.qr.branchName}</p>
         {context.qr.branchAddress ? <p>{context.qr.branchAddress}</p> : null}
+        <SalonContactDetails {...context.qr} />
       </header>
       <div className="panel web-customer-summary">
         <span>{context.customer.name}</span>

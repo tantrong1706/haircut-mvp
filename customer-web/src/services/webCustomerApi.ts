@@ -7,10 +7,11 @@ import type {
   LuckyWheelConfig,
   QrContext,
   Reward,
+  SalonPublicDetails,
   SpinResult,
 } from "./types";
 
-type WebQrView = {
+type WebQrView = SalonPublicDetails & {
   salonId: string;
   salonName: string;
   salonAvatarUrl: string;
@@ -25,8 +26,7 @@ export type WebCustomerContext = {
   activeSession: AppSession | null;
 };
 
-type WebSessionResult = {
-  salonName?: string;
+type WebSessionResult = SalonPublicDetails & {
   firebaseUid?: string;
   qr?: Pick<QrContext, "salonId" | "branchId">;
   sessionId: string;
@@ -65,6 +65,9 @@ export async function getWebCustomerAccount(salonId: string): Promise<AppSession
       firebaseUid: "web-test-uid",
       qr,
       salonName: context.qr.salonName,
+      salonAvatarUrl: context.qr.salonAvatarUrl,
+      salonHotline: context.qr.salonHotline,
+      salonOpeningHours: context.qr.salonOpeningHours,
       sessionId: "",
       zaloUserId: "",
       customer: context.customer,
@@ -81,6 +84,10 @@ export async function getWebCustomerAccount(salonId: string): Promise<AppSession
 export async function getWebCustomerSessionState(session: AppSession) {
   if (testAdapterEnabled()) {
     return {
+      salonName: session.salonName,
+      salonAvatarUrl: session.salonAvatarUrl,
+      salonHotline: session.salonHotline,
+      salonOpeningHours: session.salonOpeningHours,
       sessionStatus: session.sessionStatus,
       branchId: session.qr.branchId,
       branchName: session.branchName,
@@ -240,6 +247,9 @@ function appSessionFromWebResult(qr: QrContext, result: WebSessionResult): AppSe
   return {
     identityProvider: "firebase",
     salonName: result.salonName || "",
+    salonAvatarUrl: result.salonAvatarUrl,
+    salonHotline: result.salonHotline,
+    salonOpeningHours: result.salonOpeningHours,
     firebaseUid: result.firebaseUid || getCustomerFirebaseAuth()?.currentUser?.uid || "",
     qr: {
       qrType: "branch",

@@ -645,6 +645,13 @@
   margin: 0;
 }
 
+.salon-profile-fields {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-inline-size: 0;
+}
+
 .owner-setup-links {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));

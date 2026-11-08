@@ -46,6 +46,10 @@ test("settings groups salon setup and opens the existing wheel form", async ({ p
     .getByRole("button", { name: "Cài đặt", exact: true })
     .click();
   await expect(page.getByRole("region", { name: "Hồ sơ salon" })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Tên hiển thị" })).toHaveValue("CH Hair Studio");
+  await expect(page.getByRole("textbox", { name: /Hotline hiển thị cho khách/ })).toHaveValue("");
+  await expect(page.getByRole("textbox", { name: /Giờ mở cửa/ })).toHaveValue("");
+  await expect(page.getByRole("heading", { name: "Ảnh đại diện salon" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Tài khoản chủ salon" })).toBeVisible();
   const setup = page.getByRole("navigation", { name: "Thiết lập vận hành" });
   expect(await setup.getByRole("button").count()).toBe(3);

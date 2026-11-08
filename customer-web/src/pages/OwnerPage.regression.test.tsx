@@ -199,13 +199,20 @@ describe("OwnerPage behavior before extraction", () => {
     await user.type(hotline, "028 0000 0000");
     await user.type(hours, "Thứ 2–CN, 09:00–20:00");
     mocks.updateProfile.mockResolvedValue({
-      ...(await mocks.profile()), name: "Salon mới", hotline: "028 0000 0000",
+      ...(await mocks.profile()),
+      name: "Salon mới",
+      hotline: "028 0000 0000",
       openingHours: "Thứ 2–CN, 09:00–20:00",
     });
     await user.click(screen.getByRole("button", { name: "Lưu thông tin salon" }));
     expect(mocks.updateProfile).toHaveBeenCalledWith({
-      salonId: "salon-fixture", name: "Salon mới", address: "", phone: "", pointPerVisit: 2,
-      hotline: "028 0000 0000", openingHours: "Thứ 2–CN, 09:00–20:00",
+      salonId: "salon-fixture",
+      name: "Salon mới",
+      address: "",
+      phone: "",
+      pointPerVisit: 2,
+      hotline: "028 0000 0000",
+      openingHours: "Thứ 2–CN, 09:00–20:00",
     });
     expect(await screen.findByText("Đã cập nhật thông tin salon.")).toBeVisible();
   });

@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { BrandLogo } from "../components/BrandLogo";
+import { SalonContactDetails } from "../components/SalonContactDetails";
 import { getCustomerWheelConfig } from "../services/api";
 import { AppSession, defaultLuckyWheelConfig, TabKey } from "../services/types";
 
@@ -97,6 +98,7 @@ export function HomePage({
               ? "Cảm ơn bạn đã ghé salon."
               : shortStatusText(status, session.assignedStaffName)}
         </p>
+        {session.identityProvider === "firebase" ? <SalonContactDetails {...session} /> : null}
       </header>
 
       {syncStatus === "error" ? (

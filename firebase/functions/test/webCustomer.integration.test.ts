@@ -30,32 +30,51 @@ describe("authenticated web customer platform", () => {
     const base = { salonId: "salon-a", name: "Salon A", phone: "0900000000", pointPerVisit: 1 };
     const contact = { hotline: "028 0000 0000", openingHours: "Thứ 2–CN, 09:00–20:00" };
     const update = { ...base, ...contact };
-    await expect(updateSalonProfile.run(requestFor("staff-a", update, {})))
-      .rejects.toMatchObject({ code: "permission-denied" });
-    await expect(updateSalonProfile.run(requestFor("owner-a", { ...update, salonId: "salon-b" }, {})))
-      .rejects.toMatchObject({ code: "permission-denied" });
+    await expect(updateSalonProfile.run(requestFor("staff-a", update, {}))).rejects.toMatchObject({
+      code: "permission-denied",
+    });
+    await expect(
+      updateSalonProfile.run(requestFor("owner-a", { ...update, salonId: "salon-b" }, {})),
+    ).rejects.toMatchObject({ code: "permission-denied" });
     const qr = signedBranchQr("salon-a", "branch-a");
     await updateSalonProfile.run(requestFor("owner-a", base, {}));
     const before = await getWebCustomerContext.run(phoneRequest("uid-salon-contact", qr));
     expect(before.qr).toMatchObject({ salonHotline: "", salonOpeningHours: "" });
     expect(JSON.stringify(before)).not.toContain(base.phone);
-    await expect(updateSalonProfile.run(requestFor("owner-a", { ...update, hotline: "javascript:alert(1)" }, {})))
-      .rejects.toMatchObject({ code: "invalid-argument" });
-    await expect(updateSalonProfile.run(requestFor("owner-a", { ...update, openingHours: "x".repeat(161) }, {})))
-      .rejects.toMatchObject({ code: "invalid-argument" });
-    await expect(updateSalonProfile.run(requestFor("owner-a", update, {}))).resolves.toMatchObject(contact);
+    await expect(
+      updateSalonProfile.run(
+        requestFor("owner-a", { ...update, hotline: "javascript:alert(1)" }, {}),
+      ),
+    ).rejects.toMatchObject({ code: "invalid-argument" });
+    await expect(
+      updateSalonProfile.run(
+        requestFor("owner-a", { ...update, openingHours: "x".repeat(161) }, {}),
+      ),
+    ).rejects.toMatchObject({ code: "invalid-argument" });
+    await expect(updateSalonProfile.run(requestFor("owner-a", update, {}))).resolves.toMatchObject(
+      contact,
+    );
     await updateSalonProfile.run(requestFor("owner-a", { ...base, name: "Salon A mới" }, {}));
-    await expect(getSalonProfile.run(requestFor("owner-a", { salonId: "salon-a" }, {})))
-      .resolves.toMatchObject({ ...contact, name: "Salon A mới" });
-    const publicFields = { salonName: "Salon A mới", salonHotline: contact.hotline, salonOpeningHours: contact.openingHours };
+    await expect(
+      getSalonProfile.run(requestFor("owner-a", { salonId: "salon-a" }, {})),
+    ).resolves.toMatchObject({ ...contact, name: "Salon A mới" });
+    const publicFields = {
+      salonName: "Salon A mới",
+      salonHotline: contact.hotline,
+      salonOpeningHours: contact.openingHours,
+    };
     const visible = await getWebCustomerContext.run(phoneRequest("uid-salon-contact", qr));
     expect(visible.qr).toMatchObject(publicFields);
     expect(JSON.stringify(visible)).not.toContain(base.phone);
-    await expect(checkInWebCustomer.run(checkinRequest("uid-salon-contact", qr)))
-      .resolves.toMatchObject(publicFields);
-    await expect(getWebCustomerSession.run(phoneRequest("uid-salon-contact", { salonId: "salon-a" })))
-      .resolves.toMatchObject(publicFields);
-    await updateSalonProfile.run(requestFor("owner-a", { ...base, hotline: "", openingHours: "" }, {}));
+    await expect(
+      checkInWebCustomer.run(checkinRequest("uid-salon-contact", qr)),
+    ).resolves.toMatchObject(publicFields);
+    await expect(
+      getWebCustomerSession.run(phoneRequest("uid-salon-contact", { salonId: "salon-a" })),
+    ).resolves.toMatchObject(publicFields);
+    await updateSalonProfile.run(
+      requestFor("owner-a", { ...base, hotline: "", openingHours: "" }, {}),
+    );
     const cleared = await getWebCustomerContext.run(phoneRequest("uid-salon-contact", qr));
     expect(cleared.qr).toMatchObject({ salonHotline: "", salonOpeningHours: "" });
     expect(JSON.stringify(cleared)).not.toContain(base.phone);

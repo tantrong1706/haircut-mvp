@@ -17,6 +17,9 @@ test.beforeEach(async ({ page }) => {
       JSON.stringify({
         identityProvider: "firebase",
         firebaseUid: "web-test-uid",
+        salonName: "Salon mẫu",
+        salonHotline: "028 0000 0000",
+        salonOpeningHours: "Thứ 2–CN, 09:00–20:00",
         sessionId: "session-e2e",
         zaloUserId: "",
         sessionStatus: "completed",
@@ -70,6 +73,8 @@ test("khách chuyển qua điểm, lịch sử, vòng quay và quà", async ({ p
   await page.goto(`/?${new URLSearchParams(qr)}`);
 
   await expect(page.getByRole("heading", { name: "Khách Web" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "028 0000 0000" })).toHaveAttribute("href", "tel:02800000000");
+  await expect(page.getByText("Thứ 2–CN, 09:00–20:00")).toBeVisible();
   await page.getByRole("button", { name: "Lịch sử" }).last().click();
   await expect(page.getByRole("heading", { name: "Lịch sử cắt tóc" })).toBeVisible();
   await expect(page.getByText("20/06/2026")).toBeVisible();

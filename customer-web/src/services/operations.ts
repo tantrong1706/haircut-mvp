@@ -158,6 +158,8 @@ export type SalonProfile = {
   name: string;
   address: string;
   phone: string;
+  hotline?: string;
+  openingHours?: string;
   avatarUrl: string;
   pointPerVisit: number;
   freeCustomerLimit: number;
@@ -488,13 +490,17 @@ export async function getSalonProfile(salonId: string): Promise<SalonProfile> {
   );
 }
 
-export async function updateSalonProfile(input: {
+export type SalonProfileUpdate = {
   salonId: string;
   name: string;
   address?: string;
   phone?: string;
+  hotline?: string;
+  openingHours?: string;
   pointPerVisit: number;
-}): Promise<SalonProfile> {
+};
+
+export async function updateSalonProfile(input: SalonProfileUpdate): Promise<SalonProfile> {
   const name = input.name.trim();
   const address = input.address?.trim() || "";
   const phone = input.phone?.trim() || "";
@@ -504,23 +510,27 @@ export async function updateSalonProfile(input: {
     throw new Error("Vui lòng nhập tên salon");
   }
 
+  const base = { salonId: input.salonId, name, address, phone, pointPerVisit };
+  if (input.hotline !== undefined || input.openingHours !== undefined) {
+    const contact = {
+      ...(input.hotline !== undefined ? { hotline: input.hotline.trim() } : {}),
+      ...(input.openingHours !== undefined ? { openingHours: input.openingHours.trim() } : {}),
+    };
+    // Public contact edits must be confirmed by the authorized callable, never a test fallback.
+    const result = await callFunction<SalonProfileUpdate, SalonProfile>("updateSalonProfile", {
+      ...base,
+      ...contact,
+    });
+    if (Object.entries(contact).some(([key, value]) => result[key as keyof typeof contact] !== value)) {
+      throw new Error("Máy chủ chưa xác nhận lưu hotline hoặc giờ mở cửa. Vui lòng tải lại và thử lại.");
+    }
+    return result;
+  }
+
   return callWriteFunctionOrFallback(
     "updateSalonProfile",
-    {
-      salonId: input.salonId,
-      name,
-      address,
-      phone,
-      pointPerVisit,
-    },
-    () =>
-      updateSalonProfileDirect({
-        salonId: input.salonId,
-        name,
-        address,
-        phone,
-        pointPerVisit,
-      }),
+    base,
+    () => updateSalonProfileDirect(base),
   );
 }
 
@@ -683,6 +693,8 @@ async function getSalonProfileDirect(salonId: string): Promise<SalonProfile> {
     name: String(data.name || "Salon"),
     address: String(data.address || ""),
     phone: String(data.phone || ""),
+    hotline: typeof data.hotline === "string" ? data.hotline : "",
+    openingHours: typeof data.openingHours === "string" ? data.openingHours : "",
     avatarUrl: String(data.avatarUrl || ""),
     pointPerVisit: Number(data.pointPerVisit ?? 1),
     freeCustomerLimit: Number(data.freeCustomerLimit ?? 50),
