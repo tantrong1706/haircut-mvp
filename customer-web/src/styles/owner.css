@@ -660,6 +660,24 @@
   font-weight: 700;
 }
 
+.salon-customer-preview {
+  margin-block-start: 1rem;
+}
+
+.salon-preview-card {
+  box-sizing: border-box;
+  max-inline-size: 26rem;
+  margin-block-start: 0.75rem;
+  padding: 1rem;
+  border: 1px solid currentColor;
+  border-radius: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+.salon-preview-card > p {
+  margin-block: 0.4rem 0;
+}
+
 .salon-visibility-options {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));

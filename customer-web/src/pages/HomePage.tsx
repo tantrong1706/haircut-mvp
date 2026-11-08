@@ -31,7 +31,7 @@ const actions: Array<{
   description: string;
   Icon: LucideIcon;
 }> = [
-  { tab: "history", title: "Lịch sử", description: "Ảnh & ghi chú lần cắt", Icon: CalendarClock },
+  { tab: "history", title: "Lịch sử", description: "Ngày cắt và ảnh đã lưu", Icon: CalendarClock },
   { tab: "rewards", title: "Quà", description: "Các mã quà đã nhận", Icon: Gift },
 ];
 

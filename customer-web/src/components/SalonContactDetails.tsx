@@ -8,7 +8,12 @@ export function SalonContactDetails({
   salonOpeningHours,
   branchAddress,
   branchDirectionsEnabled,
-}: SalonPublicDetails & { branchAddress?: string; branchDirectionsEnabled?: boolean }) {
+  preview = false,
+}: SalonPublicDetails & {
+  branchAddress?: string;
+  branchDirectionsEnabled?: boolean;
+  preview?: boolean;
+}) {
   const dial = salonHotline?.replace(/[ .()-]/g, "") ?? "";
   const showHotline = /^\+?[0-9]{7,15}$/.test(dial);
   const destination = branchAddress?.trim();
@@ -35,16 +40,21 @@ export function SalonContactDetails({
         <p>
           <Phone size={16} aria-hidden="true" />
           <span>
-            <strong>Hotline</strong> <a href={`tel:${dial}`}>{salonHotline}</a>
+            <strong>Hotline</strong>{" "}
+            {preview ? <span>{salonHotline}</span> : <a href={`tel:${dial}`}>{salonHotline}</a>}
           </span>
         </p>
       ) : null}
       {mapUrl ? (
         <p>
           <MapPin size={16} aria-hidden="true" />
-          <a href={mapUrl} target="_blank" rel="noopener noreferrer">
-            Chỉ đường
-          </a>
+          {preview ? (
+            <span>Chỉ đường</span>
+          ) : (
+            <a href={mapUrl} target="_blank" rel="noopener noreferrer">
+              Chỉ đường
+            </a>
+          )}
         </p>
       ) : null}
     </div>

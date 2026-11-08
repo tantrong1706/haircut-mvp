@@ -795,6 +795,7 @@ export function OwnerPage({ currentUser }: Props) {
           <section className="owner-settings-group" aria-label="Hồ sơ salon">
             <SalonProfilePanel
               profile={salonProfile}
+              branches={ownerBranches}
               saving={savingSalonProfile}
               onSave={saveSalonProfile}
             />

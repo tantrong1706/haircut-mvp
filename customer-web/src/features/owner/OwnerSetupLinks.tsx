@@ -24,8 +24,8 @@ const links = [
 
 export function OwnerSetupLinks({ onOpenTab }: { onOpenTab: (tab: OwnerTab) => void }) {
   return (
-    <nav className="panel owner-setup" aria-label="Thiết lập vận hành">
-      <h2>Thiết lập vận hành</h2>
+    <nav className="panel owner-setup" aria-label="Lối tắt quản lý">
+      <h2>Lối tắt quản lý</h2>
       <div className="owner-setup-links">
         {links.map(({ tab, title, detail, Icon }) => (
           <button

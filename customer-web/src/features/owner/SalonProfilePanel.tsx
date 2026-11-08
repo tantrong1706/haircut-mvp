@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { Save } from "lucide-react";
+import { useEffect, useId, useState } from "react";
+import { Eye, Save } from "lucide-react";
+import { SalonCustomerPreview, type PreviewBranch } from "./SalonCustomerPreview";
 import type {
   SalonProfile,
   SalonProfileSwitches,
@@ -8,6 +9,7 @@ import type {
 
 type Props = {
   profile: SalonProfile | null;
+  branches?: readonly PreviewBranch[];
   saving: boolean;
   onSave: (input: Omit<SalonProfileUpdate, "salonId">) => void;
 };
@@ -25,7 +27,7 @@ const operationOptions = [
 ] as const;
 type SwitchKey = keyof SalonProfileSwitches;
 
-export function SalonProfilePanel({ profile, saving, onSave }: Props) {
+export function SalonProfilePanel({ profile, branches = [], saving, onSave }: Props) {
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
@@ -33,6 +35,8 @@ export function SalonProfilePanel({ profile, saving, onSave }: Props) {
   const [openingHours, setOpeningHours] = useState("");
   const [pointPerVisit, setPointPerVisit] = useState(1);
   const [switchDraft, setSwitchDraft] = useState<SalonProfileSwitches>({});
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const previewId = useId();
 
   const savedName = profile?.name ?? "";
   const savedAddress = profile?.address ?? "";
@@ -68,6 +72,7 @@ export function SalonProfilePanel({ profile, saving, onSave }: Props) {
   const hotlineChanged = hotline.trim() !== savedHotline;
   const hoursChanged = openingHours.trim() !== savedHours;
   const savedSwitch = (key: SwitchKey) => profile?.[key] ?? key !== "showDirections";
+  const draftSwitch = (key: SwitchKey) => switchDraft[key] ?? savedSwitch(key);
   const switchPatch: SalonProfileSwitches = {};
   for (const [key] of [...visibilityOptions, ...operationOptions]) {
     const value = switchDraft[key];
@@ -87,7 +92,7 @@ export function SalonProfilePanel({ profile, saving, onSave }: Props) {
     return (
       <div className="salon-visibility-options">
         {options.map(([key, label]) => {
-          const enabled = switchDraft[key] ?? savedSwitch(key);
+          const enabled = draftSwitch(key);
           return (
             <button
               className="secondary-button salon-visibility-switch"
@@ -95,7 +100,12 @@ export function SalonProfilePanel({ profile, saving, onSave }: Props) {
               type="button"
               role="switch"
               aria-checked={enabled}
-              onClick={() => setSwitchDraft((current) => ({ ...current, [key]: !enabled }))}
+              onClick={() =>
+                setSwitchDraft((current) => ({
+                  ...current,
+                  [key]: !(current[key] ?? savedSwitch(key)),
+                }))
+              }
             >
               {label}
               <span className="salon-visibility-status" aria-hidden="true">
@@ -194,13 +204,14 @@ export function SalonProfilePanel({ profile, saving, onSave }: Props) {
           <small>Nhân viên sẽ gửi yêu cầu cộng đúng số điểm này cho mỗi lượt cắt.</small>
         </label>
         <label className="field wide-field">
-          <span>Địa chỉ</span>
+          <span>Địa chỉ hồ sơ salon</span>
           <input
             value={address}
             onChange={(event) => setAddress(event.target.value)}
             maxLength={200}
-            placeholder="Địa chỉ để nhận diện salon"
+            placeholder="Địa chỉ chung của salon"
           />
+          <small>Địa chỉ khách xem được chỉnh riêng trong Chi nhánh và QR.</small>
         </label>
       </fieldset>
       <fieldset className="salon-profile-fields salon-visibility" disabled={saving || !profile}>
@@ -219,11 +230,42 @@ export function SalonProfilePanel({ profile, saving, onSave }: Props) {
         {renderSwitches(operationOptions)}
       </fieldset>
       <div className="button-row wrap-row">
+        <button
+          type="button"
+          className="secondary-button"
+          disabled={!profile}
+          aria-expanded={previewOpen}
+          aria-controls={previewId}
+          onClick={() => setPreviewOpen((open) => !open)}
+        >
+          <Eye size={18} aria-hidden="true" />
+          Xem trước thông tin khách
+        </button>
         <button type="submit" className="primary-button" disabled={!canSave}>
           <Save size={18} aria-hidden="true" />
           {saving ? "Đang lưu..." : "Lưu thông tin salon"}
         </button>
       </div>
+      <section
+        id={previewId}
+        className="salon-customer-preview"
+        aria-label="Xem trước thông tin khách"
+        hidden={!previewOpen || !profile}
+      >
+        {previewOpen && profile ? (
+          <SalonCustomerPreview
+            key={profile.id}
+            salonId={profile.id}
+            branches={branches}
+            salonName={name}
+            salonAvatarUrl={draftSwitch("showLogo") ? profile.avatarUrl : ""}
+            salonHotline={draftSwitch("showHotline") ? hotline.trim() : ""}
+            salonOpeningHours={draftSwitch("showOpeningHours") ? openingHours.trim() : ""}
+            showAddress={draftSwitch("showBranchAddress")}
+            showDirections={draftSwitch("showDirections")}
+          />
+        ) : null}
+      </section>
     </form>
   );
 }

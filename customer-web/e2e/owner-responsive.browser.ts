@@ -66,7 +66,16 @@ test("settings groups salon setup and opens the existing wheel form", async ({ p
   await expect(requestSwitch).not.toBeChecked();
   await expect(page.getByRole("switch", { name: "Cho phép quay thưởng" })).toBeChecked();
   await expect(page.getByRole("region", { name: "Tài khoản chủ salon" })).toBeVisible();
-  const setup = page.getByRole("navigation", { name: "Thiết lập vận hành" });
+  const previewButton = page.getByRole("button", { name: "Xem trước thông tin khách" });
+  await previewButton.click();
+  const preview = page.getByRole("region", { name: "Xem trước thông tin khách" });
+  await expect(preview.getByText("Chi nhánh Nguyễn Văn Linh")).toBeVisible();
+  await expect(preview.getByRole("link")).toHaveCount(0);
+  await expect(previewButton).toHaveAttribute("aria-expanded", "true");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await previewButton.click();
+  await expect(preview).not.toBeVisible();
+  const setup = page.getByRole("navigation", { name: "Lối tắt quản lý" });
   expect(await setup.getByRole("button").count()).toBe(3);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await setup.getByRole("button", { name: /Vòng quay/ }).click();

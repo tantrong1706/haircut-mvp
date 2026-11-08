@@ -6159,7 +6159,29 @@ async function customerSessionResult(
   };
 }
 
-function webAppSessionResult(
+async function webVisitLocation(
+  salonId: string,
+  visit: { branchId: string; branchAddress: string },
+  switches: SalonOwnerSwitches,
+  resolvedQr?: { branchId: string | null; branchAddress: string },
+) {
+  if (!switches.showBranchAddress || !/^[A-Za-z0-9_-]{1,128}$/.test(visit.branchId)) {
+    return webBranchLocation("", switches);
+  }
+  if (resolvedQr?.branchId === visit.branchId) {
+    return webBranchLocation(resolvedQr.branchAddress, switches);
+  }
+  if (!switches.showDirections) {
+    return webBranchLocation(visit.branchAddress, switches);
+  }
+  // Directions must use the current record, not the address copied onto an earlier visit.
+  const branch = (await db.collection("branches").doc(visit.branchId).get()).data();
+  const address = branch?.salonId === salonId && branch.isActive === true
+    ? String(branch.address ?? "") : "";
+  return webBranchLocation(address, switches);
+}
+
+async function webAppSessionResult(
   firebaseUid: string,
   resolution: CustomerQrResolution,
   result: Awaited<ReturnType<typeof customerSessionResult>>,
@@ -6179,7 +6201,7 @@ function webAppSessionResult(
     },
     sessionId: result.sessionId,
     branchName: result.branchName,
-    ...webBranchLocation(result.branchAddress, resolution.ownerSwitches),
+    ...await webVisitLocation(resolution.salonId, result, resolution.ownerSwitches, resolution),
     mirrorName: result.mirrorName,
     zaloUserId: "",
     sessionStatus: result.sessionStatus,
@@ -6206,7 +6228,7 @@ export const getWebCustomerSession = onCall(functionOptions, async (request) => 
     ...result,
     firebaseUid: principal.uid,
     ...webSalonDetails(salonId, salon.data()),
-    ...webBranchLocation(result.branchAddress, switches),
+    ...await webVisitLocation(salonId, result, switches),
     features: webOwnerFeatures(result.features, switches),
   };
 });

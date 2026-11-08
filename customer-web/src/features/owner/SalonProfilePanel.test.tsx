@@ -18,17 +18,67 @@ const profile = {
 };
 
 describe("salon public profile form", () => {
+  it("does not fall back to the salon's private address when no branch is available", async () => {
+    render(
+      <SalonProfilePanel
+        profile={{ ...profile, showDirections: true }}
+        saving={false}
+        onSave={vi.fn()}
+      />,
+    );
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Xem trước thông tin khách" }));
+    const preview = within(screen.getByRole("region", { name: "Xem trước thông tin khách" }));
+    expect(preview.getByText("Chưa có chi nhánh để xem trước.")).toBeVisible();
+    expect(preview.queryByText(profile.address)).not.toBeInTheDocument();
+    expect(preview.queryByText("Chỉ đường")).not.toBeInTheDocument();
+  });
+
   it("previews the selected branch and unsaved visibility settings without submitting or opening external links", async () => {
     const onSave = vi.fn();
     const user = userEvent.setup();
     const branches = [
-      { id: "first", salonId: profile.id, name: "Chi nhánh Một", address: "Đường Một", isActive: true },
-      { id: "second", salonId: profile.id, name: "Chi nhánh Hai", address: "Đường Hai", isActive: true },
-      { id: "inactive", salonId: profile.id, name: "Đã đóng", address: "Địa chỉ cũ", isActive: false },
-      { id: "other", salonId: "other-salon", name: "Salon khác", address: "Địa chỉ khác", isActive: true },
+      {
+        id: "first",
+        salonId: profile.id,
+        name: "Chi nhánh Một",
+        address: "Đường Một",
+        isActive: true,
+      },
+      {
+        id: "second",
+        salonId: profile.id,
+        name: "Chi nhánh Hai",
+        address: "Đường Hai",
+        isActive: true,
+      },
+      {
+        id: "inactive",
+        salonId: profile.id,
+        name: "Đã đóng",
+        address: "Địa chỉ cũ",
+        isActive: false,
+      },
+      {
+        id: "other",
+        salonId: "other-salon",
+        name: "Salon khác",
+        address: "Địa chỉ khác",
+        isActive: true,
+      },
     ];
-    render(<SalonProfilePanel profile={{ ...profile, showDirections: true }} branches={branches} saving={false} onSave={onSave} />);
-    expect(screen.queryByRole("region", { name: "Xem trước thông tin khách" })).not.toBeInTheDocument();
+    render(
+      <SalonProfilePanel
+        profile={{ ...profile, showDirections: true }}
+        branches={branches}
+        saving={false}
+        onSave={onSave}
+      />,
+    );
+    expect(
+      screen.queryByRole("region", { name: "Xem trước thông tin khách" }),
+    ).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Xem trước thông tin khách" }));
     const preview = within(screen.getByRole("region", { name: "Xem trước thông tin khách" }));
     await user.selectOptions(preview.getByRole("combobox"), "second");
@@ -124,7 +174,7 @@ describe("salon public profile form", () => {
     const user = userEvent.setup();
     const phone = screen.getByRole("textbox", { name: "Số liên hệ nội bộ" });
     await user.clear(phone);
-    const address = screen.getByRole("textbox", { name: "Địa chỉ" });
+    const address = screen.getByRole("textbox", { name: /Địa chỉ hồ sơ salon/ });
     await user.clear(address);
     const points = screen.getByRole("spinbutton", { name: /Điểm cộng mỗi lượt cắt/ });
     fireEvent.change(points, { target: { value: "2" } });

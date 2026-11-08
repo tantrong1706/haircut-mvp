@@ -170,20 +170,16 @@ describe("OwnerPage behavior before extraction", () => {
 
   it("groups salon setup in Settings and links to the existing management forms", async () => {
     await openPage();
-    expect(
-      screen.queryByRole("navigation", { name: "Thiết lập vận hành" }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Lối tắt quản lý" })).not.toBeInTheDocument();
     await openTab("Cài đặt");
     expect(screen.getByRole("region", { name: "Hồ sơ salon" })).toBeVisible();
     expect(screen.getByRole("region", { name: "Tài khoản chủ salon" })).toBeVisible();
-    const operations = screen.getByRole("navigation", { name: "Thiết lập vận hành" });
+    const operations = screen.getByRole("navigation", { name: "Lối tắt quản lý" });
     expect(within(operations).getByRole("button", { name: /Chi nhánh và QR/ })).toBeVisible();
     expect(within(operations).getByRole("button", { name: /Nhân viên và quyền/ })).toBeVisible();
     await userEvent.setup().click(within(operations).getByRole("button", { name: /Vòng quay/ }));
     expect(screen.getByRole("heading", { name: "Cấu hình vòng quay" })).toBeVisible();
-    expect(
-      screen.queryByRole("navigation", { name: "Thiết lập vận hành" }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Lối tắt quản lý" })).not.toBeInTheDocument();
   });
 
   it("saves salon display name, public hotline and opening hours from Settings", async () => {
