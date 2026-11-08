@@ -33,6 +33,7 @@ export type AppSession = SalonPublicDetails & {
   sessionId: string;
   branchName?: string;
   branchAddress?: string;
+  branchDirectionsEnabled?: boolean;
   mirrorName?: string;
   zaloUserId: string;
   identityBinding?: string;

@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import { Save } from "lucide-react";
-import type { SalonProfile, SalonProfileUpdate } from "../../services/operations";
+import type {
+  SalonProfile,
+  SalonProfileSwitches,
+  SalonProfileUpdate,
+} from "../../services/operations";
 
 type Props = {
   profile: SalonProfile | null;
@@ -12,7 +16,14 @@ const visibilityOptions = [
   ["showLogo", "Hiện logo"],
   ["showHotline", "Hiện hotline"],
   ["showOpeningHours", "Hiện giờ mở cửa"],
+  ["showBranchAddress", "Hiện địa chỉ chi nhánh"],
+  ["showDirections", "Hiện nút Chỉ đường"],
 ] as const;
+const operationOptions = [
+  ["acceptWebPointRequests", "Nhận yêu cầu tích điểm mới"],
+  ["allowWebWheel", "Cho phép quay thưởng"],
+] as const;
+type SwitchKey = keyof SalonProfileSwitches;
 
 export function SalonProfilePanel({ profile, saving, onSave }: Props) {
   const [name, setName] = useState("");
@@ -21,11 +32,7 @@ export function SalonProfilePanel({ profile, saving, onSave }: Props) {
   const [hotline, setHotline] = useState("");
   const [openingHours, setOpeningHours] = useState("");
   const [pointPerVisit, setPointPerVisit] = useState(1);
-  const [visibility, setVisibility] = useState({
-    showLogo: true,
-    showHotline: true,
-    showOpeningHours: true,
-  });
+  const [switchDraft, setSwitchDraft] = useState<SalonProfileSwitches>({});
 
   const savedName = profile?.name ?? "";
   const savedAddress = profile?.address ?? "";
@@ -33,9 +40,6 @@ export function SalonProfilePanel({ profile, saving, onSave }: Props) {
   const savedHotline = profile?.hotline ?? "";
   const savedHours = profile?.openingHours ?? "";
   const savedPoints = profile?.pointPerVisit ?? 1;
-  const savedShowLogo = profile?.showLogo ?? true;
-  const savedShowHotline = profile?.showHotline ?? true;
-  const savedShowOpeningHours = profile?.showOpeningHours ?? true;
   useEffect(() => {
     setName(savedName);
     setAddress(savedAddress);
@@ -43,11 +47,7 @@ export function SalonProfilePanel({ profile, saving, onSave }: Props) {
     setHotline(savedHotline);
     setOpeningHours(savedHours);
     setPointPerVisit(savedPoints);
-    setVisibility({
-      showLogo: savedShowLogo,
-      showHotline: savedShowHotline,
-      showOpeningHours: savedShowOpeningHours,
-    });
+    setSwitchDraft({});
   }, [
     profile?.id,
     savedName,
@@ -56,29 +56,57 @@ export function SalonProfilePanel({ profile, saving, onSave }: Props) {
     savedHotline,
     savedHours,
     savedPoints,
-    savedShowLogo,
-    savedShowHotline,
-    savedShowOpeningHours,
+    profile?.showLogo,
+    profile?.showHotline,
+    profile?.showOpeningHours,
+    profile?.showBranchAddress,
+    profile?.showDirections,
+    profile?.acceptWebPointRequests,
+    profile?.allowWebWheel,
   ]);
 
   const hotlineChanged = hotline.trim() !== savedHotline;
   const hoursChanged = openingHours.trim() !== savedHours;
-  const visibilityPatch = {
-    ...(visibility.showLogo !== savedShowLogo ? { showLogo: visibility.showLogo } : {}),
-    ...(visibility.showHotline !== savedShowHotline ? { showHotline: visibility.showHotline } : {}),
-    ...(visibility.showOpeningHours !== savedShowOpeningHours
-      ? { showOpeningHours: visibility.showOpeningHours }
-      : {}),
-  };
+  const savedSwitch = (key: SwitchKey) => profile?.[key] ?? key !== "showDirections";
+  const switchPatch: SalonProfileSwitches = {};
+  for (const [key] of [...visibilityOptions, ...operationOptions]) {
+    const value = switchDraft[key];
+    if (value !== undefined && value !== savedSwitch(key)) switchPatch[key] = value;
+  }
   const changed =
     name.trim() !== savedName ||
     address.trim() !== savedAddress ||
     phone.trim() !== savedPhone ||
     hotlineChanged ||
     hoursChanged ||
-    Object.keys(visibilityPatch).length > 0 ||
+    Object.keys(switchPatch).length > 0 ||
     pointPerVisit !== savedPoints;
   const canSave = Boolean(profile && !saving && name.trim() && changed);
+
+  function renderSwitches(options: ReadonlyArray<readonly [SwitchKey, string]>) {
+    return (
+      <div className="salon-visibility-options">
+        {options.map(([key, label]) => {
+          const enabled = switchDraft[key] ?? savedSwitch(key);
+          return (
+            <button
+              className="secondary-button salon-visibility-switch"
+              key={key}
+              type="button"
+              role="switch"
+              aria-checked={enabled}
+              onClick={() => setSwitchDraft((current) => ({ ...current, [key]: !enabled }))}
+            >
+              {label}
+              <span className="salon-visibility-status" aria-hidden="true">
+                {enabled ? "Bật" : "Tắt"}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
 
   return (
     <form
@@ -93,7 +121,7 @@ export function SalonProfilePanel({ profile, saving, onSave }: Props) {
           pointPerVisit,
           ...(hotlineChanged ? { hotline: hotline.trim() } : {}),
           ...(hoursChanged ? { openingHours: openingHours.trim() } : {}),
-          ...visibilityPatch,
+          ...switchPatch,
         });
       }}
     >
@@ -177,24 +205,18 @@ export function SalonProfilePanel({ profile, saving, onSave }: Props) {
       </fieldset>
       <fieldset className="salon-profile-fields salon-visibility" disabled={saving || !profile}>
         <legend>Hiển thị với khách</legend>
-        <p className="muted">Tắt để ẩn mà vẫn giữ nội dung. Thay đổi áp dụng sau khi lưu.</p>
-        <div className="salon-visibility-options">
-          {visibilityOptions.map(([key, label]) => (
-            <button
-              className="secondary-button salon-visibility-switch"
-              key={key}
-              type="button"
-              role="switch"
-              aria-checked={visibility[key]}
-              onClick={() => setVisibility((current) => ({ ...current, [key]: !current[key] }))}
-            >
-              {label}
-              <span className="salon-visibility-status" aria-hidden="true">
-                {visibility[key] ? "Bật" : "Tắt"}
-              </span>
-            </button>
-          ))}
-        </div>
+        <p className="muted">
+          Tắt để ẩn mà vẫn giữ nội dung. Chỉ đường cần có địa chỉ chi nhánh đang hiển thị.
+        </p>
+        {renderSwitches(visibilityOptions)}
+      </fieldset>
+      <fieldset className="salon-profile-fields salon-visibility" disabled={saving || !profile}>
+        <legend>Vận hành trên Web</legend>
+        <p className="muted">
+          Tạm dừng lượt gửi từ QR hoặc vòng quay mới. Yêu cầu đã gửi, điểm và quà đã có không thay
+          đổi. Áp dụng sau khi lưu.
+        </p>
+        {renderSwitches(operationOptions)}
       </fieldset>
       <div className="button-row wrap-row">
         <button type="submit" className="primary-button" disabled={!canSave}>

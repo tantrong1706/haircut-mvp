@@ -60,6 +60,7 @@ export function HomePage({
   const status = session.sessionStatus || "waiting";
   const [wheelConfig, setWheelConfig] = useState(defaultLuckyWheelConfig);
   const missingPoints = Math.max(0, wheelConfig.requiredPoints - customer.points);
+  const wheelPaused = session.features?.luckyWheelEnabled === false || session.features?.maintenanceMode === true;
   const wheelProgress = Math.min(
     100,
     Math.round((customer.points / wheelConfig.requiredPoints) * 100),
@@ -98,7 +99,12 @@ export function HomePage({
               ? "Cảm ơn bạn đã ghé salon."
               : shortStatusText(status, session.assignedStaffName)}
         </p>
-        {session.identityProvider === "firebase" ? <SalonContactDetails {...session} /> : null}
+        {session.identityProvider === "firebase" ? (
+          <>
+            {session.branchAddress ? <p className="muted">{session.branchAddress}</p> : null}
+            <SalonContactDetails {...session} />
+          </>
+        ) : null}
       </header>
 
       {syncStatus === "error" ? (
@@ -133,7 +139,9 @@ export function HomePage({
             <small>điểm</small>
           </div>
           <p>
-            {missingPoints === 0
+            {wheelPaused
+              ? "Vòng quay đang tạm dừng."
+              : missingPoints === 0
               ? "Bạn đã đủ điểm để quay."
               : `Thêm ${missingPoints} điểm để mở lượt quay.`}
           </p>
@@ -170,13 +178,16 @@ export function HomePage({
 
         <button className="home-wheel-button" type="button" onClick={() => onTabChange("wheel")}>
           <Sparkles size={20} aria-hidden="true" />
-          {missingPoints === 0 ? "Quay ngay" : "Xem vòng quay"}
+          {missingPoints === 0 && !wheelPaused ? "Quay ngay" : "Xem vòng quay"}
         </button>
       </section>
 
       {accountOnly && !webCooldownActive ? (
         <p className="panel">
-          Quét QR tại chi nhánh để yêu cầu tích điểm. Bạn vẫn xem được lịch sử và quà tại đây.
+          {session.features?.checkinEnabled === false
+            ? "Salon đang tạm dừng nhận yêu cầu tích điểm mới."
+            : "Quét QR tại chi nhánh để yêu cầu tích điểm."}{" "}
+          Bạn vẫn xem được lịch sử và quà tại đây.
         </p>
       ) : !accountOnly && session.identityProvider === "firebase" ? (
         <div className="visit-update" role="status">

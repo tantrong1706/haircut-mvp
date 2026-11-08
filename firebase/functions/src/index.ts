@@ -134,7 +134,7 @@ import { publicRequestPeer } from "./security";
 import { revokeHaircutDownloadTokens } from "./domains/photos/photoDownloadTokens";
 import { createPrivatePhotoReader, privatePhotoUrl, PRIVATE_PHOTO_URL_TTL_MS } from "./domains/photos/privatePhotoAccess";
 import { customerMayViewVisitPhotos, hasCustomerVisitPhotos, readCustomerVisitPhotos } from "./domains/photos/customerVisitPhotos";
-import { parseSalonPublicContactPatch, parseSalonVisibilityPatch, salonPublicContact, salonVisibility } from "./domains/salons/publicContact";
+import { parseSalonPublicContactPatch, parseSalonSwitchPatch, salonPublicContact, salonOwnerSwitches, webBranchLocation, type SalonOwnerSwitches } from "./domains/salons/publicContact";
 import { createVisitDetailsApi, assertLatestCompletedPhotoVisit } from "./domains/photos/visitDetails";
 
 initializeApp();
@@ -1515,6 +1515,7 @@ type CustomerQrResolution = {
   salonAvatarUrl: string;
   salonHotline: string;
   salonOpeningHours: string;
+  ownerSwitches: SalonOwnerSwitches;
   branchId: string | null;
   branchName: string;
   branchAddress: string;
@@ -1544,7 +1545,8 @@ async function resolveCustomerQrData(data: unknown): Promise<CustomerQrResolutio
   }
 
   const salon = salonSnap.data();
-  const publicDetails = webSalonDetails(salonId, salon);
+  const ownerSwitches = salonOwnerSwitches(salon);
+  const publicDetails = { ...webSalonDetails(salonId, salon), ownerSwitches };
   assertSalonIsOperational(salon);
   const features = await getSystemFeatures(salonId);
   const secret = qrSigningSecret.value();
@@ -1717,6 +1719,7 @@ async function spinWheelForCustomer(
   idempotencyKey: string,
   requestedConfigVersion: unknown,
   appVersion: unknown,
+  checkWebPause = false,
 ): Promise<SpinWheelResult> {
   await assertFeatureEnabled(
     salonId,
@@ -1742,10 +1745,11 @@ async function spinWheelForCustomer(
   let pointsAfter = 0;
 
   await db.runTransaction(async (tx) => {
-    const [operationSnap, wheelSnap, customerSnap] = await Promise.all([
+    const [operationSnap, wheelSnap, customerSnap, salonSnap] = await Promise.all([
       tx.get(operationRef),
       tx.get(wheelRef),
       tx.get(customerRef),
+      checkWebPause ? tx.get(db.collection("salons").doc(salonId)) : null,
     ]);
     if (operationSnap.exists) {
       const operation = operationSnap.data();
@@ -1765,6 +1769,12 @@ async function spinWheelForCustomer(
       configVersion = wheelConfigVersion(response?.configVersion);
       pointsAfter = Number(response?.pointsAfter ?? 0);
       return;
+    }
+    if (salonSnap && !salonOwnerSwitches(salonSnap.data()).allowWebWheel) {
+      throw new HttpsError("failed-precondition", "Vòng quay đang tạm ngừng. Vui lòng quay lại sau.", {
+        errorCode: ApiErrorCode.FEATURE_DISABLED,
+        feature: "luckyWheelEnabled",
+      });
     }
     if (!wheelSnap.exists) {
       throw new HttpsError("not-found", "Vòng quay chưa được cấu hình");
@@ -2775,7 +2785,7 @@ export const getSalonProfile = onCall(functionOptions, async (request) => {
     address: salon?.address ?? "",
     phone: salon?.phone ?? "",
     ...salonPublicContact(salon),
-    ...salonVisibility(salon),
+    ...salonOwnerSwitches(salon),
     avatarUrl: trustedStoredSalonAvatarUrl(salon?.avatarUrl, salonId),
     pointPerVisit: Number(salon?.pointPerVisit ?? 1),
     freeCustomerLimit: Number(salon?.freeCustomerLimit ?? 50),
@@ -2795,10 +2805,14 @@ export const updateSalonProfile = onCall(functionOptions, async (request) => {
     hotline: request.data?.hotline,
     openingHours: request.data?.openingHours,
   });
-  const visibilityPatch = parseSalonVisibilityPatch({
+  const switchPatch = parseSalonSwitchPatch({
     showLogo: request.data?.showLogo,
     showHotline: request.data?.showHotline,
     showOpeningHours: request.data?.showOpeningHours,
+    showBranchAddress: request.data?.showBranchAddress,
+    showDirections: request.data?.showDirections,
+    acceptWebPointRequests: request.data?.acceptWebPointRequests,
+    allowWebWheel: request.data?.allowWebWheel,
   });
   const pointPerVisit = requireBoundedPositiveNumber(
     request.data?.pointPerVisit,
@@ -2821,7 +2835,7 @@ export const updateSalonProfile = onCall(functionOptions, async (request) => {
       address: address ?? null,
       phone: phone ?? null,
       ...contactPatch,
-      ...visibilityPatch,
+      ...switchPatch,
       pointPerVisit,
       updatedAt: now,
     },
@@ -2853,7 +2867,7 @@ export const updateSalonProfile = onCall(functionOptions, async (request) => {
     phone: phone ?? "",
     avatarUrl: trustedStoredSalonAvatarUrl(salonSnap.data()?.avatarUrl, salonId),
     ...salonPublicContact({ ...salonSnap.data(), ...contactPatch }),
-    ...salonVisibility({ ...salonSnap.data(), ...visibilityPatch }),
+    ...salonOwnerSwitches({ ...salonSnap.data(), ...switchPatch }),
     pointPerVisit,
     freeCustomerLimit: Number(salonSnap.data()?.freeCustomerLimit ?? 50),
     features,
@@ -2954,7 +2968,15 @@ export const createManualCustomer = onCall(functionOptions, async (request) => {
 export const resolveCustomerQr = onCall(qrFunctionOptions, async (request) => {
   const salonId = requireString(request.data?.salonId, "salonId");
   await enforcePublicRequestPolicy("resolveCustomerQr", request, salonId, request.data?.qrToken);
-  return assertBranchOnlyCustomerQr(await resolveCustomerQrData(request.data));
+  const { ownerSwitches, ...resolution } = assertBranchOnlyCustomerQr(await resolveCustomerQrData(request.data));
+  return {
+    ...resolution,
+    ...webBranchLocation(resolution.branchAddress, ownerSwitches),
+    branches: resolution.branches.map((branch) => ({
+      ...branch, address: ownerSwitches.showBranchAddress ? branch.address : "",
+    })),
+    features: webOwnerFeatures(resolution.features, ownerSwitches),
+  };
 });
 
 function assertWebCheckinQr(resolution: CustomerQrResolution) {
@@ -3053,12 +3075,20 @@ async function getOrCreateWebCustomer(
 
 function webSalonDetails(salonId: string, salon: DocumentData | undefined) {
   const contact = salonPublicContact(salon);
-  const visibility = salonVisibility(salon);
+  const visibility = salonOwnerSwitches(salon);
   return {
     salonName: String(salon?.name || "Salon"),
     salonAvatarUrl: visibility.showLogo ? trustedStoredSalonAvatarUrl(salon?.avatarUrl, salonId) : "",
     salonHotline: visibility.showHotline ? contact.hotline : "",
     salonOpeningHours: visibility.showOpeningHours ? contact.openingHours : "",
+  };
+}
+
+function webOwnerFeatures(features: SystemFeatures, switches: SalonOwnerSwitches): SystemFeatures {
+  return {
+    ...features,
+    checkinEnabled: features.checkinEnabled && switches.acceptWebPointRequests,
+    luckyWheelEnabled: features.luckyWheelEnabled && switches.allowWebWheel,
   };
 }
 
@@ -3071,7 +3101,8 @@ function webQrView(resolution: CustomerQrResolution) {
     salonOpeningHours: resolution.salonOpeningHours,
     branchId: resolution.branchId,
     branchName: resolution.branchName,
-    branchAddress: resolution.branchAddress,
+    ...webBranchLocation(resolution.branchAddress, resolution.ownerSwitches),
+    acceptingPointRequests: webOwnerFeatures(resolution.features, resolution.ownerSwitches).checkinEnabled,
   };
 }
 
@@ -3212,6 +3243,12 @@ export const checkInWebCustomer = onCall(qrFunctionOptions, async (request) => {
       return;
     }
 
+    if (!salonOwnerSwitches(salonSnap.data()).acceptWebPointRequests) {
+      throw new HttpsError("failed-precondition", "Salon đang tạm dừng nhận yêu cầu tích điểm mới.", {
+        errorCode: ApiErrorCode.FEATURE_DISABLED,
+        feature: "checkinEnabled",
+      });
+    }
     const remainingMs = pointCooldownRemainingMs({
       nowMs: now.toMillis(),
       lastVisitAtMs: timestampMillis(customerSnap.data()?.lastVisitAt),
@@ -6001,6 +6038,7 @@ export const spinWebLuckyWheel = onCall(functionOptions, async (request) => {
     idempotencyKey,
     request.data?.configVersion,
     request.data?.appVersion,
+    true,
   );
 });
 
@@ -6141,7 +6179,7 @@ function webAppSessionResult(
     },
     sessionId: result.sessionId,
     branchName: result.branchName,
-    branchAddress: result.branchAddress,
+    ...webBranchLocation(result.branchAddress, resolution.ownerSwitches),
     mirrorName: result.mirrorName,
     zaloUserId: "",
     sessionStatus: result.sessionStatus,
@@ -6149,7 +6187,7 @@ function webAppSessionResult(
     claimedAtMs: result.claimedAtMs,
     customer: result.customer,
     wheelConfig: result.wheelConfig,
-    features: result.features,
+    features: webOwnerFeatures(result.features, resolution.ownerSwitches),
   };
 }
 
@@ -6163,7 +6201,14 @@ export const getWebCustomerSession = onCall(functionOptions, async (request) => 
   const result = await customerSessionResult(salonId, customerId, sessionId, `Khách ${principal.phoneLast4}`);
   const salon = await db.collection("salons").doc(salonId).get();
   assertSalonIsOperational(salon.data());
-  return { ...result, firebaseUid: principal.uid, ...webSalonDetails(salonId, salon.data()) };
+  const switches = salonOwnerSwitches(salon.data());
+  return {
+    ...result,
+    firebaseUid: principal.uid,
+    ...webSalonDetails(salonId, salon.data()),
+    ...webBranchLocation(result.branchAddress, switches),
+    features: webOwnerFeatures(result.features, switches),
+  };
 });
 
 export const getCustomerSessionFromZalo = onCall(zaloFunctionOptions, async (request) => {

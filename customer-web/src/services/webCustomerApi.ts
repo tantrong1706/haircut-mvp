@@ -18,6 +18,8 @@ type WebQrView = SalonPublicDetails & {
   branchId: string;
   branchName: string;
   branchAddress: string;
+  branchDirectionsEnabled?: boolean;
+  acceptingPointRequests?: boolean;
 };
 
 export type WebCustomerContext = {
@@ -34,6 +36,7 @@ type WebSessionResult = SalonPublicDetails & {
   branchId?: string;
   branchName?: string;
   branchAddress?: string;
+  branchDirectionsEnabled?: boolean;
   assignedStaffName?: string;
   claimedAtMs?: number | null;
   customer: CustomerProfile;
@@ -92,6 +95,7 @@ export async function getWebCustomerSessionState(session: AppSession) {
       branchId: session.qr.branchId,
       branchName: session.branchName,
       branchAddress: session.branchAddress,
+      branchDirectionsEnabled: session.branchDirectionsEnabled,
       assignedStaffName: session.assignedStaffName,
       claimedAtMs: session.claimedAtMs,
       customer: session.customer,
@@ -260,6 +264,7 @@ function appSessionFromWebResult(qr: QrContext, result: WebSessionResult): AppSe
     sessionId: result.sessionId,
     branchName: result.branchName || "",
     branchAddress: result.branchAddress || "",
+    branchDirectionsEnabled: result.branchDirectionsEnabled,
     zaloUserId: "",
     sessionStatus: result.sessionId ? result.sessionStatus || "pending_approval" : undefined,
     assignedStaffName: result.assignedStaffName || "",

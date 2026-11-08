@@ -30,38 +30,93 @@ describe("authenticated web customer platform", () => {
     await db.doc("users/owner-a").set({ salonId: "salon-a", role: "owner", isActive: true });
     const qr = signedBranchQr("salon-a", "branch-a");
     const owner = { salonId: "salon-a", name: "Salon A", pointPerVisit: 1 };
-    const set = (fields: Record<string, unknown>) => updateSalonProfile.run(requestFor("owner-a", { ...owner, ...fields }, {}));
+    const set = (fields: Record<string, unknown>) =>
+      updateSalonProfile.run(requestFor("owner-a", { ...owner, ...fields }, {}));
     const uid = "uid-owner-pause";
     const existing = await checkInWebCustomer.run(checkinRequest(uid, qr));
     const customer = db.doc(`customers/${existing.customer.customerId}`);
     await customer.update({ points: 8 });
-    await set({ showBranchAddress: false, showDirections: true, acceptWebPointRequests: false, allowWebWheel: false });
+    await set({
+      showBranchAddress: false,
+      showDirections: true,
+      acceptWebPointRequests: false,
+      allowWebWheel: false,
+    });
     const context = await getWebCustomerContext.run(phoneRequest(uid, qr));
-    expect(context.qr).toMatchObject({ branchAddress: "", branchDirectionsEnabled: false, acceptingPointRequests: false });
-    expect(context.activeSession).toMatchObject({ sessionId: existing.sessionId, branchAddress: "", features: { checkinEnabled: false, luckyWheelEnabled: false } });
+    expect(context.qr).toMatchObject({
+      branchAddress: "",
+      branchDirectionsEnabled: false,
+      acceptingPointRequests: false,
+    });
+    expect(context.activeSession).toMatchObject({
+      sessionId: existing.sessionId,
+      branchAddress: "",
+      features: { checkinEnabled: false, luckyWheelEnabled: false },
+    });
     const publicQr = await resolveCustomerQr.run(requestFor("", qr, {}));
     expect(publicQr.branchAddress).toBe("");
     expect(publicQr.branches[0].address).toBe("");
-    await expect(getWebCustomerSession.run(phoneRequest(uid, { salonId: "salon-a", sessionId: existing.sessionId })))
-      .resolves.toMatchObject({ branchAddress: "", features: { luckyWheelEnabled: false } });
-    await expect(checkInWebCustomer.run(checkinRequest("uid-pause-new", qr)))
-      .rejects.toMatchObject({ code: "failed-precondition", details: { feature: "checkinEnabled" } });
-    await expect(spinWebLuckyWheel.run(phoneRequest(uid, { salonId: "salon-a", configVersion: 1, idempotencyKey: "fixture-paused-spin" })))
-      .rejects.toMatchObject({ code: "failed-precondition", details: { feature: "luckyWheelEnabled" } });
+    await expect(
+      getWebCustomerSession.run(
+        phoneRequest(uid, { salonId: "salon-a", sessionId: existing.sessionId }),
+      ),
+    ).resolves.toMatchObject({ branchAddress: "", features: { luckyWheelEnabled: false } });
+    await expect(checkInWebCustomer.run(checkinRequest("uid-pause-new", qr))).rejects.toMatchObject(
+      { code: "failed-precondition", details: { feature: "checkinEnabled" } },
+    );
+    await expect(
+      spinWebLuckyWheel.run(
+        phoneRequest(uid, {
+          salonId: "salon-a",
+          configVersion: 1,
+          idempotencyKey: "fixture-paused-spin",
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "failed-precondition",
+      details: { feature: "luckyWheelEnabled" },
+    });
     expect((await db.collection("point_requests").get()).size).toBe(1);
     expect((await customer.get()).data()?.points).toBe(8);
     expect((await db.collection("reward_history").get()).empty).toBe(true);
     expect((await db.doc("branches/branch-a").get()).data()?.address).toBe("1 Đường A");
-    await expect(checkInWebCustomer.run(checkinRequest("uid-other-salon", signedBranchQr("salon-b", "branch-b"))))
-      .resolves.toMatchObject({ sessionStatus: "pending_approval" });
+    await db.doc("users/staff-pause").set({
+      salonId: "salon-a",
+      role: "staff",
+      isActive: true,
+      branchIds: ["branch-a"],
+    });
+    await approvePointRequest.run(
+      requestFor("staff-pause", { salonId: "salon-a", requestId: existing.sessionId }, {}),
+    );
+    expect((await customer.get()).data()?.points).toBe(9);
+    await expect(
+      checkInWebCustomer.run(
+        checkinRequest("uid-other-salon", signedBranchQr("salon-b", "branch-b")),
+      ),
+    ).resolves.toMatchObject({ sessionStatus: "pending_approval" });
     await db.doc("system_config/features").set({ luckyWheelEnabled: false });
     await set({ showBranchAddress: true, acceptWebPointRequests: true, allowWebWheel: true });
-    expect((await getWebCustomerContext.run(phoneRequest(uid, qr))).qr)
-      .toMatchObject({ branchAddress: "1 Đường A", branchDirectionsEnabled: true, acceptingPointRequests: true });
-    await expect(spinWebLuckyWheel.run(phoneRequest(uid, { salonId: "salon-a", configVersion: 1, idempotencyKey: "fixture-admin-pause" })))
-      .rejects.toMatchObject({ code: "failed-precondition", details: { feature: "luckyWheelEnabled" } });
-    await expect(checkInWebCustomer.run(checkinRequest("uid-pause-new", qr)))
-      .resolves.toMatchObject({ sessionStatus: "pending_approval" });
+    expect((await getWebCustomerContext.run(phoneRequest(uid, qr))).qr).toMatchObject({
+      branchAddress: "1 Đường A",
+      branchDirectionsEnabled: true,
+      acceptingPointRequests: true,
+    });
+    await expect(
+      spinWebLuckyWheel.run(
+        phoneRequest(uid, {
+          salonId: "salon-a",
+          configVersion: 1,
+          idempotencyKey: "fixture-admin-pause",
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "failed-precondition",
+      details: { feature: "luckyWheelEnabled" },
+    });
+    await expect(
+      checkInWebCustomer.run(checkinRequest("uid-pause-new", qr)),
+    ).resolves.toMatchObject({ sessionStatus: "pending_approval" });
   });
 
   it("hides only opted-out public fields without deleting their values", async () => {
@@ -778,6 +833,7 @@ describe("authenticated web customer platform", () => {
     };
 
     const first = await spinWebLuckyWheel.run(phoneRequest("uid-owner", payload));
+    await db.doc("salons/salon-a").update({ allowWebWheel: false });
     const retry = await spinWebLuckyWheel.run(phoneRequest("uid-owner", payload));
     expect(retry).toEqual(first);
     expect(

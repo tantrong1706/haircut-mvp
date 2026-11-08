@@ -34,9 +34,13 @@ describe("salon public profile form", () => {
     await user.click(checkin);
     await user.click(wheel);
     await user.click(screen.getByRole("button", { name: "Lưu thông tin salon" }));
-    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
-      showDirections: true, acceptWebPointRequests: false, allowWebWheel: false,
-    }));
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        showDirections: true,
+        acceptWebPointRequests: false,
+        allowWebWheel: false,
+      }),
+    );
   });
 
   it("saves only the visibility switches changed and keeps the saved contact values", async () => {

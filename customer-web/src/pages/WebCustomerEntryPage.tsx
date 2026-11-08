@@ -52,6 +52,7 @@ export function WebCustomerEntryPage({ onReady }: Props) {
   const checkinStarted = useRef(false);
   const cooldownUntil = context?.customer.nextPointEligibleAtMs ?? 0;
   const cooldownActive = cooldownUntil > clockNow;
+  const requestsPaused = context?.qr.acceptingPointRequests === false;
 
   useEffect(() => {
     if (!cooldownActive) return undefined;
@@ -134,6 +135,8 @@ export function WebCustomerEntryPage({ onReady }: Props) {
             branchId: account.qr.branchId,
             branchName: account.branchName || "",
             branchAddress: account.branchAddress || "",
+            branchDirectionsEnabled: account.branchDirectionsEnabled,
+            acceptingPointRequests: account.features?.checkinEnabled,
           },
           customer: account.customer,
           activeSession: account,
@@ -201,7 +204,8 @@ export function WebCustomerEntryPage({ onReady }: Props) {
   }
 
   async function checkIn() {
-    if (!activeUid.current || busy || cooldownActive || checkinStarted.current) return;
+    if (!activeUid.current || busy || cooldownActive || requestsPaused || checkinStarted.current)
+      return;
     if (!allowPhoto) {
       setError(PHOTO_CONSENT_REQUIRED_MESSAGE);
       photoChoice.current?.focus();
@@ -381,7 +385,9 @@ export function WebCustomerEntryPage({ onReady }: Props) {
       <div className="panel web-customer-summary">
         <span>{context.customer.name}</span>
         <strong>{context.customer.points} điểm</strong>
-        {!cooldownActive ? (
+        {requestsPaused ? (
+          <p role="status">Salon đang tạm dừng nhận yêu cầu tích điểm mới.</p>
+        ) : !cooldownActive ? (
           <>
             <label className="photo-permission-choice">
               <input

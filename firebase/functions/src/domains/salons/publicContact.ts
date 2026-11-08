@@ -1,30 +1,50 @@
 import { HttpsError } from "firebase-functions/v2/https";
 
 type Fields = { hotline?: unknown; openingHours?: unknown };
-const visibilityKeys = ["showLogo", "showHotline", "showOpeningHours"] as const;
-type VisibilityKey = (typeof visibilityKeys)[number];
-type VisibilityFields = Partial<Record<VisibilityKey, unknown>>;
-type Visibility = Record<VisibilityKey, boolean>;
+const switchKeys = [
+  "showLogo",
+  "showHotline",
+  "showOpeningHours",
+  "showBranchAddress",
+  "showDirections",
+  "acceptWebPointRequests",
+  "allowWebWheel",
+] as const;
+type SwitchKey = (typeof switchKeys)[number];
+type SwitchFields = Partial<Record<SwitchKey, unknown>>;
+export type SalonOwnerSwitches = Record<SwitchKey, boolean>;
 
-export function parseSalonVisibilityPatch(input: VisibilityFields): Partial<Visibility> {
-  const patch: Partial<Visibility> = {};
-  for (const key of visibilityKeys) {
+export function parseSalonSwitchPatch(input: SwitchFields): Partial<SalonOwnerSwitches> {
+  const patch: Partial<SalonOwnerSwitches> = {};
+  for (const key of switchKeys) {
     const value = input[key];
     if (value === undefined) continue;
     if (typeof value !== "boolean") {
-      throw new HttpsError("invalid-argument", "Cài đặt hiển thị phải là Bật hoặc Tắt.");
+      throw new HttpsError("invalid-argument", "Công tắc phải là Bật hoặc Tắt.");
     }
     patch[key] = value;
   }
   return patch;
 }
 
-export function salonVisibility(data: VisibilityFields | undefined): Visibility {
-  const enabled = (key: VisibilityKey) => data?.[key] === undefined || data[key] === true;
+export function salonOwnerSwitches(data: SwitchFields | undefined): SalonOwnerSwitches {
+  const enabled = (key: SwitchKey) => data?.[key] === undefined || data[key] === true;
   return {
     showLogo: enabled("showLogo"),
     showHotline: enabled("showHotline"),
     showOpeningHours: enabled("showOpeningHours"),
+    showBranchAddress: enabled("showBranchAddress"),
+    showDirections: data?.showDirections === true,
+    acceptWebPointRequests: enabled("acceptWebPointRequests"),
+    allowWebWheel: enabled("allowWebWheel"),
+  };
+}
+
+export function webBranchLocation(address: string, settings: SalonOwnerSwitches) {
+  return {
+    branchAddress: settings.showBranchAddress ? address : "",
+    branchDirectionsEnabled:
+      settings.showBranchAddress && settings.showDirections && Boolean(address.trim()),
   };
 }
 

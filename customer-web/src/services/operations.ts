@@ -153,13 +153,17 @@ export type InactiveCustomer = {
   daysSinceLastVisit: number;
 };
 
-export type SalonProfileVisibility = {
+export type SalonProfileSwitches = {
   showLogo?: boolean;
   showHotline?: boolean;
   showOpeningHours?: boolean;
+  showBranchAddress?: boolean;
+  showDirections?: boolean;
+  acceptWebPointRequests?: boolean;
+  allowWebWheel?: boolean;
 };
 
-export type SalonProfile = SalonProfileVisibility & {
+export type SalonProfile = SalonProfileSwitches & {
   id: string;
   name: string;
   address: string;
@@ -496,7 +500,7 @@ export async function getSalonProfile(salonId: string): Promise<SalonProfile> {
   );
 }
 
-export type SalonProfileUpdate = SalonProfileVisibility & {
+export type SalonProfileUpdate = SalonProfileSwitches & {
   salonId: string;
   name: string;
   address?: string;
@@ -523,6 +527,10 @@ export async function updateSalonProfile(input: SalonProfileUpdate): Promise<Sal
     ...(input.showLogo !== undefined ? { showLogo: input.showLogo } : {}),
     ...(input.showHotline !== undefined ? { showHotline: input.showHotline } : {}),
     ...(input.showOpeningHours !== undefined ? { showOpeningHours: input.showOpeningHours } : {}),
+    ...(input.showBranchAddress !== undefined ? { showBranchAddress: input.showBranchAddress } : {}),
+    ...(input.showDirections !== undefined ? { showDirections: input.showDirections } : {}),
+    ...(input.acceptWebPointRequests !== undefined ? { acceptWebPointRequests: input.acceptWebPointRequests } : {}),
+    ...(input.allowWebWheel !== undefined ? { allowWebWheel: input.allowWebWheel } : {}),
   };
   if (Object.keys(publicChanges).length > 0) {
     // Public contact edits must be confirmed by the authorized callable, never a test fallback.
@@ -531,7 +539,7 @@ export async function updateSalonProfile(input: SalonProfileUpdate): Promise<Sal
       ...publicChanges,
     });
     if (Object.entries(publicChanges).some(([key, value]) => result[key as keyof typeof publicChanges] !== value)) {
-      throw new Error("Máy chủ chưa xác nhận lưu cài đặt hiển thị. Vui lòng tải lại và thử lại.");
+      throw new Error("Máy chủ chưa xác nhận lưu cài đặt salon. Vui lòng tải lại và thử lại.");
     }
     return result;
   }
@@ -707,6 +715,10 @@ async function getSalonProfileDirect(salonId: string): Promise<SalonProfile> {
     showLogo: data.showLogo === undefined || data.showLogo === true,
     showHotline: data.showHotline === undefined || data.showHotline === true,
     showOpeningHours: data.showOpeningHours === undefined || data.showOpeningHours === true,
+    showBranchAddress: data.showBranchAddress === undefined || data.showBranchAddress === true,
+    showDirections: data.showDirections === true,
+    acceptWebPointRequests: data.acceptWebPointRequests === undefined || data.acceptWebPointRequests === true,
+    allowWebWheel: data.allowWebWheel === undefined || data.allowWebWheel === true,
     avatarUrl: String(data.avatarUrl || ""),
     pointPerVisit: Number(data.pointPerVisit ?? 1),
     freeCustomerLimit: Number(data.freeCustomerLimit ?? 50),

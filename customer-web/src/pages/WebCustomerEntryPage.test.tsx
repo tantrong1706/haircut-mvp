@@ -82,16 +82,23 @@ describe("WebCustomerEntryPage", () => {
   it("shows directions for the scanned branch but leaves account access when requests are paused", async () => {
     mocks.resolveWebCustomerContext.mockResolvedValue({
       qr: {
-        ...qr, salonName: "Salon A", branchName: "Chi nhánh Trung tâm",
-        branchAddress: "123 Nguyễn Huệ", branchDirectionsEnabled: true,
+        ...qr,
+        salonName: "Salon A",
+        branchName: "Chi nhánh Trung tâm",
+        branchAddress: "123 Nguyễn Huệ",
+        branchDirectionsEnabled: true,
         acceptingPointRequests: false,
       },
-      customer: session.customer, activeSession: null,
+      customer: session.customer,
+      activeSession: null,
     });
     render(<WebCustomerEntryPage onReady={vi.fn()} />);
     act(() => mocks.authListener?.({ uid: "uid-a" }));
     const link = await screen.findByRole("link", { name: "Chỉ đường" });
-    expect(link).toHaveAttribute("href", "https://www.google.com/maps/dir/?api=1&destination=123+Nguy%E1%BB%85n+Hu%E1%BB%87");
+    expect(link).toHaveAttribute(
+      "href",
+      "https://www.google.com/maps/dir/?api=1&destination=123+Nguy%E1%BB%85n+Hu%E1%BB%87",
+    );
     expect(screen.getByText(/tạm dừng nhận yêu cầu tích điểm/)).toBeVisible();
     expect(screen.queryByRole("button", { name: "Yêu cầu tích điểm" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Xem điểm, lịch sử và quà" })).toBeEnabled();
