@@ -8,6 +8,7 @@ import {
 import { awardReturningCustomerPoints } from "../services/returningCustomerPoints";
 import { SalonVisitDetails } from "./SalonVisitDetails";
 import { SalonHaircutHistory } from "./SalonHaircutHistory";
+import { CustomerRewardActions } from "./CustomerRewardActions";
 
 type Props = {
   salonId: string;
@@ -15,14 +16,27 @@ type Props = {
   branchName: string;
   pointPerVisit: number;
   canAward: boolean;
+  canRedeem?: boolean;
 };
 
 export function ReturningCustomerPoints(props: Props) {
   // Remount on scope/permission change so an old selection cannot cross branches.
-  return <CustomerLookup key={`${props.salonId}:${props.branchId}:${props.canAward}`} {...props} />;
+  return (
+    <CustomerLookup
+      key={`${props.salonId}:${props.branchId}:${props.canAward}:${props.canRedeem}`}
+      {...props}
+    />
+  );
 }
 
-function CustomerLookup({ salonId, branchId, branchName, pointPerVisit, canAward }: Props) {
+function CustomerLookup({
+  salonId,
+  branchId,
+  branchName,
+  pointPerVisit,
+  canAward,
+  canRedeem = false,
+}: Props) {
   const [term, setTerm] = useState("");
   const [verificationDigits, setVerificationDigits] = useState("");
   const [customers, setCustomers] = useState<CustomerLookupResult[]>([]);
@@ -57,7 +71,8 @@ function CustomerLookup({ salonId, branchId, branchName, pointPerVisit, canAward
 
   async function findCustomers(event?: FormEvent, cursor?: string) {
     event?.preventDefault();
-    if (!validLookup || !branchId || !canAward || searching || submitting.current) return;
+    if (!validLookup || !branchId || !(canAward || canRedeem) || searching || submitting.current)
+      return;
     const current = ++revision.current;
     setSearching(true);
     setCompletedCustomer(null);
@@ -126,20 +141,23 @@ function CustomerLookup({ salonId, branchId, branchName, pointPerVisit, canAward
       <div className="detail-heading">
         <div>
           <p className="eyebrow">Khách quen</p>
-          <h2 id="returning-customer-title">Tích điểm không cần quét QR</h2>
+          <h2 id="returning-customer-title">
+            {canRedeem
+              ? canAward
+                ? "Tìm khách để tích điểm hoặc dùng quà"
+                : "Tìm khách để dùng quà"
+              : "Tích điểm không cần quét QR"}
+          </h2>
         </div>
         <UserRoundCheck size={24} aria-hidden="true" />
       </div>
-      {!canAward ? (
+      {!canAward && !canRedeem ? (
         <p>Chủ salon cần cấp quyền cộng điểm trực tiếp cho tài khoản này.</p>
       ) : !branchId ? (
         <p>Chọn chi nhánh hiện tại trước khi tìm khách.</p>
       ) : (
         <>
-          <p>
-            Nhập tên hoặc 4 số cuối điện thoại, đối chiếu đúng khách rồi xác nhận lượt cắt tại{" "}
-            {branchName}.
-          </p>
+          <p>Nhập tên hoặc 4 số cuối điện thoại để tìm đúng khách tại {branchName}.</p>
           <form className="button-row wrap-row" onSubmit={findCustomers}>
             <label className="field">
               <span>Tên khách hoặc 4 số cuối điện thoại</span>
@@ -226,13 +244,15 @@ function CustomerLookup({ salonId, branchId, branchName, pointPerVisit, canAward
                 <strong>
                   {selected.customer.name || "Khách hàng"} · ******{selected.customer.phoneLast4}
                 </strong>
-                <p>Xác nhận khách đã sử dụng dịch vụ tại {branchName}.</p>
-                <SelectedCustomerHistory
-                  key={`${branchId}:${selected.customer.id}`}
-                  salonId={salonId}
-                  branchId={branchId}
-                  customerId={selected.customer.id}
-                />
+                {canAward ? <p>Xác nhận khách đã sử dụng dịch vụ tại {branchName}.</p> : null}
+                {canAward ? (
+                  <SelectedCustomerHistory
+                    key={`${branchId}:${selected.customer.id}`}
+                    salonId={salonId}
+                    branchId={branchId}
+                    customerId={selected.customer.id}
+                  />
+                ) : null}
                 {!suffixLookup ? (
                   <label className="field">
                     <span>Xác nhận 4 số cuối điện thoại</span>
@@ -252,14 +272,27 @@ function CustomerLookup({ salonId, branchId, branchName, pointPerVisit, canAward
                     ) : null}
                   </label>
                 ) : null}
-                <button
-                  type="button"
-                  className="primary-button"
-                  disabled={busy || searching || !suffixMatches}
-                  onClick={() => void confirm()}
-                >
-                  {busy ? "Đang cộng điểm..." : `Xác nhận cộng ${pointPerVisit} điểm`}
-                </button>
+                {canAward ? (
+                  <button
+                    type="button"
+                    className="primary-button"
+                    disabled={busy || searching || !suffixMatches}
+                    onClick={() => void confirm()}
+                  >
+                    {busy ? "Đang cộng điểm..." : `Xác nhận cộng ${pointPerVisit} điểm`}
+                  </button>
+                ) : null}
+                {canRedeem && suffixMatches ? (
+                  <CustomerRewardActions
+                    salonId={salonId}
+                    branchId={branchId}
+                    branchName={branchName}
+                    customerId={selected.customer.id}
+                    customerName={selected.customer.name}
+                    verifiedPhoneLast4={confirmedSuffix}
+                    disabled={busy || searching}
+                  />
+                ) : null}
               </div>
             </div>
           ) : null}

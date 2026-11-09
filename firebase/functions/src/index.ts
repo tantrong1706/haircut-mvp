@@ -27,6 +27,7 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { withdrawCustomerPhotoConsent } from "./domains/privacy/customerPhotoConsent";
 import { changeCustomerName } from "./domains/customers/customerName";
 import { changeOwnCustomerName } from "./domains/customers/ownCustomerName";
+import { assertRewardCustomerPhone, parseRewardCustomerIdentity, redeemableCustomerGift, requireRewardDocumentId } from "./domains/rewards/customerRedemption";
 import { onDocumentCreated, onDocumentUpdated } from "firebase-functions/v2/firestore";
 import {
   buildCustomerContactPatch,
@@ -211,6 +212,7 @@ const AUTHENTICATED_RATE_LIMITS = {
   approvePointRequest: 60,
   rejectPointRequest: 60,
   lookupRewardCode: 60,
+  listRedeemableCustomerRewards: 30,
   redeemRewardCode: 30,
   spinLuckyWheel: 20,
   getWebCustomerContext: 30,
@@ -7888,6 +7890,39 @@ export const lookupRewardCode = onCall(functionOptions, async (request) => {
   };
 });
 
+export const listRedeemableCustomerRewards = onCall(functionOptions, async (request) => {
+  const uid = currentUid(request.auth);
+  const salonId = requireString(request.data?.salonId, "salonId");
+  const user = await assertSalonRole(uid, salonId, ["owner", "staff"]);
+  if (user.role === "staff" && user.canRedeemRewards !== true) {
+    throw new HttpsError("permission-denied", "Nhân viên chưa được phép đổi quà.");
+  }
+  await enforceAuthenticatedRateLimit("listRedeemableCustomerRewards", uid, salonId);
+  await assertFeatureEnabled(salonId, "rewardRedeemEnabled", "Tính năng đổi quà đang tạm ngừng.", request.data?.appVersion);
+  const branchId = await resolveAuthorizedBranchScope(user, salonId, request.data?.branchId);
+  if (!branchId) throw new HttpsError("invalid-argument", "Vui lòng chọn chi nhánh đổi quà.");
+  const { customerId, phoneLast4 } = parseRewardCustomerIdentity(request.data);
+  const customer = (await db.collection("customers").doc(customerId).get()).data();
+  if (!customer || customer.salonId !== salonId) {
+    throw new HttpsError("not-found", "Không tìm thấy khách trong salon này.");
+  }
+  assertRewardCustomerPhone(customer, phoneLast4);
+  const cursor = request.data?.cursor === undefined ? undefined : requireRewardDocumentId(request.data.cursor);
+  const pageSize = 25;
+  const query = db.collection("reward_history")
+    .where("salonId", "==", salonId)
+    .where("customerId", "==", customerId)
+    .where("status", "==", "unused")
+    .orderBy(FieldPath.documentId());
+  const snapshot = await (cursor ? query.startAfter(cursor) : query).limit(pageSize + 1).get();
+  const page = snapshot.docs.slice(0, pageSize);
+  const now = Date.now();
+  return {
+    rewards: page.flatMap((doc) => redeemableCustomerGift(doc.id, doc.data(), salonId, branchId, now)),
+    nextCursor: snapshot.size > pageSize ? page[pageSize - 1].id : null,
+  };
+});
+
 export const redeemRewardCode = onCall(functionOptions, async (request) => {
   const uid = currentUid(request.auth);
   const salonId = requireString(request.data?.salonId, "salonId");
@@ -7904,7 +7939,13 @@ export const redeemRewardCode = onCall(functionOptions, async (request) => {
   if (user.role === "staff" && user.canRedeemRewards !== true) {
     throw new HttpsError("permission-denied", "Nhân viên chưa được phép xác nhận mã quà");
   }
-  const rewardCodeInput = requireRewardCodeInput(request.data?.rewardCode);
+  const selection = request.data?.rewardId !== undefined
+    ? { ...parseRewardCustomerIdentity(request.data), rewardId: requireRewardDocumentId(request.data.rewardId) }
+    : null;
+  if (selection && request.data?.rewardCode !== undefined) {
+    throw new HttpsError("invalid-argument", "Chọn quà theo khách hoặc theo mã, không dùng cả hai.");
+  }
+  const rewardCodeInput = selection ? "" : requireRewardCodeInput(request.data?.rewardCode);
 
   const branchId = await resolveAuthorizedBranchScope(user, salonId, request.data?.branchId);
   if (!branchId) {
@@ -7915,25 +7956,25 @@ export const redeemRewardCode = onCall(functionOptions, async (request) => {
       { field: "branchId" },
     );
   }
-  const query = await db
-    .collection("reward_history")
+  const rewardCollection = db.collection("reward_history");
+  const codeMatch = selection ? undefined : (await rewardCollection
     .where("salonId", "==", salonId)
     .where("rewardCode", "==", rewardCodeInput)
-    .limit(1)
-    .get();
-
-  if (query.empty) {
+    .limit(1).get()).docs[0];
+  if (!selection && !codeMatch) {
     throw new HttpsError("not-found", "Không tìm thấy mã quà");
   }
 
-  const rewardRef = query.docs[0].ref;
-  const rewardBeforeTransaction = query.docs[0].data();
+  const rewardRef = selection ? rewardCollection.doc(selection.rewardId) : codeMatch!.ref;
+  const customerId = selection?.customerId ?? String(codeMatch?.data().customerId || "");
+  if (!customerId) {
+    throw new HttpsError("failed-precondition", "Mã quà không còn gắn với khách hợp lệ");
+  }
   const usedBranchId = branchId;
   await assertBranchAccess(user, usedBranchId);
   const now = Timestamp.now();
 
   const result = await db.runTransaction(async (tx) => {
-    const customerId = String(rewardBeforeTransaction.customerId || "");
     const [rewardSnap, branchSnap, customerSnap] = await Promise.all([
       tx.get(rewardRef),
       tx.get(db.collection("branches").doc(usedBranchId)),
@@ -7957,10 +7998,12 @@ export const redeemRewardCode = onCall(functionOptions, async (request) => {
         "Mã quà không còn gắn với khách hợp lệ",
       );
     }
+    if (selection) assertRewardCustomerPhone(customerSnap.data(), selection.phoneLast4);
     if (
       reward?.status === "used" &&
       reward?.redemptionIdempotencyKey === idempotencyKey &&
-      reward?.usedBy === uid
+      reward?.usedBy === uid &&
+      (!selection || reward?.usedBranchId === usedBranchId)
     ) {
       return {
         rewardId: rewardSnap.id,
@@ -8035,7 +8078,7 @@ export const redeemRewardCode = onCall(functionOptions, async (request) => {
         targetType: "reward",
         targetId: rewardSnap.id,
         before: { status: rewardStatus },
-        after: { status: "used", usedBranchId },
+        after: { status: "used", usedBranchId, ...(selection ? { source: "customer_lookup" } : {}) },
         createdAt: now,
       }),
     );
@@ -8063,7 +8106,7 @@ export const redeemRewardCode = onCall(functionOptions, async (request) => {
 
   return {
     rewardId: result.rewardId,
-    rewardCode: result.rewardCode,
+    rewardCode: selection ? "" : result.rewardCode,
     rewardName: result.rewardName,
     customerName,
     alreadyRedeemed: result.alreadyRedeemed,

@@ -51,6 +51,7 @@ const CloudFunctionNames = Object.freeze([
   "searchSalonCustomers",
   "deleteCustomerData",
   "lookupRewardCode",
+  "listRedeemableCustomerRewards",
   "redeemRewardCode",
   "restoreRewardCode",
   "requestPersonalAccountDeletion",

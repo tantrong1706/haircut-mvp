@@ -235,3 +235,28 @@
     width: fit-content;
   }
 }
+.customer-reward-actions {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.customer-reward-actions > div:not([hidden]),
+.customer-reward-list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.customer-reward-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.customer-reward-list > li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  overflow-wrap: anywhere;
+}

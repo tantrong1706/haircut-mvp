@@ -133,6 +133,23 @@ test("all management tabs remain usable without page overflow", async ({ page },
   expect(errors).toEqual([]);
 });
 
+test("owner finds and uses a customer's reward without entering a reward code", async ({
+  page,
+}) => {
+  await page
+    .getByRole("navigation", { name: "Chọn mục quản lý" })
+    .getByRole("button", { name: "Khách hàng", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Xem quà có thể dùng" }).click();
+  await page.getByLabel("4 số cuối điện thoại để xem quà").fill("5678");
+  await page.getByRole("button", { name: "Tải quà của khách" }).click();
+  await page.getByRole("button", { name: "Sử dụng Gội đầu kiểm thử" }).click();
+  await page.getByRole("button", { name: "Xác nhận đã trao quà" }).click();
+  await expect(page.getByText(/Đã xác nhận sử dụng Gội đầu kiểm thử/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sử dụng Gội đầu kiểm thử" })).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
 test("overview is accessible and confirmation can be cancelled without writes", async ({
   page,
 }) => {

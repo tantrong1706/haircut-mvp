@@ -35,6 +35,7 @@ import {
 import QRCode from "qrcode";
 import { BrandLogo } from "../components/BrandLogo";
 import { CustomerPointAction } from "../components/CustomerPointAction";
+import { CustomerRewardActions } from "../components/CustomerRewardActions";
 import { CustomerNameEditor } from "../components/CustomerNameEditor";
 import { OwnerConfirmDialog, type OwnerConfirmation as ConfirmRequest } from "../components/OwnerConfirmDialog";
 import { APP_NAME } from "../config/branding";
@@ -1902,7 +1903,7 @@ function CustomerSearchPanel({
       </div>
 
       <label className="field">
-        <span>Chi nhánh cộng điểm</span>
+        <span>Chi nhánh phục vụ</span>
         <select value={awardBranch?.id || ""} onChange={event => setAwardBranchId(event.target.value)}>
           <option value="">Chọn chi nhánh</option>
           {activeBranches.map(branch => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
@@ -1953,6 +1954,9 @@ function CustomerSearchPanel({
                 onSaved={name => setResults(current => current.map(item => item.id === customer.id ? { ...item, name } : item))} />
               <span>Lần ghé gần nhất: {formatDateTime(customer.lastVisitAtMs) || "Chưa có"}</span>
               <CustomerPointAction salonId={salonId} branchId={awardBranch?.id || ""} branchName={awardBranch?.name || ""} pointPerVisit={pointPerVisit} customer={customer} onAwarded={pointsAfter => setResults(current => current.map(item => item.id === customer.id ? { ...item, points: pointsAfter, detailsLoaded: false } : item))} />
+              <CustomerRewardActions salonId={salonId} branchId={awardBranch?.id || ""}
+                branchName={awardBranch?.name || ""} customerId={customer.id}
+                customerName={customer.name} disabled={busyCustomerId === customer.id} />
 
               <SalonVisitDetails salonId={salonId} customerId={customer.id} onSaved={() => void loadCustomerDetails(customer.id)} />
               {customer.detailsLoaded ? (

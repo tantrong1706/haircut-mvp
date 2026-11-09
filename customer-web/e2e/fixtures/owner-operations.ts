@@ -81,6 +81,31 @@ export const listenStaffProfiles = (_salon: string, next: (items: unknown[]) => 
   return () => undefined;
 };
 export const searchSalonCustomers = async () => ({ customers: [], nextCursor: null });
+const fixtureReward = { id: "fixture-reward", rewardName: "Gội đầu kiểm thử", expiresAtMs: null };
+export const listRedeemableCustomerRewards = async (input: {
+  customerId: string;
+  branchId: string;
+  phoneLast4: string;
+}) => {
+  if (
+    input.customerId !== "customer-fixture" ||
+    input.branchId !== "branch-fixture" ||
+    input.phoneLast4 !== "5678"
+  ) {
+    throw new Error("Fixture reward identity mismatch");
+  }
+  return { rewards: [fixtureReward], nextCursor: null };
+};
+export const redeemCustomerReward = async (input: {
+  rewardId: string;
+  customerId: string;
+  branchId: string;
+  phoneLast4: string;
+}) => {
+  await listRedeemableCustomerRewards(input);
+  if (input.rewardId !== fixtureReward.id) throw new Error("Fixture reward mismatch");
+  return { rewardId: fixtureReward.id, alreadyRedeemed: false };
+};
 let directoryName = "Khách mẫu trong danh bạ";
 export const updateCustomerName = async (input: {
   customerId: string;

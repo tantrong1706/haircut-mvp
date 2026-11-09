@@ -584,6 +584,7 @@ export function StaffPage({ currentUser }: Props) {
         branchName={currentBranchName}
         pointPerVisit={pointPerVisit}
         canAward={canAwardPointsDirectly}
+        canRedeem={canRedeemRewards}
       />
 
       <div className="metrics-row compact-metrics">
