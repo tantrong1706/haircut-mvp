@@ -25,6 +25,8 @@ const mocks = vi.hoisted(() => ({
   upload: vi.fn(),
   remove: vi.fn(),
   savePhotos: vi.fn(),
+  directory: vi.fn(),
+  adjustPoints: vi.fn(),
 }));
 vi.mock("../services/operations", () => ({
   listenPendingPointRequests: mocks.subscribe,
@@ -42,8 +44,9 @@ vi.mock("../services/operations", () => ({
 }));
 vi.mock("../services/ownerWorkspace", () => ({
   savePendingVisitNote: mocks.saveNote,
-  listSalonCustomerDirectory: async () => ({ customers: [], nextCursor: null, totalCount: 0 }),
+  listSalonCustomerDirectory: mocks.directory,
 }));
+vi.mock("../services/customerPointAdjustment", () => ({ adjustSalonCustomerPoints: mocks.adjustPoints }));
 vi.mock("../services/auth", () => ({
   updateOwnerAvatar: vi.fn(),
   uploadOwnerAvatarFile: vi.fn(),
@@ -121,6 +124,7 @@ async function openTab(name: string) {
 describe("OwnerPage behavior before extraction", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    mocks.directory.mockResolvedValue({ customers: [], nextCursor: null, totalCount: 0 });
     mocks.subscribe.mockImplementation((_salon, _branch, next) => {
       next(structuredClone([request]));
       return mocks.unsubscribe;
@@ -153,6 +157,26 @@ describe("OwnerPage behavior before extraction", () => {
         static revokeObjectURL = vi.fn();
       },
     );
+  });
+
+  it("lets the owner confirm a manual subtraction with a reason, without changing visit history", async () => {
+    mocks.directory.mockResolvedValue({ customers: [{ id: "fixture-customer", name: "Khách mẫu", phoneLast4: "1234", points: 7, detailsLoaded: false }], nextCursor: null, totalCount: 1 });
+    mocks.adjustPoints.mockResolvedValue({ pointsBefore: 7, pointsAfter: 5, currentPoints: 5, alreadyProcessed: false });
+    await openPage();
+    await openTab("Khách hàng");
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Điều chỉnh điểm" }));
+    await user.selectOptions(screen.getByLabelText("Thao tác điểm"), "subtract");
+    await user.type(screen.getByLabelText("Số điểm điều chỉnh"), "2");
+    expect(screen.getByRole("button", { name: "Kiểm tra điều chỉnh" })).toBeDisabled();
+    await user.type(screen.getByLabelText("Lý do điều chỉnh"), "Sửa cộng trùng");
+    await user.click(screen.getByRole("button", { name: "Kiểm tra điều chỉnh" }));
+    expect(mocks.adjustPoints).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Xác nhận điều chỉnh" }));
+    expect(mocks.adjustPoints).toHaveBeenCalledWith(expect.objectContaining({
+      salonId: "salon-fixture", customerId: "fixture-customer", expectedPoints: 7, delta: -2, reason: "Sửa cộng trùng",
+    }));
+    expect(await screen.findByText("5 điểm", { exact: true })).toBeVisible();
   });
   afterEach(() => {
     cleanup();
