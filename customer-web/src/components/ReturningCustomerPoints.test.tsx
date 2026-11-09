@@ -3,7 +3,11 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ReturningCustomerPoints } from "./ReturningCustomerPoints";
 
-const mocks = vi.hoisted(() => ({ search: vi.fn(), award: vi.fn(), details: vi.fn() }));
+const mocks = vi.hoisted(() => ({ search: vi.fn(), award: vi.fn(), details: vi.fn(), listRewards: vi.fn(), useReward: vi.fn() }));
+vi.mock("../services/customerRewardRedemption", () => ({
+  listRedeemableCustomerRewards: mocks.listRewards,
+  redeemCustomerReward: mocks.useReward,
+}));
 vi.mock("../services/operations", () => ({
   searchSalonCustomers: mocks.search,
   getSalonCustomerDetails: mocks.details,
@@ -35,6 +39,26 @@ describe("ReturningCustomerPoints", () => {
     mocks.search.mockResolvedValue({ customers, nextCursor: null });
     mocks.details.mockResolvedValue({ ...customers[0], recentRecords: [] });
     mocks.award.mockResolvedValue({ pointsAdded: 2, pointsAfter: 6, alreadyProcessed: false });
+  });
+  it("lets reward-authorized staff find and use a gift without the points permission or a code", async () => {
+    mocks.listRewards.mockResolvedValue({ rewards: [{ id: "reward-b", rewardName: "Gội đầu miễn phí", expiresAtMs: null }], nextCursor: null });
+    mocks.useReward.mockResolvedValue({ rewardId: "reward-b", alreadyRedeemed: false });
+    render(<ReturningCustomerPoints {...props} canAward={false} canRedeem />);
+    const user = await search();
+    await user.click(screen.getByRole("button", { name: /Chọn Bình/ }));
+    await user.click(screen.getByRole("button", { name: "Xem quà có thể dùng" }));
+    expect(await screen.findByText("Gội đầu miễn phí")).toBeVisible();
+    expect(mocks.listRewards).toHaveBeenCalledWith(expect.objectContaining({
+      salonId: "salon-a", branchId: "branch-a", customerId: "customer-b", phoneLast4: "5678",
+    }));
+    await user.click(screen.getByRole("button", { name: /Sử dụng Gội đầu miễn phí/ }));
+    expect(mocks.useReward).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Xác nhận đã trao quà" }));
+    expect(mocks.useReward).toHaveBeenCalledWith(expect.objectContaining({ rewardId: "reward-b", customerId: "customer-b", branchId: "branch-a" }));
+    expect(await screen.findByText(/Đã xác nhận sử dụng/)).toBeVisible();
+    expect(screen.queryByRole("button", { name: /Sử dụng Gội đầu miễn phí/ })).not.toBeInTheDocument();
+    expect(mocks.award).not.toHaveBeenCalled();
+    expect(mocks.details).not.toHaveBeenCalled();
   });
   it("accepts a pasted Vietnamese name, but requires the customer's suffix before awarding", async () => {
     const user = userEvent.setup();

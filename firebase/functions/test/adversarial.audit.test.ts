@@ -4,6 +4,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { buildNameSearchPrefixes } from "../src/customerSearch";
 import {
   getSalonCustomerDetails,
+  listRedeemableCustomerRewards,
   lookupRewardCode,
   redeemRewardCode,
   searchSalonCustomers,
@@ -33,6 +34,52 @@ describe("adversarial tenant access", () => {
 
   afterAll(async () => {
     await Promise.all(getApps().map((app) => deleteApp(app)));
+  });
+
+  describe("redeem from customer search without a code", () => {
+    const selection = { salonId: SALON_A, branchId: BRANCH_A1, customerId: "customer-a1", phoneLast4: "1111" };
+    const redemption = { ...selection, rewardId: "reward-a1", idempotencyKey: "direct-redemption-fixture-1" };
+
+    it("redeems only the chosen customer's reward, safely replays a retry and never returns its code", async () => {
+      const first = await redeemRewardCode.run(requestFor("staff-a1", redemption));
+      expect(first).toMatchObject({ rewardId: "reward-a1", alreadyRedeemed: false, usedBranchId: BRANCH_A1 });
+      expect(first.rewardCode).toBe("");
+      const retry = await redeemRewardCode.run(requestFor("staff-a1", redemption));
+      expect(retry).toMatchObject({ rewardId: "reward-a1", alreadyRedeemed: true });
+      await expect(redeemRewardCode.run(requestFor("staff-a1", { ...redemption, idempotencyKey: "direct-redemption-fixture-2" })))
+        .rejects.toMatchObject({ code: "failed-precondition" });
+    });
+
+    it("lists only usable gifts without codes after the customer and branch are verified", async () => {
+      await db.doc("reward_history/reward-a1-a2").update({ redemptionScope: "branches", allowedBranchIds: [BRANCH_A2] });
+      await seedReward("reward-expired-direct", SALON_A, BRANCH_A1, "customer-a1", "HC-EXPIRED-DIRECT", Timestamp.now(), {
+        expiresAt: Timestamp.fromMillis(Date.now() - 1000),
+      });
+      const result = await listRedeemableCustomerRewards.run(requestFor("staff-a1", selection));
+      expect(result.rewards).toEqual([expect.objectContaining({ id: "reward-a1" })]);
+      expect(result.rewards[0]).not.toHaveProperty("rewardCode");
+      await expect(listRedeemableCustomerRewards.run(requestFor("staff-a1-view-only", selection)))
+        .rejects.toMatchObject({ code: "permission-denied" });
+      await expect(listRedeemableCustomerRewards.run(requestFor("staff-a1", { ...selection, branchId: BRANCH_A2 })))
+        .rejects.toMatchObject({ code: "permission-denied" });
+      await expect(listRedeemableCustomerRewards.run(requestFor("owner-a", { ...selection, phoneLast4: "9999" })))
+        .rejects.toMatchObject({ code: "permission-denied" });
+      await expect(listRedeemableCustomerRewards.run(requestFor("owner-a", { ...selection, customerId: "customer-b1", phoneLast4: "3333" })))
+        .rejects.toMatchObject({ code: "not-found" });
+    });
+
+    it("does not redeem a different customer's reward, a wrong suffix, or a restricted reward", async () => {
+      await expect(redeemRewardCode.run(requestFor("owner-a", { ...redemption, rewardId: "reward-a2" })))
+        .rejects.toMatchObject({ code: "failed-precondition" });
+      await expect(redeemRewardCode.run(requestFor("staff-a1", { ...redemption, phoneLast4: "9999" })))
+        .rejects.toMatchObject({ code: "permission-denied" });
+      await expect(redeemRewardCode.run(requestFor("staff-a1-view-only", redemption)))
+        .rejects.toMatchObject({ code: "permission-denied" });
+      await expect(redeemRewardCode.run(requestFor("staff-a1", {
+        ...redemption, customerId: "customer-a2", phoneLast4: "2222", rewardId: "reward-restricted-a2",
+      }))).rejects.toMatchObject({ code: "failed-precondition" });
+      expect((await db.doc("reward_history/reward-a1").get()).data()?.status).toBe("unused");
+    });
   });
 
   describe("searchSalonCustomers", () => {
