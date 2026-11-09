@@ -635,6 +635,93 @@
   }
 }
 
+.owner-settings-group,
+.owner-setup {
+  display: grid;
+  gap: 1rem;
+}
+
+.owner-setup h2 {
+  margin: 0;
+}
+
+.salon-profile-fields {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-inline-size: 0;
+}
+
+.salon-visibility {
+  margin-block: 1rem;
+}
+
+.salon-visibility legend {
+  font-weight: 700;
+}
+
+.salon-customer-preview {
+  margin-block-start: 1rem;
+}
+
+.salon-preview-card {
+  box-sizing: border-box;
+  max-inline-size: 26rem;
+  margin-block-start: 0.75rem;
+  padding: 1rem;
+  border: 1px solid currentColor;
+  border-radius: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+.salon-preview-card > p {
+  margin-block: 0.4rem 0;
+}
+
+.salon-visibility-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+  gap: 0.55rem;
+}
+
+.salon-visibility-options .salon-visibility-switch {
+  justify-content: space-between;
+  min-height: 44px;
+  text-align: start;
+}
+
+.salon-visibility-status {
+  padding: 0.2rem 0.6rem;
+  border-radius: 99px;
+  border: 1px solid currentColor;
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+
+.salon-visibility-switch[aria-checked="true"] .salon-visibility-status {
+  background: #ddaa72;
+  color: #181410;
+}
+
+.owner-setup-links {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+  gap: 0.75rem;
+}
+
+.owner-setup-links button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  text-align: left;
+}
+
+.owner-setup-links small {
+  display: block;
+  margin-top: 0.25rem;
+  font-weight: 400;
+}
+
 @media (max-width: 390px) {
   .owner-page {
     gap: 12px;

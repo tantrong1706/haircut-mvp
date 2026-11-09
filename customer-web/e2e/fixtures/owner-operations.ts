@@ -81,7 +81,48 @@ export const listenStaffProfiles = (_salon: string, next: (items: unknown[]) => 
   return () => undefined;
 };
 export const searchSalonCustomers = async () => ({ customers: [], nextCursor: null });
+const fixtureReward = { id: "fixture-reward", rewardName: "Gội đầu kiểm thử", expiresAtMs: null };
+export const listRedeemableCustomerRewards = async (input: {
+  customerId: string;
+  branchId: string;
+  phoneLast4: string;
+}) => {
+  if (
+    input.customerId !== "customer-fixture" ||
+    input.branchId !== "branch-fixture" ||
+    input.phoneLast4 !== "5678"
+  ) {
+    throw new Error("Fixture reward identity mismatch");
+  }
+  return { rewards: [fixtureReward], nextCursor: null };
+};
+export const redeemCustomerReward = async (input: {
+  rewardId: string;
+  customerId: string;
+  branchId: string;
+  phoneLast4: string;
+}) => {
+  await listRedeemableCustomerRewards(input);
+  if (input.rewardId !== fixtureReward.id) throw new Error("Fixture reward mismatch");
+  return { rewardId: fixtureReward.id, alreadyRedeemed: false };
+};
 let directoryName = "Khách mẫu trong danh bạ";
+export const adjustSalonCustomerPoints = async (input: {
+  customerId: string;
+  expectedPoints: number;
+  delta: number;
+  reason: string;
+}) => {
+  if (
+    input.customerId !== "customer-fixture" ||
+    input.expectedPoints !== 7 ||
+    input.delta !== -2 ||
+    !input.reason.trim()
+  ) {
+    throw new Error("Fixture point adjustment mismatch");
+  }
+  return { pointsBefore: 7, pointsAfter: 5, currentPoints: 5, alreadyProcessed: false };
+};
 export const updateCustomerName = async (input: {
   customerId: string;
   name: string;

@@ -11,6 +11,22 @@ test.beforeEach(async ({ page }) => {
   await expect(page.getByRole("button", { name: "Làm mới", exact: true })).toBeEnabled();
 });
 
+test("owner verifies a manual point correction and sees the updated balance", async ({ page }) => {
+  await page
+    .getByRole("navigation", { name: "Chọn mục quản lý" })
+    .getByRole("button", { name: "Khách hàng", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Điều chỉnh điểm" }).click();
+  await page.getByLabel("Thao tác điểm").selectOption("subtract");
+  await page.getByLabel("Số điểm điều chỉnh").fill("2");
+  await page.getByLabel("Lý do điều chỉnh").fill("Sửa điểm cộng trùng");
+  await page.getByRole("button", { name: "Kiểm tra điều chỉnh" }).click();
+  await expect(page.getByText(/7 → 5 điểm/)).toBeVisible();
+  await page.getByRole("button", { name: "Xác nhận điều chỉnh" }).click();
+  await expect(page.getByText("5 điểm", { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
 test("owner can save a directory name without changing points or overflowing", async ({ page }) => {
   await page
     .getByRole("navigation", { name: "Chọn mục quản lý" })
@@ -38,6 +54,48 @@ test("all owner menu items fit without horizontal scrolling", async ({ page }, i
     expect(box!.x).toBeGreaterThanOrEqual(0);
     expect(box!.x + box!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
   }
+});
+
+test("settings groups salon setup and opens the existing wheel form", async ({ page }) => {
+  await page
+    .getByRole("navigation", { name: "Chọn mục quản lý" })
+    .getByRole("button", { name: "Cài đặt", exact: true })
+    .click();
+  await expect(page.getByRole("region", { name: "Hồ sơ salon" })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Tên hiển thị" })).toHaveValue("CH Hair Studio");
+  await expect(page.getByRole("textbox", { name: /Hotline hiển thị cho khách/ })).toHaveValue("");
+  await expect(page.getByRole("textbox", { name: /Giờ mở cửa/ })).toHaveValue("");
+  await expect(page.getByRole("heading", { name: "Ảnh đại diện salon" })).toBeVisible();
+  const logoSwitch = page.getByRole("switch", { name: "Hiện logo" });
+  await expect(logoSwitch).toBeChecked();
+  await logoSwitch.focus();
+  await page.keyboard.press("Space");
+  await expect(logoSwitch).not.toBeChecked();
+  await expect(page.getByRole("button", { name: "Lưu thông tin salon" })).toBeEnabled();
+  await logoSwitch.click();
+  await expect(page.getByRole("button", { name: "Lưu thông tin salon" })).toBeDisabled();
+  await expect(page.getByRole("switch", { name: "Hiện địa chỉ chi nhánh" })).toHaveCount(0);
+  await expect(page.getByRole("switch", { name: "Hiện nút Chỉ đường" })).toHaveCount(0);
+  const requestSwitch = page.getByRole("switch", { name: "Nhận yêu cầu tích điểm mới" });
+  await expect(requestSwitch).toBeChecked();
+  await requestSwitch.click();
+  await expect(requestSwitch).not.toBeChecked();
+  await expect(page.getByRole("switch", { name: "Cho phép quay thưởng" })).toBeChecked();
+  await expect(page.getByRole("region", { name: "Tài khoản chủ salon" })).toBeVisible();
+  const previewButton = page.getByRole("button", { name: "Xem trước thông tin khách" });
+  await previewButton.click();
+  const preview = page.getByRole("region", { name: "Xem trước thông tin khách" });
+  await expect(preview.getByText("Chi nhánh Nguyễn Văn Linh")).toBeVisible();
+  await expect(preview.getByRole("link")).toHaveCount(0);
+  await expect(previewButton).toHaveAttribute("aria-expanded", "true");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await previewButton.click();
+  await expect(preview).not.toBeVisible();
+  const setup = page.getByRole("navigation", { name: "Lối tắt quản lý" });
+  expect(await setup.getByRole("button").count()).toBe(3);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await setup.getByRole("button", { name: /Vòng quay/ }).click();
+  await expect(page.getByRole("heading", { name: "Cấu hình vòng quay" })).toBeVisible();
 });
 
 test("daily numbers have readable labels and quick actions precede retention", async ({ page }) => {
@@ -71,6 +129,10 @@ test("all management tabs remain usable without page overflow", async ({ page },
     const button = menu.getByRole("button", { name: label, exact: true });
     await button.click();
     await expect(button).toHaveAttribute("aria-pressed", "true");
+    if (label === "Đổi quà") {
+      await expect(page.getByText("Chi nhánh đổi quà: Chi nhánh Nguyễn Văn Linh")).toBeVisible();
+      await expect(page.getByLabel("Mã quà", { exact: true })).toBeEnabled();
+    }
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
       label,
@@ -85,6 +147,23 @@ test("all management tabs remain usable without page overflow", async ({ page },
   }
   await page.screenshot({ path: info.outputPath("owner-wheel.png"), fullPage: true });
   expect(errors).toEqual([]);
+});
+
+test("owner finds and uses a customer's reward without entering a reward code", async ({
+  page,
+}) => {
+  await page
+    .getByRole("navigation", { name: "Chọn mục quản lý" })
+    .getByRole("button", { name: "Khách hàng", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Xem quà có thể dùng" }).click();
+  await page.getByLabel("4 số cuối điện thoại để xem quà").fill("5678");
+  await page.getByRole("button", { name: "Tải quà của khách" }).click();
+  await page.getByRole("button", { name: "Sử dụng Gội đầu kiểm thử" }).click();
+  await page.getByRole("button", { name: "Xác nhận đã trao quà" }).click();
+  await expect(page.getByText(/Đã xác nhận sử dụng Gội đầu kiểm thử/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sử dụng Gội đầu kiểm thử" })).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
 test("overview is accessible and confirmation can be cancelled without writes", async ({

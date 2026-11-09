@@ -4,6 +4,7 @@
   "region": "asia-southeast1",
   "functions": [
     "acceptStaffInvite",
+    "adjustSalonCustomerPoints",
     "approvePointRequest",
     "awardReturningCustomerPoints",
     "beginHaircutPhotoUpload",
@@ -34,6 +35,7 @@
     "getWebCustomerRewards",
     "getWebCustomerSession",
     "listBranches",
+    "listRedeemableCustomerRewards",
     "listStaffProfiles",
     "lookupRewardCode",
     "migrateSalonBranches",

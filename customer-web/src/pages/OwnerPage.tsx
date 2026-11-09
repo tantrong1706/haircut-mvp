@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { OverviewPanel } from "../features/owner/OverviewPanel";
 import { ApprovalsPanel } from "../features/owner/ApprovalsPanel";
 import { WheelConfigPanel } from "../features/owner/WheelConfigPanel";
+import { OwnerSetupLinks } from "../features/owner/OwnerSetupLinks";
+import { SalonProfilePanel } from "../features/owner/SalonProfilePanel";
 import { ownerPhoneLabel } from "../features/owner/ownerFormatters";
 import { useOwnerNavigation } from "../features/owner/useOwnerNavigation";
 import type { ReactNode } from "react";
@@ -33,6 +35,8 @@ import {
 import QRCode from "qrcode";
 import { BrandLogo } from "../components/BrandLogo";
 import { CustomerPointAction } from "../components/CustomerPointAction";
+import { CustomerPointAdjustment } from "../components/CustomerPointAdjustment";
+import { CustomerRewardActions } from "../components/CustomerRewardActions";
 import { CustomerNameEditor } from "../components/CustomerNameEditor";
 import { OwnerConfirmDialog, type OwnerConfirmation as ConfirmRequest } from "../components/OwnerConfirmDialog";
 import { APP_NAME } from "../config/branding";
@@ -48,6 +52,7 @@ import {
   OwnerOverview,
   PointRequest,
   SalonProfile,
+  type SalonProfileUpdate,
   StaffProfile,
   approvePointRequest,
   createBranch,
@@ -226,12 +231,7 @@ export function OwnerPage({ currentUser }: Props) {
     }
   }
 
-  async function saveSalonProfile(input: {
-    name: string;
-    address: string;
-    phone: string;
-    pointPerVisit: number;
-  }) {
+  async function saveSalonProfile(input: Omit<SalonProfileUpdate, "salonId">) {
     setSavingSalonProfile(true);
     setMessage("");
     setError("");
@@ -772,6 +772,7 @@ export function OwnerPage({ currentUser }: Props) {
         <StaffManagementPanel salonId={salonId} onMessage={setMessage} onError={setError} />
       ) : activeTab === "customers" ? (
         <CustomerSearchPanel
+          key={salonId}
           salonId={salonId}
           branches={ownerBranches}
           pointPerVisit={salonProfile?.pointPerVisit || 1}
@@ -789,31 +790,37 @@ export function OwnerPage({ currentUser }: Props) {
       ) : activeTab === "redeem" ? (
         <RedeemRewardPanel
           salonId={salonId}
-          branchId={branchFilter === "all" ? undefined : branchFilter}
+          branchChoices={ownerBranches.filter((branch) => branch.salonId === salonId && branch.isActive)}
           allowRestore
         />
       ) : (
         <>
-          <SalonProfilePanel
-            profile={salonProfile}
-            saving={savingSalonProfile}
-            onSave={saveSalonProfile}
-          />
-          <SalonBrandingPanel
-            salonName={salonProfile?.name || "Salon"}
-            avatarUrl={salonProfile?.avatarUrl || ""}
-            saving={savingSalonAvatar}
-            onUpload={uploadSalonAvatar}
-            onClear={clearSalonAvatar}
-          />
-          <OwnerProfilePanel
-            currentUser={currentUser}
-            avatarUrl={ownerAvatarUrl}
-            saving={savingAvatar}
-            onUpload={uploadOwnerAvatar}
-            onClear={() => saveOwnerAvatar("")}
-          />
-          <AccountDeletionPanel currentUser={currentUser} />
+          <section className="owner-settings-group" aria-label="Hồ sơ salon">
+            <SalonProfilePanel
+              profile={salonProfile}
+              branches={ownerBranches}
+              saving={savingSalonProfile}
+              onSave={saveSalonProfile}
+            />
+            <SalonBrandingPanel
+              salonName={salonProfile?.name || "Salon"}
+              avatarUrl={salonProfile?.avatarUrl || ""}
+              saving={savingSalonAvatar}
+              onUpload={uploadSalonAvatar}
+              onClear={clearSalonAvatar}
+            />
+          </section>
+          <OwnerSetupLinks onOpenTab={setActiveTab} />
+          <section className="owner-settings-group" aria-label="Tài khoản chủ salon">
+            <OwnerProfilePanel
+              currentUser={currentUser}
+              avatarUrl={ownerAvatarUrl}
+              saving={savingAvatar}
+              onUpload={uploadOwnerAvatar}
+              onClear={() => saveOwnerAvatar("")}
+            />
+            <AccountDeletionPanel currentUser={currentUser} />
+          </section>
         </>
       )}
 
@@ -954,108 +961,6 @@ function formatUploadSize(size: number) {
   }
 
   return `${Math.max(1, Math.round(size / 1024))}KB`;
-}
-
-function SalonProfilePanel({
-  profile,
-  saving,
-  onSave,
-}: {
-  profile: SalonProfile | null;
-  saving: boolean;
-  onSave: (input: { name: string; address: string; phone: string; pointPerVisit: number }) => void;
-}) {
-  const [name, setName] = useState(profile?.name || "");
-  const [address, setAddress] = useState(profile?.address || "");
-  const [phone, setPhone] = useState(profile?.phone || "");
-  const [pointPerVisit, setPointPerVisit] = useState(profile?.pointPerVisit || 1);
-
-  useEffect(() => {
-    setName(profile?.name || "");
-    setAddress(profile?.address || "");
-    setPhone(profile?.phone || "");
-    setPointPerVisit(profile?.pointPerVisit || 1);
-  }, [profile?.id, profile?.name, profile?.address, profile?.phone, profile?.pointPerVisit]);
-
-  const changed = profile
-    ? name.trim() !== profile.name ||
-      address.trim() !== profile.address ||
-      phone.trim() !== profile.phone ||
-      Number(pointPerVisit) !== profile.pointPerVisit
-    : false;
-
-  return (
-    <div className="panel salon-profile-panel">
-      <div className="dashboard-heading">
-        <div>
-          <p className="eyebrow">Thiết lập salon</p>
-          <h2>Thông tin vận hành</h2>
-        </div>
-        <span className="pill muted-pill">
-          {profile ? `${profile.freeCustomerLimit} khách miễn phí` : "Đang tải"}
-        </span>
-      </div>
-
-      <div className="salon-profile-grid">
-        <label className="field">
-          <span>Tên salon</span>
-          <input
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            placeholder="Ví dụ: HAIRCUT Studio"
-          />
-        </label>
-        <label className="field">
-          <span>Số điện thoại salon</span>
-          <input
-            value={phone}
-            onChange={(event) => setPhone(event.target.value)}
-            inputMode="tel"
-            placeholder="Số điện thoại liên hệ"
-          />
-        </label>
-        <label className="field wide-field">
-          <span>Địa chỉ</span>
-          <input
-            value={address}
-            onChange={(event) => setAddress(event.target.value)}
-            placeholder="Địa chỉ để khách nhận diện đúng salon"
-          />
-        </label>
-        <label className="field">
-          <span>Điểm cộng mỗi lượt cắt</span>
-          <input
-            type="number"
-            min={1}
-            max={100}
-            value={pointPerVisit}
-            onChange={(event) =>
-              setPointPerVisit(Math.min(100, Math.max(1, Number(event.target.value || 1))))
-            }
-          />
-          <small>Nhân viên sẽ gửi yêu cầu cộng đúng số điểm này cho mỗi lượt cắt.</small>
-        </label>
-      </div>
-
-      <div className="button-row wrap-row">
-        <button
-          className="primary-button"
-          disabled={saving || !profile || !name.trim() || !changed}
-          onClick={() =>
-            onSave({
-              name,
-              address,
-              phone,
-              pointPerVisit,
-            })
-          }
-        >
-          <Save size={18} aria-hidden="true" />
-          {saving ? "Đang lưu..." : "Lưu thông tin salon"}
-        </button>
-      </div>
-    </div>
-  );
 }
 
 function OwnerAvatar({
@@ -1896,6 +1801,11 @@ function CustomerSearchPanel({
   const termDigits = compactTerm.replace(/\D/g, "");
   const isNumericTerm = compactTerm.length > 0 && termDigits.length === compactTerm.length;
   const canSearch = term.trim().length >= 2 && (!isNumericTerm || termDigits.length === 4);
+  const searchedSuffix = searchedTerm.replace(/\s/g, "");
+  const verifiedRewardSuffix =
+    !loading && /^\d{4}$/.test(searchedSuffix) && compactTerm === searchedSuffix
+      ? searchedSuffix
+      : undefined;
 
   useEffect(() => {
     const current = ++revision.current;
@@ -2000,7 +1910,7 @@ function CustomerSearchPanel({
       </div>
 
       <label className="field">
-        <span>Chi nhánh cộng điểm</span>
+        <span>Chi nhánh phục vụ</span>
         <select value={awardBranch?.id || ""} onChange={event => setAwardBranchId(event.target.value)}>
           <option value="">Chọn chi nhánh</option>
           {activeBranches.map(branch => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
@@ -2030,6 +1940,11 @@ function CustomerSearchPanel({
         <button type="button" className="secondary-button" disabled={loading} onClick={() => { setTerm(""); void search(false, ""); }}>Tất cả khách</button>
       </div>
 
+      {verifiedRewardSuffix && results.length > 1 ? (
+        <p className="muted">
+          Nhiều khách trùng 4 số cuối. Hỏi tên để chọn đúng khách; nếu chưa phân biệt được, dùng mã quà của khách.
+        </p>
+      ) : null}
       <div className="ops-list">
         {results.length === 0 ? (
           <div className="empty-state compact-empty">
@@ -2051,6 +1966,14 @@ function CustomerSearchPanel({
                 onSaved={name => setResults(current => current.map(item => item.id === customer.id ? { ...item, name } : item))} />
               <span>Lần ghé gần nhất: {formatDateTime(customer.lastVisitAtMs) || "Chưa có"}</span>
               <CustomerPointAction salonId={salonId} branchId={awardBranch?.id || ""} branchName={awardBranch?.name || ""} pointPerVisit={pointPerVisit} customer={customer} onAwarded={pointsAfter => setResults(current => current.map(item => item.id === customer.id ? { ...item, points: pointsAfter, detailsLoaded: false } : item))} />
+              <CustomerPointAdjustment key={`adjust-points:${salonId}:${customer.id}`} salonId={salonId}
+                customerId={customer.id} customerName={customer.name} points={customer.points}
+                disabled={busyCustomerId === customer.id}
+                onAdjusted={points => setResults(current => current.map(item => item.id === customer.id ? { ...item, points } : item))} />
+              <CustomerRewardActions salonId={salonId} branchId={awardBranch?.id || ""}
+                branchName={awardBranch?.name || ""} customerId={customer.id}
+                customerName={customer.name} disabled={busyCustomerId === customer.id}
+                verifiedPhoneLast4={customer.phoneLast4 === verifiedRewardSuffix ? verifiedRewardSuffix : undefined} />
 
               <SalonVisitDetails salonId={salonId} customerId={customer.id} onSaved={() => void loadCustomerDetails(customer.id)} />
               {customer.detailsLoaded ? (

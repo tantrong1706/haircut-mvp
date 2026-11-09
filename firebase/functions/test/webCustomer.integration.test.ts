@@ -1,4 +1,5 @@
 import { deleteApp, getApps } from "firebase-admin/app";
+import { getStorage } from "firebase-admin/storage";
 import { Timestamp, getFirestore } from "firebase-admin/firestore";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -8,10 +9,14 @@ import {
   getWebCustomerHistory,
   getWebCustomerRewards,
   getWebCustomerSession,
+  getSalonProfile,
   listBranches,
   spinWebLuckyWheel,
+  resolveCustomerQr,
+  updateSalonProfile,
 } from "../src/index";
 import { createSignedQrToken } from "../src/security";
+import * as privatePhotos from "../src/domains/photos/privatePhotoAccess";
 import { requireFirestoreEmulator } from "./emulatorEnvironment";
 
 const { emulatorHost, projectId } = requireFirestoreEmulator();
@@ -19,6 +24,237 @@ const db = getFirestore();
 const secret = "fixture-qr-signing-key-only-32-characters";
 
 describe("authenticated web customer platform", () => {
+  it("does not send saved branch addresses to Web customers even with old visibility flags", async () => {
+    await seedSalon("salon-a", "branch-a");
+    await db.doc("salons/salon-a").update({ showBranchAddress: true, showDirections: true });
+    await db.doc("users/owner-location").set({ salonId: "salon-a", role: "owner", isActive: true });
+    const qr = signedBranchQr("salon-a", "branch-a");
+    const uid = "uid-private-branch-address";
+    const checked = await checkInWebCustomer.run(checkinRequest(uid, qr));
+    expect(checked).toMatchObject({ branchAddress: "", branchName: expect.any(String) });
+    expect(checked).not.toHaveProperty("branchDirectionsEnabled");
+    const sessionInput = { salonId: "salon-a", sessionId: checked.sessionId };
+    const context = await getWebCustomerContext.run(phoneRequest(uid, qr));
+    expect(context.qr.branchAddress).toBe("");
+    expect(context.activeSession).toMatchObject({ branchAddress: "" });
+    const resolved = await resolveCustomerQr.run(requestFor("", qr, {}));
+    expect(resolved.branchAddress).toBe("");
+    expect(resolved.branches[0].address).toBe("");
+    await expect(getWebCustomerSession.run(phoneRequest(uid, sessionInput))).resolves.toMatchObject(
+      { branchAddress: "", sessionStatus: "pending_approval" },
+    );
+    const managed = await listBranches.run(
+      requestFor("owner-location", { salonId: "salon-a" }, {}),
+    );
+    expect(managed.branches).toContainEqual(
+      expect.objectContaining({ id: "branch-a", address: "1 Đường A" }),
+    );
+  });
+
+  it("enforces owner operation settings without changing existing requests or overriding admin", async () => {
+    await seedSalon("salon-a", "branch-a");
+    await seedSalon("salon-b", "branch-b");
+    await db.doc("users/owner-a").set({ salonId: "salon-a", role: "owner", isActive: true });
+    const qr = signedBranchQr("salon-a", "branch-a");
+    const owner = { salonId: "salon-a", name: "Salon A", pointPerVisit: 1 };
+    const set = (fields: Record<string, unknown>) =>
+      updateSalonProfile.run(requestFor("owner-a", { ...owner, ...fields }, {}));
+    const uid = "uid-owner-pause";
+    const existing = await checkInWebCustomer.run(checkinRequest(uid, qr));
+    const customer = db.doc(`customers/${existing.customer.customerId}`);
+    await customer.update({ points: 8 });
+    await set({
+      acceptWebPointRequests: false,
+      allowWebWheel: false,
+    });
+    const context = await getWebCustomerContext.run(phoneRequest(uid, qr));
+    expect(context.qr).toMatchObject({
+      branchAddress: "",
+      acceptingPointRequests: false,
+    });
+    expect(context.activeSession).toMatchObject({
+      sessionId: existing.sessionId,
+      branchAddress: "",
+      features: { checkinEnabled: false, luckyWheelEnabled: false },
+    });
+    const publicQr = await resolveCustomerQr.run(requestFor("", qr, {}));
+    expect(publicQr.branchAddress).toBe("");
+    expect(publicQr.branches[0].address).toBe("");
+    await expect(
+      getWebCustomerSession.run(
+        phoneRequest(uid, { salonId: "salon-a", sessionId: existing.sessionId }),
+      ),
+    ).resolves.toMatchObject({ branchAddress: "", features: { luckyWheelEnabled: false } });
+    await expect(checkInWebCustomer.run(checkinRequest("uid-pause-new", qr))).rejects.toMatchObject(
+      { code: "failed-precondition", details: { feature: "checkinEnabled" } },
+    );
+    await expect(
+      spinWebLuckyWheel.run(
+        phoneRequest(uid, {
+          salonId: "salon-a",
+          configVersion: 1,
+          idempotencyKey: "fixture-paused-spin",
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "failed-precondition",
+      details: { feature: "luckyWheelEnabled" },
+    });
+    expect((await db.collection("point_requests").get()).size).toBe(1);
+    expect((await customer.get()).data()?.points).toBe(8);
+    expect((await db.collection("reward_history").get()).empty).toBe(true);
+    expect((await db.doc("branches/branch-a").get()).data()?.address).toBe("1 Đường A");
+    await db.doc("users/staff-pause").set({
+      salonId: "salon-a",
+      role: "staff",
+      isActive: true,
+      branchIds: ["branch-a"],
+    });
+    await approvePointRequest.run(
+      requestFor("staff-pause", { salonId: "salon-a", requestId: existing.sessionId }, {}),
+    );
+    expect((await customer.get()).data()?.points).toBe(9);
+    await expect(
+      checkInWebCustomer.run(
+        checkinRequest("uid-other-salon", signedBranchQr("salon-b", "branch-b")),
+      ),
+    ).resolves.toMatchObject({ sessionStatus: "pending_approval" });
+    await db.doc("system_config/features").set({ luckyWheelEnabled: false });
+    await set({ acceptWebPointRequests: true, allowWebWheel: true });
+    expect((await getWebCustomerContext.run(phoneRequest(uid, qr))).qr).toMatchObject({
+      branchAddress: "",
+      acceptingPointRequests: true,
+    });
+    await expect(
+      spinWebLuckyWheel.run(
+        phoneRequest(uid, {
+          salonId: "salon-a",
+          configVersion: 1,
+          idempotencyKey: "fixture-admin-pause",
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "failed-precondition",
+      details: { feature: "luckyWheelEnabled" },
+    });
+    await expect(
+      checkInWebCustomer.run(checkinRequest("uid-pause-new", qr)),
+    ).resolves.toMatchObject({ sessionStatus: "pending_approval" });
+  });
+
+  it("hides only opted-out public fields without deleting their values", async () => {
+    await seedSalon("salon-a", "branch-a");
+    await db.doc("users/owner-a").set({ salonId: "salon-a", role: "owner", isActive: true });
+    await db.doc("users/staff-a").set({ salonId: "salon-a", role: "staff", isActive: true });
+    const bucket = getStorage().bucket().name;
+    const avatarUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket}/o/salons%2Fsalon-a%2Fbranding%2Favatar.webp?alt=media`;
+    const saved = { avatarUrl, hotline: "028 0000 0000", openingHours: "09:00–20:00" };
+    await db.doc("salons/salon-a").update({ name: "Salon A", ...saved });
+    const qr = signedBranchQr("salon-a", "branch-a");
+    const uid = "uid-contact-visibility";
+    const ownerProfile = { salonId: "salon-a", name: "Salon A", pointPerVisit: 1 };
+    const visible = {
+      salonName: "Salon A",
+      salonAvatarUrl: avatarUrl,
+      salonHotline: saved.hotline,
+      salonOpeningHours: saved.openingHours,
+    };
+    expect((await getWebCustomerContext.run(phoneRequest(uid, qr))).qr).toMatchObject(visible);
+    const allHidden = { showLogo: false, showHotline: false, showOpeningHours: false };
+    await expect(
+      updateSalonProfile.run(requestFor("staff-a", { ...ownerProfile, ...allHidden }, {})),
+    ).rejects.toMatchObject({ code: "permission-denied" });
+    await expect(
+      updateSalonProfile.run(requestFor("owner-a", { ...ownerProfile, showLogo: "false" }, {})),
+    ).rejects.toMatchObject({ code: "invalid-argument" });
+    await expect(
+      updateSalonProfile.run(requestFor("owner-a", { ...ownerProfile, ...allHidden }, {})),
+    ).resolves.toMatchObject({ ...saved, ...allHidden });
+    await updateSalonProfile.run(requestFor("owner-a", ownerProfile, {}));
+    await expect(
+      getSalonProfile.run(requestFor("owner-a", { salonId: "salon-a" }, {})),
+    ).resolves.toMatchObject({ ...saved, ...allHidden });
+    const hidden = {
+      salonName: "Salon A",
+      salonAvatarUrl: "",
+      salonHotline: "",
+      salonOpeningHours: "",
+    };
+    await expect(resolveCustomerQr.run(requestFor("", qr, {}))).resolves.toMatchObject(hidden);
+    expect((await getWebCustomerContext.run(phoneRequest(uid, qr))).qr).toMatchObject(hidden);
+    await expect(checkInWebCustomer.run(checkinRequest(uid, qr))).resolves.toMatchObject(hidden);
+    await expect(
+      getWebCustomerSession.run(phoneRequest(uid, { salonId: "salon-a" })),
+    ).resolves.toMatchObject(hidden);
+    await updateSalonProfile.run(requestFor("owner-a", { ...ownerProfile, showHotline: true }, {}));
+    expect((await getWebCustomerContext.run(phoneRequest(uid, qr))).qr).toMatchObject({
+      ...hidden,
+      salonHotline: saved.hotline,
+    });
+    await updateSalonProfile.run(
+      requestFor("owner-a", { ...ownerProfile, showLogo: true, showOpeningHours: true }, {}),
+    );
+    expect((await getWebCustomerContext.run(phoneRequest(uid, qr))).qr).toMatchObject(visible);
+  });
+
+  it("publishes only explicitly set salon contact details and keeps them across older client edits", async () => {
+    await seedSalon("salon-a", "branch-a");
+    await seedSalon("salon-b", "branch-b");
+    await db.doc("users/owner-a").set({ salonId: "salon-a", role: "owner", isActive: true });
+    await db.doc("users/staff-a").set({ salonId: "salon-a", role: "staff", isActive: true });
+    const base = { salonId: "salon-a", name: "Salon A", phone: "0900000000", pointPerVisit: 1 };
+    const contact = { hotline: "028 0000 0000", openingHours: "Thứ 2–CN, 09:00–20:00" };
+    const update = { ...base, ...contact };
+    await expect(updateSalonProfile.run(requestFor("staff-a", update, {}))).rejects.toMatchObject({
+      code: "permission-denied",
+    });
+    await expect(
+      updateSalonProfile.run(requestFor("owner-a", { ...update, salonId: "salon-b" }, {})),
+    ).rejects.toMatchObject({ code: "permission-denied" });
+    const qr = signedBranchQr("salon-a", "branch-a");
+    await updateSalonProfile.run(requestFor("owner-a", base, {}));
+    const before = await getWebCustomerContext.run(phoneRequest("uid-salon-contact", qr));
+    expect(before.qr).toMatchObject({ salonHotline: "", salonOpeningHours: "" });
+    expect(JSON.stringify(before)).not.toContain(base.phone);
+    await expect(
+      updateSalonProfile.run(
+        requestFor("owner-a", { ...update, hotline: "javascript:alert(1)" }, {}),
+      ),
+    ).rejects.toMatchObject({ code: "invalid-argument" });
+    await expect(
+      updateSalonProfile.run(
+        requestFor("owner-a", { ...update, openingHours: "x".repeat(161) }, {}),
+      ),
+    ).rejects.toMatchObject({ code: "invalid-argument" });
+    await expect(updateSalonProfile.run(requestFor("owner-a", update, {}))).resolves.toMatchObject(
+      contact,
+    );
+    await updateSalonProfile.run(requestFor("owner-a", { ...base, name: "Salon A mới" }, {}));
+    await expect(
+      getSalonProfile.run(requestFor("owner-a", { salonId: "salon-a" }, {})),
+    ).resolves.toMatchObject({ ...contact, name: "Salon A mới" });
+    const publicFields = {
+      salonName: "Salon A mới",
+      salonHotline: contact.hotline,
+      salonOpeningHours: contact.openingHours,
+    };
+    const visible = await getWebCustomerContext.run(phoneRequest("uid-salon-contact", qr));
+    expect(visible.qr).toMatchObject(publicFields);
+    expect(JSON.stringify(visible)).not.toContain(base.phone);
+    await expect(
+      checkInWebCustomer.run(checkinRequest("uid-salon-contact", qr)),
+    ).resolves.toMatchObject(publicFields);
+    await expect(
+      getWebCustomerSession.run(phoneRequest("uid-salon-contact", { salonId: "salon-a" })),
+    ).resolves.toMatchObject(publicFields);
+    await updateSalonProfile.run(
+      requestFor("owner-a", { ...base, hotline: "", openingHours: "" }, {}),
+    );
+    const cleared = await getWebCustomerContext.run(phoneRequest("uid-salon-contact", qr));
+    expect(cleared.qr).toMatchObject({ salonHotline: "", salonOpeningHours: "" });
+    expect(JSON.stringify(cleared)).not.toContain(base.phone);
+  });
+
   it.each([undefined, false, null, "true"])(
     "blocks a new request without explicit photo consent (%s)",
     async (allowPhoto) => {
@@ -112,7 +348,7 @@ describe("authenticated web customer platform", () => {
     await Promise.all(getApps().map((app) => deleteApp(app)));
   });
 
-  it("customer history never returns internal notes or images even when storage consent exists", async () => {
+  it("customer history never returns internal notes, storage paths or legacy image URLs", async () => {
     await seedSalon("salon-a", "branch-a");
     const context = await getWebCustomerContext.run(
       phoneRequest("uid-private", signedBranchQr("salon-a", "branch-a")),
@@ -139,6 +375,84 @@ describe("authenticated web customer platform", () => {
     expect((await db.doc("haircut_records/private-record").get()).data()?.note).toBe(
       "Synthetic internal formula",
     );
+  });
+
+  it("only issues a temporary photo link to the authenticated customer for a consented completed visit", async () => {
+    await seedSalon("salon-a", "branch-a");
+    const qr = signedBranchQr("salon-a", "branch-a");
+    const own = await checkInWebCustomer.run(checkinRequest("uid-photos", qr));
+    const other = await getWebCustomerContext.run(phoneRequest("uid-other-photos", qr));
+    const customerId = own.customer.customerId;
+    const sessionId = own.sessionId;
+    const path = `salons/salon-a/customers/${customerId}/sessions/${sessionId}/op-${"a".repeat(40)}.jpg`;
+    const otherPath = path.replace(customerId, other.customer.customerId);
+    const visit = db.doc("haircut_records/photo-visit");
+    await db.doc(`chair_sessions/${sessionId}`).update({ status: "completed" });
+    await db.doc(`point_requests/${sessionId}`).update({ status: "approved" });
+    await visit.set({
+      salonId: "salon-a",
+      customerId,
+      branchId: "branch-a",
+      pointRequestId: sessionId,
+      createdAt: Timestamp.now(),
+      pointsAdded: 1,
+      note: "Private formula",
+      photoUrls: ["https://example.invalid/not-a-salon-photo.jpg"],
+      photoPaths: [path, otherPath],
+    });
+    const link = "https://storage.googleapis.com/demo-haircut/fixture.jpg?X-Goog-Signature=fixture";
+    const sign = vi.spyOn(privatePhotos, "privatePhotoUrl").mockResolvedValue(link);
+    const request = { salonId: "salon-a", photoRecordId: visit.id };
+    try {
+      const list = await getWebCustomerHistory.run(
+        phoneRequest("uid-photos", { salonId: "salon-a" }),
+      );
+      expect(list.records[0]).toMatchObject({ id: visit.id, hasCustomerPhotos: true });
+      expect(list.records[0]).not.toHaveProperty("note");
+      expect(list.records[0]).not.toHaveProperty("photoPaths");
+      expect(sign).not.toHaveBeenCalled();
+      await expect(
+        getWebCustomerHistory.run(
+          phoneRequest("uid-other-photos", {
+            ...request,
+            customerId,
+          }),
+        ),
+      ).rejects.toMatchObject({ code: "not-found" });
+      await expect(
+        getWebCustomerHistory.run(
+          phoneRequest("uid-photos", {
+            ...request,
+            salonId: "salon-b",
+          }),
+        ),
+      ).rejects.toMatchObject({ code: "not-found" });
+      await expect(getWebCustomerHistory.run(requestFor("", request, {}))).rejects.toMatchObject({
+        code: "unauthenticated",
+      });
+      const photo = await getWebCustomerHistory.run(phoneRequest("uid-photos", request));
+      expect(photo).toMatchObject({ records: [], customerPhotoUrls: [link] });
+      expect(sign).toHaveBeenCalledExactlyOnceWith(expect.anything(), path, expect.any(Number));
+      await db.doc(`customers/${customerId}`).update({ allowPhoto: false });
+      await expect(
+        getWebCustomerHistory.run(phoneRequest("uid-photos", request)),
+      ).resolves.toMatchObject({ customerPhotoUrls: [] });
+      await db.doc(`customers/${customerId}`).update({
+        allowPhoto: true,
+        photoConsentRevokedAt: Timestamp.fromMillis(Date.now() + 1000),
+      });
+      await expect(
+        getWebCustomerHistory.run(phoneRequest("uid-photos", request)),
+      ).resolves.toMatchObject({ customerPhotoUrls: [] });
+      await db.doc(`customers/${customerId}`).update({ photoConsentRevokedAt: null });
+      await db.doc(`chair_sessions/${sessionId}`).update({ photoConsentGranted: false });
+      await expect(
+        getWebCustomerHistory.run(phoneRequest("uid-photos", request)),
+      ).resolves.toMatchObject({ customerPhotoUrls: [] });
+      expect(sign).toHaveBeenCalledTimes(1);
+    } finally {
+      sign.mockRestore();
+    }
   });
 
   it("cùng UID tạo profile riêng cho từng salon và retry không tạo trùng", async () => {
@@ -542,6 +856,7 @@ describe("authenticated web customer platform", () => {
     };
 
     const first = await spinWebLuckyWheel.run(phoneRequest("uid-owner", payload));
+    await db.doc("salons/salon-a").update({ allowWebWheel: false });
     const retry = await spinWebLuckyWheel.run(phoneRequest("uid-owner", payload));
     expect(retry).toEqual(first);
     expect(

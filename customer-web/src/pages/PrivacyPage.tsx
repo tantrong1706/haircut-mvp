@@ -49,8 +49,9 @@ export function PrivacyPage({ onBack, onNavigate }: Props = {}) {
           đồng ý ảnh trước khi gửi yêu cầu tích điểm mới. Nếu không đồng ý, khách có thể nhờ nhân
           viên hỗ trợ và vẫn xem được điểm, lịch sử, quà và dùng quyền dữ liệu. Khi đồng ý, nhân
           viên có thể chụp và lưu tối đa 3 ảnh cho lượt phục vụ đó; không bắt buộc phải có ảnh để
-          nhân viên xác nhận điểm. Ảnh và ghi chú chỉ dành cho chủ salon và nhân viên được phân quyền;
-          trang khách hiển thị ngày cắt và điểm đã cộng. Khách có thể ngừng cho phép ảnh hoặc yêu cầu
+          nhân viên xác nhận điểm. Khách đã đăng nhập có thể xem ảnh của chính mình trong Lịch sử
+          nếu ảnh được lưu với sự đồng ý. Ghi chú chỉ dành cho chủ salon và nhân viên được phân
+          quyền. Khách có thể ngừng cho phép ảnh hoặc yêu cầu
           xóa theo mục 8; việc này không đồng nghĩa xóa điểm hoặc tài khoản.
         </p>
 

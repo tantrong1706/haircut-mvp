@@ -27,6 +27,8 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { withdrawCustomerPhotoConsent } from "./domains/privacy/customerPhotoConsent";
 import { changeCustomerName } from "./domains/customers/customerName";
 import { changeOwnCustomerName } from "./domains/customers/ownCustomerName";
+import { applyCustomerPointAdjustment, parseCustomerPointAdjustment } from "./domains/points/customerPointAdjustment";
+import { assertRewardCustomerPhone, parseRewardCustomerIdentity, redeemableCustomerGift, requireRewardDocumentId } from "./domains/rewards/customerRedemption";
 import { onDocumentCreated, onDocumentUpdated } from "firebase-functions/v2/firestore";
 import {
   buildCustomerContactPatch,
@@ -133,6 +135,8 @@ import { apiError } from "./shared/errors";
 import { publicRequestPeer } from "./security";
 import { revokeHaircutDownloadTokens } from "./domains/photos/photoDownloadTokens";
 import { createPrivatePhotoReader, privatePhotoUrl, PRIVATE_PHOTO_URL_TTL_MS } from "./domains/photos/privatePhotoAccess";
+import { customerMayViewVisitPhotos, hasCustomerVisitPhotos, readCustomerVisitPhotos } from "./domains/photos/customerVisitPhotos";
+import { parseSalonPublicContactPatch, parseSalonSwitchPatch, salonPublicContact, salonOwnerSwitches, type SalonOwnerSwitches } from "./domains/salons/publicContact";
 import { createVisitDetailsApi, assertLatestCompletedPhotoVisit } from "./domains/photos/visitDetails";
 
 initializeApp();
@@ -205,10 +209,12 @@ const AUTHENTICATED_RATE_LIMITS = {
   awardReturningCustomerPoints: 20,
   searchSalonCustomers: 30,
   updateSalonCustomerName: 20,
+  adjustSalonCustomerPoints: 20,
   updateWebCustomerName: 20,
   approvePointRequest: 60,
   rejectPointRequest: 60,
   lookupRewardCode: 60,
+  listRedeemableCustomerRewards: 30,
   redeemRewardCode: 30,
   spinLuckyWheel: 20,
   getWebCustomerContext: 30,
@@ -1511,6 +1517,9 @@ type CustomerQrResolution = {
   salonId: string;
   salonName: string;
   salonAvatarUrl: string;
+  salonHotline: string;
+  salonOpeningHours: string;
+  ownerSwitches: SalonOwnerSwitches;
   branchId: string | null;
   branchName: string;
   branchAddress: string;
@@ -1539,9 +1548,10 @@ async function resolveCustomerQrData(data: unknown): Promise<CustomerQrResolutio
     throw new HttpsError("not-found", "Salon không tồn tại hoặc đã ngừng hoạt động");
   }
 
-  const salonName = String(salonSnap.data()?.name || "Salon");
-  const salonAvatarUrl = trustedStoredSalonAvatarUrl(salonSnap.data()?.avatarUrl, salonId);
-  assertSalonIsOperational(salonSnap.data());
+  const salon = salonSnap.data();
+  const ownerSwitches = salonOwnerSwitches(salon);
+  const publicDetails = { ...webSalonDetails(salonId, salon), ownerSwitches };
+  assertSalonIsOperational(salon);
   const features = await getSystemFeatures(salonId);
   const secret = qrSigningSecret.value();
   if (secret.length < 32) {
@@ -1574,8 +1584,7 @@ async function resolveCustomerQrData(data: unknown): Promise<CustomerQrResolutio
     return {
       qrType,
       salonId,
-      salonName,
-      salonAvatarUrl,
+      ...publicDetails,
       branchId: branch.id,
       branchName: branch.name,
       branchAddress: branch.address,
@@ -1613,8 +1622,7 @@ async function resolveCustomerQrData(data: unknown): Promise<CustomerQrResolutio
     return {
       qrType,
       salonId,
-      salonName,
-      salonAvatarUrl,
+      ...publicDetails,
       branchId: branch.id,
       branchName: branch.name,
       branchAddress: branch.address,
@@ -1651,8 +1659,7 @@ async function resolveCustomerQrData(data: unknown): Promise<CustomerQrResolutio
   return {
     qrType,
     salonId,
-    salonName,
-    salonAvatarUrl,
+    ...publicDetails,
     branchId: selected?.id ?? null,
     branchName: selected?.name ?? "",
     branchAddress: selected?.address ?? "",
@@ -1716,6 +1723,7 @@ async function spinWheelForCustomer(
   idempotencyKey: string,
   requestedConfigVersion: unknown,
   appVersion: unknown,
+  checkWebPause = false,
 ): Promise<SpinWheelResult> {
   await assertFeatureEnabled(
     salonId,
@@ -1741,10 +1749,11 @@ async function spinWheelForCustomer(
   let pointsAfter = 0;
 
   await db.runTransaction(async (tx) => {
-    const [operationSnap, wheelSnap, customerSnap] = await Promise.all([
+    const [operationSnap, wheelSnap, customerSnap, salonSnap] = await Promise.all([
       tx.get(operationRef),
       tx.get(wheelRef),
       tx.get(customerRef),
+      checkWebPause ? tx.get(db.collection("salons").doc(salonId)) : null,
     ]);
     if (operationSnap.exists) {
       const operation = operationSnap.data();
@@ -1764,6 +1773,12 @@ async function spinWheelForCustomer(
       configVersion = wheelConfigVersion(response?.configVersion);
       pointsAfter = Number(response?.pointsAfter ?? 0);
       return;
+    }
+    if (salonSnap && !salonOwnerSwitches(salonSnap.data()).allowWebWheel) {
+      throw new HttpsError("failed-precondition", "Vòng quay đang tạm ngừng. Vui lòng quay lại sau.", {
+        errorCode: ApiErrorCode.FEATURE_DISABLED,
+        feature: "luckyWheelEnabled",
+      });
     }
     if (!wheelSnap.exists) {
       throw new HttpsError("not-found", "Vòng quay chưa được cấu hình");
@@ -2773,6 +2788,8 @@ export const getSalonProfile = onCall(functionOptions, async (request) => {
     name: salon?.name ?? "Salon",
     address: salon?.address ?? "",
     phone: salon?.phone ?? "",
+    ...salonPublicContact(salon),
+    ...salonOwnerSwitches(salon),
     avatarUrl: trustedStoredSalonAvatarUrl(salon?.avatarUrl, salonId),
     pointPerVisit: Number(salon?.pointPerVisit ?? 1),
     freeCustomerLimit: Number(salon?.freeCustomerLimit ?? 50),
@@ -2788,6 +2805,17 @@ export const updateSalonProfile = onCall(functionOptions, async (request) => {
   const name = limitedString(request.data?.name, "name", 120);
   const address = optionalLimitedString(request.data?.address, "address", 200);
   const phone = optionalLimitedString(request.data?.phone, "phone", 30);
+  const contactPatch = parseSalonPublicContactPatch({
+    hotline: request.data?.hotline,
+    openingHours: request.data?.openingHours,
+  });
+  const switchPatch = parseSalonSwitchPatch({
+    showLogo: request.data?.showLogo,
+    showHotline: request.data?.showHotline,
+    showOpeningHours: request.data?.showOpeningHours,
+    acceptWebPointRequests: request.data?.acceptWebPointRequests,
+    allowWebWheel: request.data?.allowWebWheel,
+  });
   const pointPerVisit = requireBoundedPositiveNumber(
     request.data?.pointPerVisit,
     "pointPerVisit",
@@ -2808,6 +2836,8 @@ export const updateSalonProfile = onCall(functionOptions, async (request) => {
       name,
       address: address ?? null,
       phone: phone ?? null,
+      ...contactPatch,
+      ...switchPatch,
       pointPerVisit,
       updatedAt: now,
     },
@@ -2837,6 +2867,9 @@ export const updateSalonProfile = onCall(functionOptions, async (request) => {
     name,
     address: address ?? "",
     phone: phone ?? "",
+    avatarUrl: trustedStoredSalonAvatarUrl(salonSnap.data()?.avatarUrl, salonId),
+    ...salonPublicContact({ ...salonSnap.data(), ...contactPatch }),
+    ...salonOwnerSwitches({ ...salonSnap.data(), ...switchPatch }),
     pointPerVisit,
     freeCustomerLimit: Number(salonSnap.data()?.freeCustomerLimit ?? 50),
     features,
@@ -2937,7 +2970,16 @@ export const createManualCustomer = onCall(functionOptions, async (request) => {
 export const resolveCustomerQr = onCall(qrFunctionOptions, async (request) => {
   const salonId = requireString(request.data?.salonId, "salonId");
   await enforcePublicRequestPolicy("resolveCustomerQr", request, salonId, request.data?.qrToken);
-  return assertBranchOnlyCustomerQr(await resolveCustomerQrData(request.data));
+  const { ownerSwitches, ...resolution } = assertBranchOnlyCustomerQr(await resolveCustomerQrData(request.data));
+  return {
+    ...resolution,
+    // Keep the older response shape, but addresses stay in salon management.
+    branchAddress: "",
+    branches: resolution.branches.map((branch) => ({
+      ...branch, address: "",
+    })),
+    features: webOwnerFeatures(resolution.features, ownerSwitches),
+  };
 });
 
 function assertWebCheckinQr(resolution: CustomerQrResolution) {
@@ -3034,14 +3076,36 @@ async function getOrCreateWebCustomer(
   return { customerId, customer: customerSnap.data() ?? {} };
 }
 
+function webSalonDetails(salonId: string, salon: DocumentData | undefined) {
+  const contact = salonPublicContact(salon);
+  const visibility = salonOwnerSwitches(salon);
+  return {
+    salonName: String(salon?.name || "Salon"),
+    salonAvatarUrl: visibility.showLogo ? trustedStoredSalonAvatarUrl(salon?.avatarUrl, salonId) : "",
+    salonHotline: visibility.showHotline ? contact.hotline : "",
+    salonOpeningHours: visibility.showOpeningHours ? contact.openingHours : "",
+  };
+}
+
+function webOwnerFeatures(features: SystemFeatures, switches: SalonOwnerSwitches): SystemFeatures {
+  return {
+    ...features,
+    checkinEnabled: features.checkinEnabled && switches.acceptWebPointRequests,
+    luckyWheelEnabled: features.luckyWheelEnabled && switches.allowWebWheel,
+  };
+}
+
 function webQrView(resolution: CustomerQrResolution) {
   return {
     salonId: resolution.salonId,
     salonName: resolution.salonName,
     salonAvatarUrl: resolution.salonAvatarUrl,
+    salonHotline: resolution.salonHotline,
+    salonOpeningHours: resolution.salonOpeningHours,
     branchId: resolution.branchId,
     branchName: resolution.branchName,
-    branchAddress: resolution.branchAddress,
+    branchAddress: "",
+    acceptingPointRequests: webOwnerFeatures(resolution.features, resolution.ownerSwitches).checkinEnabled,
   };
 }
 
@@ -3074,7 +3138,7 @@ async function activeWebSessionView(
     sessionId,
     `Khách ${principal.phoneLast4}`,
   );
-  return webAppSessionResult(principal.uid, resolution.salonId, result);
+  return webAppSessionResult(principal.uid, resolution, result);
 }
 
 export const getWebCustomerContext = onCall(qrFunctionOptions, async (request) => {
@@ -3182,6 +3246,12 @@ export const checkInWebCustomer = onCall(qrFunctionOptions, async (request) => {
       return;
     }
 
+    if (!salonOwnerSwitches(salonSnap.data()).acceptWebPointRequests) {
+      throw new HttpsError("failed-precondition", "Salon đang tạm dừng nhận yêu cầu tích điểm mới.", {
+        errorCode: ApiErrorCode.FEATURE_DISABLED,
+        feature: "checkinEnabled",
+      });
+    }
     const remainingMs = pointCooldownRemainingMs({
       nowMs: now.toMillis(),
       lastVisitAtMs: timestampMillis(customerSnap.data()?.lastVisitAt),
@@ -3275,7 +3345,7 @@ export const checkInWebCustomer = onCall(qrFunctionOptions, async (request) => {
     returnedSessionId,
     `Khách ${principal.phoneLast4}`,
   );
-  return webAppSessionResult(principal.uid, salonId, result);
+  return webAppSessionResult(principal.uid, resolution, result);
 });
 
 export const withdrawWebCustomerPhotoConsent = onCall(qrFunctionOptions, async (request) => {
@@ -5971,6 +6041,7 @@ export const spinWebLuckyWheel = onCall(functionOptions, async (request) => {
     idempotencyKey,
     request.data?.configVersion,
     request.data?.appVersion,
+    true,
   );
 });
 
@@ -6093,21 +6164,25 @@ async function customerSessionResult(
 
 function webAppSessionResult(
   firebaseUid: string,
-  salonId: string,
+  resolution: CustomerQrResolution,
   result: Awaited<ReturnType<typeof customerSessionResult>>,
 ) {
   return {
     identityProvider: "firebase" as const,
     firebaseUid,
+    salonName: resolution.salonName,
+    salonAvatarUrl: resolution.salonAvatarUrl,
+    salonHotline: resolution.salonHotline,
+    salonOpeningHours: resolution.salonOpeningHours,
     qr: {
       qrType: "branch" as const,
-      salonId,
+      salonId: resolution.salonId,
       branchId: result.branchId || "",
       mirrorId: "",
     },
     sessionId: result.sessionId,
     branchName: result.branchName,
-    branchAddress: result.branchAddress,
+    branchAddress: "",
     mirrorName: result.mirrorName,
     zaloUserId: "",
     sessionStatus: result.sessionStatus,
@@ -6115,7 +6190,7 @@ function webAppSessionResult(
     claimedAtMs: result.claimedAtMs,
     customer: result.customer,
     wheelConfig: result.wheelConfig,
-    features: result.features,
+    features: webOwnerFeatures(result.features, resolution.ownerSwitches),
   };
 }
 
@@ -6129,7 +6204,14 @@ export const getWebCustomerSession = onCall(functionOptions, async (request) => 
   const result = await customerSessionResult(salonId, customerId, sessionId, `Khách ${principal.phoneLast4}`);
   const salon = await db.collection("salons").doc(salonId).get();
   assertSalonIsOperational(salon.data());
-  return { ...result, firebaseUid: principal.uid, salonName: String(salon.data()?.name || "Salon") };
+  const switches = salonOwnerSwitches(salon.data());
+  return {
+    ...result,
+    firebaseUid: principal.uid,
+    ...webSalonDetails(salonId, salon.data()),
+    branchAddress: "",
+    features: webOwnerFeatures(result.features, switches),
+  };
 });
 
 export const getCustomerSessionFromZalo = onCall(zaloFunctionOptions, async (request) => {
@@ -6155,8 +6237,8 @@ export const getCustomerSessionFromZalo = onCall(zaloFunctionOptions, async (req
   };
 });
 
-async function customerHistoryResult(salonId: string, customerId: string, limit: number) {
-  const [recordsSnap, salonSnap] = await Promise.all([
+async function customerHistoryResult(salonId: string, customerId: string, limit: number, webUid?: string) {
+  const [recordsSnap, salonSnap, customerSnap] = await Promise.all([
     db
       .collection("haircut_records")
       .where("salonId", "==", salonId)
@@ -6165,7 +6247,12 @@ async function customerHistoryResult(salonId: string, customerId: string, limit:
       .limit(limit)
       .get(),
     db.collection("salons").doc(salonId).get(),
+    webUid ? db.collection("customers").doc(customerId).get() : undefined,
   ]);
+  const canViewPhotos = webUid && customerMayViewVisitPhotos(customerSnap?.data(), {
+    uid: webUid, salonId, customerId,
+  });
+  const bucketName = canViewPhotos ? storage.bucket().name : "";
 
   const staffIds = [
     ...new Set(
@@ -6203,7 +6290,8 @@ async function customerHistoryResult(salonId: string, customerId: string, limit:
             (typeof data.staffName === "string" ? data.staffName : ""),
           serviceName: typeof data.serviceName === "string" ? data.serviceName : "",
           rewardName: typeof data.rewardName === "string" ? data.rewardName : "",
-          // Notes and photos are internal salon records, not customer history fields.
+          // Never include notes, Storage paths or photo links in a history listing.
+          ...(bucketName && hasCustomerVisitPhotos(data, bucketName) ? { hasCustomerPhotos: true } : {}),
           pointsAdded: data.pointsAdded ?? 0,
         };
       }),
@@ -6216,10 +6304,20 @@ export const getWebCustomerHistory = onCall(functionOptions, async (request) => 
   const salonId = requireString(request.data?.salonId, "salonId");
   await enforceAuthenticatedRateLimit("getWebCustomerHistory", principal.uid, salonId);
   const customerId = customerIdForWeb(salonId, principal.uid);
+  if (request.data?.photoRecordId !== undefined) {
+    await assertDedicatedWebCustomerUid(principal.uid);
+    return {
+      records: [],
+      customerPhotoUrls: await readCustomerVisitPhotos(db, storage.bucket(), {
+        uid: principal.uid, salonId, customerId,
+      }, request.data.photoRecordId),
+    };
+  }
   return customerHistoryResult(
     salonId,
     customerId,
     boundedQueryLimit(request.data?.limit, 20, 50),
+    principal.uid,
   );
 });
 
@@ -6688,6 +6786,17 @@ export const updateWebCustomerName = onCall(functionOptions, async (request) => 
     uid: principal.uid, salonId, name: request.data?.name, expectedName: request.data?.expectedName,
     activeRef: activeSessionRefFor(salonId, customerIdForWeb(salonId, principal.uid)),
   });
+});
+
+export const adjustSalonCustomerPoints = onCall(functionOptions, async (request) => {
+  const uid = currentUid(request.auth);
+  const salonId = requireString(request.data?.salonId, "salonId");
+  await assertSalonRole(uid, salonId, ["owner"]);
+  await enforceAuthenticatedRateLimit("adjustSalonCustomerPoints", uid, salonId);
+  await assertFeatureEnabled(salonId, "pointApprovalEnabled", "Điều chỉnh điểm đang tạm ngừng.", request.data?.appVersion);
+  const input = parseCustomerPointAdjustment(request.data);
+  const idempotencyKey = requireIdempotencyKey(request.data?.idempotencyKey);
+  return applyCustomerPointAdjustment(db, { ...input, uid, salonId, idempotencyKey });
 });
 
 export const updateSalonCustomerName = onCall(functionOptions, async (request) => {
@@ -7794,6 +7903,39 @@ export const lookupRewardCode = onCall(functionOptions, async (request) => {
   };
 });
 
+export const listRedeemableCustomerRewards = onCall(functionOptions, async (request) => {
+  const uid = currentUid(request.auth);
+  const salonId = requireString(request.data?.salonId, "salonId");
+  const user = await assertSalonRole(uid, salonId, ["owner", "staff"]);
+  if (user.role === "staff" && user.canRedeemRewards !== true) {
+    throw new HttpsError("permission-denied", "Nhân viên chưa được phép đổi quà.");
+  }
+  await enforceAuthenticatedRateLimit("listRedeemableCustomerRewards", uid, salonId);
+  await assertFeatureEnabled(salonId, "rewardRedeemEnabled", "Tính năng đổi quà đang tạm ngừng.", request.data?.appVersion);
+  const branchId = await resolveAuthorizedBranchScope(user, salonId, request.data?.branchId);
+  if (!branchId) throw new HttpsError("invalid-argument", "Vui lòng chọn chi nhánh đổi quà.");
+  const { customerId, phoneLast4 } = parseRewardCustomerIdentity(request.data);
+  const customer = (await db.collection("customers").doc(customerId).get()).data();
+  if (!customer || customer.salonId !== salonId) {
+    throw new HttpsError("not-found", "Không tìm thấy khách trong salon này.");
+  }
+  assertRewardCustomerPhone(customer, phoneLast4);
+  const cursor = request.data?.cursor === undefined ? undefined : requireRewardDocumentId(request.data.cursor);
+  const pageSize = 25;
+  const query = db.collection("reward_history")
+    .where("salonId", "==", salonId)
+    .where("customerId", "==", customerId)
+    .where("status", "==", "unused")
+    .orderBy(FieldPath.documentId());
+  const snapshot = await (cursor ? query.startAfter(cursor) : query).limit(pageSize + 1).get();
+  const page = snapshot.docs.slice(0, pageSize);
+  const now = Date.now();
+  return {
+    rewards: page.flatMap((doc) => redeemableCustomerGift(doc.id, doc.data(), salonId, branchId, now)),
+    nextCursor: snapshot.size > pageSize ? page[pageSize - 1].id : null,
+  };
+});
+
 export const redeemRewardCode = onCall(functionOptions, async (request) => {
   const uid = currentUid(request.auth);
   const salonId = requireString(request.data?.salonId, "salonId");
@@ -7810,7 +7952,13 @@ export const redeemRewardCode = onCall(functionOptions, async (request) => {
   if (user.role === "staff" && user.canRedeemRewards !== true) {
     throw new HttpsError("permission-denied", "Nhân viên chưa được phép xác nhận mã quà");
   }
-  const rewardCodeInput = requireRewardCodeInput(request.data?.rewardCode);
+  const selection = request.data?.rewardId !== undefined
+    ? { ...parseRewardCustomerIdentity(request.data), rewardId: requireRewardDocumentId(request.data.rewardId) }
+    : null;
+  if (selection && request.data?.rewardCode !== undefined) {
+    throw new HttpsError("invalid-argument", "Chọn quà theo khách hoặc theo mã, không dùng cả hai.");
+  }
+  const rewardCodeInput = selection ? "" : requireRewardCodeInput(request.data?.rewardCode);
 
   const branchId = await resolveAuthorizedBranchScope(user, salonId, request.data?.branchId);
   if (!branchId) {
@@ -7821,25 +7969,25 @@ export const redeemRewardCode = onCall(functionOptions, async (request) => {
       { field: "branchId" },
     );
   }
-  const query = await db
-    .collection("reward_history")
+  const rewardCollection = db.collection("reward_history");
+  const codeMatch = selection ? undefined : (await rewardCollection
     .where("salonId", "==", salonId)
     .where("rewardCode", "==", rewardCodeInput)
-    .limit(1)
-    .get();
-
-  if (query.empty) {
+    .limit(1).get()).docs[0];
+  if (!selection && !codeMatch) {
     throw new HttpsError("not-found", "Không tìm thấy mã quà");
   }
 
-  const rewardRef = query.docs[0].ref;
-  const rewardBeforeTransaction = query.docs[0].data();
+  const rewardRef = selection ? rewardCollection.doc(selection.rewardId) : codeMatch!.ref;
+  const customerId = selection?.customerId ?? String(codeMatch?.data().customerId || "");
+  if (!customerId) {
+    throw new HttpsError("failed-precondition", "Mã quà không còn gắn với khách hợp lệ");
+  }
   const usedBranchId = branchId;
   await assertBranchAccess(user, usedBranchId);
   const now = Timestamp.now();
 
   const result = await db.runTransaction(async (tx) => {
-    const customerId = String(rewardBeforeTransaction.customerId || "");
     const [rewardSnap, branchSnap, customerSnap] = await Promise.all([
       tx.get(rewardRef),
       tx.get(db.collection("branches").doc(usedBranchId)),
@@ -7863,10 +8011,12 @@ export const redeemRewardCode = onCall(functionOptions, async (request) => {
         "Mã quà không còn gắn với khách hợp lệ",
       );
     }
+    if (selection) assertRewardCustomerPhone(customerSnap.data(), selection.phoneLast4);
     if (
       reward?.status === "used" &&
       reward?.redemptionIdempotencyKey === idempotencyKey &&
-      reward?.usedBy === uid
+      reward?.usedBy === uid &&
+      (!selection || reward?.usedBranchId === usedBranchId)
     ) {
       return {
         rewardId: rewardSnap.id,
@@ -7941,7 +8091,7 @@ export const redeemRewardCode = onCall(functionOptions, async (request) => {
         targetType: "reward",
         targetId: rewardSnap.id,
         before: { status: rewardStatus },
-        after: { status: "used", usedBranchId },
+        after: { status: "used", usedBranchId, ...(selection ? { source: "customer_lookup" } : {}) },
         createdAt: now,
       }),
     );
@@ -7969,7 +8119,7 @@ export const redeemRewardCode = onCall(functionOptions, async (request) => {
 
   return {
     rewardId: result.rewardId,
-    rewardCode: result.rewardCode,
+    rewardCode: selection ? "" : result.rewardCode,
     rewardName: result.rewardName,
     customerName,
     alreadyRedeemed: result.alreadyRedeemed,

@@ -153,11 +153,21 @@ export type InactiveCustomer = {
   daysSinceLastVisit: number;
 };
 
-export type SalonProfile = {
+export type SalonProfileSwitches = {
+  showLogo?: boolean;
+  showHotline?: boolean;
+  showOpeningHours?: boolean;
+  acceptWebPointRequests?: boolean;
+  allowWebWheel?: boolean;
+};
+
+export type SalonProfile = SalonProfileSwitches & {
   id: string;
   name: string;
   address: string;
   phone: string;
+  hotline?: string;
+  openingHours?: string;
   avatarUrl: string;
   pointPerVisit: number;
   freeCustomerLimit: number;
@@ -488,13 +498,17 @@ export async function getSalonProfile(salonId: string): Promise<SalonProfile> {
   );
 }
 
-export async function updateSalonProfile(input: {
+export type SalonProfileUpdate = SalonProfileSwitches & {
   salonId: string;
   name: string;
   address?: string;
   phone?: string;
+  hotline?: string;
+  openingHours?: string;
   pointPerVisit: number;
-}): Promise<SalonProfile> {
+};
+
+export async function updateSalonProfile(input: SalonProfileUpdate): Promise<SalonProfile> {
   const name = input.name.trim();
   const address = input.address?.trim() || "";
   const phone = input.phone?.trim() || "";
@@ -504,23 +518,32 @@ export async function updateSalonProfile(input: {
     throw new Error("Vui lòng nhập tên salon");
   }
 
+  const base = { salonId: input.salonId, name, address, phone, pointPerVisit };
+  const publicChanges = {
+    ...(input.hotline !== undefined ? { hotline: input.hotline.trim() } : {}),
+    ...(input.openingHours !== undefined ? { openingHours: input.openingHours.trim() } : {}),
+    ...(input.showLogo !== undefined ? { showLogo: input.showLogo } : {}),
+    ...(input.showHotline !== undefined ? { showHotline: input.showHotline } : {}),
+    ...(input.showOpeningHours !== undefined ? { showOpeningHours: input.showOpeningHours } : {}),
+    ...(input.acceptWebPointRequests !== undefined ? { acceptWebPointRequests: input.acceptWebPointRequests } : {}),
+    ...(input.allowWebWheel !== undefined ? { allowWebWheel: input.allowWebWheel } : {}),
+  };
+  if (Object.keys(publicChanges).length > 0) {
+    // Public contact edits must be confirmed by the authorized callable, never a test fallback.
+    const result = await callFunction<SalonProfileUpdate, SalonProfile>("updateSalonProfile", {
+      ...base,
+      ...publicChanges,
+    });
+    if (Object.entries(publicChanges).some(([key, value]) => result[key as keyof typeof publicChanges] !== value)) {
+      throw new Error("Máy chủ chưa xác nhận lưu cài đặt salon. Vui lòng tải lại và thử lại.");
+    }
+    return result;
+  }
+
   return callWriteFunctionOrFallback(
     "updateSalonProfile",
-    {
-      salonId: input.salonId,
-      name,
-      address,
-      phone,
-      pointPerVisit,
-    },
-    () =>
-      updateSalonProfileDirect({
-        salonId: input.salonId,
-        name,
-        address,
-        phone,
-        pointPerVisit,
-      }),
+    base,
+    () => updateSalonProfileDirect(base),
   );
 }
 
@@ -683,6 +706,13 @@ async function getSalonProfileDirect(salonId: string): Promise<SalonProfile> {
     name: String(data.name || "Salon"),
     address: String(data.address || ""),
     phone: String(data.phone || ""),
+    hotline: typeof data.hotline === "string" ? data.hotline : "",
+    openingHours: typeof data.openingHours === "string" ? data.openingHours : "",
+    showLogo: data.showLogo === undefined || data.showLogo === true,
+    showHotline: data.showHotline === undefined || data.showHotline === true,
+    showOpeningHours: data.showOpeningHours === undefined || data.showOpeningHours === true,
+    acceptWebPointRequests: data.acceptWebPointRequests === undefined || data.acceptWebPointRequests === true,
+    allowWebWheel: data.allowWebWheel === undefined || data.allowWebWheel === true,
     avatarUrl: String(data.avatarUrl || ""),
     pointPerVisit: Number(data.pointPerVisit ?? 1),
     freeCustomerLimit: Number(data.freeCustomerLimit ?? 50),

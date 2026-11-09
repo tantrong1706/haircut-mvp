@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { BrandLogo } from "../components/BrandLogo";
+import { SalonContactDetails } from "../components/SalonContactDetails";
 import { getCustomerWheelConfig } from "../services/api";
 import { AppSession, defaultLuckyWheelConfig, TabKey } from "../services/types";
 
@@ -30,7 +31,7 @@ const actions: Array<{
   description: string;
   Icon: LucideIcon;
 }> = [
-  { tab: "history", title: "Lịch sử", description: "Ảnh & ghi chú lần cắt", Icon: CalendarClock },
+  { tab: "history", title: "Lịch sử", description: "Ngày cắt và ảnh đã lưu", Icon: CalendarClock },
   { tab: "rewards", title: "Quà", description: "Các mã quà đã nhận", Icon: Gift },
 ];
 
@@ -59,6 +60,7 @@ export function HomePage({
   const status = session.sessionStatus || "waiting";
   const [wheelConfig, setWheelConfig] = useState(defaultLuckyWheelConfig);
   const missingPoints = Math.max(0, wheelConfig.requiredPoints - customer.points);
+  const wheelPaused = session.features?.luckyWheelEnabled === false || session.features?.maintenanceMode === true;
   const wheelProgress = Math.min(
     100,
     Math.round((customer.points / wheelConfig.requiredPoints) * 100),
@@ -97,6 +99,7 @@ export function HomePage({
               ? "Cảm ơn bạn đã ghé salon."
               : shortStatusText(status, session.assignedStaffName)}
         </p>
+        {session.identityProvider === "firebase" ? <SalonContactDetails {...session} /> : null}
       </header>
 
       {syncStatus === "error" ? (
@@ -131,7 +134,9 @@ export function HomePage({
             <small>điểm</small>
           </div>
           <p>
-            {missingPoints === 0
+            {wheelPaused
+              ? "Vòng quay đang tạm dừng."
+              : missingPoints === 0
               ? "Bạn đã đủ điểm để quay."
               : `Thêm ${missingPoints} điểm để mở lượt quay.`}
           </p>
@@ -168,13 +173,16 @@ export function HomePage({
 
         <button className="home-wheel-button" type="button" onClick={() => onTabChange("wheel")}>
           <Sparkles size={20} aria-hidden="true" />
-          {missingPoints === 0 ? "Quay ngay" : "Xem vòng quay"}
+          {missingPoints === 0 && !wheelPaused ? "Quay ngay" : "Xem vòng quay"}
         </button>
       </section>
 
       {accountOnly && !webCooldownActive ? (
         <p className="panel">
-          Quét QR tại chi nhánh để yêu cầu tích điểm. Bạn vẫn xem được lịch sử và quà tại đây.
+          {session.features?.checkinEnabled === false
+            ? "Salon đang tạm dừng nhận yêu cầu tích điểm mới."
+            : "Quét QR tại chi nhánh để yêu cầu tích điểm."}{" "}
+          Bạn vẫn xem được lịch sử và quà tại đây.
         </p>
       ) : !accountOnly && session.identityProvider === "firebase" ? (
         <div className="visit-update" role="status">
@@ -194,11 +202,7 @@ export function HomePage({
             done
             icon={<CheckCircle2 size={20} />}
             title="Đã gửi yêu cầu"
-            text={
-              session.branchAddress
-                ? `${branchLabel(session)} · ${session.branchAddress}`
-                : branchLabel(session)
-            }
+            text={branchLabel(session)}
           />
           <StatusStep
             done={

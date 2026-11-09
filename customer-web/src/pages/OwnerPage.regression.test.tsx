@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   overview: vi.fn(),
   branches: vi.fn(),
   profile: vi.fn(),
+  updateProfile: vi.fn(),
   wheel: vi.fn(),
   saveWheel: vi.fn(),
   saveNote: vi.fn(),
@@ -24,12 +25,18 @@ const mocks = vi.hoisted(() => ({
   upload: vi.fn(),
   remove: vi.fn(),
   savePhotos: vi.fn(),
+  directory: vi.fn(),
+  adjustPoints: vi.fn(),
+  searchCustomers: vi.fn(),
+  listGifts: vi.fn(),
 }));
 vi.mock("../services/operations", () => ({
   listenPendingPointRequests: mocks.subscribe,
   getOwnerOverview: mocks.overview,
   getBranchQrSettings: mocks.branches,
   getSalonProfile: mocks.profile,
+  updateSalonProfile: mocks.updateProfile,
+  searchSalonCustomers: mocks.searchCustomers,
   getLuckyWheelConfig: mocks.wheel,
   saveLuckyWheelConfig: mocks.saveWheel,
   approvePointRequest: mocks.approve,
@@ -40,7 +47,14 @@ vi.mock("../services/operations", () => ({
 }));
 vi.mock("../services/ownerWorkspace", () => ({
   savePendingVisitNote: mocks.saveNote,
-  listSalonCustomerDirectory: async () => ({ customers: [], nextCursor: null, totalCount: 0 }),
+  listSalonCustomerDirectory: mocks.directory,
+}));
+vi.mock("../services/customerPointAdjustment", () => ({
+  adjustSalonCustomerPoints: mocks.adjustPoints,
+}));
+vi.mock("../services/customerRewardRedemption", () => ({
+  listRedeemableCustomerRewards: mocks.listGifts,
+  redeemCustomerReward: vi.fn(),
 }));
 vi.mock("../services/auth", () => ({
   updateOwnerAvatar: vi.fn(),
@@ -119,6 +133,7 @@ async function openTab(name: string) {
 describe("OwnerPage behavior before extraction", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    mocks.directory.mockResolvedValue({ customers: [], nextCursor: null, totalCount: 0 });
     mocks.subscribe.mockImplementation((_salon, _branch, next) => {
       next(structuredClone([request]));
       return mocks.unsubscribe;
@@ -152,6 +167,84 @@ describe("OwnerPage behavior before extraction", () => {
       },
     );
   });
+
+  it("lets the owner confirm a manual subtraction with a reason, without changing visit history", async () => {
+    mocks.directory.mockResolvedValue({
+      customers: [
+        {
+          id: "fixture-customer",
+          name: "Khách mẫu",
+          phoneLast4: "1234",
+          points: 7,
+          detailsLoaded: false,
+        },
+      ],
+      nextCursor: null,
+      totalCount: 1,
+    });
+    mocks.adjustPoints.mockResolvedValue({
+      pointsBefore: 7,
+      pointsAfter: 5,
+      currentPoints: 5,
+      alreadyProcessed: false,
+    });
+    await openPage();
+    await openTab("Khách hàng");
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Điều chỉnh điểm" }));
+    await user.selectOptions(screen.getByLabelText("Thao tác điểm"), "subtract");
+    await user.type(screen.getByLabelText("Số điểm điều chỉnh"), "2");
+    expect(screen.getByRole("button", { name: "Kiểm tra điều chỉnh" })).toBeDisabled();
+    await user.type(screen.getByLabelText("Lý do điều chỉnh"), "Sửa cộng trùng");
+    await user.click(screen.getByRole("button", { name: "Kiểm tra điều chỉnh" }));
+    expect(mocks.adjustPoints).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Xác nhận điều chỉnh" }));
+    expect(mocks.adjustPoints).toHaveBeenCalledWith(
+      expect.objectContaining({
+        salonId: "salon-fixture",
+        customerId: "fixture-customer",
+        expectedPoints: 7,
+        delta: -2,
+        reason: "Sửa cộng trùng",
+      }),
+    );
+    expect(await screen.findByText("5 điểm", { exact: true })).toBeVisible();
+  });
+
+  it("reuses a matching completed suffix search to show gifts, but a name search still needs verification", async () => {
+    mocks.branches.mockResolvedValue({ branches: [branches[0]] });
+    const customer = {
+      id: "gift-customer",
+      name: "Khách quà",
+      phoneLast4: "1234",
+      points: 7,
+      detailsLoaded: false,
+    };
+    mocks.searchCustomers.mockResolvedValue({ customers: [customer], nextCursor: null });
+    mocks.listGifts.mockResolvedValue({ rewards: [], nextCursor: null });
+    await openPage();
+    await openTab("Khách hàng");
+    const user = userEvent.setup();
+    const search = screen.getByRole("textbox", { name: "Tìm khách theo tên hoặc 4 số cuối" });
+    await user.type(search, "12 34");
+    await user.click(screen.getByRole("button", { name: /^Tìm$/u }));
+    await user.click(await screen.findByRole("button", { name: "Xem quà có thể dùng" }));
+    expect(await screen.findByText("Không có quà dùng được tại chi nhánh này.")).toBeVisible();
+    expect(screen.queryByLabelText("4 số cuối điện thoại để xem quà")).not.toBeInTheDocument();
+    expect(mocks.listGifts).toHaveBeenCalledWith({
+      salonId: "salon-fixture",
+      branchId: "one",
+      customerId: "gift-customer",
+      phoneLast4: "1234",
+    });
+
+    await user.clear(search);
+    await user.type(search, "Khách quà");
+    await user.click(screen.getByRole("button", { name: /^Tìm$/u }));
+    await user.click(await screen.findByRole("button", { name: "Xem quà có thể dùng" }));
+    expect(screen.getByLabelText("4 số cuối điện thoại để xem quà")).toBeVisible();
+    expect(mocks.listGifts).toHaveBeenCalledTimes(1);
+  });
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
@@ -164,6 +257,51 @@ describe("OwnerPage behavior before extraction", () => {
     expect(mocks.subscribe).not.toHaveBeenCalled();
     expect(mocks.overview).not.toHaveBeenCalled();
     expect(mocks.wheel).not.toHaveBeenCalled();
+  });
+
+  it("groups salon setup in Settings and links to the existing management forms", async () => {
+    await openPage();
+    expect(screen.queryByRole("navigation", { name: "Lối tắt quản lý" })).not.toBeInTheDocument();
+    await openTab("Cài đặt");
+    expect(screen.getByRole("region", { name: "Hồ sơ salon" })).toBeVisible();
+    expect(screen.getByRole("region", { name: "Tài khoản chủ salon" })).toBeVisible();
+    const operations = screen.getByRole("navigation", { name: "Lối tắt quản lý" });
+    expect(within(operations).getByRole("button", { name: /Chi nhánh và QR/ })).toBeVisible();
+    expect(within(operations).getByRole("button", { name: /Nhân viên và quyền/ })).toBeVisible();
+    await userEvent.setup().click(within(operations).getByRole("button", { name: /Vòng quay/ }));
+    expect(screen.getByRole("heading", { name: "Cấu hình vòng quay" })).toBeVisible();
+    expect(screen.queryByRole("navigation", { name: "Lối tắt quản lý" })).not.toBeInTheDocument();
+  });
+
+  it("saves salon display name, public hotline and opening hours from Settings", async () => {
+    await openPage();
+    await openTab("Cài đặt");
+    const user = userEvent.setup();
+    const name = screen.getByRole("textbox", { name: "Tên hiển thị" });
+    const hotline = screen.getByRole("textbox", { name: /Hotline hiển thị cho khách/i });
+    const hours = screen.getByRole("textbox", { name: /Giờ mở cửa/i });
+    expect(hotline).toHaveValue("");
+    await user.clear(name);
+    await user.type(name, "Salon mới");
+    await user.type(hotline, "028 0000 0000");
+    await user.type(hours, "Thứ 2–CN, 09:00–20:00");
+    mocks.updateProfile.mockResolvedValue({
+      ...(await mocks.profile()),
+      name: "Salon mới",
+      hotline: "028 0000 0000",
+      openingHours: "Thứ 2–CN, 09:00–20:00",
+    });
+    await user.click(screen.getByRole("button", { name: "Lưu thông tin salon" }));
+    expect(mocks.updateProfile).toHaveBeenCalledWith({
+      salonId: "salon-fixture",
+      name: "Salon mới",
+      address: "",
+      phone: "",
+      pointPerVisit: 2,
+      hotline: "028 0000 0000",
+      openingHours: "Thứ 2–CN, 09:00–20:00",
+    });
+    expect(await screen.findByText("Đã cập nhật thông tin salon.")).toBeVisible();
   });
 
   it("keeps trimmed salon/branch scope and disposes subscriptions on filter change and unmount", async () => {

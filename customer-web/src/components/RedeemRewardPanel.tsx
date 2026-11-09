@@ -14,14 +14,20 @@ import { RewardQrScanner } from "./RewardQrScanner";
 type Props = {
   salonId: string;
   branchId?: string;
+  branchChoices?: readonly { id: string; name: string }[];
   disabled?: boolean;
   note?: string;
   allowRestore?: boolean;
 };
 
-export function RedeemRewardPanel({
+export function RedeemRewardPanel(props: Props) {
+  return <RedeemRewardForm key={JSON.stringify([props.salonId, props.branchId])} {...props} />;
+}
+
+function RedeemRewardForm({
   salonId,
   branchId,
+  branchChoices,
   disabled,
   note,
   allowRestore = false,
@@ -35,9 +41,21 @@ export function RedeemRewardPanel({
   const [message, setMessage] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [selectedBranchId, setSelectedBranchId] = useState("");
+  const [checkedBranchId, setCheckedBranchId] = useState<string>();
+  const selectedBranch = branchChoices?.length === 1
+    ? branchChoices[0]
+    : branchChoices?.find((branch) => branch.id === selectedBranchId);
+  const targetBranchId = branchChoices ? selectedBranch?.id : branchId;
+  const unavailable = Boolean(disabled || (branchChoices && !targetBranchId));
+  const busy = loading || checking || restoring;
+  const checkedInfo = checkedBranchId === targetBranchId ? info : null;
+  const canRedeem = !unavailable && !busy && checkedInfo?.found &&
+    checkedInfo.status === "unused" && checkedInfo.redeemableAtBranch !== false;
 
   useEffect(() => {
     const receiveScannedCode = (event: Event) => {
+      if (unavailable || busy || confirming) return;
       const code = String((event as CustomEvent<string>).detail || "")
         .trim()
         .toUpperCase();
@@ -51,9 +69,10 @@ export function RedeemRewardPanel({
     };
     window.addEventListener("haircut:reward-code-scanned", receiveScannedCode);
     return () => window.removeEventListener("haircut:reward-code-scanned", receiveScannedCode);
-  }, []);
+  }, [unavailable, busy, confirming]);
 
   async function checkCode() {
+    if (unavailable || busy || !rewardCode.trim()) return;
     setChecking(true);
     setResult(null);
     setInfo(null);
@@ -63,12 +82,13 @@ export function RedeemRewardPanel({
     try {
       const nextInfo = await withMonitoringTrace(
         "reward_code_lookup",
-        () => lookupRewardCode({ salonId, branchId, rewardCode }),
+        () => lookupRewardCode({ salonId, branchId: targetBranchId, rewardCode }),
         {
           salon_id: salonId,
         },
       );
       setInfo(nextInfo);
+      setCheckedBranchId(targetBranchId);
       trackEvent("reward_code_lookup_completed", {
         salon_id: salonId,
         found: Boolean(nextInfo.found),
@@ -82,6 +102,7 @@ export function RedeemRewardPanel({
   }
 
   async function redeem() {
+    if (!canRedeem || !confirming) return;
     setConfirming(false);
     setLoading(true);
     setResult(null);
@@ -91,7 +112,7 @@ export function RedeemRewardPanel({
     try {
       const nextResult = await withMonitoringTrace(
         "reward_code_redeem",
-        () => redeemRewardCode({ salonId, branchId, rewardCode }),
+        () => redeemRewardCode({ salonId, branchId: targetBranchId, rewardCode }),
         {
           salon_id: salonId,
         },
@@ -125,7 +146,7 @@ export function RedeemRewardPanel({
   }
 
   async function restore() {
-    if (!result) {
+    if (!result || busy || disabled || !allowRestore) {
       return;
     }
 
@@ -158,9 +179,31 @@ export function RedeemRewardPanel({
       </div>
 
       {note ? <p className="notice-banner">{note}</p> : null}
+      {branchChoices ? (
+        branchChoices.length > 1 ? (
+          <label className="field">
+            <span>Chi nhánh đổi quà</span>
+            <select value={selectedBranch?.id ?? ""} disabled={disabled || busy || confirming}
+              onChange={(event) => {
+                setSelectedBranchId(event.target.value);
+                setInfo(null);
+                setResult(null);
+                setError("");
+                setMessage("");
+              }}>
+              <option value="">Chọn chi nhánh</option>
+              {branchChoices.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+            </select>
+          </label>
+        ) : (
+          <p className="muted">
+            {selectedBranch ? `Chi nhánh đổi quà: ${selectedBranch.name}` : "Chưa có chi nhánh hoạt động để đổi quà."}
+          </p>
+        )
+      ) : null}
 
       <RewardQrScanner
-        disabled={disabled || loading || checking}
+        disabled={unavailable || busy || confirming}
         onCode={(code) => {
           window.dispatchEvent(new CustomEvent("haircut:reward-code-scanned", { detail: code }));
         }}
@@ -182,7 +225,7 @@ export function RedeemRewardPanel({
             setError("");
           }}
           placeholder="Ví dụ: HC-20260629-1A2B3C4D"
-          disabled={disabled || loading || checking}
+          disabled={unavailable || busy || confirming}
         />
       </label>
 
@@ -190,7 +233,7 @@ export function RedeemRewardPanel({
         <button
           className="secondary-button"
           type="button"
-          disabled={disabled || checking || loading || rewardCode.trim().length === 0}
+          disabled={unavailable || busy || confirming || rewardCode.trim().length === 0}
           onClick={checkCode}
         >
           <Search size={18} aria-hidden="true" />
@@ -200,13 +243,7 @@ export function RedeemRewardPanel({
         <button
           className="primary-button compact"
           type="button"
-          disabled={
-            disabled ||
-            loading ||
-            !info?.found ||
-            info.status !== "unused" ||
-            info.redeemableAtBranch === false
-          }
+          disabled={!canRedeem}
           onClick={() => setConfirming(true)}
         >
           <BadgeCheck size={20} aria-hidden="true" />
@@ -214,7 +251,7 @@ export function RedeemRewardPanel({
         </button>
       </div>
 
-      {info ? <RewardCodeStatus info={info} /> : null}
+      {checkedInfo ? <RewardCodeStatus info={checkedInfo} /> : null}
 
       {result ? (
         <div className="alert success retry-alert">
@@ -226,7 +263,7 @@ export function RedeemRewardPanel({
                 }.`}
           </span>
           {allowRestore ? (
-            <button type="button" disabled={restoring} onClick={restore}>
+            <button type="button" disabled={busy || disabled} onClick={restore}>
               {restoring ? "Đang hoàn tác..." : "Hoàn tác"}
             </button>
           ) : null}
@@ -235,10 +272,7 @@ export function RedeemRewardPanel({
       {message ? <p className="alert success">{message}</p> : null}
       {error ? <p className="alert error">{error}</p> : null}
 
-      {confirming &&
-      info?.found &&
-      info.status === "unused" &&
-      info.redeemableAtBranch !== false ? (
+      {confirming && canRedeem && checkedInfo ? (
         <div className="dialog-backdrop" role="presentation">
           <div
             className="confirm-dialog"
@@ -257,7 +291,7 @@ export function RedeemRewardPanel({
             <ShieldCheck className="confirm-icon" size={28} aria-hidden="true" />
             <h3 id="redeem-confirm-title">Xác nhận sử dụng quà?</h3>
             <p>
-              {info.rewardName || "Mã quà"} cho {info.customerName || "khách hàng"}. Sau khi xác
+              {checkedInfo.rewardName || "Mã quà"} cho {checkedInfo.customerName || "khách hàng"}. Sau khi xác
               nhận đã trao quà, mã sẽ được đánh dấu đã sử dụng. Chủ salon có thể hoàn tác trong 15
               phút nếu thao tác nhầm.
             </p>

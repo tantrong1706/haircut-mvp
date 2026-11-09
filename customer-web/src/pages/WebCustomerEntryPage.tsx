@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BrandLogo } from "../components/BrandLogo";
+import { SalonContactDetails } from "../components/SalonContactDetails";
 import {
   beginCustomerPhoneSignIn,
   clearPendingWebQr,
@@ -51,6 +52,7 @@ export function WebCustomerEntryPage({ onReady }: Props) {
   const checkinStarted = useRef(false);
   const cooldownUntil = context?.customer.nextPointEligibleAtMs ?? 0;
   const cooldownActive = cooldownUntil > clockNow;
+  const requestsPaused = context?.qr.acceptingPointRequests === false;
 
   useEffect(() => {
     if (!cooldownActive) return undefined;
@@ -132,7 +134,7 @@ export function WebCustomerEntryPage({ onReady }: Props) {
             salonAvatarUrl: "",
             branchId: account.qr.branchId,
             branchName: account.branchName || "",
-            branchAddress: account.branchAddress || "",
+            acceptingPointRequests: account.features?.checkinEnabled,
           },
           customer: account.customer,
           activeSession: account,
@@ -200,7 +202,8 @@ export function WebCustomerEntryPage({ onReady }: Props) {
   }
 
   async function checkIn() {
-    if (!activeUid.current || busy || cooldownActive || checkinStarted.current) return;
+    if (!activeUid.current || busy || cooldownActive || requestsPaused || checkinStarted.current)
+      return;
     if (!allowPhoto) {
       setError(PHOTO_CONSENT_REQUIRED_MESSAGE);
       photoChoice.current?.focus();
@@ -374,12 +377,14 @@ export function WebCustomerEntryPage({ onReady }: Props) {
         <p className="eyebrow">Check-in</p>
         <h1>{context.qr.salonName}</h1>
         <p className="muted">{context.qr.branchName}</p>
-        {context.qr.branchAddress ? <p>{context.qr.branchAddress}</p> : null}
+        <SalonContactDetails {...context.qr} />
       </header>
       <div className="panel web-customer-summary">
         <span>{context.customer.name}</span>
         <strong>{context.customer.points} điểm</strong>
-        {!cooldownActive ? (
+        {requestsPaused ? (
+          <p role="status">Salon đang tạm dừng nhận yêu cầu tích điểm mới.</p>
+        ) : !cooldownActive ? (
           <>
             <label className="photo-permission-choice">
               <input
@@ -397,8 +402,8 @@ export function WebCustomerEntryPage({ onReady }: Props) {
               <span>Cho phép salon chụp và lưu ảnh</span>
             </label>
             <p className="muted" id="qr-photo-consent-help">
-              Cần đồng ý ảnh để gửi yêu cầu điểm mới từ QR. Ảnh chỉ dùng trong hồ sơ nội bộ; nếu
-              không đồng ý, bạn có thể nhờ nhân viên hỗ trợ.{" "}
+              Cần đồng ý ảnh để gửi yêu cầu điểm mới từ QR. Bạn có thể xem ảnh của mình trong Lịch
+              sử; nếu không đồng ý, bạn có thể nhờ nhân viên hỗ trợ.{" "}
               <a href="/privacy#photo-consent">Tìm hiểu về ảnh</a>.
             </p>
             <button

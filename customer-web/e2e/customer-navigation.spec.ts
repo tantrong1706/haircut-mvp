@@ -17,6 +17,11 @@ test.beforeEach(async ({ page }) => {
       JSON.stringify({
         identityProvider: "firebase",
         firebaseUid: "web-test-uid",
+        salonName: "Salon mẫu",
+        salonHotline: "028 0000 0000",
+        salonOpeningHours: "Thứ 2–CN, 09:00–20:00",
+        branchAddress: "123 Nguyễn Huệ",
+        branchDirectionsEnabled: true,
         sessionId: "session-e2e",
         zaloUserId: "",
         sessionStatus: "completed",
@@ -45,6 +50,7 @@ test.beforeEach(async ({ page }) => {
           staffName: "Nam",
           note: "Fade thấp",
           photoUrls: [],
+          hasCustomerPhotos: true,
           pointsAdded: 1,
         },
       ]),
@@ -69,6 +75,10 @@ test("khách chuyển qua điểm, lịch sử, vòng quay và quà", async ({ p
   await page.goto(`/?${new URLSearchParams(qr)}`);
 
   await expect(page.getByRole("heading", { name: "Khách Web" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "028 0000 0000" })).toHaveAttribute("href", "tel:02800000000");
+  await expect(page.getByText("Thứ 2–CN, 09:00–20:00")).toBeVisible();
+  await expect(page.getByText("123 Nguyễn Huệ")).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Chỉ đường" })).toHaveCount(0);
   await page.getByRole("button", { name: "Lịch sử" }).last().click();
   await expect(page.getByRole("heading", { name: "Lịch sử cắt tóc" })).toBeVisible();
   await expect(page.getByText("20/06/2026")).toBeVisible();
@@ -83,6 +93,45 @@ test("khách chuyển qua điểm, lịch sử, vòng quay và quà", async ({ p
 
   await page.getByRole("button", { name: "Mã quà" }).click();
   await expect(page.getByRole("heading", { name: "Quà của tôi" })).toBeVisible();
+});
+
+test("khách mở và đóng ảnh của lượt cắt trong Lịch sử", async ({ page }) => {
+  const photoUrl = "https://storage.googleapis.com/demo-haircut/photo.jpg?X-Goog-Signature=fixture";
+  await page.addInitScript(({ salonId, url }) => {
+    localStorage.setItem(`haircut_test_web_visit_photos:${salonId}`, JSON.stringify({ "record-e2e": [url] }));
+  }, { salonId: qr.salonId, url: photoUrl });
+  await page.route(photoUrl, (route) => route.fulfill({
+    contentType: "image/png",
+    body: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jPioAAAAASUVORK5CYII=", "base64"),
+  }));
+  await page.goto(`/?${new URLSearchParams(qr)}`);
+  await page.getByRole("button", { name: "Lịch sử" }).last().click();
+  await expect(page.getByRole("img", { name: "Ảnh kiểu tóc 1" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Xem ảnh ngày 20/06/2026" }).click();
+  const photo = page.getByRole("img", { name: "Ảnh kiểu tóc 1" });
+  await expect(photo).toBeVisible();
+  await expect.poll(() => photo.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(1);
+  await expect(page.getByText("Fade thấp")).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
+  await page.getByRole("button", { name: "Ẩn ảnh ngày 20/06/2026" }).click();
+  await expect(photo).toHaveCount(0);
+});
+
+test("khách cập nhật mã quà vừa được xác nhận ở thiết bị khác", async ({ page }) => {
+  await page.goto(`/?${new URLSearchParams(qr)}`);
+  await expect(page.getByRole("heading", { name: "Khách Web" })).toBeVisible();
+  const key = `haircut_test_web_rewards:${qr.salonId}`;
+  const reward = {
+    id: "reward-sync", rewardName: "Quà kiểm thử", rewardCode: "HC-SYNC",
+    status: "unused", redemptionScope: "salon", allowedBranchIds: [],
+  };
+  await page.evaluate(({ key, reward }) => localStorage.setItem(key, JSON.stringify([reward])), { key, reward });
+  await page.getByRole("button", { name: "Quà và quay", exact: true }).click();
+  await expect(page.getByRole("img", { name: "QR quà Quà kiểm thử" })).toBeVisible();
+  await page.evaluate(({ key, reward }) => localStorage.setItem(key, JSON.stringify([{ ...reward, status: "used" }])), { key, reward });
+  await page.getByRole("button", { name: "Cập nhật mã quà" }).click();
+  await expect(page.getByRole("region", { name: "Lịch sử quà" }).getByText("Đã dùng", { exact: true })).toBeVisible();
+  await expect(page.getByRole("img", { name: "QR quà Quà kiểm thử" })).toHaveCount(0);
 });
 
 test("giao diện mobile không tràn ngang", async ({ page }) => {

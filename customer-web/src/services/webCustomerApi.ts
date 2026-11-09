@@ -7,16 +7,17 @@ import type {
   LuckyWheelConfig,
   QrContext,
   Reward,
+  SalonPublicDetails,
   SpinResult,
 } from "./types";
 
-type WebQrView = {
+type WebQrView = SalonPublicDetails & {
   salonId: string;
   salonName: string;
   salonAvatarUrl: string;
   branchId: string;
   branchName: string;
-  branchAddress: string;
+  acceptingPointRequests?: boolean;
 };
 
 export type WebCustomerContext = {
@@ -25,15 +26,13 @@ export type WebCustomerContext = {
   activeSession: AppSession | null;
 };
 
-type WebSessionResult = {
-  salonName?: string;
+type WebSessionResult = SalonPublicDetails & {
   firebaseUid?: string;
   qr?: Pick<QrContext, "salonId" | "branchId">;
   sessionId: string;
   sessionStatus: AppSession["sessionStatus"];
   branchId?: string;
   branchName?: string;
-  branchAddress?: string;
   assignedStaffName?: string;
   claimedAtMs?: number | null;
   customer: CustomerProfile;
@@ -65,6 +64,9 @@ export async function getWebCustomerAccount(salonId: string): Promise<AppSession
       firebaseUid: "web-test-uid",
       qr,
       salonName: context.qr.salonName,
+      salonAvatarUrl: context.qr.salonAvatarUrl,
+      salonHotline: context.qr.salonHotline,
+      salonOpeningHours: context.qr.salonOpeningHours,
       sessionId: "",
       zaloUserId: "",
       customer: context.customer,
@@ -81,10 +83,13 @@ export async function getWebCustomerAccount(salonId: string): Promise<AppSession
 export async function getWebCustomerSessionState(session: AppSession) {
   if (testAdapterEnabled()) {
     return {
+      salonName: session.salonName,
+      salonAvatarUrl: session.salonAvatarUrl,
+      salonHotline: session.salonHotline,
+      salonOpeningHours: session.salonOpeningHours,
       sessionStatus: session.sessionStatus,
       branchId: session.qr.branchId,
       branchName: session.branchName,
-      branchAddress: session.branchAddress,
       assignedStaffName: session.assignedStaffName,
       claimedAtMs: session.claimedAtMs,
       customer: session.customer,
@@ -117,6 +122,7 @@ export async function getWebCustomerHistory(session: AppSession): Promise<Haircu
         rewardName?: string;
         note?: string;
         photoUrls?: string[];
+        hasCustomerPhotos?: boolean;
         pointsAdded?: number;
       }>;
     }
@@ -133,8 +139,46 @@ export async function getWebCustomerHistory(session: AppSession): Promise<Haircu
     // Ignore private fields from older backend responses during rolling upgrades.
     note: "",
     photoUrls: [],
+    ...(record.hasCustomerPhotos === true ? { hasCustomerPhotos: true } : {}),
     pointsAdded: Number(record.pointsAdded ?? 0),
   }));
+}
+
+export async function getWebCustomerVisitPhotos(
+  session: AppSession,
+  recordId: string,
+): Promise<string[]> {
+  const result = testAdapterEnabled()
+    ? {
+        customerPhotoUrls: testFixture<Record<string, string[]>>("visit_photos", session, {})[
+          recordId
+        ],
+      }
+    : await callCustomerWebFunction<
+        { salonId: string; photoRecordId: string },
+        { customerPhotoUrls?: unknown }
+      >("getWebCustomerHistory", { salonId: session.qr.salonId, photoRecordId: recordId });
+  return Array.isArray(result.customerPhotoUrls)
+    ? [
+        ...new Set(
+          result.customerPhotoUrls.slice(0, 3).filter((value): value is string => {
+            if (typeof value !== "string") return false;
+            try {
+              const url = new URL(value);
+              return (
+                url.origin === "https://storage.googleapis.com" &&
+                !url.username &&
+                !url.password &&
+                !url.searchParams.has("token") &&
+                Boolean(url.searchParams.get("X-Goog-Signature"))
+              );
+            } catch {
+              return false;
+            }
+          }),
+        ),
+      ]
+    : [];
 }
 
 export async function getWebCustomerRewards(session: AppSession): Promise<Reward[]> {
@@ -201,6 +245,9 @@ function appSessionFromWebResult(qr: QrContext, result: WebSessionResult): AppSe
   return {
     identityProvider: "firebase",
     salonName: result.salonName || "",
+    salonAvatarUrl: result.salonAvatarUrl,
+    salonHotline: result.salonHotline,
+    salonOpeningHours: result.salonOpeningHours,
     firebaseUid: result.firebaseUid || getCustomerFirebaseAuth()?.currentUser?.uid || "",
     qr: {
       qrType: "branch",
@@ -210,7 +257,6 @@ function appSessionFromWebResult(qr: QrContext, result: WebSessionResult): AppSe
     },
     sessionId: result.sessionId,
     branchName: result.branchName || "",
-    branchAddress: result.branchAddress || "",
     zaloUserId: "",
     sessionStatus: result.sessionId ? result.sessionStatus || "pending_approval" : undefined,
     assignedStaffName: result.assignedStaffName || "",
@@ -238,7 +284,6 @@ function mockWebCustomerContext(qr: QrContext): WebCustomerContext {
       salonAvatarUrl: "",
       branchId: qr.branchId || "demo-branch-main",
       branchName: "Chi nhánh chính",
-      branchAddress: "1 Đường kiểm thử",
     },
     customer,
     activeSession: activeRaw ? (JSON.parse(activeRaw) as AppSession) : null,
@@ -254,7 +299,6 @@ function mockWebCustomerCheckin(qr: QrContext, allowPhoto: boolean): AppSession 
     qr: { ...qr, qrType: "branch", branchId: context.qr.branchId },
     sessionId: `web-test-session-${qr.salonId}`,
     branchName: context.qr.branchName,
-    branchAddress: context.qr.branchAddress,
     zaloUserId: "",
     sessionStatus: "pending_approval",
     customer: { ...context.customer, allowPhoto },

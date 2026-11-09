@@ -79,6 +79,54 @@ vi.mock("../services/monitoring", () => ({
 }));
 
 describe("WebCustomerEntryPage", () => {
+  it("shows the scanned branch without its old address and leaves account access when paused", async () => {
+    mocks.resolveWebCustomerContext.mockResolvedValue({
+      qr: {
+        ...qr,
+        salonName: "Salon A",
+        branchName: "Chi nhánh Trung tâm",
+        branchAddress: "123 Nguyễn Huệ",
+        branchDirectionsEnabled: true,
+        acceptingPointRequests: false,
+      },
+      customer: session.customer,
+      activeSession: null,
+    });
+    render(<WebCustomerEntryPage onReady={vi.fn()} />);
+    act(() => mocks.authListener?.({ uid: "uid-a" }));
+    expect(await screen.findByText("Chi nhánh Trung tâm")).toBeVisible();
+    expect(screen.queryByText("123 Nguyễn Huệ")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Chỉ đường" })).not.toBeInTheDocument();
+    expect(screen.getByText(/tạm dừng nhận yêu cầu tích điểm/)).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Yêu cầu tích điểm" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Xem điểm, lịch sử và quà" })).toBeEnabled();
+  });
+
+  it("shows the salon logo, public hotline and hours after resolving a valid QR", async () => {
+    mocks.resolveWebCustomerContext.mockResolvedValue({
+      qr: {
+        ...qr,
+        salonName: "Salon A",
+        branchName: "Chi nhánh Trung tâm",
+        branchAddress: "123 Nguyễn Huệ",
+        salonAvatarUrl: "https://firebasestorage.googleapis.com/fixture",
+        salonHotline: "028 0000 0000",
+        salonOpeningHours: "Thứ 2–CN, 09:00–20:00",
+      },
+      customer: session.customer,
+      activeSession: null,
+    });
+    render(<WebCustomerEntryPage onReady={vi.fn()} />);
+    act(() => mocks.authListener?.({ uid: "uid-a" }));
+    expect(await screen.findByRole("heading", { name: "Salon A" })).toBeVisible();
+    expect(screen.getByRole("img", { name: "Logo Salon A" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "028 0000 0000" })).toHaveAttribute(
+      "href",
+      "tel:02800000000",
+    );
+    expect(screen.getByText("Thứ 2–CN, 09:00–20:00")).toBeVisible();
+    expect(screen.queryByText("123 Nguyễn Huệ")).not.toBeInTheDocument();
+  });
   it("shows concise photo permission without a count or optional wording", async () => {
     render(<WebCustomerEntryPage onReady={vi.fn()} />);
     act(() => mocks.authListener?.({ uid: "uid-a" }));

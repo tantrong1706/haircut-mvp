@@ -19,8 +19,14 @@ export type CustomerProfile = {
   allowPhoto: boolean;
 };
 
-export type AppSession = {
+export type SalonPublicDetails = {
   salonName?: string;
+  salonAvatarUrl?: string;
+  salonHotline?: string;
+  salonOpeningHours?: string;
+};
+
+export type AppSession = SalonPublicDetails & {
   identityProvider?: "zalo" | "firebase";
   firebaseUid?: string;
   qr: QrContext;
@@ -48,6 +54,7 @@ export type HaircutRecord = {
   rewardName?: string;
   note: string;
   photoUrls: string[];
+  hasCustomerPhotos?: boolean;
   pointsAdded: number;
 };
 

@@ -16,6 +16,7 @@ import {
   getWebCustomerHistory,
   getWebCustomerRewards,
   getWebCustomerSessionState,
+  getWebCustomerVisitPhotos,
   getWebCustomerAccount,
   resolveWebCustomerContext,
   spinWebCustomerWheel,
@@ -111,6 +112,25 @@ describe("web customer callable adapter", () => {
     await expect(spinWebCustomerWheel(session, 1, "test-idempotency-key")).resolves.toEqual(spin);
     await expect(getWebCustomerHistory(session)).resolves.toEqual([{ id: "test-record" }]);
     expect(mocks.callCustomerWebFunction).not.toHaveBeenCalled();
+  });
+
+  it("does not send customer IDs or accept external and unsigned image links", async () => {
+    const signed = "https://storage.googleapis.com/demo-haircut/photo.jpg?X-Goog-Signature=fixture";
+    mocks.callCustomerWebFunction
+      .mockResolvedValueOnce({
+        customerPhotoUrls: [
+          signed,
+          "https://example.invalid/photo.jpg",
+          signed.replace("Signature", "Date"),
+        ],
+      })
+      .mockResolvedValueOnce({ records: [] });
+    await expect(getWebCustomerVisitPhotos(session, "visit-a")).resolves.toEqual([signed]);
+    expect(mocks.callCustomerWebFunction).toHaveBeenCalledWith("getWebCustomerHistory", {
+      salonId: "salon-a",
+      photoRecordId: "visit-a",
+    });
+    await expect(getWebCustomerVisitPhotos(session, "visit-a")).resolves.toEqual([]);
   });
 
   it("check-in tạo AppSession Firebase và không cần Zalo token", async () => {
