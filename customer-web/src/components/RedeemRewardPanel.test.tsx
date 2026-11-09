@@ -90,6 +90,18 @@ describe("RedeemRewardPanel", () => {
     expect(await screen.findByText(/Đã xác nhận Gội đầu miễn phí/)).toBeInTheDocument();
   });
 
+  it("uses the only active branch automatically and blocks lookup if there are none", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<RedeemRewardPanel salonId="salon-a" branchChoices={[]} />);
+    expect(screen.getByText("Chưa có chi nhánh hoạt động để đổi quà.")).toBeVisible();
+    expect(screen.getByLabelText("Mã quà")).toBeDisabled();
+    rerender(<RedeemRewardPanel salonId="salon-a" branchChoices={[{ id: "branch-a1", name: "Chi nhánh Một" }]} />);
+    expect(screen.getByText("Chi nhánh đổi quà: Chi nhánh Một")).toBeVisible();
+    await user.type(screen.getByLabelText("Mã quà"), "HC-TEST");
+    await user.click(screen.getByRole("button", { name: "Kiểm tra mã" }));
+    expect(mocks.lookupRewardCode).toHaveBeenLastCalledWith({ salonId: "salon-a", branchId: "branch-a1", rewardCode: "HC-TEST" });
+  });
+
   it("phân biệt request lặp với lần sử dụng mới", async () => {
     const user = userEvent.setup();
     mocks.redeemRewardCode.mockResolvedValue({

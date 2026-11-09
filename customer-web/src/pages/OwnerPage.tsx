@@ -787,7 +787,7 @@ export function OwnerPage({ currentUser }: Props) {
       ) : activeTab === "redeem" ? (
         <RedeemRewardPanel
           salonId={salonId}
-          branchId={branchFilter === "all" ? undefined : branchFilter}
+          branchChoices={ownerBranches.filter((branch) => branch.salonId === salonId && branch.isActive)}
           allowRestore
         />
       ) : (

@@ -113,6 +113,10 @@ test("all management tabs remain usable without page overflow", async ({ page },
     const button = menu.getByRole("button", { name: label, exact: true });
     await button.click();
     await expect(button).toHaveAttribute("aria-pressed", "true");
+    if (label === "Đổi quà") {
+      await expect(page.getByText("Chi nhánh đổi quà: Chi nhánh Nguyễn Văn Linh")).toBeVisible();
+      await expect(page.getByLabel("Mã quà", { exact: true })).toBeEnabled();
+    }
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
       label,

@@ -117,6 +117,23 @@ test("khách mở và đóng ảnh của lượt cắt trong Lịch sử", async
   await expect(photo).toHaveCount(0);
 });
 
+test("khách cập nhật mã quà vừa được xác nhận ở thiết bị khác", async ({ page }) => {
+  await page.goto(`/?${new URLSearchParams(qr)}`);
+  await expect(page.getByRole("heading", { name: "Khách Web" })).toBeVisible();
+  const key = `haircut_test_web_rewards:${qr.salonId}`;
+  const reward = {
+    id: "reward-sync", rewardName: "Quà kiểm thử", rewardCode: "HC-SYNC",
+    status: "unused", redemptionScope: "salon", allowedBranchIds: [],
+  };
+  await page.evaluate(({ key, reward }) => localStorage.setItem(key, JSON.stringify([reward])), { key, reward });
+  await page.getByRole("button", { name: "Quà và quay", exact: true }).click();
+  await expect(page.getByRole("img", { name: "QR quà Quà kiểm thử" })).toBeVisible();
+  await page.evaluate(({ key, reward }) => localStorage.setItem(key, JSON.stringify([{ ...reward, status: "used" }])), { key, reward });
+  await page.getByRole("button", { name: "Cập nhật mã quà" }).click();
+  await expect(page.getByRole("region", { name: "Lịch sử quà" }).getByText("Đã dùng", { exact: true })).toBeVisible();
+  await expect(page.getByRole("img", { name: "QR quà Quà kiểm thử" })).toHaveCount(0);
+});
+
 test("giao diện mobile không tràn ngang", async ({ page }) => {
   await page.goto(`/?${new URLSearchParams(qr)}`);
   const overflow = await page.evaluate(

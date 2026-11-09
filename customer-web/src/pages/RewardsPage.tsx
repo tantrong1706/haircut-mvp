@@ -10,7 +10,12 @@ type Props = {
   onOpenWheel?: () => void;
 };
 
-export function RewardsPage({ session, onOpenWheel }: Props) {
+export function RewardsPage(props: Props) {
+  const { session } = props;
+  return <RewardList key={JSON.stringify([session.qr.salonId, session.customer.customerId, session.firebaseUid])} {...props} />;
+}
+
+function RewardList({ session, onOpenWheel }: Props) {
   const [rewards, setRewards] = useState<Reward[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -27,29 +32,38 @@ export function RewardsPage({ session, onOpenWheel }: Props) {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError("");
-    setCopyMessage("");
-
-    getRewards(session)
-      .then((nextRewards) => {
-        if (!cancelled) {
-          setRewards(nextRewards);
-        }
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Không tải được mã quà");
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      });
+    let inFlight = false;
+    let lastCheckedAt = 0;
+    async function refresh() {
+      if (cancelled || inFlight) return;
+      inFlight = true;
+      setLoading(true);
+      setError("");
+      setCopyMessage("");
+      try {
+        const nextRewards = await getRewards(session);
+        if (!cancelled) setRewards(nextRewards);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Không tải được mã quà");
+      } finally {
+        inFlight = false;
+        lastCheckedAt = Date.now();
+        if (!cancelled) setLoading(false);
+      }
+    }
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible" && Date.now() - lastCheckedAt >= 5_000) {
+        void refresh();
+      }
+    };
+    void refresh();
+    window.addEventListener("focus", refreshWhenVisible);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
 
     return () => {
       cancelled = true;
+      window.removeEventListener("focus", refreshWhenVisible);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
   }, [loadVersion, session]);
 
@@ -70,6 +84,11 @@ export function RewardsPage({ session, onOpenWheel }: Props) {
         <p className="eyebrow">Ưu đãi</p>
         <h1>Quà của tôi</h1>
         <p className="muted">Mỗi mã ghi rõ phạm vi áp dụng và chỉ được xác nhận một lần.</p>
+        <button className="secondary-button" type="button" disabled={loading}
+          onClick={() => setLoadVersion((value) => value + 1)}>
+          <RefreshCcw size={16} aria-hidden="true" />
+          Cập nhật mã quà
+        </button>
       </header>
 
       <div className="rewards-content">
