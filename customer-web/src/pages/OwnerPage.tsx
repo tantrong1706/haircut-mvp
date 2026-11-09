@@ -35,6 +35,7 @@ import {
 import QRCode from "qrcode";
 import { BrandLogo } from "../components/BrandLogo";
 import { CustomerPointAction } from "../components/CustomerPointAction";
+import { CustomerPointAdjustment } from "../components/CustomerPointAdjustment";
 import { CustomerRewardActions } from "../components/CustomerRewardActions";
 import { CustomerNameEditor } from "../components/CustomerNameEditor";
 import { OwnerConfirmDialog, type OwnerConfirmation as ConfirmRequest } from "../components/OwnerConfirmDialog";
@@ -1954,6 +1955,10 @@ function CustomerSearchPanel({
                 onSaved={name => setResults(current => current.map(item => item.id === customer.id ? { ...item, name } : item))} />
               <span>Lần ghé gần nhất: {formatDateTime(customer.lastVisitAtMs) || "Chưa có"}</span>
               <CustomerPointAction salonId={salonId} branchId={awardBranch?.id || ""} branchName={awardBranch?.name || ""} pointPerVisit={pointPerVisit} customer={customer} onAwarded={pointsAfter => setResults(current => current.map(item => item.id === customer.id ? { ...item, points: pointsAfter, detailsLoaded: false } : item))} />
+              <CustomerPointAdjustment key={`adjust-points:${salonId}:${customer.id}`} salonId={salonId}
+                customerId={customer.id} customerName={customer.name} points={customer.points}
+                disabled={busyCustomerId === customer.id}
+                onAdjusted={points => setResults(current => current.map(item => item.id === customer.id ? { ...item, points } : item))} />
               <CustomerRewardActions salonId={salonId} branchId={awardBranch?.id || ""}
                 branchName={awardBranch?.name || ""} customerId={customer.id}
                 customerName={customer.name} disabled={busyCustomerId === customer.id} />

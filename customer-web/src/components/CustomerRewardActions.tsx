@@ -114,7 +114,7 @@ function CustomerRewardForm({
   }
 
   return (
-    <div className="customer-reward-actions">
+    <div className="customer-action-block">
       <button
         type="button"
         className="secondary-button"

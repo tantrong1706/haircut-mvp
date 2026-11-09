@@ -235,12 +235,12 @@
     width: fit-content;
   }
 }
-.customer-reward-actions {
+.customer-action-block {
   display: grid;
   gap: 0.5rem;
 }
 
-.customer-reward-actions > div:not([hidden]),
+.customer-action-block > div:not([hidden]),
 .customer-reward-list {
   display: grid;
   gap: 0.5rem;

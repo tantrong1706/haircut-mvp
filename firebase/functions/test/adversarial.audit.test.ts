@@ -38,37 +38,91 @@ describe("adversarial tenant access", () => {
   });
 
   describe("owner manual point adjustment", () => {
-    const input = { salonId: SALON_A, customerId: "customer-a1", expectedPoints: 6, delta: 2, reason: "Điều chỉnh nhầm điểm", idempotencyKey: "fixture-point-adjustment-1" };
+    const input = {
+      salonId: SALON_A,
+      customerId: "customer-a1",
+      expectedPoints: 6,
+      delta: 2,
+      reason: "Điều chỉnh nhầm điểm",
+      idempotencyKey: "fixture-point-adjustment-1",
+    };
 
     it("adds or subtracts once, records the reason and leaves the visit cooldown unchanged", async () => {
       const customer = db.doc("customers/customer-a1");
       const nextEligible = Timestamp.fromMillis(Date.now() + 60_000);
       await customer.update({ points: 6, nextPointEligibleAt: nextEligible });
       const first = await adjustSalonCustomerPoints.run(requestFor("owner-a", input));
-      expect(first).toMatchObject({ pointsBefore: 6, pointsAfter: 8, currentPoints: 8, alreadyProcessed: false });
+      expect(first).toMatchObject({
+        pointsBefore: 6,
+        pointsAfter: 8,
+        currentPoints: 8,
+        alreadyProcessed: false,
+      });
       const retry = await adjustSalonCustomerPoints.run(requestFor("owner-a", input));
       expect(retry).toMatchObject({ pointsAfter: 8, currentPoints: 8, alreadyProcessed: true });
-      const subtract = await adjustSalonCustomerPoints.run(requestFor("owner-a", {
-        ...input, expectedPoints: 8, delta: -3, idempotencyKey: "fixture-point-adjustment-2",
-      }));
+      await expect(
+        adjustSalonCustomerPoints.run(requestFor("owner-a", { ...input, delta: 3 })),
+      ).rejects.toMatchObject({ code: "already-exists" });
+      const subtract = await adjustSalonCustomerPoints.run(
+        requestFor("owner-a", {
+          ...input,
+          expectedPoints: 8,
+          delta: -3,
+          idempotencyKey: "fixture-point-adjustment-2",
+        }),
+      );
       expect(subtract.pointsAfter).toBe(5);
-      expect((await customer.get()).data()?.nextPointEligibleAt.toMillis()).toBe(nextEligible.toMillis());
-      const audit = await db.collection("audit_events").where("salonId", "==", SALON_A).where("action", "==", "customer.points_adjusted").get();
+      expect((await customer.get()).data()?.nextPointEligibleAt.toMillis()).toBe(
+        nextEligible.toMillis(),
+      );
+      const audit = await db
+        .collection("audit_events")
+        .where("salonId", "==", SALON_A)
+        .where("action", "==", "customer.points_adjusted")
+        .get();
       expect(audit.size).toBe(2);
-      expect(audit.docs.map((doc) => doc.data())).toContainEqual(expect.objectContaining({
-        targetId: "customer-a1", actorUid: "owner-a", before: { points: 6 }, after: { points: 8 },
-        metadata: { delta: 2, reason: input.reason },
-      }));
+      expect(audit.docs.map((doc) => doc.data())).toContainEqual(
+        expect.objectContaining({
+          targetId: "customer-a1",
+          actorUid: "owner-a",
+          before: { points: 6 },
+          after: { points: 8 },
+          metadata: { delta: 2, reason: input.reason },
+        }),
+      );
       expect((await db.collection("point_requests").get()).size).toBe(0);
     });
 
     it("blocks staff, other salons, stale balance, missing reason, and negative balance", async () => {
       await db.doc("customers/customer-a1").update({ points: 6 });
-      await expect(adjustSalonCustomerPoints.run(requestFor("staff-a1", input))).rejects.toMatchObject({ code: "permission-denied" });
-      await expect(adjustSalonCustomerPoints.run(requestFor("owner-a", { ...input, customerId: "customer-b1" }))).rejects.toMatchObject({ code: "not-found" });
-      await expect(adjustSalonCustomerPoints.run(requestFor("owner-a", { ...input, expectedPoints: 7 }))).rejects.toMatchObject({ code: "failed-precondition" });
-      await expect(adjustSalonCustomerPoints.run(requestFor("owner-a", { ...input, reason: " " }))).rejects.toMatchObject({ code: "invalid-argument" });
-      await expect(adjustSalonCustomerPoints.run(requestFor("owner-a", { ...input, delta: -7 }))).rejects.toMatchObject({ code: "failed-precondition" });
+      await expect(
+        adjustSalonCustomerPoints.run(requestFor("staff-a1", input)),
+      ).rejects.toMatchObject({ code: "permission-denied" });
+      await expect(
+        adjustSalonCustomerPoints.run(
+          requestFor("owner-a", { ...input, customerId: "customer-b1" }),
+        ),
+      ).rejects.toMatchObject({ code: "not-found" });
+      await expect(
+        adjustSalonCustomerPoints.run(requestFor("owner-a", { ...input, expectedPoints: 7 })),
+      ).rejects.toMatchObject({ code: "failed-precondition" });
+      await expect(
+        adjustSalonCustomerPoints.run(requestFor("owner-a", { ...input, reason: " " })),
+      ).rejects.toMatchObject({ code: "invalid-argument" });
+      await expect(
+        adjustSalonCustomerPoints.run(requestFor("owner-a", { ...input, delta: 101 })),
+      ).rejects.toMatchObject({ code: "invalid-argument" });
+      await expect(
+        adjustSalonCustomerPoints.run(requestFor("owner-a", { ...input, expectedPoints: "6" })),
+      ).rejects.toMatchObject({ code: "invalid-argument" });
+      await expect(
+        adjustSalonCustomerPoints.run(
+          requestFor("owner-a", { ...input, customerId: "unsafe/path" }),
+        ),
+      ).rejects.toMatchObject({ code: "invalid-argument" });
+      await expect(
+        adjustSalonCustomerPoints.run(requestFor("owner-a", { ...input, delta: -7 })),
+      ).rejects.toMatchObject({ code: "failed-precondition" });
       expect((await db.doc("customers/customer-a1").get()).data()?.points).toBe(6);
     });
   });

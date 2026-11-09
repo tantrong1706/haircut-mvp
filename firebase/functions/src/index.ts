@@ -27,6 +27,7 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { withdrawCustomerPhotoConsent } from "./domains/privacy/customerPhotoConsent";
 import { changeCustomerName } from "./domains/customers/customerName";
 import { changeOwnCustomerName } from "./domains/customers/ownCustomerName";
+import { applyCustomerPointAdjustment, parseCustomerPointAdjustment } from "./domains/points/customerPointAdjustment";
 import { assertRewardCustomerPhone, parseRewardCustomerIdentity, redeemableCustomerGift, requireRewardDocumentId } from "./domains/rewards/customerRedemption";
 import { onDocumentCreated, onDocumentUpdated } from "firebase-functions/v2/firestore";
 import {
@@ -208,6 +209,7 @@ const AUTHENTICATED_RATE_LIMITS = {
   awardReturningCustomerPoints: 20,
   searchSalonCustomers: 30,
   updateSalonCustomerName: 20,
+  adjustSalonCustomerPoints: 20,
   updateWebCustomerName: 20,
   approvePointRequest: 60,
   rejectPointRequest: 60,
@@ -6784,6 +6786,17 @@ export const updateWebCustomerName = onCall(functionOptions, async (request) => 
     uid: principal.uid, salonId, name: request.data?.name, expectedName: request.data?.expectedName,
     activeRef: activeSessionRefFor(salonId, customerIdForWeb(salonId, principal.uid)),
   });
+});
+
+export const adjustSalonCustomerPoints = onCall(functionOptions, async (request) => {
+  const uid = currentUid(request.auth);
+  const salonId = requireString(request.data?.salonId, "salonId");
+  await assertSalonRole(uid, salonId, ["owner"]);
+  await enforceAuthenticatedRateLimit("adjustSalonCustomerPoints", uid, salonId);
+  await assertFeatureEnabled(salonId, "pointApprovalEnabled", "Điều chỉnh điểm đang tạm ngừng.", request.data?.appVersion);
+  const input = parseCustomerPointAdjustment(request.data);
+  const idempotencyKey = requireIdempotencyKey(request.data?.idempotencyKey);
+  return applyCustomerPointAdjustment(db, { ...input, uid, salonId, idempotencyKey });
 });
 
 export const updateSalonCustomerName = onCall(functionOptions, async (request) => {

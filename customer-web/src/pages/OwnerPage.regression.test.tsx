@@ -46,7 +46,9 @@ vi.mock("../services/ownerWorkspace", () => ({
   savePendingVisitNote: mocks.saveNote,
   listSalonCustomerDirectory: mocks.directory,
 }));
-vi.mock("../services/customerPointAdjustment", () => ({ adjustSalonCustomerPoints: mocks.adjustPoints }));
+vi.mock("../services/customerPointAdjustment", () => ({
+  adjustSalonCustomerPoints: mocks.adjustPoints,
+}));
 vi.mock("../services/auth", () => ({
   updateOwnerAvatar: vi.fn(),
   uploadOwnerAvatarFile: vi.fn(),
@@ -160,8 +162,25 @@ describe("OwnerPage behavior before extraction", () => {
   });
 
   it("lets the owner confirm a manual subtraction with a reason, without changing visit history", async () => {
-    mocks.directory.mockResolvedValue({ customers: [{ id: "fixture-customer", name: "Khách mẫu", phoneLast4: "1234", points: 7, detailsLoaded: false }], nextCursor: null, totalCount: 1 });
-    mocks.adjustPoints.mockResolvedValue({ pointsBefore: 7, pointsAfter: 5, currentPoints: 5, alreadyProcessed: false });
+    mocks.directory.mockResolvedValue({
+      customers: [
+        {
+          id: "fixture-customer",
+          name: "Khách mẫu",
+          phoneLast4: "1234",
+          points: 7,
+          detailsLoaded: false,
+        },
+      ],
+      nextCursor: null,
+      totalCount: 1,
+    });
+    mocks.adjustPoints.mockResolvedValue({
+      pointsBefore: 7,
+      pointsAfter: 5,
+      currentPoints: 5,
+      alreadyProcessed: false,
+    });
     await openPage();
     await openTab("Khách hàng");
     const user = userEvent.setup();
@@ -173,9 +192,15 @@ describe("OwnerPage behavior before extraction", () => {
     await user.click(screen.getByRole("button", { name: "Kiểm tra điều chỉnh" }));
     expect(mocks.adjustPoints).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Xác nhận điều chỉnh" }));
-    expect(mocks.adjustPoints).toHaveBeenCalledWith(expect.objectContaining({
-      salonId: "salon-fixture", customerId: "fixture-customer", expectedPoints: 7, delta: -2, reason: "Sửa cộng trùng",
-    }));
+    expect(mocks.adjustPoints).toHaveBeenCalledWith(
+      expect.objectContaining({
+        salonId: "salon-fixture",
+        customerId: "fixture-customer",
+        expectedPoints: 7,
+        delta: -2,
+        reason: "Sửa cộng trùng",
+      }),
+    );
     expect(await screen.findByText("5 điểm", { exact: true })).toBeVisible();
   });
   afterEach(() => {

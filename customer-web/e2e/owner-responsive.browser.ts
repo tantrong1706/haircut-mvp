@@ -11,6 +11,22 @@ test.beforeEach(async ({ page }) => {
   await expect(page.getByRole("button", { name: "Làm mới", exact: true })).toBeEnabled();
 });
 
+test("owner verifies a manual point correction and sees the updated balance", async ({ page }) => {
+  await page
+    .getByRole("navigation", { name: "Chọn mục quản lý" })
+    .getByRole("button", { name: "Khách hàng", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Điều chỉnh điểm" }).click();
+  await page.getByLabel("Thao tác điểm").selectOption("subtract");
+  await page.getByLabel("Số điểm điều chỉnh").fill("2");
+  await page.getByLabel("Lý do điều chỉnh").fill("Sửa điểm cộng trùng");
+  await page.getByRole("button", { name: "Kiểm tra điều chỉnh" }).click();
+  await expect(page.getByText(/7 → 5 điểm/)).toBeVisible();
+  await page.getByRole("button", { name: "Xác nhận điều chỉnh" }).click();
+  await expect(page.getByText("5 điểm", { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
 test("owner can save a directory name without changing points or overflowing", async ({ page }) => {
   await page
     .getByRole("navigation", { name: "Chọn mục quản lý" })

@@ -107,6 +107,22 @@ export const redeemCustomerReward = async (input: {
   return { rewardId: fixtureReward.id, alreadyRedeemed: false };
 };
 let directoryName = "Khách mẫu trong danh bạ";
+export const adjustSalonCustomerPoints = async (input: {
+  customerId: string;
+  expectedPoints: number;
+  delta: number;
+  reason: string;
+}) => {
+  if (
+    input.customerId !== "customer-fixture" ||
+    input.expectedPoints !== 7 ||
+    input.delta !== -2 ||
+    !input.reason.trim()
+  ) {
+    throw new Error("Fixture point adjustment mismatch");
+  }
+  return { pointsBefore: 7, pointsAfter: 5, currentPoints: 5, alreadyProcessed: false };
+};
 export const updateCustomerName = async (input: {
   customerId: string;
   name: string;
