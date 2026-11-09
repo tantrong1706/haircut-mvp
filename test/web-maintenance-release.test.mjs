@@ -47,9 +47,11 @@ function snapshot() {
   };
 }
 
-test("maintenance produces only the reviewed 57 callable selectors and exact Hosting site", () => {
+test("maintenance produces only the reviewed 59 callable selectors and exact Hosting site", () => {
   const result = policy.validateWebMaintenance(snapshot(), scope);
-  assert.equal(result.functions.length, 57);
+  assert.equal(result.functions.length, 59);
+  assert.ok(result.functions.includes("functions:adjustSalonCustomerPoints"));
+  assert.ok(result.functions.includes("functions:listRedeemableCustomerRewards"));
   assert.ok(result.functions.includes("functions:updateWebCustomerName"));
   assert.ok(result.functions.includes("functions:updateSalonCustomerName"));
   assert.ok(result.functions.includes("functions:withdrawWebCustomerPhotoConsent"));

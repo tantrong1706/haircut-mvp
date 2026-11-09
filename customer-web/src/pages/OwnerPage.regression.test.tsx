@@ -221,7 +221,7 @@ describe("OwnerPage behavior before extraction", () => {
     const user = userEvent.setup();
     const search = screen.getByRole("textbox", { name: "Tìm khách theo tên hoặc 4 số cuối" });
     await user.type(search, "12 34");
-    await user.click(screen.getByRole("button", { name: "Tìm", exact: true }));
+    await user.click(screen.getByRole("button", { name: /^Tìm$/u }));
     await user.click(await screen.findByRole("button", { name: "Xem quà có thể dùng" }));
     expect(await screen.findByText("Không có quà dùng được tại chi nhánh này.")).toBeVisible();
     expect(screen.queryByLabelText("4 số cuối điện thoại để xem quà")).not.toBeInTheDocument();
@@ -231,7 +231,7 @@ describe("OwnerPage behavior before extraction", () => {
 
     await user.clear(search);
     await user.type(search, "Khách quà");
-    await user.click(screen.getByRole("button", { name: "Tìm", exact: true }));
+    await user.click(screen.getByRole("button", { name: /^Tìm$/u }));
     await user.click(await screen.findByRole("button", { name: "Xem quà có thể dùng" }));
     expect(screen.getByLabelText("4 số cuối điện thoại để xem quà")).toBeVisible();
     expect(mocks.listGifts).toHaveBeenCalledTimes(1);
