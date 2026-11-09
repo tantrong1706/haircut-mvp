@@ -213,7 +213,13 @@ describe("OwnerPage behavior before extraction", () => {
 
   it("reuses a matching completed suffix search to show gifts, but a name search still needs verification", async () => {
     mocks.branches.mockResolvedValue({ branches: [branches[0]] });
-    const customer = { id: "gift-customer", name: "Khách quà", phoneLast4: "1234", points: 7, detailsLoaded: false };
+    const customer = {
+      id: "gift-customer",
+      name: "Khách quà",
+      phoneLast4: "1234",
+      points: 7,
+      detailsLoaded: false,
+    };
     mocks.searchCustomers.mockResolvedValue({ customers: [customer], nextCursor: null });
     mocks.listGifts.mockResolvedValue({ rewards: [], nextCursor: null });
     await openPage();
@@ -226,7 +232,10 @@ describe("OwnerPage behavior before extraction", () => {
     expect(await screen.findByText("Không có quà dùng được tại chi nhánh này.")).toBeVisible();
     expect(screen.queryByLabelText("4 số cuối điện thoại để xem quà")).not.toBeInTheDocument();
     expect(mocks.listGifts).toHaveBeenCalledWith({
-      salonId: "salon-fixture", branchId: "one", customerId: "gift-customer", phoneLast4: "1234",
+      salonId: "salon-fixture",
+      branchId: "one",
+      customerId: "gift-customer",
+      phoneLast4: "1234",
     });
 
     await user.clear(search);
