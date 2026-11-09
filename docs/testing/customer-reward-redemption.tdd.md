@@ -4,6 +4,11 @@ An owner or reward-authorized staff member can find a customer by name or phone 
 verify the suffix, choose a branch and confirm the gift after handing it over. No gift
 code or QR is required. The existing code-based flow stays available.
 
+The owner reuses a matching four-digit suffix from the current search. A name
+search still prompts for the suffix; selecting a gift never redeems it without
+explicit confirmation. Regression checkpoint `6d12554` failed on the redundant
+prompt before the fix. The focused owner/staff/reward suite then passed 30 tests.
+
 | Check                                                  | Result                                                                                                                                                                                     |
 | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | RED `7eccb2c`                                          | Reward-only staff could not use the lookup, and redemption required a gift code.                                                                                                           |

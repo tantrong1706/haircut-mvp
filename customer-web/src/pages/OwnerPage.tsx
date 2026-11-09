@@ -772,6 +772,7 @@ export function OwnerPage({ currentUser }: Props) {
         <StaffManagementPanel salonId={salonId} onMessage={setMessage} onError={setError} />
       ) : activeTab === "customers" ? (
         <CustomerSearchPanel
+          key={salonId}
           salonId={salonId}
           branches={ownerBranches}
           pointPerVisit={salonProfile?.pointPerVisit || 1}
@@ -1800,6 +1801,11 @@ function CustomerSearchPanel({
   const termDigits = compactTerm.replace(/\D/g, "");
   const isNumericTerm = compactTerm.length > 0 && termDigits.length === compactTerm.length;
   const canSearch = term.trim().length >= 2 && (!isNumericTerm || termDigits.length === 4);
+  const searchedSuffix = searchedTerm.replace(/\s/g, "");
+  const verifiedRewardSuffix =
+    !loading && /^\d{4}$/.test(searchedSuffix) && compactTerm === searchedSuffix
+      ? searchedSuffix
+      : undefined;
 
   useEffect(() => {
     const current = ++revision.current;
@@ -1934,6 +1940,11 @@ function CustomerSearchPanel({
         <button type="button" className="secondary-button" disabled={loading} onClick={() => { setTerm(""); void search(false, ""); }}>Tất cả khách</button>
       </div>
 
+      {verifiedRewardSuffix && results.length > 1 ? (
+        <p className="muted">
+          Nhiều khách trùng 4 số cuối. Hỏi tên để chọn đúng khách; nếu chưa phân biệt được, dùng mã quà của khách.
+        </p>
+      ) : null}
       <div className="ops-list">
         {results.length === 0 ? (
           <div className="empty-state compact-empty">
@@ -1961,7 +1972,8 @@ function CustomerSearchPanel({
                 onAdjusted={points => setResults(current => current.map(item => item.id === customer.id ? { ...item, points } : item))} />
               <CustomerRewardActions salonId={salonId} branchId={awardBranch?.id || ""}
                 branchName={awardBranch?.name || ""} customerId={customer.id}
-                customerName={customer.name} disabled={busyCustomerId === customer.id} />
+                customerName={customer.name} disabled={busyCustomerId === customer.id}
+                verifiedPhoneLast4={customer.phoneLast4 === verifiedRewardSuffix ? verifiedRewardSuffix : undefined} />
 
               <SalonVisitDetails salonId={salonId} customerId={customer.id} onSaved={() => void loadCustomerDetails(customer.id)} />
               {customer.detailsLoaded ? (
