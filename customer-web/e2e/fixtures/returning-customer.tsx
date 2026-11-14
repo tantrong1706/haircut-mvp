@@ -16,6 +16,7 @@ createRoot(document.getElementById("root")!).render(
           branchName="Chi nhánh mẫu"
           pointPerVisit={1}
           canAward
+          canCreateCustomer
         />
       </main>
     </div>

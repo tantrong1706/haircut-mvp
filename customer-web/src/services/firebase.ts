@@ -296,6 +296,7 @@ export function friendlyFirebaseFunctionError(error: unknown, callableName = "")
 }
 
 const BUSINESS_ERROR_MESSAGES: Record<string, string> = {
+  MANUAL_CUSTOMER_PHONE_EXISTS: "Số điện thoại đã có trong salon. Hãy tìm khách bằng 4 số cuối thay vì tạo hồ sơ mới.",
   CUSTOMER_NAME_CHANGED: "Tên khách đã thay đổi. Hãy tải lại và kiểm tra trước khi lưu.",
   CUSTOMER_PROFILE_CHANGED: "Hồ sơ khách đã thay đổi. Hãy tải lại thẻ khách và xác nhận yêu cầu xóa mới.",
   UNAUTHENTICATED: "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.",

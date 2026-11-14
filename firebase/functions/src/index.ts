@@ -27,6 +27,7 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { withdrawCustomerPhotoConsent } from "./domains/privacy/customerPhotoConsent";
 import { changeCustomerName } from "./domains/customers/customerName";
 import { changeOwnCustomerName } from "./domains/customers/ownCustomerName";
+import { createManualCustomerProfile } from "./domains/customers/manualCustomer";
 import { applyCustomerPointAdjustment, parseCustomerPointAdjustment } from "./domains/points/customerPointAdjustment";
 import { assertRewardCustomerPhone, parseRewardCustomerIdentity, redeemableCustomerGift, requireRewardDocumentId } from "./domains/rewards/customerRedemption";
 import { onDocumentCreated, onDocumentUpdated } from "firebase-functions/v2/firestore";
@@ -208,6 +209,7 @@ const AUTHENTICATED_RATE_LIMITS = {
   submitPointRequest: 20,
   awardReturningCustomerPoints: 20,
   searchSalonCustomers: 30,
+  createManualCustomer: 20,
   updateSalonCustomerName: 20,
   adjustSalonCustomerPoints: 20,
   updateWebCustomerName: 20,
@@ -1314,14 +1316,6 @@ async function verifyZaloAccessToken(
       category: gatewayCode,
     });
   }
-}
-
-function last4(phone?: string): string | undefined {
-  if (!phone) {
-    return undefined;
-  }
-  const digits = phone.replace(/\D/g, "");
-  return digits.length >= 4 ? digits.slice(-4) : undefined;
 }
 
 function isValidCustomerPhone(phone?: string): boolean {
@@ -2916,55 +2910,16 @@ export const listStaffProfiles = onCall(functionOptions, async (request) => {
 export const createManualCustomer = onCall(functionOptions, async (request) => {
   const uid = currentUid(request.auth);
   const salonId = requireString(request.data?.salonId, "salonId");
-  await assertSalonRole(uid, salonId, ["owner"]);
-
-  const name = limitedString(request.data?.name, "name", 80);
-  const phone = optionalLimitedString(request.data?.phone, "phone", 30);
-  const birthday = optionalLimitedString(request.data?.birthday, "birthday", 20);
-  const allowPhoto = Boolean(request.data?.allowPhoto ?? false);
-  const key = phone ? phone.replace(/\D/g, "") : randomToken(10);
-  const customerId = createHash("sha256")
-    .update(`${salonId}:manual:${key}`)
-    .digest("hex")
-    .slice(0, 40);
-  const now = Timestamp.now();
-
-  const customerRef = db.collection("customers").doc(customerId);
-  const salonRef = db.collection("salons").doc(salonId);
-  await ensureSalonCustomerCount(salonId);
-  await db.runTransaction(async (tx) => {
-    const [snap, salonSnap] = await Promise.all([tx.get(customerRef), tx.get(salonRef)]);
-    if (!salonSnap.exists) {
-      throw new HttpsError("not-found", "Không tìm thấy salon");
-    }
-    const payload = {
-      salonId,
-      zaloUserId: null,
-      source: "manual",
-      name,
-      nameSearch: normalizeSearchText(name),
-      namePrefixes: buildNameSearchPrefixes(name),
-      phone: phone ?? null,
-      phoneLast4: last4(phone) ?? null,
-      birthday: birthday ?? null,
-      allowPhoto,
-      updatedAt: now,
-    };
-
-    if (snap.exists) {
-      tx.set(customerRef, payload, { merge: true });
-    } else {
-      const customerCount = assertCustomerQuota(salonSnap.data() ?? {});
-      tx.set(customerRef, {
-        ...payload,
-        points: 0,
-        createdAt: now,
-      });
-      tx.set(salonRef, { customerCount: customerCount + 1, updatedAt: now }, { merge: true });
-    }
-  });
-
-  return { customerId };
+  return createManualCustomerProfile(
+    db,
+    { uid, salonId, data: request.data },
+    {
+      rateLimit: (actor, salon) =>
+        enforceAuthenticatedRateLimit("createManualCustomer", actor, salon),
+      prepareCounter: ensureSalonCustomerCount,
+      assertQuota: assertCustomerQuota,
+    },
+  );
 });
 
 export const resolveCustomerQr = onCall(qrFunctionOptions, async (request) => {

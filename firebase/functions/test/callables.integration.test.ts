@@ -136,6 +136,114 @@ describe("callable transactions", () => {
     expect((await db.collection("salons").doc("salon-quota").get()).data()?.customerCount).toBe(50);
   });
 
+  it("manual customer creation accepts optional phone, retries once, and protects existing profiles", async () => {
+    const salonId = "salon-manual";
+    const phone = "0900004321";
+    await seedOwner("owner-manual", salonId);
+    await seedBranch(salonId, "branch-manual");
+    await db.doc("users/staff-manual").set({
+      salonId,
+      role: "staff",
+      isActive: true,
+      branchIds: ["branch-manual"],
+    });
+    const create = (uid: string, data: Record<string, unknown>) =>
+      createManualCustomer.run(requestFor(uid, { salonId, ...data }));
+    const noPhone = await create("owner-manual", {
+      name: "Khách Không Số",
+      operationId: "manual-no-phone-0001",
+    });
+    expect((await db.doc(`customers/${noPhone.customerId}`).get()).data()).toMatchObject({
+      phone: null,
+      phoneLast4: null,
+      source: "manual",
+      points: 0,
+      allowPhoto: false,
+    });
+    const form = {
+      branchId: "branch-manual",
+      name: "Khách Có Số",
+      phone: "+84 90 000 4321",
+      operationId: "manual-with-phone-0001",
+    };
+    const first = await create("staff-manual", form);
+    await expect(create("staff-manual", form)).resolves.toMatchObject({
+      customerId: first.customerId,
+    });
+    const profile = await db.doc(`customers/${first.customerId}`).get();
+    expect(profile.data()).toMatchObject({
+      phone,
+      phoneLast4: "4321",
+      points: 0,
+      source: "manual",
+    });
+    expect(profile.get("firebaseUid")).toBeUndefined();
+    await expect(create("staff-manual", { ...form, name: "Khác" })).rejects.toMatchObject({
+      code: "already-exists",
+    });
+    await expect(
+      create("owner-manual", { ...form, phone, operationId: "manual-with-phone-0002" }),
+    ).rejects.toMatchObject({ code: "already-exists" });
+    await db.doc("customers/existing-web").set({
+      salonId,
+      phone: "+84900004322",
+      phoneLast4: "4322",
+      firebaseUid: "fixture-web",
+      points: 9,
+      name: "Khách OTP",
+    });
+    await expect(
+      create("owner-manual", {
+        ...form,
+        phone: "0900004322",
+        operationId: "manual-with-phone-0003",
+      }),
+    ).rejects.toMatchObject({ code: "already-exists" });
+    expect((await db.doc("customers/existing-web").get()).data()).toMatchObject({
+      points: 9,
+      name: "Khách OTP",
+    });
+    const logs = (
+      await db.collection("audit_events").where("salonId", "==", salonId).get()
+    ).docs.map((doc) => doc.data());
+    expect(logs).toHaveLength(2);
+    expect(JSON.stringify(logs)).not.toMatch(/0900004321|84900004321|Khách Có Số/);
+    expect((await db.doc(`salons/${salonId}`).get()).get("customerCount")).toBe(2);
+  });
+
+  it("manual customer creation rejects bad numbers and unassigned staff branches", async () => {
+    await seedOwner("owner-guard", "salon-guard");
+    await seedBranch("salon-guard", "branch-allowed");
+    await seedBranch("salon-guard", "branch-forbidden");
+    await db.doc("users/staff-guard").set({
+      salonId: "salon-guard",
+      role: "staff",
+      isActive: true,
+      branchId: "branch-allowed",
+    });
+    const base = {
+      salonId: "salon-guard",
+      name: "Khách kiểm thử",
+      operationId: "manual-guard-0001",
+    };
+    await expect(
+      createManualCustomer.run(requestFor("owner-guard", { ...base, phone: "090ABC1234" })),
+    ).rejects.toMatchObject({ code: "invalid-argument" });
+    await expect(
+      createManualCustomer.run(
+        requestFor("staff-guard", { ...base, branchId: "branch-forbidden" }),
+      ),
+    ).rejects.toMatchObject({ code: "permission-denied" });
+    await expect(createManualCustomer.run(requestFor("staff-guard", base))).rejects.toMatchObject({
+      code: "invalid-argument",
+    });
+    await db.doc("branches/branch-allowed").update({ isActive: false });
+    await expect(
+      createManualCustomer.run(requestFor("staff-guard", { ...base, branchId: "branch-allowed" })),
+    ).rejects.toMatchObject({ code: "failed-precondition" });
+    expect((await db.doc("salons/salon-guard").get()).get("customerCount")).toBe(0);
+  });
+
   it("QR chi nhánh → gửi trùng → staff xác nhận → khóa cả salon 2 giờ", async () => {
     const salonId = "salon-qr-end-to-end";
     const branchId = "branch-qr-a";

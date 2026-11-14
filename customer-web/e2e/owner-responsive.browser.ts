@@ -11,6 +11,18 @@ test.beforeEach(async ({ page }) => {
   await expect(page.getByRole("button", { name: "Làm mới", exact: true })).toBeEnabled();
 });
 
+test("owner can add a customer with only a name", async ({ page }) => {
+  await page.getByRole("button", { name: "Khách hàng", exact: true }).click();
+  await page.getByRole("button", { name: "Thêm khách", exact: true }).click();
+  const phone = page.getByRole("textbox", { name: "Số điện thoại (không bắt buộc)" });
+  await expect(phone).toBeVisible();
+  await expect(phone).not.toHaveAttribute("required");
+  await page.getByLabel("Tên khách", { exact: true }).fill("Khách không dùng điện thoại");
+  await page.getByRole("button", { name: "Lưu khách" }).click();
+  await expect(page.getByText("Đã thêm khách vào danh bạ.")).toBeVisible();
+  await expect(page.getByText("Khách không dùng điện thoại", { exact: true })).toBeVisible();
+});
+
 test("owner verifies a manual point correction and sees the updated balance", async ({ page }) => {
   await page
     .getByRole("navigation", { name: "Chọn mục quản lý" })

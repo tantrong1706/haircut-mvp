@@ -37,6 +37,7 @@ import { BrandLogo } from "../components/BrandLogo";
 import { CustomerPointAction } from "../components/CustomerPointAction";
 import { CustomerPointAdjustment } from "../components/CustomerPointAdjustment";
 import { CustomerRewardActions } from "../components/CustomerRewardActions";
+import { ManualCustomerForm } from "../components/ManualCustomerForm";
 import { CustomerNameEditor } from "../components/CustomerNameEditor";
 import { OwnerConfirmDialog, type OwnerConfirmation as ConfirmRequest } from "../components/OwnerConfirmDialog";
 import { APP_NAME } from "../config/branding";
@@ -1908,6 +1909,14 @@ function CustomerSearchPanel({
           </p>
         </div>
       </div>
+
+      <ManualCustomerForm
+        salonId={salonId}
+        onCreated={() => {
+          setTerm("");
+          void search(false, "");
+        }}
+      />
 
       <label className="field">
         <span>Chi nhánh phục vụ</span>

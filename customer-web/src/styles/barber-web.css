@@ -104,6 +104,18 @@
 body {
   background: #121211;
 }
+.manual-customer {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+}
+.manual-customer > div {
+  width: min(100%, 42rem);
+}
+.app-shell .manual-customer-form {
+  margin: 0;
+  gap: 12px;
+}
 ::selection {
   color: #fff;
   background: #764234;
