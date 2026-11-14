@@ -17,6 +17,30 @@ test.beforeEach(async ({ page }) => {
   await page.goto("/e2e/fixtures/returning-customer.html");
 });
 
+test("staff can enter a phone number for a new customer at the assigned branch", async ({
+  page,
+}) => {
+  let request: unknown;
+  await page.route("**/__fixture/createManualCustomer", (route) => {
+    request = route.request().postDataJSON();
+    return route.fulfill({ json: { customerId: "fixture-manual" } });
+  });
+  await page.getByRole("button", { name: "Thêm khách", exact: true }).click();
+  await page.getByLabel("Tên khách", { exact: true }).fill("Khách thử");
+  await page
+    .getByRole("textbox", { name: "Số điện thoại (không bắt buộc)" })
+    .fill("+84 90 000 4321");
+  await page.getByRole("button", { name: "Lưu khách" }).click();
+  await expect(page.getByText("Đã thêm khách vào danh bạ.")).toBeVisible();
+  expect(request).toMatchObject({
+    salonId: "salon-fixture",
+    branchId: "branch-fixture",
+    name: "Khách thử",
+    phone: "0900004321",
+    operationId: expect.any(String),
+  });
+});
+
 test("search, disambiguate and confirm once on a real browser", async ({ page }, testInfo) => {
   const submissions: Array<Record<string, unknown>> = [];
   const errors: string[] = [];
