@@ -133,6 +133,35 @@ export const updateCustomerName = async (input: {
   directoryName = input.name.trim();
   return { customerId: input.customerId, name: directoryName };
 };
+const manualCustomers: Array<{
+  id: string;
+  name: string;
+  phoneLast4: string;
+  points: number;
+  allowPhoto: boolean;
+  detailsLoaded: boolean;
+  recentRecords: [];
+  unusedRewards: [];
+}> = [];
+export const createManualCustomer = async (input: {
+  salonId: string;
+  name: string;
+  phone?: string;
+}) => {
+  if (input.salonId !== salonId) throw new Error("Fixture only accepts the expected salon");
+  const id = `fixture-manual-${manualCustomers.length + 1}`;
+  manualCustomers.push({
+    id,
+    name: input.name,
+    phoneLast4: input.phone?.slice(-4) ?? "",
+    points: 0,
+    allowPhoto: false,
+    detailsLoaded: false,
+    recentRecords: [],
+    unusedRewards: [],
+  });
+  return { customerId: id };
+};
 export const listSalonCustomerDirectory = async () => ({
   customers: [
     {
@@ -145,9 +174,10 @@ export const listSalonCustomerDirectory = async () => ({
       recentRecords: [],
       unusedRewards: [],
     },
+    ...manualCustomers,
   ],
   nextCursor: null,
-  totalCount: 1,
+  totalCount: 1 + manualCustomers.length,
 });
 // Only local text drafts are allowed; points/deletions stay blocked below.
 export const savePendingVisitNote = async (input: { note: string }) => {

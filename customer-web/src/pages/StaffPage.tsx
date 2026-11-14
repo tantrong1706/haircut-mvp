@@ -585,6 +585,7 @@ export function StaffPage({ currentUser }: Props) {
         pointPerVisit={pointPerVisit}
         canAward={canAwardPointsDirectly}
         canRedeem={canRedeemRewards}
+        canCreateCustomer={branches.some((branch) => branch.id === branchFilter)}
       />
 
       <div className="metrics-row compact-metrics">

@@ -9,6 +9,7 @@ import { awardReturningCustomerPoints } from "../services/returningCustomerPoint
 import { SalonVisitDetails } from "./SalonVisitDetails";
 import { SalonHaircutHistory } from "./SalonHaircutHistory";
 import { CustomerRewardActions } from "./CustomerRewardActions";
+import { ManualCustomerForm } from "./ManualCustomerForm";
 
 type Props = {
   salonId: string;
@@ -17,6 +18,7 @@ type Props = {
   pointPerVisit: number;
   canAward: boolean;
   canRedeem?: boolean;
+  canCreateCustomer?: boolean;
 };
 
 export function ReturningCustomerPoints(props: Props) {
@@ -36,6 +38,7 @@ function CustomerLookup({
   pointPerVisit,
   canAward,
   canRedeem = false,
+  canCreateCustomer = false,
 }: Props) {
   const [term, setTerm] = useState("");
   const [verificationDigits, setVerificationDigits] = useState("");
@@ -151,8 +154,11 @@ function CustomerLookup({
         </div>
         <UserRoundCheck size={24} aria-hidden="true" />
       </div>
+      {canCreateCustomer && branchId ? (
+        <ManualCustomerForm salonId={salonId} branchId={branchId} branchName={branchName} />
+      ) : null}
       {!canAward && !canRedeem ? (
-        <p>Chủ salon cần cấp quyền cộng điểm trực tiếp cho tài khoản này.</p>
+        <p>Chủ salon cần cấp quyền để tài khoản này tìm khách tích điểm hoặc dùng quà.</p>
       ) : !branchId ? (
         <p>Chọn chi nhánh hiện tại trước khi tìm khách.</p>
       ) : (

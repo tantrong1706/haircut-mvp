@@ -184,16 +184,14 @@ describe("callable transactions", () => {
     await expect(
       create("owner-manual", { ...form, phone, operationId: "manual-with-phone-0002" }),
     ).rejects.toMatchObject({ code: "already-exists" });
-    await db
-      .doc("customers/existing-web")
-      .set({
-        salonId,
-        phone: "+84900004322",
-        phoneLast4: "4322",
-        firebaseUid: "fixture-web",
-        points: 9,
-        name: "Khách OTP",
-      });
+    await db.doc("customers/existing-web").set({
+      salonId,
+      phone: "+84900004322",
+      phoneLast4: "4322",
+      firebaseUid: "fixture-web",
+      points: 9,
+      name: "Khách OTP",
+    });
     await expect(
       create("owner-manual", {
         ...form,

@@ -19,7 +19,7 @@ test.beforeEach(async ({ page }) => {
 
 test("staff can enter a phone number for a new customer at the assigned branch", async ({
   page,
-}) => {
+}, info) => {
   let request: unknown;
   await page.route("**/__fixture/createManualCustomer", (route) => {
     request = route.request().postDataJSON();
@@ -30,6 +30,14 @@ test("staff can enter a phone number for a new customer at the assigned branch",
   await page
     .getByRole("textbox", { name: "Số điện thoại (không bắt buộc)" })
     .fill("+84 90 000 4321");
+  const form = page.getByRole("form", { name: "Thêm khách thủ công" });
+  expect(
+    (await new AxeBuilder({ page }).include(".manual-customer-form").analyze()).violations,
+  ).toEqual([]);
+  await form.screenshot({ path: info.outputPath("manual-customer-form.png"), scale: "css" });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(
+    true,
+  );
   await page.getByRole("button", { name: "Lưu khách" }).click();
   await expect(page.getByText("Đã thêm khách vào danh bạ.")).toBeVisible();
   expect(request).toMatchObject({
