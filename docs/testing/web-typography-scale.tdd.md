@@ -10,6 +10,8 @@
 
 - RED `b7dcbab`: hai ca Chromium chạy và thất bại như dự kiến. Tiêu đề khách tại 320 px là 31 px và tiêu đề quản lý tại 360 px là 32 px, chưa theo thang mới.
 - GREEN: `npm run build:test` và `npm run test:e2e:run -- web-barber.spec.ts` đạt 12/12 ca trên Chromium desktop, Chromium di động và WebKit iPhone. Kiểm tra cỡ chữ, phông tiếng Việt, cỡ chữ 125%, tràn ngang và luồng OTP/tích điểm với dữ liệu giả. Không chạy thao tác ghi trên production.
+- Hồi quy: `npm run check` đạt lint, định dạng, 415 ca Vitest và bản dựng production (gồm TypeScript). `npm run test:e2e:run` đạt 90 ca, đã bao gồm 12 ca nêu trên; `npm run test:owner:browser` đạt 65 ca, `npm run test:returning:browser` đạt 12 ca. Đã xem ảnh màn hình đăng nhập và thẻ duyệt điểm ở 320 px.
+- Không đổi lockfile. `npm audit --omit=dev` báo 0 cảnh báo trong phụ thuộc chạy production; `npm ci` vẫn báo 43 cảnh báo khi tính cả bộ công cụ phát triển có sẵn, ngoài phạm vi thay đổi kiểu chữ.
 - Thay đổi là CSS; kiểm thử đọc kiểu hiển thị thực tế của trình duyệt, không suy ra tỷ lệ coverage CSS từ Vitest.
 
 ## Bước tiếp theo: tham khảo shadcn/ui
