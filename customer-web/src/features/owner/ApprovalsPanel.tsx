@@ -87,7 +87,9 @@ export function ApprovalsPanel({
             <HaircutPhotoCapture
               title="Ảnh khách sau cắt"
               photos={photoItemsFor(request)}
-              consentGranted={request.customer?.allowPhoto === true}
+              consentGranted={
+                request.customer?.allowPhoto === true && request.photoConsentGranted !== false
+              }
               busy={photoBusyId === request.id}
               disabled={busyId === request.id || Boolean(photoBusyId)}
               disabledReason="Chụp hoặc chọn ảnh trước khi duyệt điểm."

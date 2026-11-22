@@ -68,3 +68,60 @@ it("clears draft contact data when staff changes branch", async () => {
   expect(phone()).toHaveValue("");
   expect(create).not.toHaveBeenCalled();
 });
+
+it("requires the visit branch and records photo consent only after an explicit choice", async () => {
+  const actor = userEvent.setup();
+  create.mockResolvedValue({ customerId: "customer-fixture", sessionId: "visit-fixture" });
+  const onCreated = vi.fn();
+  render(
+    <ManualCustomerForm
+      mode="visit"
+      salonId="salon-a"
+      branches={[
+        { id: "branch-a", name: "Chi nhánh A" },
+        { id: "branch-b", name: "Chi nhánh B" },
+      ]}
+      onCreated={onCreated}
+    />,
+  );
+  await actor.click(screen.getByRole("button", { name: "Thêm khách trực tiếp" }));
+  expect(name()).toHaveValue("");
+  expect(phone()).toHaveValue("");
+  const createVisit = screen.getByRole("button", { name: "Tạo lượt chờ" });
+  const consent = screen.getByRole("checkbox", { name: /Khách đã đồng ý/ });
+  expect(consent).not.toBeChecked();
+  await actor.type(name(), "Khách trực tiếp");
+  expect(createVisit).toBeDisabled();
+  await actor.selectOptions(screen.getByLabelText("Chi nhánh phục vụ"), "branch-b");
+  await actor.click(consent);
+  await actor.click(createVisit);
+  expect(await screen.findByRole("status")).toHaveTextContent(
+    "Đã tạo lượt chờ xác nhận. Chưa cộng điểm.",
+  );
+  expect(create).toHaveBeenLastCalledWith({
+    salonId: "salon-a",
+    branchId: "branch-b",
+    name: "Khách trực tiếp",
+    startVisit: true,
+    allowPhoto: true,
+    operationId: expect.any(String),
+  });
+  expect(onCreated).toHaveBeenCalledWith("visit-fixture");
+});
+
+it("does not announce a pending visit when an older server returns only a profile", async () => {
+  const actor = userEvent.setup();
+  const onCreated = vi.fn();
+  render(
+    <ManualCustomerForm mode="visit" salonId="salon-a" branchId="branch-a" onCreated={onCreated} />,
+  );
+  await actor.click(screen.getByRole("button", { name: "Thêm khách trực tiếp" }));
+  await actor.type(name(), "Khách mẫu");
+  await actor.click(screen.getByRole("button", { name: "Tạo lượt chờ" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Máy chủ chưa trả lượt chờ");
+  expect(screen.queryByRole("status")).toBeNull();
+  expect(onCreated).not.toHaveBeenCalled();
+  expect(create).toHaveBeenLastCalledWith(
+    expect.objectContaining({ startVisit: true, allowPhoto: false }),
+  );
+});

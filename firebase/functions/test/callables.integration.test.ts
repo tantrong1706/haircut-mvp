@@ -410,6 +410,59 @@ describe("callable transactions", () => {
     ).toBe(true);
   });
 
+  it("manual visit cannot overwrite an existing QR request or create two concurrent visits", async () => {
+    const salonId = "manual-visit-race";
+    await seedOwner("manual-race-owner", salonId);
+    await seedBranch(salonId, "manual-race-branch");
+    await db
+      .doc("customers/race-web-customer")
+      .set({ salonId, name: "Khách QR", phone: "0900004321", phoneLast4: "4321", points: 4 });
+    const pointer = db.doc(
+      `active_service_sessions/${activeSessionDocId(salonId, "race-web-customer")}`,
+    );
+    await pointer.set({
+      salonId,
+      customerId: "race-web-customer",
+      sessionId: "qr-pending-fixture",
+    });
+    await db.doc("point_requests/qr-pending-fixture").set({
+      salonId,
+      status: "pending",
+      note: "Giữ nguyên ghi chú QR",
+      photoPaths: ["existing-photo-path"],
+    });
+    const form = {
+      salonId,
+      branchId: "manual-race-branch",
+      startVisit: true,
+      name: "Khách QR",
+      phone: "0900004321",
+      operationId: "manual-qr-conflict-0001",
+    };
+    await expect(
+      createManualCustomer.run(requestFor("manual-race-owner", form)),
+    ).rejects.toMatchObject({ details: { errorCode: "ACTIVE_SESSION_EXISTS" } });
+    expect((await pointer.get()).get("sessionId")).toBe("qr-pending-fixture");
+    expect((await db.doc("point_requests/qr-pending-fixture").get()).data()).toMatchObject({
+      status: "pending",
+      note: "Giữ nguyên ghi chú QR",
+      photoPaths: ["existing-photo-path"],
+    });
+    const attempts = await Promise.allSettled(
+      ["race-operation-0001", "race-operation-0002"].map((operationId) =>
+        createManualCustomer.run(
+          requestFor("manual-race-owner", { ...form, phone: "0900004322", operationId }),
+        ),
+      ),
+    );
+    expect(attempts.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect((await db.collection("customers").where("phoneLast4", "==", "4322").get()).size).toBe(1);
+    expect(
+      (await db.collection("point_requests").where("source", "==", "manual_visit").get()).size,
+    ).toBe(1);
+    expect((await db.doc(`salons/${salonId}`).get()).get("customerCount")).toBe(1);
+  });
+
   it("QR chi nhánh → gửi trùng → staff xác nhận → khóa cả salon 2 giờ", async () => {
     const salonId = "salon-qr-end-to-end";
     const branchId = "branch-qr-a";

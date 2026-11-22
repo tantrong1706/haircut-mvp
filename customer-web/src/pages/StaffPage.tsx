@@ -12,6 +12,7 @@ import { HaircutPhotoCapture } from "../components/HaircutPhotoCapture";
 import { RedeemRewardPanel } from "../components/RedeemRewardPanel";
 import { BrandLogo } from "../components/BrandLogo";
 import { ReturningCustomerPoints } from "../components/ReturningCustomerPoints";
+import { ManualCustomerForm } from "../components/ManualCustomerForm";
 import { CustomerNameEditor } from "../components/CustomerNameEditor";
 import {
   StaffSession,
@@ -585,7 +586,6 @@ export function StaffPage({ currentUser }: Props) {
         pointPerVisit={pointPerVisit}
         canAward={canAwardPointsDirectly}
         canRedeem={canRedeemRewards}
-        canCreateCustomer={branches.some((branch) => branch.id === branchFilter)}
       />
 
       <div className="metrics-row compact-metrics">
@@ -611,6 +611,15 @@ export function StaffPage({ currentUser }: Props) {
         ) : null}
       </div>
 
+      {branches.some((branch) => branch.id === branchFilter) ? (
+        <ManualCustomerForm
+          mode="visit"
+          salonId={salonId}
+          branchId={branchFilter}
+          branchName={currentBranchName}
+          onCreated={(sessionId) => { if (sessionId) setSelectedId(sessionId); }}
+        />
+      ) : null}
       <div className="ops-grid staff-workspace">
         <div className="ops-list">
           {!loaded ? (
@@ -622,7 +631,7 @@ export function StaffPage({ currentUser }: Props) {
             <div className="empty-state compact-empty">
               <UsersRound size={28} aria-hidden="true" />
               <strong>Chưa có khách</strong>
-              <p>Khách quét QR sẽ hiện tại đây.</p>
+              <p>Khách quét QR hoặc lượt được thêm trực tiếp sẽ hiện tại đây.</p>
             </div>
           ) : (
             sessions.map((session) => (
