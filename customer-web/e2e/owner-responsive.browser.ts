@@ -23,6 +23,31 @@ test("owner can add a customer with only a name", async ({ page }) => {
   await expect(page.getByText("Khách không dùng điện thoại", { exact: true })).toBeVisible();
 });
 
+test("owner creates a manual visit from approvals without awarding points", async ({
+  page,
+}, info) => {
+  await page.getByRole("button", { name: "Duyệt điểm", exact: true }).click();
+  await page.getByRole("button", { name: "Thêm khách trực tiếp", exact: true }).click();
+  const form = page.getByRole("form", { name: "Tạo lượt khách trực tiếp" });
+  await expect(form.getByLabel("Tên khách", { exact: true })).toHaveValue("");
+  await expect(form.getByLabel("Số điện thoại (không bắt buộc)")).toHaveValue("");
+  await form.getByLabel("Tên khách", { exact: true }).fill("Khách trực tiếp mẫu");
+  await form.getByLabel("Số điện thoại (không bắt buộc)").fill("0900004321");
+  await form.getByRole("button", { name: "Tạo lượt chờ" }).click();
+  await expect(
+    page.getByText("Đã tạo lượt chờ xác nhận. Chưa cộng điểm.", { exact: true }),
+  ).toBeVisible();
+  const card = page.locator(".approval-card").filter({ hasText: "Khách trực tiếp mẫu" });
+  await expect(card.getByRole("button", { name: "Duyệt", exact: true })).toBeEnabled();
+  await expect(card.getByLabel("Ghi chú kiểu tóc (không bắt buộc)")).toBeVisible();
+  await card.screenshot({
+    path: info.outputPath("manual-visit-pending.png"),
+    scale: "css",
+    style: ".owner-tabs { position: static !important; }",
+  });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
 test("owner verifies a manual point correction and sees the updated balance", async ({ page }) => {
   await page
     .getByRole("navigation", { name: "Chọn mục quản lý" })

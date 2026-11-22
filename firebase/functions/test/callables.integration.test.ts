@@ -244,6 +244,271 @@ describe("callable transactions", () => {
     expect((await db.doc("salons/salon-guard").get()).get("customerCount")).toBe(0);
   });
 
+  it("manual visit creates a pending request, saves a note, and confirms points exactly once", async () => {
+    const salonId = "manual-visit-salon";
+    await seedOwner("manual-visit-owner", salonId);
+    await seedBranch(salonId, "manual-visit-branch");
+    await db.doc("users/manual-visit-staff").set({
+      salonId,
+      role: "staff",
+      isActive: true,
+      branchIds: ["manual-visit-branch"],
+      name: "Thợ mẫu",
+    });
+    const form = {
+      salonId,
+      branchId: "manual-visit-branch",
+      startVisit: true,
+      name: "Khách trực tiếp",
+      operationId: "manual-visit-operation-0001",
+      allowPhoto: false,
+    };
+    const result = (await createManualCustomer.run(requestFor("manual-visit-staff", form))) as {
+      customerId: string;
+      sessionId?: string;
+    };
+    expect(result.sessionId).toEqual(expect.any(String));
+    expect((await db.doc(`customers/${result.customerId}`).get()).data()).toMatchObject({
+      points: 0,
+      phone: null,
+      allowPhoto: false,
+    });
+    const requestId = String(result.sessionId);
+    const pending = await db.doc(`point_requests/${requestId}`).get();
+    expect(pending.data()).toMatchObject({
+      status: "pending",
+      approvalMode: "staff_confirmation",
+      source: "manual_visit",
+      salonId,
+      branchId: form.branchId,
+      customerId: result.customerId,
+      photoConsentGranted: false,
+      note: "",
+      photoPaths: [],
+    });
+    expect(pending.get("expiresAt").toMillis() - pending.get("createdAt").toMillis()).toBe(
+      7_200_000,
+    );
+    expect((await db.doc(`chair_sessions/${requestId}`).get()).data()).toMatchObject({
+      status: "pending_approval",
+      isOpen: true,
+      photoConsentGranted: false,
+    });
+    await expect(
+      createManualCustomer.run(requestFor("manual-visit-staff", form)),
+    ).resolves.toMatchObject(result);
+    expect((await db.collection("point_requests").where("salonId", "==", salonId).get()).size).toBe(
+      1,
+    );
+    await updatePendingPointRequestPhotos.run(
+      requestFor("manual-visit-staff", { salonId, requestId, note: "Giữ form cũ" }),
+    );
+    await approvePointRequest.run(requestFor("manual-visit-staff", { salonId, requestId }));
+    await approvePointRequest.run(requestFor("manual-visit-owner", { salonId, requestId }));
+    expect((await db.doc(`customers/${result.customerId}`).get()).get("points")).toBe(1);
+    const records = await db.collection("haircut_records").where("salonId", "==", salonId).get();
+    expect(records.size).toBe(1);
+    expect(records.docs[0].data()).toMatchObject({
+      note: "Giữ form cũ",
+      pointsAdded: 1,
+      staffId: "manual-visit-staff",
+      photoUrls: [],
+    });
+    expect((await db.doc(`salons/${salonId}`).get()).get("customerCount")).toBe(1);
+  });
+
+  it("manual visit reuses a unique matching phone and cannot replace a QR request or bypass cooldown", async () => {
+    const salonId = "manual-existing";
+    await seedOwner("manual-existing-owner", salonId, { customerCount: 50 });
+    await seedBranch(salonId, "manual-existing-branch");
+    await db.doc("customers/existing-manual-visit").set({
+      salonId,
+      phone: "+84900004321",
+      phoneLast4: "4321",
+      name: "Tên đã đăng ký",
+      points: 7,
+      firebaseUid: "customer-web-fixture",
+      allowPhoto: false,
+    });
+    const form = {
+      salonId,
+      branchId: "manual-existing-branch",
+      startVisit: true,
+      name: "Không ghi đè tên",
+      phone: "0900004321",
+      operationId: "manual-reuse-operation-0001",
+      allowPhoto: true,
+    };
+    const result = (await createManualCustomer.run(requestFor("manual-existing-owner", form))) as {
+      customerId: string;
+      sessionId?: string;
+    };
+    expect(result.customerId).toBe("existing-manual-visit");
+    expect(result.sessionId).toEqual(expect.any(String));
+    expect((await db.doc("customers/existing-manual-visit").get()).data()).toMatchObject({
+      name: "Tên đã đăng ký",
+      points: 7,
+      firebaseUid: "customer-web-fixture",
+      allowPhoto: true,
+    });
+    expect((await db.doc(`point_requests/${result.sessionId}`).get()).data()).toMatchObject({
+      customerSummary: { name: "Tên đã đăng ký", points: 7, allowPhoto: true },
+      photoConsentGranted: true,
+    });
+    await expect(
+      createManualCustomer.run(
+        requestFor("manual-existing-owner", {
+          ...form,
+          operationId: "manual-reuse-operation-0002",
+        }),
+      ),
+    ).rejects.toMatchObject({
+      details: { errorCode: "ACTIVE_SESSION_EXISTS" },
+    });
+    await approvePointRequest.run(
+      requestFor("manual-existing-owner", { salonId, requestId: result.sessionId }),
+    );
+    await expect(
+      createManualCustomer.run(
+        requestFor("manual-existing-owner", {
+          ...form,
+          operationId: "manual-reuse-operation-0003",
+        }),
+      ),
+    ).rejects.toMatchObject({
+      details: { errorCode: "POINT_COOLDOWN" },
+    });
+    expect((await db.doc(`salons/${salonId}`).get()).get("customerCount")).toBe(50);
+  });
+
+  it.each(["0900004321", "+84900004321", "84900004321"])(
+    "manual visit reuses a legacy full phone without a suffix (%s)",
+    async (storedPhone) => {
+      const salonId = "manual-legacy-phone";
+      await seedOwner("manual-legacy-owner", salonId, { customerCount: 50 });
+      await seedBranch(salonId, "manual-legacy-branch");
+      await db.doc("customers/legacy-phone-profile").set({
+        salonId,
+        phone: storedPhone,
+        name: "Khách cũ",
+        points: 7,
+        firebaseUid: "legacy-fixture-uid",
+      });
+      await db
+        .doc("customers/legacy-other-salon")
+        .set({ salonId: "other-salon", phone: storedPhone, points: 99 });
+      const form = {
+        salonId,
+        branchId: "manual-legacy-branch",
+        startVisit: true,
+        name: "Không đổi tên",
+        phone: "0900004321",
+        operationId: "manual-legacy-operation-0001",
+      };
+      const result = (await createManualCustomer.run(requestFor("manual-legacy-owner", form))) as {
+        customerId: string;
+      };
+      expect(result.customerId).toBe("legacy-phone-profile");
+      expect((await db.doc("customers/legacy-phone-profile").get()).data()).toMatchObject({
+        name: "Khách cũ",
+        points: 7,
+        firebaseUid: "legacy-fixture-uid",
+      });
+      expect((await db.doc(`salons/${salonId}`).get()).get("customerCount")).toBe(50);
+      await db.doc("customers/legacy-duplicate").set({ salonId, phone: "0900004321", points: 1 });
+      await expect(
+        createManualCustomer.run(
+          requestFor("manual-legacy-owner", {
+            ...form,
+            operationId: "manual-legacy-operation-0002",
+          }),
+        ),
+      ).rejects.toMatchObject({ details: { errorCode: "MANUAL_CUSTOMER_AMBIGUOUS" } });
+    },
+  );
+
+  it("manual visit validates branch and explicit photo consent without leaving a partial profile", async () => {
+    const salonId = "manual-visit-guards";
+    await seedOwner("manual-guard-owner", salonId);
+    await seedBranch(salonId, "manual-guard-branch");
+    const form = {
+      salonId,
+      branchId: "manual-guard-branch",
+      startVisit: true,
+      name: "Khách mẫu",
+      operationId: "manual-guard-visit-0001",
+    };
+    await expect(
+      createManualCustomer.run(requestFor("manual-guard-owner", { ...form, branchId: undefined })),
+    ).rejects.toMatchObject({ code: "invalid-argument" });
+    await expect(
+      createManualCustomer.run(requestFor("manual-guard-owner", { ...form, allowPhoto: "true" })),
+    ).rejects.toMatchObject({ code: "invalid-argument" });
+    await db.doc("system_config/features").set({ checkinEnabled: false });
+    await expect(
+      createManualCustomer.run(requestFor("manual-guard-owner", form)),
+    ).rejects.toMatchObject({ details: { errorCode: "FEATURE_DISABLED" } });
+    expect((await db.collection("customers").where("salonId", "==", salonId).get()).empty).toBe(
+      true,
+    );
+    expect(
+      (await db.collection("point_requests").where("salonId", "==", salonId).get()).empty,
+    ).toBe(true);
+  });
+
+  it("manual visit cannot overwrite an existing QR request or create two concurrent visits", async () => {
+    const salonId = "manual-visit-race";
+    await seedOwner("manual-race-owner", salonId);
+    await seedBranch(salonId, "manual-race-branch");
+    await db
+      .doc("customers/race-web-customer")
+      .set({ salonId, name: "Khách QR", phone: "0900004321", phoneLast4: "4321", points: 4 });
+    const pointer = db.doc(
+      `active_service_sessions/${activeSessionDocId(salonId, "race-web-customer")}`,
+    );
+    await pointer.set({
+      salonId,
+      customerId: "race-web-customer",
+      sessionId: "qr-pending-fixture",
+    });
+    await db.doc("point_requests/qr-pending-fixture").set({
+      salonId,
+      status: "pending",
+      note: "Giữ nguyên ghi chú QR",
+      photoPaths: ["existing-photo-path"],
+    });
+    const form = {
+      salonId,
+      branchId: "manual-race-branch",
+      startVisit: true,
+      name: "Khách QR",
+      phone: "0900004321",
+      operationId: "manual-qr-conflict-0001",
+    };
+    await expect(
+      createManualCustomer.run(requestFor("manual-race-owner", form)),
+    ).rejects.toMatchObject({ details: { errorCode: "ACTIVE_SESSION_EXISTS" } });
+    expect((await pointer.get()).get("sessionId")).toBe("qr-pending-fixture");
+    expect((await db.doc("point_requests/qr-pending-fixture").get()).data()).toMatchObject({
+      status: "pending",
+      note: "Giữ nguyên ghi chú QR",
+      photoPaths: ["existing-photo-path"],
+    });
+    const attempts = await Promise.allSettled(
+      ["race-operation-0001", "race-operation-0002"].map((operationId) =>
+        createManualCustomer.run(
+          requestFor("manual-race-owner", { ...form, phone: "0900004322", operationId }),
+        ),
+      ),
+    );
+    expect(attempts.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect((await db.collection("customers").where("phoneLast4", "==", "4322").get()).size).toBe(1);
+    expect(
+      (await db.collection("point_requests").where("source", "==", "manual_visit").get()).size,
+    ).toBe(1);
+    expect((await db.doc(`salons/${salonId}`).get()).get("customerCount")).toBe(1);
+  }, 15_000); // Concurrent emulator transactions can retry with backoff, especially under coverage.
+
   it("QR chi nhánh → gửi trùng → staff xác nhận → khóa cả salon 2 giờ", async () => {
     const salonId = "salon-qr-end-to-end";
     const branchId = "branch-qr-a";

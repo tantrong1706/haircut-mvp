@@ -49,33 +49,39 @@ export const listenPendingPointRequests = (
   _branch: string | null,
   next: (items: unknown[]) => void,
 ) => {
-  next([
-    {
-      id: "request-fixture",
-      salonId,
-      branchId: "branch-fixture",
-      branchName: branches[0].name,
-      sessionId: "session-fixture",
-      customerId: "customer-fixture",
-      staffName: "Nhân viên mẫu",
-      note: "Giữ form tóc, tỉa gọn hai bên.",
-      photoUrls: [],
-      photoPaths: [],
-      photoReadUrls: {},
-      pointsAdded: 1,
-      status: "pending",
-      createdAtMs: 1780000000000,
-      customer: {
-        id: "customer-fixture",
-        name: "Khách hàng có tên dài Nguyễn Hoàng Minh",
-        phoneLast4: "5678",
-        points: 7,
-        allowPhoto: false,
+  const emit = () =>
+    next([
+      {
+        id: "request-fixture",
+        salonId,
+        branchId: "branch-fixture",
+        branchName: branches[0].name,
+        sessionId: "session-fixture",
+        customerId: "customer-fixture",
+        staffName: "Nhân viên mẫu",
+        note: "Giữ form tóc, tỉa gọn hai bên.",
+        photoUrls: [],
+        photoPaths: [],
+        photoReadUrls: {},
+        pointsAdded: 1,
+        status: "pending",
+        createdAtMs: 1780000000000,
+        customer: {
+          id: "customer-fixture",
+          name: "Khách hàng có tên dài Nguyễn Hoàng Minh",
+          phoneLast4: "5678",
+          points: 7,
+          allowPhoto: false,
+        },
       },
-    },
-  ]);
-  return () => undefined;
+      ...manualRequests,
+    ]);
+  pendingListeners.add(emit);
+  emit();
+  return () => pendingListeners.delete(emit);
 };
+const manualRequests: Array<Record<string, unknown>> = [];
+const pendingListeners = new Set<() => void>();
 export const listenStaffProfiles = (_salon: string, next: (items: unknown[]) => void) => {
   next([]);
   return () => undefined;
@@ -147,6 +153,9 @@ export const createManualCustomer = async (input: {
   salonId: string;
   name: string;
   phone?: string;
+  branchId?: string;
+  startVisit?: boolean;
+  allowPhoto?: boolean;
 }) => {
   if (input.salonId !== salonId) throw new Error("Fixture only accepts the expected salon");
   const id = `fixture-manual-${manualCustomers.length + 1}`;
@@ -160,6 +169,36 @@ export const createManualCustomer = async (input: {
     recentRecords: [],
     unusedRewards: [],
   });
+  if (input.startVisit) {
+    if (input.branchId !== branches[0].id) throw new Error("Fixture branch mismatch");
+    const sessionId = `fixture-manual-session-${manualRequests.length + 1}`;
+    manualRequests.push({
+      id: sessionId,
+      sessionId,
+      salonId,
+      branchId: branches[0].id,
+      branchName: branches[0].name,
+      customerId: id,
+      staffName: "Nhân viên mẫu",
+      note: "",
+      photoUrls: [],
+      photoPaths: [],
+      photoReadUrls: {},
+      pointsAdded: 1,
+      status: "pending",
+      photoConsentGranted: input.allowPhoto === true,
+      createdAtMs: Date.now(),
+      customer: {
+        id,
+        name: input.name,
+        phoneLast4: input.phone?.slice(-4) ?? "",
+        points: 0,
+        allowPhoto: input.allowPhoto === true,
+      },
+    });
+    pendingListeners.forEach((emit) => emit());
+    return { customerId: id, sessionId };
+  }
   return { customerId: id };
 };
 export const listSalonCustomerDirectory = async () => ({

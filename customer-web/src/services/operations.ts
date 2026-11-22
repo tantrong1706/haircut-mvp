@@ -79,6 +79,7 @@ export type ManagerSessionHistoryItem = Omit<
 };
 
 export type PointRequest = {
+  photoConsentGranted?: boolean;
   id: string;
   salonId: string;
   branchId: string;
@@ -2214,6 +2215,7 @@ function mapPointRequest(docSnap: QueryDocumentSnapshot<DocumentData>): PointReq
     sessionId,
     customerId,
     staffName: String(data.staffName || ""),
+    ...(typeof data.photoConsentGranted === "boolean" ? { photoConsentGranted: data.photoConsentGranted } : {}),
     note: String(data.note || ""),
     photoUrls: [],
     legacyPhotoUrls,

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { StaffSession } from "../services/operations";
@@ -16,7 +16,9 @@ const mocks = vi.hoisted(() => ({
   listenActiveSessions: vi.fn(),
   getBranchQrSettings: vi.fn(),
   getSalonProfile: vi.fn(),
+  createManualCustomer: vi.fn(),
 }));
+vi.mock("../services/manualCustomer", () => ({createManualCustomer: mocks.createManualCustomer}));
 
 beforeAll(() => {
   Object.defineProperty(URL, "createObjectURL", {
@@ -83,6 +85,54 @@ const waitingSession: StaffSession = {
 let sessionsForTest: StaffSession[] = [waitingSession];
 
 describe("StaffPage", () => {
+  it("keeps a response-first manual visit selected while its listener is delayed", async () => {
+    const actor = userEvent.setup();
+    mocks.createManualCustomer.mockResolvedValue({ customerId: "manual-customer", sessionId: "manual-delayed" });
+    render(<StaffPage currentUser={{uid:"staff-a",salonId:"salon-a",name:"Nam",avatarUrl:"",
+      role:"staff",isActive:true,branchId:"branch-a",branchIds:["branch-a"]}} />);
+    await actor.click(await screen.findByRole("button", {name: "Thêm khách trực tiếp"}));
+    await actor.type(screen.getByLabelText("Tên khách", {exact:true}), "Khách mới chờ mạng");
+    await actor.click(screen.getByRole("button", {name:"Tạo lượt chờ"}));
+    await screen.findByText("Đã tạo lượt chờ xác nhận. Chưa cộng điểm.");
+    expect(screen.queryByRole("heading", {name:"Anh Tân"})).not.toBeInTheDocument();
+    const session: StaffSession = {
+      ...waitingSession, id: "manual-delayed", status: "pending_approval", approvalMode: "staff_confirmation",
+      customer: {...waitingSession.customer!, name:"Khách mới chờ mạng", points:0},
+    };
+    await act(async () => {
+      const listeners = mocks.listenActiveSessions.mock.calls;
+      listeners[listeners.length - 1][2]([waitingSession, session]);
+    });
+    expect(await screen.findByRole("heading", {name:"Khách mới chờ mạng"})).toBeVisible();
+    expect(screen.queryByText(/hiệu lực 30 phút/)).not.toBeInTheDocument();
+    expect(mocks.confirmCustomerPointRequest).not.toHaveBeenCalled();
+  });
+  it("creates a manual pending visit in the staff queue without confirming or awarding it", async () => {
+    const actor = userEvent.setup();
+    mocks.createManualCustomer.mockImplementation(async () => {
+      const session = {
+        ...waitingSession, id: "manual-session", status: "pending_approval" as const,
+        approvalMode: "staff_confirmation", pointsRequested: 2, photoConsentGranted: false,
+        customer: {...waitingSession.customer!, name: "Khách tại tiệm", points: 0},
+      };
+      sessionsForTest = [session];
+      const listeners = mocks.listenActiveSessions.mock.calls;
+      listeners[listeners.length - 1][2]([session]);
+      return { customerId: session.customerId, sessionId: session.id };
+    });
+    render(<StaffPage currentUser={{uid:"staff-a",salonId:"salon-a",name:"Nam",avatarUrl:"",
+      role:"staff",isActive:true,branchId:"branch-a",branchIds:["branch-a"]}} />);
+    await actor.click(await screen.findByRole("button", {name: "Thêm khách trực tiếp"}));
+    await actor.type(screen.getByLabelText("Tên khách", {exact:true}), "Khách tại tiệm");
+    await actor.click(screen.getByRole("button", {name:"Tạo lượt chờ"}));
+    expect(await screen.findByRole("heading", {name:"Khách tại tiệm"})).toBeVisible();
+    expect(screen.getByRole("button", {name:"Xác nhận cộng 2 điểm"})).toBeEnabled();
+    expect(mocks.createManualCustomer).toHaveBeenCalledWith(expect.objectContaining({
+      salonId:"salon-a",branchId:"branch-a",startVisit:true,allowPhoto:false,
+    }));
+    expect(mocks.confirmCustomerPointRequest).not.toHaveBeenCalled();
+    expect(mocks.submitPointRequest).not.toHaveBeenCalled();
+  });
   it.each(["staff", "owner"] as const)("never offers salon deletion inside the staff workspace (%s)", async role => {
     render(<StaffPage currentUser={{uid:"staff-a",salonId:"salon-a",name:"Fixture",avatarUrl:"",role,isActive:true,branchId:"branch-a",branchIds:["branch-a"]}}/>);
     await screen.findByRole("heading",{name:"Xác nhận tích điểm"});

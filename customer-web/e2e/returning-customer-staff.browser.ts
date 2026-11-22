@@ -23,14 +23,16 @@ test("staff can enter a phone number for a new customer at the assigned branch",
   let request: unknown;
   await page.route("**/__fixture/createManualCustomer", (route) => {
     request = route.request().postDataJSON();
-    return route.fulfill({ json: { customerId: "fixture-manual" } });
+    return route.fulfill({
+      json: { customerId: "fixture-manual", sessionId: "fixture-manual-session" },
+    });
   });
-  await page.getByRole("button", { name: "Thêm khách", exact: true }).click();
+  await page.getByRole("button", { name: "Thêm khách trực tiếp", exact: true }).click();
   await page.getByLabel("Tên khách", { exact: true }).fill("Khách thử");
   await page
     .getByRole("textbox", { name: "Số điện thoại (không bắt buộc)" })
     .fill("+84 90 000 4321");
-  const form = page.getByRole("form", { name: "Thêm khách thủ công" });
+  const form = page.getByRole("form", { name: "Tạo lượt khách trực tiếp" });
   expect(
     (await new AxeBuilder({ page }).include(".manual-customer-form").analyze()).violations,
   ).toEqual([]);
@@ -38,14 +40,16 @@ test("staff can enter a phone number for a new customer at the assigned branch",
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(
     true,
   );
-  await page.getByRole("button", { name: "Lưu khách" }).click();
-  await expect(page.getByText("Đã thêm khách vào danh bạ.")).toBeVisible();
+  await page.getByRole("button", { name: "Tạo lượt chờ" }).click();
+  await expect(page.getByText("Đã tạo lượt chờ xác nhận. Chưa cộng điểm.")).toBeVisible();
   expect(request).toMatchObject({
     salonId: "salon-fixture",
     branchId: "branch-fixture",
     name: "Khách thử",
     phone: "0900004321",
     operationId: expect.any(String),
+    startVisit: true,
+    allowPhoto: false,
   });
 });
 

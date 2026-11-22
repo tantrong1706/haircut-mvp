@@ -2918,6 +2918,10 @@ export const createManualCustomer = onCall(functionOptions, async (request) => {
         enforceAuthenticatedRateLimit("createManualCustomer", actor, salon),
       prepareCounter: ensureSalonCustomerCount,
       assertQuota: assertCustomerQuota,
+      featureCheck: async (salon, appVersion) => {
+        await assertFeatureEnabled(salon, "checkinEnabled", "Salon đang tạm ngừng nhận lượt mới.", appVersion);
+        await assertFeatureEnabled(salon, "pointApprovalEnabled", "Tính năng gửi và duyệt điểm đang tạm ngừng.", appVersion);
+      },
     },
   );
 });

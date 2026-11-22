@@ -748,20 +748,28 @@ export function OwnerPage({ currentUser }: Props) {
           onOpenTab={setActiveTab}
         />
       ) : activeTab === "approvals" ? (
-        <ApprovalsPanel
-          requests={requests}
-          noteDrafts={noteDrafts}
-          onNoteChange={(requestId, note) => setNoteDrafts(current => ({ ...current, [requestId]: note }))}
-          onSaveNote={saveOwnerNote}
-          busyId={busyId}
-          photoBusyId={photoBusyId}
-          photoProgress={photoProgress}
-          onApprove={approve}
-          onReject={reject}
-          onAddPhotos={addOwnerPhotos}
-          onRemovePhoto={removeOwnerPhoto}
-          onCancelPhotoUpload={() => photoAbortRef.current?.abort()}
-        />
+        <>
+          <ManualCustomerForm
+            mode="visit"
+            salonId={salonId}
+            branchId={branchFilter === "all" ? undefined : branchFilter}
+            branches={ownerBranches.filter((branch) => branch.salonId === salonId && branch.isActive)}
+          />
+          <ApprovalsPanel
+            requests={requests}
+            noteDrafts={noteDrafts}
+            onNoteChange={(requestId, note) => setNoteDrafts(current => ({ ...current, [requestId]: note }))}
+            onSaveNote={saveOwnerNote}
+            busyId={busyId}
+            photoBusyId={photoBusyId}
+            photoProgress={photoProgress}
+            onApprove={approve}
+            onReject={reject}
+            onAddPhotos={addOwnerPhotos}
+            onRemovePhoto={removeOwnerPhoto}
+            onCancelPhotoUpload={() => photoAbortRef.current?.abort()}
+          />
+        </>
       ) : activeTab === "branches" ? (
         <BranchesPanel
           salonId={salonId}

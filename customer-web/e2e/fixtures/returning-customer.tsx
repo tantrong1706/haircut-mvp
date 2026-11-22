@@ -1,6 +1,7 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { ReturningCustomerPoints } from "../../src/components/ReturningCustomerPoints";
+import { ManualCustomerForm } from "../../src/components/ManualCustomerForm";
 import "../../src/styles/global.css";
 import "../../src/styles/staff.css";
 import "../../src/styles/barber-web.css";
@@ -10,13 +11,18 @@ createRoot(document.getElementById("root")!).render(
     <div className="app-shell">
       <main className="ops-page compact-ops-page">
         <h1>Nhân viên</h1>
+        <ManualCustomerForm
+          mode="visit"
+          salonId="salon-fixture"
+          branchId="branch-fixture"
+          branchName="Chi nhánh mẫu"
+        />
         <ReturningCustomerPoints
           salonId="salon-fixture"
           branchId="branch-fixture"
           branchName="Chi nhánh mẫu"
           pointPerVisit={1}
           canAward
-          canCreateCustomer
         />
       </main>
     </div>

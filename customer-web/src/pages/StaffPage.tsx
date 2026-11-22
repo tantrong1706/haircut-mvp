@@ -12,6 +12,7 @@ import { HaircutPhotoCapture } from "../components/HaircutPhotoCapture";
 import { RedeemRewardPanel } from "../components/RedeemRewardPanel";
 import { BrandLogo } from "../components/BrandLogo";
 import { ReturningCustomerPoints } from "../components/ReturningCustomerPoints";
+import { ManualCustomerForm } from "../components/ManualCustomerForm";
 import { CustomerNameEditor } from "../components/CustomerNameEditor";
 import {
   StaffSession,
@@ -52,6 +53,7 @@ export function StaffPage({ currentUser }: Props) {
     currentUser.role === "owner" ? "all" : currentUser.branchId || currentUser.branchIds?.[0] || "",
   );
   const [selectedId, setSelectedId] = useState("");
+  const [pendingVisit, setPendingVisit] = useState<{ id: string; salonId: string; branchId: string } | null>(null);
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [claimingId, setClaimingId] = useState("");
@@ -70,7 +72,8 @@ export function StaffPage({ currentUser }: Props) {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  const selectedSession = sessions.find((session) => session.id === selectedId) || sessions[0];
+  const awaitingVisit = pendingVisit?.salonId === salonId && pendingVisit.branchId === branchFilter;
+  const selectedSession = sessions.find((session) => session.id === selectedId) || (awaitingVisit ? undefined : sessions[0]);
   const note = selectedSession ? noteDrafts[selectedSession.id] ?? selectedSession.note ?? "" : "";
   function setNote(value: string | ((previous: string) => string)) {
     if (!selectedSession) return;
@@ -201,6 +204,17 @@ export function StaffPage({ currentUser }: Props) {
   }, [salonId]);
 
   useEffect(() => {
+    if (pendingVisit) {
+      if (pendingVisit.salonId !== salonId || pendingVisit.branchId !== branchFilter) {
+        setPendingVisit(null);
+      } else if (sessions.some((session) => session.id === pendingVisit.id)) {
+        setSelectedId(pendingVisit.id);
+        setPendingVisit(null);
+        return;
+      } else {
+        return;
+      }
+    }
     if (sessions.length === 0) {
       if (selectedId) {
         setSelectedId("");
@@ -211,7 +225,7 @@ export function StaffPage({ currentUser }: Props) {
     if (!selectedId || !sessions.some((session) => session.id === selectedId)) {
       setSelectedId(sessions[0].id);
     }
-  }, [selectedId, sessions]);
+  }, [selectedId, sessions, pendingVisit, salonId, branchFilter]);
 
   useEffect(() => {
     const session = selectedSession;
@@ -585,7 +599,6 @@ export function StaffPage({ currentUser }: Props) {
         pointPerVisit={pointPerVisit}
         canAward={canAwardPointsDirectly}
         canRedeem={canRedeemRewards}
-        canCreateCustomer={branches.some((branch) => branch.id === branchFilter)}
       />
 
       <div className="metrics-row compact-metrics">
@@ -611,6 +624,20 @@ export function StaffPage({ currentUser }: Props) {
         ) : null}
       </div>
 
+      {branches.some((branch) => branch.id === branchFilter) ? (
+        <ManualCustomerForm
+          mode="visit"
+          salonId={salonId}
+          branchId={branchFilter}
+          branchName={currentBranchName}
+          onCreated={(sessionId) => {
+            if (sessionId) {
+              setPendingVisit({id: sessionId, salonId, branchId: branchFilter});
+              setSelectedId(sessionId);
+            }
+          }}
+        />
+      ) : null}
       <div className="ops-grid staff-workspace">
         <div className="ops-list">
           {!loaded ? (
@@ -622,7 +649,7 @@ export function StaffPage({ currentUser }: Props) {
             <div className="empty-state compact-empty">
               <UsersRound size={28} aria-hidden="true" />
               <strong>Chưa có khách</strong>
-              <p>Khách quét QR sẽ hiện tại đây.</p>
+              <p>Khách quét QR hoặc lượt được thêm trực tiếp sẽ hiện tại đây.</p>
             </div>
           ) : (
             sessions.map((session) => (
@@ -636,7 +663,7 @@ export function StaffPage({ currentUser }: Props) {
                   .filter(Boolean)
                   .join(" ")}
                 disabled={loading || photoBusy}
-                onClick={() => setSelectedId(session.id)}
+                onClick={() => { setPendingVisit(null); setSelectedId(session.id); }}
               >
                 <div className="ops-card-row">
                   <span className="ops-card-title">{session.customer?.name || "Khách hàng"}</span>
@@ -708,7 +735,7 @@ export function StaffPage({ currentUser }: Props) {
                 </strong>
                 <span>
                   {isCustomerPointRequest
-                    ? "Kiểm tra tên và 4 số điện thoại cuối, thêm ảnh nếu cần rồi xác nhận. Yêu cầu có hiệu lực 30 phút."
+                    ? "Kiểm tra tên và 4 số điện thoại cuối, thêm ảnh nếu cần rồi xác nhận."
                     : detailStatusText(selectedSession, currentUser.uid)}
                 </span>
               </div>
