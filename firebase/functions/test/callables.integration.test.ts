@@ -507,7 +507,7 @@ describe("callable transactions", () => {
       (await db.collection("point_requests").where("source", "==", "manual_visit").get()).size,
     ).toBe(1);
     expect((await db.doc(`salons/${salonId}`).get()).get("customerCount")).toBe(1);
-  });
+  }, 15_000); // Concurrent emulator transactions can retry with backoff, especially under coverage.
 
   it("QR chi nhánh → gửi trùng → staff xác nhận → khóa cả salon 2 giờ", async () => {
     const salonId = "salon-qr-end-to-end";
