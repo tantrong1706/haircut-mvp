@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { StaffSession } from "../services/operations";
@@ -85,6 +85,28 @@ const waitingSession: StaffSession = {
 let sessionsForTest: StaffSession[] = [waitingSession];
 
 describe("StaffPage", () => {
+  it("keeps a response-first manual visit selected while its listener is delayed", async () => {
+    const actor = userEvent.setup();
+    mocks.createManualCustomer.mockResolvedValue({ customerId: "manual-customer", sessionId: "manual-delayed" });
+    render(<StaffPage currentUser={{uid:"staff-a",salonId:"salon-a",name:"Nam",avatarUrl:"",
+      role:"staff",isActive:true,branchId:"branch-a",branchIds:["branch-a"]}} />);
+    await actor.click(await screen.findByRole("button", {name: "Thêm khách trực tiếp"}));
+    await actor.type(screen.getByLabelText("Tên khách", {exact:true}), "Khách mới chờ mạng");
+    await actor.click(screen.getByRole("button", {name:"Tạo lượt chờ"}));
+    await screen.findByText("Đã tạo lượt chờ xác nhận. Chưa cộng điểm.");
+    expect(screen.queryByRole("heading", {name:"Anh Tân"})).not.toBeInTheDocument();
+    const session: StaffSession = {
+      ...waitingSession, id: "manual-delayed", status: "pending_approval", approvalMode: "staff_confirmation",
+      customer: {...waitingSession.customer!, name:"Khách mới chờ mạng", points:0},
+    };
+    await act(async () => {
+      const listeners = mocks.listenActiveSessions.mock.calls;
+      listeners[listeners.length - 1][2]([waitingSession, session]);
+    });
+    expect(await screen.findByRole("heading", {name:"Khách mới chờ mạng"})).toBeVisible();
+    expect(screen.queryByText(/hiệu lực 30 phút/)).not.toBeInTheDocument();
+    expect(mocks.confirmCustomerPointRequest).not.toHaveBeenCalled();
+  });
   it("creates a manual pending visit in the staff queue without confirming or awarding it", async () => {
     const actor = userEvent.setup();
     mocks.createManualCustomer.mockImplementation(async () => {
