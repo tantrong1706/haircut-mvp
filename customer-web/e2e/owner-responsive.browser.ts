@@ -29,11 +29,36 @@ test("owner creates a manual visit from approvals without awarding points", asyn
   await page.getByRole("button", { name: "Duyệt điểm", exact: true }).click();
   await page.getByRole("button", { name: "Thêm khách trực tiếp", exact: true }).click();
   const form = page.getByRole("form", { name: "Tạo lượt khách trực tiếp" });
+  await expect(form.getByRole("heading", { name: "Tạo lượt khách trực tiếp" })).toBeVisible();
   await expect(form.getByLabel("Tên khách", { exact: true })).toHaveValue("");
-  await expect(form.getByLabel("Số điện thoại (không bắt buộc)")).toHaveValue("");
+  const phone = form.getByLabel("Số điện thoại (không bắt buộc)");
+  await expect(phone).toHaveValue("");
   await form.getByLabel("Tên khách", { exact: true }).fill("Khách trực tiếp mẫu");
-  await form.getByLabel("Số điện thoại (không bắt buộc)").fill("0900004321");
-  await form.getByRole("button", { name: "Tạo lượt chờ" }).click();
+  const submit = form.getByRole("button", { name: "Tạo lượt chờ" });
+  await phone.fill("090123");
+  await submit.click();
+  await expect(phone).toBeFocused();
+  await expect(phone).toHaveAccessibleDescription(/số di động Việt Nam/);
+  await expect(form.getByRole("alert")).toBeVisible();
+  expect(
+    (await new AxeBuilder({ page }).include(".manual-customer-form").analyze()).violations,
+  ).toEqual([]);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await form.screenshot({
+    path: info.outputPath("manual-customer-field-error.png"),
+    scale: "css",
+    style: ".owner-tabs { position: static !important; }",
+  });
+  await phone.fill("0900004321");
+  await expect(form.getByRole("alert")).toHaveCount(0);
+  await expect(submit).toBeEnabled();
+  expect((await submit.boundingBox())?.height).toBeGreaterThanOrEqual(44);
+  await form.screenshot({
+    path: info.outputPath("manual-customer-card.png"),
+    scale: "css",
+    style: ".owner-tabs { position: static !important; }",
+  });
+  await submit.click();
   await expect(
     page.getByText("Đã tạo lượt chờ xác nhận. Chưa cộng điểm.", { exact: true }),
   ).toBeVisible();

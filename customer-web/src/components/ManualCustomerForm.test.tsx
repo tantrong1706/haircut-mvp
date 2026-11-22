@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, it, vi } from "vitest";
 import { ManualCustomerForm } from "./ManualCustomerForm";
@@ -13,7 +13,9 @@ const submit = (actor: ReturnType<typeof userEvent.setup>) =>
 const name = () => screen.getByLabelText("Tên khách", { exact: true });
 const phone = () => screen.getByLabelText("Số điện thoại (không bắt buộc)");
 
-beforeEach(() => create.mockReset().mockResolvedValue({ customerId: "customer-fixture" }));
+beforeEach(() => {
+  create.mockReset().mockResolvedValue({ customerId: "customer-fixture" });
+});
 
 it("focuses the name, saves without a number, and does not reopen itself", async () => {
   const actor = userEvent.setup();
@@ -44,11 +46,18 @@ it("blocks malformed numbers and retries a network error without changing the op
   await actor.type(phone(), "090123");
   await submit(actor);
   expect(await screen.findByRole("alert")).toHaveTextContent("số di động Việt Nam");
+  expect(phone()).toHaveAttribute("aria-invalid", "true");
+  expect(phone()).toHaveAccessibleDescription(/số di động Việt Nam/);
+  expect(phone()).toHaveFocus();
   expect(create).not.toHaveBeenCalled();
   await actor.clear(phone());
+  expect(phone()).not.toHaveAttribute("aria-invalid", "true");
+  expect(screen.queryByRole("alert")).toBeNull();
   await actor.type(phone(), "+84 90 000 4321");
   await submit(actor);
   expect(await screen.findByRole("alert")).toHaveTextContent("Mất kết nối");
+  expect(phone()).not.toHaveAttribute("aria-invalid", "true");
+  expect(screen.getByRole("button", { name: "Lưu khách" })).toHaveFocus();
   await submit(actor);
   expect(await screen.findByRole("status")).toBeVisible();
   expect(create.mock.calls[0][0]).toMatchObject({ branchId: "branch-a", phone: "0900004321" });
@@ -124,4 +133,34 @@ it("does not announce a pending visit when an older server returns only a profil
   expect(create).toHaveBeenLastCalledWith(
     expect.objectContaining({ startVisit: true, allowPhoto: false }),
   );
+});
+
+it("announces a pending save, disables edits, and restores focus when the visit is ready", async () => {
+  const actor = userEvent.setup();
+  let complete!: () => void;
+  create.mockReturnValueOnce(
+    new Promise((resolve) => {
+      complete = () => resolve({ customerId: "customer-fixture", sessionId: "visit-fixture" });
+    }),
+  );
+  render(<ManualCustomerForm mode="visit" salonId="salon-a" branchId="branch-a" />);
+  const trigger = screen.getByRole("button", { name: "Thêm khách trực tiếp" });
+  await actor.click(trigger);
+  const form = screen.getByRole("form", { name: "Tạo lượt khách trực tiếp" });
+  expect(screen.getByRole("heading", { name: "Tạo lượt khách trực tiếp" })).toBeVisible();
+  expect(form).toHaveAccessibleDescription(/không tự cộng điểm/i);
+  expect(phone()).toHaveAccessibleDescription(/để trống/i);
+  await actor.type(name(), "Khách mẫu");
+  await actor.click(screen.getByRole("button", { name: "Tạo lượt chờ" }));
+  expect(form).toHaveAttribute("aria-busy", "true");
+  expect(screen.getByRole("button", { name: "Đang lưu…" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Đóng" })).toBeDisabled();
+  expect(phone()).toBeDisabled();
+  expect(trigger).toBeDisabled();
+  expect(create).toHaveBeenCalledOnce();
+
+  await act(async () => complete());
+  expect(await screen.findByRole("status")).toHaveTextContent("Chưa cộng điểm");
+  expect(form).not.toBeInTheDocument();
+  expect(trigger).toHaveFocus();
 });
