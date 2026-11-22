@@ -1,0 +1,75 @@
+# Read-only heuristic scan of CH Hair under Vietnamese law.
+# Only used for a draft PR; not a legal opinion, not a deployment.
+name: CH Hair Vietnam Legal Scan (trial)
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/ch-hair-vn-law-trial.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-legal-scan:
+    name: Read-only VN legal source signals
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          persist-credentials: false
+      - name: Clone scanner pinned to reviewed commit
+        shell: bash
+        run: |
+          git clone --quiet https://github.com/mhfed/vn-law-check.git "${RUNNER_TEMP}/vn-law-check"
+          git -C "${RUNNER_TEMP}/vn-law-check" checkout --quiet --detach 98ff2c3b1cee0270c4cdad1aa284d589902ce7f1
+          test "$(git -C "${RUNNER_TEMP}/vn-law-check" rev-parse HEAD)" = "98ff2c3b1cee0270c4cdad1aa284d589902ce7f1"
+      - name: Scan only source folders, produce evidence JSON
+        shell: bash
+        run: |
+          mkdir -p vn-law-evidence
+          set +e
+          for target in customer-web apps/manager-mobile apps/admin-web firebase/functions; do
+            label="${target//\//-}"
+            timeout 100s bash "${RUNNER_TEMP}/vn-law-check/scripts/scan.sh" --json "$target" > "vn-law-evidence/${label}.json" 2> "vn-law-evidence/${label}.stderr"
+            code="$?"
+            echo "${label} exit=${code}" >> vn-law-evidence/status.txt
+            if [[ $code -eq 0 ]]; then
+              python3 -m json.tool "vn-law-evidence/${label}.json" > /dev/null || echo "${label} INVALID_JSON" >> vn-law-evidence/status.txt
+            fi
+          done
+          set -e
+      - name: Summarize signals, not legal verdicts
+        shell: bash
+        run: |
+          python3 - <<'PY' > vn-law-evidence/summary.md
+          import json, glob, pathlib
+          print("## Vietnamese legal code signals — preliminary only")
+          print("")
+          print("Tool: mhfed/vn-law-check at commit 98ff2c3. Heuristic matches need review and cannot prove legal compliance.")
+          print("")
+          for filename in sorted(glob.glob("vn-law-evidence/*.json")):
+              print("###", pathlib.Path(filename).stem)
+              try:
+                  obj=json.load(open(filename))
+                  print("Summary:", obj.get("summary",{}))
+                  for signal, entry in obj.get("signals",{}).items():
+                      if entry.get("detected") is True:
+                          evidence=entry.get("evidence",[])
+                          print("- ",signal,":",", ".join(str(x.get("file","")) for x in evidence))
+              except Exception as e:
+                  print("Scan output unavailable:",type(e).__name__)
+              print("")
+          PY
+          cat vn-law-evidence/status.txt
+          cat vn-law-evidence/summary.md >> "${GITHUB_STEP_SUMMARY}"
+      - name: Upload full scan results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: ch-hair-vn-law-signals
+          path: vn-law-evidence
+          if-no-files-found: warn
+          retention-days: 14
