@@ -46,9 +46,9 @@ jobs:
             echo "- Scanner exit code: \`${result}\`"
             echo "- This is an **informational trial**, not an App Store / Google Play approval."
             echo ""
-            echo '\`\`\`text'
+            echo '```text'
             sed -n '1,180p' "${RUNNER_TEMP}/app-store-compliance-report.txt"
-            echo '\`\`\`'
+            echo '```'
           } >> "${GITHUB_STEP_SUMMARY}"
           if [ "${result}" -ne 0 ]; then
             echo "::warning::Compliance scanner reported exit code ${result}. Check the job summary and artifact."
