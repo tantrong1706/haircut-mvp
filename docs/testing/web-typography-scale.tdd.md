@@ -14,9 +14,9 @@
 - Không đổi lockfile. `npm audit --omit=dev` báo 0 cảnh báo trong phụ thuộc chạy production; `npm ci` vẫn báo 43 cảnh báo khi tính cả bộ công cụ phát triển có sẵn, ngoài phạm vi thay đổi kiểu chữ.
 - Thay đổi là CSS; kiểm thử đọc kiểu hiển thị thực tế của trình duyệt, không suy ra tỷ lệ coverage CSS từ Vitest.
 
-## Bước tiếp theo: tham khảo shadcn/ui
+## Mẫu thử tiếp theo: tham khảo shadcn/ui
 
-Thử trên biểu mẫu **Thêm khách trực tiếp** trước khi áp dụng toàn Web. Tái sử dụng CSS và màu CH Hair, không cần cài Tailwind hay chuyển toàn bộ bộ giao diện.
+Đã thử trên [biểu mẫu **Thêm khách trực tiếp**](manual-customer-form-ui.tdd.md) trước khi áp dụng toàn Web. Tái sử dụng CSS và màu CH Hair, không cần cài Tailwind hay chuyển toàn bộ bộ giao diện.
 
 - [Button](https://ui.shadcn.com/docs/components/base/button): phân biệt thao tác chính, phụ và nguy hiểm; chuẩn hóa trạng thái focus, đang xử lý, vô hiệu hóa. Giữ vùng bấm hiện có trên điện thoại.
 - [Card](https://ui.shadcn.com/docs/components/base/card): thống nhất bố cục tiêu đề, nội dung, nút ở cuối. Giữ thẻ điểm thành viên là trường hợp có nhận diện riêng.
