@@ -1,0 +1,130 @@
+/* Pilot card / field / action styles for the shared owner and staff form. */
+.manual-customer {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.manual-customer > div {
+  width: min(100%, 36rem);
+  min-width: 0;
+}
+
+.app-shell .manual-customer .manual-customer-form {
+  --manual-card-inset: clamp(14px, 2.8vw, 22px);
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  overflow-wrap: anywhere;
+}
+
+.manual-card-heading,
+.manual-card-fields,
+.manual-card-actions {
+  min-width: 0;
+  padding: var(--manual-card-inset);
+}
+
+.manual-card-heading {
+  display: grid;
+  gap: 6px;
+  border-bottom: 1px solid var(--line);
+}
+
+.manual-card-heading h2 {
+  margin: 0;
+}
+
+.manual-card-heading .muted,
+.app-shell .manual-card-branch {
+  margin: 0;
+  font-size: var(--type-label);
+}
+
+.app-shell .manual-card-branch {
+  color: var(--amber);
+}
+
+.manual-card-fields {
+  display: grid;
+  gap: 16px;
+}
+
+.manual-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.manual-field > label,
+.manual-consent label {
+  font-size: var(--type-label);
+  line-height: var(--leading-label);
+}
+
+.manual-field > label span,
+.manual-field-hint {
+  color: var(--muted);
+}
+
+.manual-field :is(input, select) {
+  width: 100%;
+}
+
+.app-shell .manual-customer-form .manual-field [aria-invalid="true"] {
+  border-color: var(--red);
+}
+
+.manual-field-hint,
+.manual-field-error {
+  margin: 0;
+  font-size: var(--type-caption);
+}
+
+.manual-field-error {
+  color: var(--red);
+}
+
+.manual-consent {
+  display: grid;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper-soft);
+}
+
+.manual-consent label {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 10px;
+}
+
+.manual-consent input {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  margin: 0;
+  accent-color: var(--action);
+}
+
+.manual-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.manual-card-actions button {
+  min-width: 0;
+  flex: 1 1 9rem;
+  white-space: normal;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .manual-card-actions .spin-icon {
+    animation: none;
+  }
+}
