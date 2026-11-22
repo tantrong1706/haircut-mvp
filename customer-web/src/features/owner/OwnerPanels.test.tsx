@@ -103,6 +103,22 @@ describe("extracted owner panels", () => {
       onCancelPhotoUpload: vi.fn(),
     };
   }
+  it("does not enable capture without consent for this visit even if the profile allowed photos before", () => {
+    const manualRequest = {
+      ...request,
+      photoConsentGranted: false,
+      customer: {
+        id: "customer",
+        name: "Khách trực tiếp",
+        phoneLast4: "1234",
+        points: 7,
+        allowPhoto: true,
+      },
+    };
+    render(<ApprovalsPanel {...approvalProps()} requests={[manualRequest]} />);
+    expect(screen.getByLabelText("Chụp ảnh kiểu tóc cho Khách trực tiếp")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Duyệt" })).toBeEnabled();
+  });
   it("keeps approval empty/fallback text, request identity and photo removal callbacks", async () => {
     const props = approvalProps();
     const { rerender } = render(<ApprovalsPanel {...props} requests={[]} />);
