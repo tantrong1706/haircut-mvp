@@ -381,20 +381,51 @@ describe("callable transactions", () => {
     expect((await db.doc(`salons/${salonId}`).get()).get("customerCount")).toBe(50);
   });
 
-  it.each(["0900004321", "+84900004321", "84900004321"])("manual visit reuses a legacy full phone without a suffix (%s)", async (storedPhone) => {
-    const salonId = "manual-legacy-phone";
-    await seedOwner("manual-legacy-owner", salonId, { customerCount: 50 });
-    await seedBranch(salonId, "manual-legacy-branch");
-    await db.doc("customers/legacy-phone-profile").set({ salonId, phone: storedPhone, name:"Khách cũ", points:7, firebaseUid:"legacy-fixture-uid" });
-    await db.doc("customers/legacy-other-salon").set({ salonId:"other-salon", phone: storedPhone, points:99 });
-    const form = { salonId, branchId:"manual-legacy-branch", startVisit:true, name:"Không đổi tên", phone:"0900004321", operationId:"manual-legacy-operation-0001" };
-    const result = await createManualCustomer.run(requestFor("manual-legacy-owner", form)) as { customerId:string };
-    expect(result.customerId).toBe("legacy-phone-profile");
-    expect((await db.doc("customers/legacy-phone-profile").get()).data()).toMatchObject({ name:"Khách cũ", points:7, firebaseUid:"legacy-fixture-uid" });
-    expect((await db.doc(`salons/${salonId}`).get()).get("customerCount")).toBe(50);
-    await db.doc("customers/legacy-duplicate").set({ salonId, phone:"0900004321", points:1 });
-    await expect(createManualCustomer.run(requestFor("manual-legacy-owner", { ...form, operationId:"manual-legacy-operation-0002" }))).rejects.toMatchObject({ details: {errorCode:"MANUAL_CUSTOMER_AMBIGUOUS"} });
-  });
+  it.each(["0900004321", "+84900004321", "84900004321"])(
+    "manual visit reuses a legacy full phone without a suffix (%s)",
+    async (storedPhone) => {
+      const salonId = "manual-legacy-phone";
+      await seedOwner("manual-legacy-owner", salonId, { customerCount: 50 });
+      await seedBranch(salonId, "manual-legacy-branch");
+      await db.doc("customers/legacy-phone-profile").set({
+        salonId,
+        phone: storedPhone,
+        name: "Khách cũ",
+        points: 7,
+        firebaseUid: "legacy-fixture-uid",
+      });
+      await db
+        .doc("customers/legacy-other-salon")
+        .set({ salonId: "other-salon", phone: storedPhone, points: 99 });
+      const form = {
+        salonId,
+        branchId: "manual-legacy-branch",
+        startVisit: true,
+        name: "Không đổi tên",
+        phone: "0900004321",
+        operationId: "manual-legacy-operation-0001",
+      };
+      const result = (await createManualCustomer.run(requestFor("manual-legacy-owner", form))) as {
+        customerId: string;
+      };
+      expect(result.customerId).toBe("legacy-phone-profile");
+      expect((await db.doc("customers/legacy-phone-profile").get()).data()).toMatchObject({
+        name: "Khách cũ",
+        points: 7,
+        firebaseUid: "legacy-fixture-uid",
+      });
+      expect((await db.doc(`salons/${salonId}`).get()).get("customerCount")).toBe(50);
+      await db.doc("customers/legacy-duplicate").set({ salonId, phone: "0900004321", points: 1 });
+      await expect(
+        createManualCustomer.run(
+          requestFor("manual-legacy-owner", {
+            ...form,
+            operationId: "manual-legacy-operation-0002",
+          }),
+        ),
+      ).rejects.toMatchObject({ details: { errorCode: "MANUAL_CUSTOMER_AMBIGUOUS" } });
+    },
+  );
 
   it("manual visit validates branch and explicit photo consent without leaving a partial profile", async () => {
     const salonId = "manual-visit-guards";

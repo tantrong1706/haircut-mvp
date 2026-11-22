@@ -139,7 +139,28 @@ export async function createManualCustomerProfile(
           .select("phone"),
       );
       // Use the existing suffix index but compare the entire number, not just the suffix.
-      const matches = siblings.docs.filter((row) => {
+      // Legacy profiles may have a full phone but no suffix. Equality queries reuse
+      // automatic indexes, stay tenant-scoped and do not require a production index rollout.
+      const exactPhones = [phone, "+84" + phone.slice(1), "84" + phone.slice(1)];
+      const exactGroups = await Promise.all(
+        exactPhones.map((value) =>
+          tx.get(
+            db
+              .collection("customers")
+              .where("salonId", "==", salonId)
+              .where("phone", "==", value)
+              .limit(2)
+              .select("phone"),
+          ),
+        ),
+      );
+      const candidates = new Map(
+        [...siblings.docs, ...exactGroups.flatMap((group) => group.docs)].map((row) => [
+          row.id,
+          row,
+        ]),
+      );
+      const matches = [...candidates.values()].filter((row) => {
         try {
           return optionalPhone(row.get("phone")) === phone;
         } catch {

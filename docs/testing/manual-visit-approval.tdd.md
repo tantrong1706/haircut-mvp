@@ -18,3 +18,8 @@ Các kiểm thử dùng Firestore giả lập và hồ sơ trình duyệt giả.
 - Biểu mẫu: 5 ca đạt, coverage 97,18% dòng và 90,41% nhánh. Bài kiểm thử tích hợp trang Nhân viên xác nhận lượt mới hiện trong hàng chờ, chưa gọi API cộng điểm.
 - Trình duyệt: Chủ salon 65 ca đạt trên 320/360 px, WebKit iPhone, tablet và desktop; Nhân viên 12 ca đạt trên Chromium desktop/mobile và WebKit.
 - Kiểm tra kiểu và lint đạt. Bộ kiểm thử luồng chủ salon cũ, biểu mẫu, nhân viên và đồng ý ảnh đã chạy, không kiểm tra bằng dữ liệu khách thật.
+
+## Bổ sung sau rà soát PR
+
+- RED `24d32a8`: kiểm thử phản hồi đến trước snapshot vẫn chọn nhầm lượt cũ; ba dạng số đầy đủ trên hồ sơ cũ thiếu `phoneLast4` bị từ chối ở giới hạn 50 khách. Sau sửa, 9 ca trang Nhân viên và 9 ca tích hợp thủ công đều đạt. Lượt vừa tạo được giữ lựa chọn trong khi chờ snapshot, không cho thao tác nhầm khách; hồ sơ cũ được tìm theo toàn bộ số, trong đúng salon, trước kiểm tra hạn mức. Trùng nhiều hồ sơ vẫn từ chối, không tự gộp. Bỏ thông báo cố định 30 phút không đúng.
+- Giữ phương án bảo thủ với con trỏ lượt cũ: thao tác thủ công không ghi đè bất kỳ lượt QR còn tồn tại nào, kể cả đang chờ tác vụ hết hạn dọn dẹp. Nhân viên xử lý lượt hiện tại hoặc chờ tác vụ định kỳ, không khôi phục hay sửa ảnh/ghi chú của lượt QR trong API thêm khách. Đây là giới hạn có chủ đích để giữ phạm vi phát hành nhỏ.
