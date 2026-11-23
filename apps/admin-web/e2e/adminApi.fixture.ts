@@ -4,6 +4,7 @@ import type {
   AdminSalon,
   AdminManagementInput,
   AdminSalonOperations,
+  AdminSalonPeople,
 } from "../src/services/adminApi";
 
 const scenario = new URLSearchParams(location.search).get("scenario");
@@ -33,6 +34,25 @@ const offline = () => {
   if (scenario === "offline") throw { code: "functions/unavailable" };
 };
 export const adminApi = {
+  people: async (salonId: string, cursor?: string): Promise<AdminSalonPeople> => ({
+    salonId,
+    owner: {
+      name: "Chủ salon mẫu",
+      email: "owner@example.invalid",
+      emailVerified: true,
+      status: "active",
+    },
+    customers: [
+      {
+        id: cursor ? "fixture-customer-b" : "fixture-customer-a",
+        name: cursor ? "Khách mẫu B" : "Khách mẫu A",
+        phoneLast4: "4321",
+        points: 7,
+        lastVisitAtMs: Date.UTC(2026, 10, 18, 9),
+      },
+    ],
+    nextCursor: cursor ? null : "fixture-customer-a",
+  }),
   salonOperations: async (salonId: string): Promise<AdminSalonOperations> => {
     if (scenario === "queue-offline") throw { code: "functions/unavailable" };
     return {

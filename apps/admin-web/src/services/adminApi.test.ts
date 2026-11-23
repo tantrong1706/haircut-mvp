@@ -15,7 +15,9 @@ describe("adminApi", () => {
     });
     expect(Object.prototype.hasOwnProperty.call(mockedCall.mock.calls[0][1], "cursor")).toBe(false);
   });
-  beforeEach(() => mockedCall.mockReset());
+  beforeEach(() => {
+    mockedCall.mockReset();
+  });
 
   it("giới hạn trang danh sách salon và gọi đúng callable", async () => {
     mockedCall.mockResolvedValueOnce({ salons: [], nextCursor: null });
@@ -36,10 +38,24 @@ describe("adminApi", () => {
       "features",
       "auditEvents",
       "diagnostics",
+      "people",
       "repair",
       "salonOperations",
       "manageSalon",
     ]);
+  });
+  it("reads people for one explicit salon without a general customer export", async () => {
+    await adminApi.people("salon-a");
+    expect(mockedCall).toHaveBeenLastCalledWith("getSystemAdminSalonPeople", {
+      salonId: "salon-a",
+      pageSize: 25,
+    });
+    await adminApi.people("salon-a", "customer-a");
+    expect(mockedCall).toHaveBeenLastCalledWith("getSystemAdminSalonPeople", {
+      salonId: "salon-a",
+      cursor: "customer-a",
+      pageSize: 25,
+    });
   });
   it("scopes pending requests to one salon and one bounded page", async () => {
     await adminApi.salonOperations("salon-a", "request-cursor");

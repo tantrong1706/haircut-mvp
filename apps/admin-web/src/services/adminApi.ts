@@ -27,6 +27,24 @@ export type AdminAuditEvent = {
   createdAtMs: number | null;
 };
 
+export type AdminSalonPeople = {
+  salonId: string;
+  owner: {
+    name: string;
+    email: string | null;
+    emailVerified: boolean;
+    status: "active" | "inactive" | "missing";
+  } | null;
+  customers: Array<{
+    id: string;
+    name: string;
+    phoneLast4: string | null;
+    points: number | null;
+    lastVisitAtMs: number | null;
+  }>;
+  nextCursor: string | null;
+};
+
 export type RepairAction = "reconcile_customer_count" | "clear_stale_session_pointer";
 export type AdminDiagnostics = {
   salonId: string;
@@ -115,6 +133,11 @@ export const adminApi = {
     callAdminFunction<{ salonId: string }, AdminDiagnostics>("getSystemAdminSalonDiagnostics", {
       salonId,
     }),
+  people: (salonId: string, cursor?: string) =>
+    callAdminFunction<{ salonId: string; cursor?: string; pageSize: number }, AdminSalonPeople>(
+      "getSystemAdminSalonPeople",
+      { salonId, ...(cursor ? { cursor } : {}), pageSize: 25 },
+    ),
   repair: (input: AdminRepairInput) =>
     callAdminFunction<
       AdminRepairInput,

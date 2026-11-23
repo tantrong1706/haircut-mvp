@@ -121,6 +121,7 @@ import { auditEventData } from "./domains/audit/auditEvent";
 import { createReturningCustomerPointAward } from "./domains/points/returningCustomerPoints";
 import { createAdminSupport } from "./domains/admin/support";
 import { createAdminSupervision } from "./domains/admin/supervision";
+import { createAdminSalonPeople } from "./domains/admin/salonPeople";
 import {
   PHOTO_UPLOAD_MAX_BYTES,
   PHOTO_UPLOAD_OPERATION_TTL_MS,
@@ -8420,6 +8421,11 @@ const adminSupervision = createAdminSupervision(db, (uid, mode) =>
 );
 export const getSystemAdminSalonOperations = onCall({ ...functionOptions, maxInstances: 3 }, adminSupervision.operations);
 export const manageSystemAdminSalon = onCall({ ...functionOptions, maxInstances: 3 }, adminSupervision.manage);
+
+export const getSystemAdminSalonPeople = onCall(
+  { ...functionOptions, maxInstances: 3 },
+  createAdminSalonPeople(db, (uid) => enforceAuthenticatedRateLimit("adminSupportRead", uid, "__system__")),
+);
 
 export const getSystemAdminOverview = onCall(functionOptions, async (request) => {
   const uid = currentUid(request.auth);
