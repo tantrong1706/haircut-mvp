@@ -1,0 +1,123 @@
+.owner-settings {
+  display: grid;
+  gap: 14px;
+  width: min(100%, 52rem);
+  min-width: 0;
+}
+
+.owner-settings-heading {
+  display: grid;
+  gap: 4px;
+}
+
+.owner-settings-heading .muted {
+  font-size: var(--type-label);
+}
+
+.owner-settings-menu {
+  display: grid;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+}
+
+.owner-settings-choice {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  min-height: 60px;
+  padding: 10px 14px;
+  background: transparent;
+  color: var(--ink);
+  text-align: start;
+  border-radius: 0;
+}
+
+.owner-settings-choice:first-child {
+  border-radius: 11px 11px 0 0;
+}
+
+.owner-settings-choice:last-child {
+  border-radius: 0 0 11px 11px;
+}
+
+.owner-settings-choice + .owner-settings-choice {
+  border-top: 1px solid var(--line);
+}
+
+.owner-settings-choice > svg:first-child {
+  color: var(--accent);
+}
+
+.owner-settings-choice strong,
+.owner-settings-choice small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.owner-settings-choice strong {
+  font-size: var(--type-label);
+  line-height: var(--leading-label);
+}
+
+.owner-settings-choice small {
+  margin-block-start: 2px;
+  font-size: var(--type-caption);
+  line-height: var(--leading-label);
+}
+
+.owner-settings-choice:hover,
+.owner-settings-choice[aria-expanded="true"] {
+  background: var(--paper-soft);
+}
+
+.owner-settings-choice[aria-expanded="true"] .owner-settings-chevron {
+  transform: rotate(180deg);
+}
+
+.owner-settings-content:not([hidden]),
+.owner-settings-data {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.owner-settings-details {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper-soft);
+}
+
+.owner-settings-details > summary {
+  min-height: 44px;
+  padding: 12px;
+  cursor: pointer;
+  font-size: var(--type-label);
+  line-height: var(--leading-label);
+}
+
+.owner-settings-details > summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 10px;
+}
+
+.owner-settings-details .owner-settings-details-content {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 0 12px 12px;
+}
+
+.owner-settings-details-content .muted,
+.owner-settings-data .muted {
+  font-size: var(--type-label);
+}
+
+.owner-settings-unsaved {
+  color: var(--amber);
+  font-size: var(--type-caption);
+}

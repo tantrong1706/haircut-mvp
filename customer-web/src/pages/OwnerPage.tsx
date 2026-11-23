@@ -2,8 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { OverviewPanel } from "../features/owner/OverviewPanel";
 import { ApprovalsPanel } from "../features/owner/ApprovalsPanel";
 import { WheelConfigPanel } from "../features/owner/WheelConfigPanel";
-import { OwnerSetupLinks } from "../features/owner/OwnerSetupLinks";
-import { SalonProfilePanel } from "../features/owner/SalonProfilePanel";
+import { OwnerSettingsPanel } from "../features/owner/OwnerSettingsPanel";
 import { ownerPhoneLabel } from "../features/owner/ownerFormatters";
 import { useOwnerNavigation } from "../features/owner/useOwnerNavigation";
 import type { ReactNode } from "react";
@@ -41,7 +40,6 @@ import { ManualCustomerForm } from "../components/ManualCustomerForm";
 import { CustomerNameEditor } from "../components/CustomerNameEditor";
 import { OwnerConfirmDialog, type OwnerConfirmation as ConfirmRequest } from "../components/OwnerConfirmDialog";
 import { APP_NAME } from "../config/branding";
-import { AccountDeletionPanel } from "../components/AccountDeletionPanel";
 import type { HaircutPhotoItem } from "../components/HaircutPhotoCapture";
 import { SalonVisitDetails } from "../components/SalonVisitDetails";
 import { SalonHaircutHistory } from "../components/SalonHaircutHistory";
@@ -803,14 +801,14 @@ export function OwnerPage({ currentUser }: Props) {
           allowRestore
         />
       ) : (
-        <>
-          <section className="owner-settings-group" aria-label="Hồ sơ salon">
-            <SalonProfilePanel
-              profile={salonProfile}
-              branches={ownerBranches}
-              saving={savingSalonProfile}
-              onSave={saveSalonProfile}
-            />
+        <OwnerSettingsPanel
+          profileForm={{
+            profile: salonProfile,
+            branches: ownerBranches,
+            saving: savingSalonProfile,
+            onSave: saveSalonProfile,
+          }}
+          branding={
             <SalonBrandingPanel
               salonName={salonProfile?.name || "Salon"}
               avatarUrl={salonProfile?.avatarUrl || ""}
@@ -818,9 +816,8 @@ export function OwnerPage({ currentUser }: Props) {
               onUpload={uploadSalonAvatar}
               onClear={clearSalonAvatar}
             />
-          </section>
-          <OwnerSetupLinks onOpenTab={setActiveTab} />
-          <section className="owner-settings-group" aria-label="Tài khoản chủ salon">
+          }
+          account={
             <OwnerProfilePanel
               currentUser={currentUser}
               avatarUrl={ownerAvatarUrl}
@@ -828,9 +825,9 @@ export function OwnerPage({ currentUser }: Props) {
               onUpload={uploadOwnerAvatar}
               onClear={() => saveOwnerAvatar("")}
             />
-            <AccountDeletionPanel currentUser={currentUser} />
-          </section>
-        </>
+          }
+          onOpenTab={setActiveTab}
+        />
       )}
 
       {message ? <p className="alert success">{message}</p> : null}
