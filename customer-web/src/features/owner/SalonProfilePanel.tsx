@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Eye, Save } from "lucide-react";
 import { SalonCustomerPreview, type PreviewBranch } from "./SalonCustomerPreview";
 import type {
@@ -11,6 +11,7 @@ type Props = {
   profile: SalonProfile | null;
   branches?: readonly PreviewBranch[];
   section?: "profile" | "operations";
+  onEditName?: () => void;
   saving: boolean;
   onSave: (input: Omit<SalonProfileUpdate, "salonId">) => void;
 };
@@ -30,10 +31,13 @@ export function SalonProfilePanel({
   profile,
   branches = [],
   section = "profile",
+  onEditName,
   saving,
   onSave,
 }: Props) {
   const operations = section === "operations";
+  const nameInput = useRef<HTMLInputElement>(null);
+  const focusNameOnOpen = useRef(false);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [hotline, setHotline] = useState("");
@@ -42,6 +46,13 @@ export function SalonProfilePanel({
   const [switchDraft, setSwitchDraft] = useState<SalonProfileSwitches>({});
   const [previewOpen, setPreviewOpen] = useState(false);
   const previewId = useId();
+
+  useEffect(() => {
+    if (!operations && focusNameOnOpen.current) {
+      focusNameOnOpen.current = false;
+      nameInput.current?.focus();
+    }
+  }, [operations]);
 
   const savedName = profile?.name ?? "";
   const savedAddress = profile?.address ?? "";
@@ -155,6 +166,7 @@ export function SalonProfilePanel({
             <label className="field">
               <span>Tên hiển thị</span>
               <input
+                ref={nameInput}
                 value={name}
                 onChange={(event) => setName(event.target.value)}
                 maxLength={120}
@@ -239,7 +251,25 @@ export function SalonProfilePanel({
           </fieldset>
         </>
       )}
-      {changed && !saving ? (
+      {operations && profile && !name.trim() && !saving ? (
+        <div className="owner-settings-validation">
+          <p className="alert error" role="alert">
+            Tên hiển thị đang để trống. Nhập tên salon để lưu thay đổi.
+          </p>
+          {onEditName ? (
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => {
+                focusNameOnOpen.current = true;
+                onEditName();
+              }}
+            >
+              Sửa tên hiển thị
+            </button>
+          ) : null}
+        </div>
+      ) : changed && !saving ? (
         <p className="owner-settings-unsaved" role="status">
           Có thay đổi chưa lưu.
         </p>

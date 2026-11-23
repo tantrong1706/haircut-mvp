@@ -121,3 +121,9 @@
   color: var(--amber);
   font-size: var(--type-caption);
 }
+
+.owner-settings-validation {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}

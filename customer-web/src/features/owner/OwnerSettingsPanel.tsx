@@ -29,7 +29,7 @@ const groups = [
 type Group = (typeof groups)[number]["id"];
 
 type Props = {
-  profileForm: Omit<ComponentProps<typeof SalonProfilePanel>, "section">;
+  profileForm: Omit<ComponentProps<typeof SalonProfilePanel>, "section" | "onEditName">;
   branding: ReactNode;
   account: ReactNode;
   onOpenTab: (tab: OwnerTab) => void;
@@ -76,7 +76,11 @@ export function OwnerSettingsPanel({ profileForm, branding, account, onOpenTab }
         hidden={openGroup !== "profile" && !operations}
       >
         {/* Keep the shared form mounted so changing groups does not discard edits. */}
-        <SalonProfilePanel {...profileForm} section={operations ? "operations" : "profile"} />
+        <SalonProfilePanel
+          {...profileForm}
+          section={operations ? "operations" : "profile"}
+          onEditName={() => setOpenGroup("profile")}
+        />
         <div hidden={openGroup !== "profile"}>
           <details className="owner-settings-details">
             <summary>Ảnh và logo salon</summary>
