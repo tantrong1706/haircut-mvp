@@ -11,17 +11,17 @@ let package = Package(
             targets: ["CapApp-SPM"])
     ],
     dependencies: [
-        .package(url: "https://github.com/ionic-team/capacitor-swift-pm.git", exact: "8.4.2"),
-        .package(name: "AparajitaCapacitorBiometricAuth", path: "..\..\..\node_modules\@aparajita\capacitor-biometric-auth"),
-        .package(name: "AparajitaCapacitorSecureStorage", path: "..\..\..\node_modules\@aparajita\capacitor-secure-storage"),
-        .package(name: "CapacitorFirebaseAppCheck", path: "..\..\..\node_modules\@capacitor-firebase\app-check"),
-        .package(name: "CapacitorFirebaseMessaging", path: "..\..\..\node_modules\@capacitor-firebase\messaging"),
-        .package(name: "CapacitorApp", path: "..\..\..\node_modules\@capacitor\app"),
-        .package(name: "CapacitorBarcodeScanner", path: "..\..\..\node_modules\@capacitor\barcode-scanner"),
-        .package(name: "CapacitorHaptics", path: "..\..\..\node_modules\@capacitor\haptics"),
-        .package(name: "CapacitorNetwork", path: "..\..\..\node_modules\@capacitor\network"),
-        .package(name: "CapacitorShare", path: "..\..\..\node_modules\@capacitor\share"),
-        .package(name: "CapacitorSplashScreen", path: "..\..\..\node_modules\@capacitor\splash-screen")
+        .package(url: "https://github.com/ionic-team/capacitor-swift-pm.git", exact: "8.4.3"),
+        .package(name: "AparajitaCapacitorBiometricAuth", path: "../../../node_modules/@aparajita/capacitor-biometric-auth"),
+        .package(name: "AparajitaCapacitorSecureStorage", path: "../../../node_modules/@aparajita/capacitor-secure-storage"),
+        .package(name: "CapacitorFirebaseAppCheck", path: "../../../node_modules/@capacitor-firebase/app-check"),
+        .package(name: "CapacitorFirebaseMessaging", path: "../../../node_modules/@capacitor-firebase/messaging"),
+        .package(name: "CapacitorApp", path: "../../../node_modules/@capacitor/app"),
+        .package(name: "CapacitorBarcodeScanner", path: "../../../node_modules/@capacitor/barcode-scanner"),
+        .package(name: "CapacitorHaptics", path: "../../../node_modules/@capacitor/haptics"),
+        .package(name: "CapacitorNetwork", path: "../../../node_modules/@capacitor/network"),
+        .package(name: "CapacitorShare", path: "../../../node_modules/@capacitor/share"),
+        .package(name: "CapacitorSplashScreen", path: "../../../node_modules/@capacitor/splash-screen")
     ],
     targets: [
         .target(

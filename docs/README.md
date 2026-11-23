@@ -10,8 +10,9 @@ Các tài liệu bắt đầu nên đọc:
 - [Triển khai](deployment.md), [vận hành](PRODUCTION_OPERATIONS.md), [xử lý sự cố](incident-runbook.md)
 - [Customer Web](../customer-web/README.md) và [Firebase](../firebase/README.md)
 - [Admin riêng](ADMIN_OPERATIONS.md)
+- [HAIRCUT Manager — thử nghiệm Android/iOS](MANAGER_STORE_SUBMISSION.md)
 - [Ranh giới mã tương thích cũ](LEGACY_COMPATIBILITY.md)
 
 Các báo cáo có ngày/SHA trong testing hoặc archive là bằng chứng của lần kiểm thử đó, không
-thay thế trạng thái phát hành hiện tại. Nội dung native hoặc Gateway cũ không phải bước bắt buộc
-để chạy Customer Web. Không chạy lệnh từ tài liệu lịch sử mà chưa xác nhận đúng phạm vi.
+thay thế trạng thái phát hành hiện tại. Manager Android/iOS có luồng chuẩn bị riêng; khách vẫn
+không cần cài app để dùng Customer Web. Không chạy lệnh từ tài liệu lịch sử mà chưa xác nhận đúng phạm vi.
