@@ -303,6 +303,26 @@ describe("OwnerPage behavior before extraction", () => {
     expect(screen.queryByRole("navigation", { name: "Lối tắt quản lý" })).not.toBeInTheDocument();
   });
 
+  it("explains a blocked save and returns focus to the missing salon name", async () => {
+    await openPage();
+    await openTab("Cài đặt");
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Thông tin salon" }));
+    await user.clear(screen.getByRole("textbox", { name: "Tên hiển thị" }));
+    await user.click(screen.getByRole("button", { name: "Vận hành" }));
+    await user.click(screen.getByRole("switch", { name: "Nhận yêu cầu tích điểm mới" }));
+    expect(screen.getByRole("button", { name: "Lưu thông tin salon" })).toBeDisabled();
+    expect(screen.getByRole("alert")).toHaveTextContent("Tên hiển thị đang để trống");
+    await user.click(screen.getByRole("button", { name: "Sửa tên hiển thị" }));
+    const name = screen.getByRole("textbox", { name: "Tên hiển thị" });
+    expect(name).toHaveFocus();
+    await user.type(name, "Salon đã sửa");
+    await user.click(screen.getByRole("button", { name: "Vận hành" }));
+    expect(screen.getByRole("switch", { name: "Nhận yêu cầu tích điểm mới" })).not.toBeChecked();
+    expect(screen.getByRole("button", { name: "Lưu thông tin salon" })).toBeEnabled();
+    expect(mocks.updateProfile).not.toHaveBeenCalled();
+  });
+
   it("saves salon display name, public hotline and opening hours from Settings", async () => {
     await openPage();
     await openTab("Cài đặt");
