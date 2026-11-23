@@ -23,6 +23,7 @@ test("the native workflow checks Android and iOS without store upload or product
   assert.match(workflow, /pull_request:/u);
   assert.match(workflow, /permissions:\s*\n\s+contents: read/u);
   assert.match(workflow, /:app:testDebugUnitTest :app:lintDebug :app:assembleDebug/u);
+  assert.match(workflow, /runs-on: macos-15-intel\s/u, "use the Intel runner pool for iOS");
   assert.match(workflow, /xcodebuild[\s\S]*generic\/platform=iOS Simulator[\s\S]*CODE_SIGNING_ALLOWED=NO/u);
   assert.doesNotMatch(workflow, /secrets\.|pull_request_target|bundleRelease|fastlane|firebase deploy|upload-artifact/u);
 });
