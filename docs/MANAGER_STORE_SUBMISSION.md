@@ -1,13 +1,35 @@
 # Hồ sơ HAIRCUT Manager cho App Store và Google Play
 
+## Phạm vi bản đầu — 23/11/2026
+
+App cho **chủ salon và nhân viên được mời**. Khách tiếp tục quét QR và dùng Web;
+không đưa luồng OTP khách, Admin hệ thống hoặc mua Plus/Pro vào bản đầu.
+Không dùng dữ liệu thật để thử hoặc gửi cho người xét duyệt.
+
+Ba mức xác minh cần tách riêng:
+
+1. **Biên dịch:** quy trình `Manager Native` kiểm tra Gradle Android debug và Xcode Simulator
+   không ký. Không chứa cấu hình Firebase, không phát hành và không phải bản cài dùng được cho salon.
+2. **Thử trên thiết bị:** Android APK và iOS bản thử có ký, kết nối Firebase thử nghiệm đã được
+   duyệt, với chủ/thợ demo, hồ sơ và ảnh mẫu, chi nhánh riêng. Không dùng bản build cấu hình
+   trống để đánh dấu đăng nhập, camera, thông báo, ảnh hoặc sử dụng quà là đạt.
+3. **Gửi duyệt:** sau khi thử thiết bị đạt, xác nhận chủ thể đứng tên, thông tin công khai,
+   hồ sơ quyền riêng tư và bản phát hành có ký. Cần quyết định riêng trước upload/gửi duyệt.
+
+Không tạo Firebase app, tài khoản demo, kho ứng dụng hoặc đăng ký trả phí bằng tài liệu này.
+Apple dùng tên pháp lý cá nhân làm tên người bán nếu đăng ký cá nhân; chọn loại tài khoản sau
+khi chủ dự án xác nhận thông tin được công khai.
+[Đăng ký Apple](https://developer.apple.com/programs/enroll/) ·
+[Loại tài khoản Google Play](https://support.google.com/googleplay/android-developer/answer/13634885)
+
 ## Thông tin ứng dụng
 
 - Tên: **HAIRCUT Manager**
 - Bundle/Application ID: `vn.haircut.manager`
 - Đối tượng: chủ salon và nhân viên được mời vào salon.
-- Privacy Policy: <https://haircut-c7d12.web.app/privacy>
-- Terms of Service: <https://haircut-c7d12.web.app/terms>
-- Account deletion: <https://haircut-c7d12.web.app/delete-account>
+- Privacy Policy: <https://app.chhaircutsalon.cc/privacy>
+- Terms of Service: <https://app.chhaircutsalon.cc/terms>
+- Account deletion: <https://app.chhaircutsalon.cc/delete-account>
 - Support: chỉ email hỗ trợ đã được chủ dự án cho phép công khai; không dùng số cá nhân.
 
 Mô tả ngắn đề xuất: “Quản lý hàng chờ, chi nhánh, nhân viên, điểm và quà cho salon trên một ứng dụng bảo mật.”
@@ -18,7 +40,8 @@ Mô tả ngắn đề xuất: “Quản lý hàng chờ, chi nhánh, nhân viên
 2. Staff chọn chi nhánh được phân công, nhận khách, ghi chú, chụp ảnh khi khách đồng ý và gửi điểm.
 3. Owner duyệt điểm, quản lý nhân viên/chi nhánh, QR, vòng quay và ảnh salon.
 4. Dùng camera quét mã quà; xác nhận sử dụng và kiểm tra audit.
-5. Mở Cài đặt để xem Privacy, Terms và luồng xóa tài khoản/salon.
+5. Mở Cài đặt để xem Privacy, Terms và đường dẫn xóa tài khoản. Dùng tài khoản demo phụ nếu
+   thử xóa để không làm mất quyền vào app của người xét duyệt.
 
 ## Tài khoản demo cần điền thủ công
 
@@ -35,7 +58,9 @@ Không commit các giá trị này. Chỉ điền vào cổng xét duyệt store
 
 ## Cấu hình native bắt buộc
 
-- Tạo Android app và iOS app `vn.haircut.manager` trong Firebase project.
+- Đăng ký Android app và iOS app `vn.haircut.manager` trong đúng Firebase project đã được duyệt.
+- Bản chạy được cần cấu hình client Firebase của Manager lúc đóng gói Web bundle, cùng với
+  cấu hình native cho SDK trên điện thoại. Thiếu một trong hai không được coi là kiểm thử đăng nhập.
 - Đặt `google-services.json` tại `apps/manager-mobile/android/app/`.
 - Đặt `GoogleService-Info.plist` tại `apps/manager-mobile/ios/App/App/`.
 - Firebase App Check: Android dùng Play Integrity; iOS dùng App Attest/DeviceCheck.
@@ -73,25 +98,37 @@ Khai báo cuối cùng phải được đối chiếu lại với SDK thực t�
 ```powershell
 cd apps\manager-mobile
 npm ci
-npm run sync
+npm run build
+npm exec --no -- cap sync android
 
 # Android
-npx cap open android
+npm exec --no -- cap open android
 
-# iOS, chỉ trên Mac
-npx cap open ios
+# iOS, chỉ trên máy Mac có Xcode phù hợp
+npm exec --no -- cap sync ios
+npm exec --no -- cap open ios
 ```
 
-Phân phối Android qua Internal Testing rồi Closed Testing. Phân phối iOS qua TestFlight internal trước khi gửi review.
+Với SDK Android 36 và JDK 21, chạy `gradlew.bat :app:testDebugUnitTest :app:lintDebug :app:assembleDebug`
+tại thư mục `android` trên Windows. APK debug không phải AAB phát hành.
+[Tài liệu Android](https://developer.android.com/build/building-cmdline)
+
+Phân phối Android qua Internal Testing, rồi Closed Testing nếu áp dụng. Tài khoản Play cá nhân
+được tạo sau 13/11/2023 phải có ít nhất 12 người tham gia liên tục 14 ngày trước khi xin quyền
+phát hành công khai. Phân phối iOS qua TestFlight trước khi gửi duyệt.
+[Google Play testing](https://support.google.com/googleplay/android-developer/answer/14151465) ·
+[Apple SDK](https://developer.apple.com/news/upcoming-requirements/)
 
 ## Checklist gửi duyệt
 
-- [ ] GitHub Actions `Manager Android` đã chạy Gradle test, lint và `assembleDebug` trên đúng release SHA.
+- [ ] GitHub Actions `Manager Android Debug` đã chạy Gradle test, lint và `assembleDebug` trên đúng release SHA.
 - [ ] GitHub Actions `Manager iOS Simulator` đã build Xcode Simulator với `CODE_SIGNING_ALLOWED=NO` trên đúng release SHA.
 - [ ] Firebase native config đúng bundle ID và không nằm trong Git.
 - [ ] FCM nhận được thông báo trên Android và iPhone; bấm thông báo mở đúng màn.
 - [ ] App Check token hợp lệ trước khi bật `ENFORCE_APP_CHECK=true`.
 - [ ] Camera, biometric, secure storage, deep link, offline và xóa tài khoản đã test trên thiết bị thật.
+- [ ] Samsung và iPhone đã thử nhầm chi nhánh, từ chối camera, ảnh có đồng ý, cộng điểm và sử dụng quà
+      đúng một lần; không dùng khách hay quà production để thử.
 - [ ] Privacy/Terms/Support/Account deletion đều truy cập công khai.
 - [ ] Demo owner/staff có dữ liệu vừa đủ và không chứa dữ liệu khách thật.
 - [ ] Screenshot, mô tả, App Privacy và Data Safety đã điền.

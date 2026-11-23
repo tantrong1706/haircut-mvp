@@ -1,7 +1,7 @@
-# Active product: Web only
+# Active product: Customer Web and Manager mobile preparation
 
-The owner has permanently switched the active product to the customer Web app. The canonical
-branch is `main`, serving the Firebase Web flow at `https://app.chhaircutsalon.cc`.
+The canonical branch is `main`. Customers use the Firebase Web flow at
+`https://app.chhaircutsalon.cc` and do not have to install an app.
 Use short-lived `codex/<task>` branches for future changes and retire them after integration.
 
 - Zalo source is retired. Historical Version 24 remains recoverable from Git history at
@@ -18,6 +18,9 @@ Use short-lived `codex/<task>` branches for future changes and retire them after
 - Preserve server-authoritative points, identity, tenant isolation and signed QR verification.
 - Do not delete production Functions, secrets or Gateway services as branch cleanup.
 - Use Web CI and focused tests. Native releases and Zalo-specific work require a new explicit task.
+- On 2026-11-23 the owner approved preparing HAIRCUT Manager for Android and iOS, for salon
+  owners and staff only. Keep Customer Web and Admin unchanged. Preparing builds is not
+  authorization to publish in stores, deploy Firebase, or change production access or data.
 - Do not commit credentials, OTPs, raw QR signatures or generated outputs.
 - Do not rewrite published history. Future merges/deployments still need authorization for their scope.
 - Use the main agent for routine work, not subagents for search, tests or reports.
