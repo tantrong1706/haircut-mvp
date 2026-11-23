@@ -307,7 +307,7 @@ describe("OwnerPage behavior before extraction", () => {
     await openPage();
     await openTab("Cài đặt");
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "Thông tin salon", exact: true }));
+    await user.click(screen.getByRole("button", { name: "Thông tin salon" }));
     const name = screen.getByRole("textbox", { name: "Tên hiển thị" });
     const hotline = screen.getByRole("textbox", { name: /Hotline hiển thị cho khách/i });
     const hours = screen.getByRole("textbox", { name: /Giờ mở cửa/i });
