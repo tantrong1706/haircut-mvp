@@ -712,6 +712,48 @@ button.danger {
   gap: 10px;
   margin: 16px 0;
 }
+.support-people-toggle {
+  margin: 12px 0;
+}
+.salon-people-panel {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #f4f8f6;
+  overflow-wrap: anywhere;
+}
+.salon-people-panel :is(h3, h4, p, dl, dd) {
+  margin: 0;
+}
+.salon-people-panel dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 112px), 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+.salon-people-panel dt {
+  color: var(--muted);
+  font-size: 12px;
+}
+.salon-people-email {
+  grid-column: 1 / -1;
+}
+.salon-people-list {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.salon-people-owner,
+.salon-people-list li {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: white;
+}
 .copy-feedback {
   color: #355c44;
   font-size: 13px;

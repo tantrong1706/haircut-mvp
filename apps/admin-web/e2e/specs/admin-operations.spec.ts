@@ -73,6 +73,30 @@ test("narrow Admin navigation fits and keeps every target usable at 320px", asyn
   }
 });
 
+test("admin reads selected salon contact and masked customers without overflowing", async ({
+  page,
+}, info) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Salon", exact: true }).click();
+  await page.getByRole("button", { name: "Kiểm tra Salon A" }).click();
+  await expect(page.getByText("owner@example.invalid")).toHaveCount(0);
+  await page.getByRole("button", { name: "Chủ salon và khách", exact: true }).click();
+  const people = page.getByRole("region", { name: "Chủ salon và danh sách khách" });
+  await expect(people.getByText("owner@example.invalid")).toBeVisible();
+  await expect(people.getByText("•••• 4321")).toBeVisible();
+  await expect(people.getByText("Khách mẫu A")).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(
+    true,
+  );
+  expect(
+    (await new AxeBuilder({ page }).include(".salon-people-panel").analyze()).violations,
+  ).toEqual([]);
+  await people.screenshot({ path: info.outputPath("admin-people.png"), scale: "css" });
+  await people.getByRole("button", { name: "Trang sau" }).click();
+  await expect(people.getByText("Khách mẫu B")).toBeVisible();
+  await expect(people.getByRole("button", { name: "Trang sau" })).toBeDisabled();
+});
+
 test("guided diagnosis has a readable preview, safe cancellation and a way back to the salon list", async ({
   page,
 }, info) => {

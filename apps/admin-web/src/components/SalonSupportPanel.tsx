@@ -17,6 +17,7 @@ import {
 } from "../services/adminApi";
 import { adminErrorMessage, makeRepairInput } from "../services/adminSupport";
 import { SalonOperationsPanel } from "./SalonOperationsPanel";
+import { SalonPeoplePanel } from "./SalonPeoplePanel";
 import {
   diagnosticSummary,
   formatDiagnosticReport,
@@ -48,6 +49,7 @@ export function SalonSupportPanel({
   const [copyMessage, setCopyMessage] = useState("");
   const [showCopyFallback, setShowCopyFallback] = useState(false);
   const [showOperations, setShowOperations] = useState(false);
+  const [showPeople, setShowPeople] = useState(false);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const alive = useRef(true);
   useEffect(() => {
@@ -134,6 +136,18 @@ export function SalonSupportPanel({
             <span>Đổi salon</span>
           </button>
         </div>
+      </div>
+      <button
+        className="secondary support-people-toggle"
+        type="button"
+        aria-expanded={showPeople}
+        aria-controls={`salon-people-${salon.id}`}
+        onClick={() => setShowPeople((value) => !value)}
+      >
+        Chủ salon và khách
+      </button>
+      <div id={`salon-people-${salon.id}`} hidden={!showPeople}>
+        {showPeople ? <SalonPeoplePanel key={salon.id} salonId={salon.id} /> : null}
       </div>
       {loading ? (
         <p className="loading-band" role="status">

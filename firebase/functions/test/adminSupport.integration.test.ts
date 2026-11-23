@@ -283,6 +283,18 @@ describe("selected salon people", () => {
     const account = vi.spyOn(getAuth(), "getUser");
     try {
       await expect(people({ pageSize: 51 })).rejects.toMatchObject({ code: "invalid-argument" });
+      await expect(people({ pageSize: "25" })).rejects.toMatchObject({ code: "invalid-argument" });
+      await expect(people({ pageSize: 0 })).rejects.toMatchObject({ code: "invalid-argument" });
+      await expect(people({ pageSize: 2.5 })).rejects.toMatchObject({ code: "invalid-argument" });
+      await expect(people({ cursor: "../other" })).rejects.toMatchObject({
+        code: "invalid-argument",
+      });
+      await expect(people({ salonId: "../other" })).rejects.toMatchObject({
+        code: "invalid-argument",
+      });
+      await expect(people({ includePrivate: true })).rejects.toMatchObject({
+        code: "invalid-argument",
+      });
       await expect(people({ salonId: "missing-salon" })).rejects.toMatchObject({
         code: "not-found",
       });
@@ -292,6 +304,27 @@ describe("selected salon people", () => {
         owner: null,
       });
       expect(account).not.toHaveBeenCalled();
+    } finally {
+      account.mockRestore();
+    }
+  });
+  it("returns a safe account status when the linked Firebase Auth account is missing or disabled", async () => {
+    const account = vi
+      .spyOn(getAuth(), "getUser")
+      .mockRejectedValueOnce({ code: "auth/user-not-found" })
+      .mockResolvedValueOnce({ uid: ADMIN, disabled: true, emailVerified: false } as UserRecord)
+      .mockRejectedValueOnce(new Error("PRIVATE_BACKEND_MESSAGE"));
+    try {
+      await expect(people()).resolves.toMatchObject({
+        owner: { email: null, emailVerified: false, status: "missing" },
+      });
+      await expect(people()).resolves.toMatchObject({
+        owner: { email: null, emailVerified: false, status: "inactive" },
+      });
+      await expect(people()).rejects.toMatchObject({
+        code: "unavailable",
+        message: "Chưa đọc được trạng thái tài khoản chủ salon.",
+      });
     } finally {
       account.mockRestore();
     }
