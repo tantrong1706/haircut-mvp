@@ -4,7 +4,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { SalonSupportPanel } from "./SalonSupportPanel";
 import type { AdminDiagnostics, AdminSalon } from "../services/adminApi";
 
-const mock = vi.hoisted(() => ({ diagnostics: vi.fn(), repair: vi.fn() }));
+const mock = vi.hoisted(() => ({ diagnostics: vi.fn(), repair: vi.fn(), people: vi.fn() }));
 vi.mock("../services/adminApi", () => ({ adminApi: mock }));
 const salon = { id: "salon-a", name: "Salon A", status: "active" } as AdminSalon;
 const data: AdminDiagnostics = {
@@ -47,6 +47,40 @@ beforeEach(() => {
 function renderPanel() {
   return render(<SalonSupportPanel salon={salon} onClose={closed} onRepaired={repaired} />);
 }
+
+it("opens owner contact and masked customer pages only for the selected salon", async () => {
+  const actor = userEvent.setup();
+  mock.people.mockReset()
+    .mockResolvedValueOnce({
+      salonId: salon.id,
+      owner: { name: "Chủ mẫu", email: "owner@example.invalid", emailVerified: true, status: "active" },
+      customers: [{ id: "customer-a", name: "Khách mẫu", phoneLast4: "4321", points: 7, lastVisitAtMs: null }],
+      nextCursor: "customer-a",
+    })
+    .mockResolvedValueOnce({
+      salonId: salon.id,
+      owner: null,
+      customers: [{ id: "customer-b", name: "Khách mẫu kế", phoneLast4: "0901234567", points: 1, lastVisitAtMs: null }],
+      nextCursor: null,
+    });
+  renderPanel();
+  const button = await screen.findByRole("button", { name: "Chủ salon và khách" });
+  expect(mock.people).not.toHaveBeenCalled();
+  expect(button).toHaveAttribute("aria-expanded", "false");
+  await actor.click(button);
+  expect(await screen.findByText("owner@example.invalid")).toBeVisible();
+  expect(screen.getByText("Email đã xác minh")).toBeVisible();
+  expect(screen.getByText("•••• 4321")).toBeVisible();
+  expect(mock.people).toHaveBeenNthCalledWith(1, salon.id, undefined);
+  await actor.click(screen.getByRole("button", { name: "Trang sau" }));
+  expect(await screen.findByText("Khách mẫu kế")).toBeVisible();
+  expect(mock.people).toHaveBeenNthCalledWith(2, salon.id, "customer-a");
+  expect(screen.queryByText("0901234567")).not.toBeInTheDocument();
+  expect(screen.queryByText("Khách mẫu", { exact: true })).not.toBeInTheDocument();
+  expect(mock.repair).not.toHaveBeenCalled();
+  await actor.click(button);
+  expect(screen.queryByText("Khách mẫu kế")).not.toBeInTheDocument();
+});
 async function completeForm(actor: ReturnType<typeof userEvent.setup>) {
   await actor.type(screen.getByLabelText("Nhập tên salon để xác nhận"), "Salon A");
   await actor.type(screen.getByLabelText("Lý do sửa"), "Đối chiếu hồ sơ thực tế");

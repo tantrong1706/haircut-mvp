@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { deleteApp, getApps } from "firebase-admin/app";
+import { getAuth, type UserRecord } from "firebase-admin/auth";
 import { Timestamp, getFirestore } from "firebase-admin/firestore";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import * as callables from "../src/index";
@@ -184,6 +185,116 @@ describe("bounded salon diagnostics", () => {
   it("rejects missing salons and path-like ids", async () => {
     await expect(diagnose("missing")).rejects.toMatchObject({ code: "not-found" });
     await expect(diagnose("a/b")).rejects.toMatchObject({ code: "invalid-argument" });
+  });
+});
+
+describe("selected salon people", () => {
+  const people = (patch: Record<string, unknown> = {}, identity: unknown = auth(ADMIN)) =>
+    invoke("getSystemAdminSalonPeople", { salonId: SALON, pageSize: 1, ...patch }, identity);
+
+  it("lists only selected-salon people and logs the read without storing private fields", async () => {
+    await db.doc(`users/${ADMIN}`).update({ name: "Chủ salon mẫu" });
+    await db.doc("customers/customer-a").update({
+      name: "Khách A",
+      phoneLast4: "4321",
+      note: "PRIVATE_NOTE_FIXTURE",
+      photoUrl: "PRIVATE_PHOTO_FIXTURE",
+      lastVisitAt: Timestamp.fromMillis(123_456),
+    });
+    await db.doc("customers/customer-a2").update({ name: "Khách B", phoneLast4: "0900009999" });
+    const account = vi.spyOn(getAuth(), "getUser").mockResolvedValue({
+      uid: ADMIN,
+      email: "owner@example.invalid",
+      emailVerified: true,
+      disabled: false,
+      passwordHash: "DO_NOT_RETURN_PASSWORD_HASH",
+    } as UserRecord);
+    try {
+      const result = await people();
+      expect(result).toEqual({
+        salonId: SALON,
+        owner: {
+          name: "Chủ salon mẫu",
+          email: "owner@example.invalid",
+          emailVerified: true,
+          status: "active",
+        },
+        customers: [
+          {
+            id: "customer-a",
+            name: "Khách A",
+            phoneLast4: "4321",
+            points: 7,
+            lastVisitAtMs: 123_456,
+          },
+        ],
+        nextCursor: "customer-a",
+      });
+      expect(account).toHaveBeenCalledWith(ADMIN);
+      const next = await people({ cursor: result.nextCursor });
+      expect(next).toMatchObject({
+        customers: [
+          { id: "customer-a2", name: "Khách B", phoneLast4: null, points: 3, lastVisitAtMs: null },
+        ],
+        nextCursor: null,
+      });
+      await expect(people({ cursor: "customer-b" })).rejects.toMatchObject({
+        code: "invalid-argument",
+      });
+      const audit = await db
+        .collection("audit_events")
+        .where("action", "==", "admin.salon_people_viewed")
+        .get();
+      expect(audit.size).toBe(2);
+      for (const row of audit.docs) {
+        expect(row.data()).toMatchObject({
+          salonId: SALON,
+          actorId: ADMIN,
+          actorRole: "system_admin",
+        });
+        expect(JSON.stringify(row.data())).not.toMatch(
+          /owner@example|Khách A|PRIVATE_|PASSWORD_HASH/,
+        );
+      }
+      expect(JSON.stringify([result, next])).not.toMatch(
+        /PRIVATE_|PASSWORD_HASH|customer-b|0900009999/,
+      );
+    } finally {
+      account.mockRestore();
+    }
+  });
+
+  it("rejects unauthenticated, ordinary and revoked accounts before disclosing people", async () => {
+    const account = vi.spyOn(getAuth(), "getUser");
+    try {
+      await expect(people({}, null)).rejects.toMatchObject({ code: "unauthenticated" });
+      await expect(people({}, auth("ordinary-owner"))).rejects.toMatchObject({
+        code: "permission-denied",
+      });
+      await db.doc(`system_admin_access/${ADMIN}`).update({ isActive: false });
+      await expect(people()).rejects.toMatchObject({ code: "permission-denied" });
+      expect(account).not.toHaveBeenCalled();
+    } finally {
+      account.mockRestore();
+    }
+  });
+
+  it("does not look up a mismatched salon owner account and validates paging", async () => {
+    const account = vi.spyOn(getAuth(), "getUser");
+    try {
+      await expect(people({ pageSize: 51 })).rejects.toMatchObject({ code: "invalid-argument" });
+      await expect(people({ salonId: "missing-salon" })).rejects.toMatchObject({
+        code: "not-found",
+      });
+      await db.doc(`salons/${OTHER}`).update({ ownerId: ADMIN });
+      await expect(people({ salonId: OTHER })).resolves.toMatchObject({
+        salonId: OTHER,
+        owner: null,
+      });
+      expect(account).not.toHaveBeenCalled();
+    } finally {
+      account.mockRestore();
+    }
   });
 });
 
