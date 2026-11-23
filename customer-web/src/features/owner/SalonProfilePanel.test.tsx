@@ -78,6 +78,7 @@ describe("salon public profile form", () => {
     expect(preview.queryByText("Chỉ đường")).not.toBeInTheDocument();
     expect(preview.queryByRole("link")).not.toBeInTheDocument();
     expect(preview.queryByText(profile.phone)).not.toBeInTheDocument();
+    await user.click(screen.getByText("Hiển thị với khách", { selector: "summary" }));
     await user.click(screen.getByRole("switch", { name: "Hiện hotline" }));
     expect(preview.queryByText("Đường Hai")).not.toBeInTheDocument();
     expect(preview.queryByText("Chỉ đường")).not.toBeInTheDocument();
@@ -88,7 +89,9 @@ describe("salon public profile form", () => {
 
   it("keeps operation switches without asking for customer location", async () => {
     const onSave = vi.fn();
-    render(<SalonProfilePanel profile={profile} saving={false} onSave={onSave} />);
+    render(
+      <SalonProfilePanel profile={profile} section="operations" saving={false} onSave={onSave} />,
+    );
     const user = userEvent.setup();
     expect(
       screen.queryByRole("switch", { name: "Hiện địa chỉ chi nhánh" }),
@@ -114,6 +117,7 @@ describe("salon public profile form", () => {
     const onSave = vi.fn();
     render(<SalonProfilePanel profile={profile} saving={false} onSave={onSave} />);
     const user = userEvent.setup();
+    await user.click(screen.getByText("Hiển thị với khách", { selector: "summary" }));
     const logo = screen.getByRole("switch", { name: "Hiện logo" });
     const hotline = screen.getByRole("switch", { name: "Hiện hotline" });
     const hours = screen.getByRole("switch", { name: "Hiện giờ mở cửa" });
@@ -158,7 +162,9 @@ describe("salon public profile form", () => {
 
   it("keeps private settings editable without resending public fields", async () => {
     const onSave = vi.fn();
-    render(<SalonProfilePanel profile={profile} saving={false} onSave={onSave} />);
+    render(
+      <SalonProfilePanel profile={profile} section="operations" saving={false} onSave={onSave} />,
+    );
     const user = userEvent.setup();
     const phone = screen.getByRole("textbox", { name: "Số liên hệ nội bộ" });
     await user.clear(phone);

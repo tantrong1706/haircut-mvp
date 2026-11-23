@@ -263,12 +263,42 @@ describe("OwnerPage behavior before extraction", () => {
     await openPage();
     expect(screen.queryByRole("navigation", { name: "Lối tắt quản lý" })).not.toBeInTheDocument();
     await openTab("Cài đặt");
+    const user = userEvent.setup();
+    const groups = screen.getByRole("navigation", { name: "Nhóm cài đặt" });
+    const information = within(groups).getByRole("button", { name: "Thông tin salon" });
+    const operationsGroup = within(groups).getByRole("button", { name: "Vận hành" });
+    const account = within(groups).getByRole("button", { name: "Tài khoản & dữ liệu" });
+    expect(within(groups).getAllByRole("button")).toHaveLength(3);
+    for (const group of [information, operationsGroup, account]) {
+      expect(group).toHaveAttribute("aria-expanded", "false");
+    }
+    expect(screen.queryByRole("textbox", { name: "Tên hiển thị" })).not.toBeInTheDocument();
+    await user.click(information);
     expect(screen.getByRole("region", { name: "Hồ sơ salon" })).toBeVisible();
+    const name = screen.getByRole("textbox", { name: "Tên hiển thị" });
+    await user.clear(name);
+    await user.type(name, "Salon chưa lưu");
+    await user.click(account);
     expect(screen.getByRole("region", { name: "Tài khoản chủ salon" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Quản lý yêu cầu xóa salon" })).toHaveAttribute(
+      "href",
+      "/delete-account/manage",
+    );
+    expect(screen.queryByLabelText("Mật khẩu hiện tại")).not.toBeInTheDocument();
+    expect(information).toHaveAttribute("aria-expanded", "false");
+    await user.click(information);
+    expect(screen.getByRole("textbox", { name: "Tên hiển thị" })).toHaveValue("Salon chưa lưu");
+    await user.click(information);
+    expect(information).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("textbox", { name: "Tên hiển thị" })).not.toBeInTheDocument();
+    await user.click(operationsGroup);
+    expect(screen.queryByRole("textbox", { name: "Tên hiển thị" })).not.toBeInTheDocument();
+    expect(screen.getByRole("spinbutton", { name: /Điểm cộng mỗi lượt cắt/ })).toBeVisible();
+    expect(mocks.updateProfile).not.toHaveBeenCalled();
     const operations = screen.getByRole("navigation", { name: "Lối tắt quản lý" });
     expect(within(operations).getByRole("button", { name: /Chi nhánh và QR/ })).toBeVisible();
     expect(within(operations).getByRole("button", { name: /Nhân viên và quyền/ })).toBeVisible();
-    await userEvent.setup().click(within(operations).getByRole("button", { name: /Vòng quay/ }));
+    await user.click(within(operations).getByRole("button", { name: /Vòng quay/ }));
     expect(screen.getByRole("heading", { name: "Cấu hình vòng quay" })).toBeVisible();
     expect(screen.queryByRole("navigation", { name: "Lối tắt quản lý" })).not.toBeInTheDocument();
   });
@@ -277,6 +307,7 @@ describe("OwnerPage behavior before extraction", () => {
     await openPage();
     await openTab("Cài đặt");
     const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Thông tin salon", exact: true }));
     const name = screen.getByRole("textbox", { name: "Tên hiển thị" });
     const hotline = screen.getByRole("textbox", { name: /Hotline hiển thị cho khách/i });
     const hours = screen.getByRole("textbox", { name: /Giờ mở cửa/i });

@@ -118,16 +118,42 @@ test("all owner menu items fit without horizontal scrolling", async ({ page }, i
   }
 });
 
-test("settings groups salon setup and opens the existing wheel form", async ({ page }) => {
+test("settings shows three choices and opens only the requested controls", async ({
+  page,
+}, info) => {
   await page
     .getByRole("navigation", { name: "Chọn mục quản lý" })
     .getByRole("button", { name: "Cài đặt", exact: true })
     .click();
+  const settings = page.getByRole("region", { name: "Cài đặt salon", exact: true });
+  const groups = settings.getByRole("navigation", { name: "Nhóm cài đặt" });
+  await expect(groups.getByRole("button")).toHaveCount(3);
+  await expect(settings.getByRole("textbox", { name: "Tên hiển thị" })).not.toBeVisible();
+  await expect(settings.getByRole("button", { name: "Lưu thông tin salon" })).not.toBeVisible();
+  expect((await new AxeBuilder({ page }).include(".owner-settings").analyze()).violations).toEqual(
+    [],
+  );
+  await settings.screenshot({
+    path: info.outputPath("cai-dat-3-nhom.png"),
+    scale: "css",
+    style: ".owner-tabs { position: static !important; }",
+  });
+  const information = groups.getByRole("button", { name: "Thông tin salon" });
+  const operations = groups.getByRole("button", { name: "Vận hành" });
+  const account = groups.getByRole("button", { name: "Tài khoản & dữ liệu" });
+  await information.focus();
+  await page.keyboard.press("Enter");
+  await expect(information).toHaveAttribute("aria-expanded", "true");
   await expect(page.getByRole("region", { name: "Hồ sơ salon" })).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Tên hiển thị" })).toHaveValue("CH Hair Studio");
   await expect(page.getByRole("textbox", { name: /Hotline hiển thị cho khách/ })).toHaveValue("");
   await expect(page.getByRole("textbox", { name: /Giờ mở cửa/ })).toHaveValue("");
-  await expect(page.getByRole("heading", { name: "Ảnh đại diện salon" })).toBeVisible();
+  const logoHeading = page.getByRole("heading", { name: "Ảnh đại diện salon" });
+  await expect(logoHeading).not.toBeVisible();
+  await page.getByText("Ảnh và logo salon", { exact: true }).click();
+  await expect(logoHeading).toBeVisible();
+  await page.getByText("Ảnh và logo salon", { exact: true }).click();
+  await page.getByText("Hiển thị với khách", { selector: "summary", exact: true }).click();
   const logoSwitch = page.getByRole("switch", { name: "Hiện logo" });
   await expect(logoSwitch).toBeChecked();
   await logoSwitch.focus();
@@ -138,12 +164,6 @@ test("settings groups salon setup and opens the existing wheel form", async ({ p
   await expect(page.getByRole("button", { name: "Lưu thông tin salon" })).toBeDisabled();
   await expect(page.getByRole("switch", { name: "Hiện địa chỉ chi nhánh" })).toHaveCount(0);
   await expect(page.getByRole("switch", { name: "Hiện nút Chỉ đường" })).toHaveCount(0);
-  const requestSwitch = page.getByRole("switch", { name: "Nhận yêu cầu tích điểm mới" });
-  await expect(requestSwitch).toBeChecked();
-  await requestSwitch.click();
-  await expect(requestSwitch).not.toBeChecked();
-  await expect(page.getByRole("switch", { name: "Cho phép quay thưởng" })).toBeChecked();
-  await expect(page.getByRole("region", { name: "Tài khoản chủ salon" })).toBeVisible();
   const previewButton = page.getByRole("button", { name: "Xem trước thông tin khách" });
   await previewButton.click();
   const preview = page.getByRole("region", { name: "Xem trước thông tin khách" });
@@ -153,6 +173,21 @@ test("settings groups salon setup and opens the existing wheel form", async ({ p
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await previewButton.click();
   await expect(preview).not.toBeVisible();
+  await account.click();
+  await expect(page.getByRole("region", { name: "Tài khoản chủ salon" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Quản lý yêu cầu xóa salon" })).toHaveAttribute(
+    "href",
+    "/delete-account/manage",
+  );
+  await expect(page.getByLabel("Mật khẩu hiện tại")).not.toBeVisible();
+  await operations.click();
+  await expect(information).toHaveAttribute("aria-expanded", "false");
+  await expect(account).toHaveAttribute("aria-expanded", "false");
+  const requestSwitch = page.getByRole("switch", { name: "Nhận yêu cầu tích điểm mới" });
+  await expect(requestSwitch).toBeChecked();
+  await requestSwitch.click();
+  await expect(requestSwitch).not.toBeChecked();
+  await expect(page.getByRole("switch", { name: "Cho phép quay thưởng" })).toBeChecked();
   const setup = page.getByRole("navigation", { name: "Lối tắt quản lý" });
   expect(await setup.getByRole("button").count()).toBe(3);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
