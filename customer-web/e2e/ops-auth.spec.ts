@@ -20,3 +20,9 @@ test("staff mở đúng cổng đăng nhập quản lý", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Đăng nhập quản lý" })).toBeVisible();
   await expect(page.getByText(/email được chủ salon mời/i)).toBeVisible();
 });
+
+test("a direct account-management URL loads the protected sign-in page", async ({ page }) => {
+  await page.goto("/delete-account/manage");
+  await expect(page.getByRole("heading", { name: "Đăng nhập quản lý" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Yêu cầu xóa salon" })).toHaveCount(0);
+});

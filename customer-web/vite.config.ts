@@ -31,7 +31,8 @@ export default defineConfig(({ mode }) => {
   const outDir = getViteBuildOutDir(mode);
 
   return {
-    base: "./",
+    // Firebase Hosting serves the SPA at the site root, including nested routes.
+    base: "/",
     plugins: [
       react(),
       ...(hasSentryUpload

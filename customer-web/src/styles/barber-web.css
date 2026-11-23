@@ -1,3 +1,26 @@
+@import "./typography.css";
+@import "./manual-customer.css";
+
+@font-face {
+  font-family: "Be Vietnam Pro";
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url("/fonts/be-vietnam-pro-300-latin.woff2") format("woff2");
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Be Vietnam Pro";
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url("/fonts/be-vietnam-pro-300-vietnamese.woff2") format("woff2");
+  unicode-range:
+    U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301,
+    U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
 @font-face {
   font-family: "Be Vietnam Pro";
   font-style: normal;
@@ -82,7 +105,7 @@
    Existing styles retain functional layouts. These rules own the Web visual language. */
 :root {
   color-scheme: dark;
-  font-family: "Be Vietnam Pro", Arial, sans-serif;
+  font-family: var(--font-ui);
   color: #f0ebe3;
   background: #121211;
   --ink: #f0ebe3;
@@ -103,18 +126,6 @@
 }
 body {
   background: #121211;
-}
-.manual-customer {
-  display: grid;
-  justify-items: start;
-  gap: 10px;
-}
-.manual-customer > div {
-  width: min(100%, 42rem);
-}
-.app-shell .manual-customer-form {
-  margin: 0;
-  gap: 12px;
 }
 ::selection {
   color: #fff;
@@ -159,24 +170,25 @@ label:focus-within {
 .app-shell .page {
   gap: 20px;
 }
-.app-shell h1 {
+.app-shell h1,
+.app-shell .entry-page .entry-hero h1 {
   color: var(--ink);
-  font-size: clamp(26px, 6vw, 34px);
+  font-size: var(--type-title);
   font-weight: 500;
-  line-height: 1.35;
+  line-height: var(--leading-title);
   letter-spacing: -0.02em;
   text-shadow: none;
 }
 .app-shell h2 {
   color: var(--ink);
-  font-size: 19px;
+  font-size: var(--type-section);
   font-weight: 500;
-  line-height: 1.45;
+  line-height: var(--leading-label);
   letter-spacing: -0.01em;
 }
 .app-shell :is(p, .muted) {
   font-weight: 400;
-  line-height: 1.65;
+  line-height: var(--leading-body);
 }
 .app-shell .eyebrow {
   color: var(--accent);
@@ -235,12 +247,11 @@ label:focus-within {
 .app-shell .customer-hero .muted {
   max-width: none;
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--type-body);
   font-weight: 400;
 }
 .app-shell .customer-hero h1 {
   font-weight: 500;
-  font-size: 28px;
   letter-spacing: -0.02em;
 }
 .app-shell :is(.soft-chip, .pill, .muted-pill, .session-status) {
@@ -314,7 +325,7 @@ label:focus-within {
 .app-shell .empty-state p {
   max-width: 38ch;
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--type-label);
 }
 .app-shell .empty-state > .brand-mark {
   margin-bottom: 24px;
@@ -341,7 +352,7 @@ label:focus-within {
   color: var(--ink);
   background: #151513;
   box-shadow: none;
-  font-size: 16px;
+  font-size: var(--type-body);
   font-weight: 400;
 }
 .app-shell input::placeholder,
@@ -357,7 +368,7 @@ label:focus-within {
 }
 .app-shell :is(.field > span, .auth-card > label) {
   color: #d9d3c9;
-  font-size: 12px;
+  font-size: var(--type-label);
   font-weight: 500;
 }
 .app-shell :is(.primary-button, .home-wheel-button) {
@@ -368,7 +379,7 @@ label:focus-within {
   color: #fff5eb;
   background: var(--action);
   box-shadow: none;
-  font-size: 13px;
+  font-size: var(--type-label);
   font-weight: 500;
 }
 .app-shell :is(.primary-button, .home-wheel-button):hover:not(:disabled) {
@@ -391,7 +402,7 @@ label:focus-within {
   border: 1px solid #4b4942;
   border-radius: 8px;
   color: var(--ink);
-  font-size: 12px;
+  font-size: var(--type-label);
   font-weight: 500;
   box-shadow: none;
 }
@@ -899,7 +910,7 @@ label:focus-within {
   padding-right: 24px;
 }
 .app-shell .ops-topbar h1 {
-  font-size: 25px;
+  font-size: var(--type-workspace-title);
   font-weight: 500;
   letter-spacing: -0.02em;
   text-shadow: none;
@@ -1011,7 +1022,7 @@ label:focus-within {
   box-shadow: none;
 }
 .app-shell :is(.detail-heading, .dashboard-heading, .section-heading) h2 {
-  font-size: 18px;
+  font-size: var(--type-section);
   color: var(--ink);
   font-weight: 500;
 }
@@ -1199,9 +1210,6 @@ label:focus-within {
     margin: 0;
     padding: 0 0 12px;
     border: 0;
-  }
-  .app-shell .ops-topbar h1 {
-    font-size: 23px;
   }
   .app-shell .overview-grid,
   .app-shell .compact-metrics {

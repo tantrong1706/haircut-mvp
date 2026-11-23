@@ -42,6 +42,48 @@ test("Light customer typography keeps Vietnamese headings and actions readable",
   ).toBe(true);
 });
 
+test("Customer entry uses a fluid title and readable text at 320px", async ({ page }, info) => {
+  await page.addInitScript(() => {
+    (window as typeof window & { __haircutWebAuthTestMode?: boolean }).__haircutWebAuthTestMode =
+      true;
+  });
+  await page.setViewportSize({ width: 320, height: 812 });
+  await page.goto(qr);
+  const heading = page.getByRole("heading", { name: "Đăng nhập bằng số điện thoại" });
+  await expect(heading).toBeVisible();
+  await expect(heading).toHaveCSS("font-size", "28px");
+  await expect(heading).toHaveCSS("line-height", "35.84px");
+  await expect(page.getByText("Chỉ cần xác thực lần đầu trên thiết bị này.")).toHaveCSS(
+    "font-size",
+    "16px",
+  );
+  await expect(page.getByText("Số điện thoại", { exact: true })).toHaveCSS("font-size", "14px");
+  await expect(page.getByLabel("Số điện thoại")).toHaveCSS("font-size", "16px");
+  await expect(page.getByRole("button", { name: "Gửi mã OTP" })).toHaveCSS("font-size", "14px");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.evaluate(() => document.fonts.ready);
+  await page.screenshot({ path: info.outputPath("customer-entry-320.png"), fullPage: true });
+
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await expect(heading).toHaveCSS("font-size", "36px");
+});
+
+test("Management entry respects a larger browser text setting without sideways scrolling", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 360, height: 800 });
+  await page.goto("/owner");
+  const heading = page.getByRole("heading", { name: "Đăng nhập quản lý" });
+  await expect(heading).toHaveCSS("font-size", "28px");
+  await expect(page.getByLabel("Email", { exact: true })).toHaveCSS("font-size", "16px");
+  await page.locator("html").evaluate((element) => {
+    element.style.fontSize = "125%";
+  });
+  await expect(heading).toHaveCSS("font-size", "35px");
+  await expect(page.getByLabel("Email", { exact: true })).toHaveCSS("font-size", "20px");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
 test("Web barber: Phone login, dark pages, no narrow-screen overflow or serious a11y errors", async ({
   page,
 }, testInfo) => {
