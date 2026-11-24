@@ -1,0 +1,64 @@
+# Experimental, read-only store readiness scan. Never deploys the app or uses Firebase credentials.
+name: App Store Compliance (trial)
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/app-store-compliance-trial.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  manager-compliance:
+    if: github.event_name == 'workflow_dispatch' || github.head_ref == 'codex/app-store-compliance-trial'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out CH Hair source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Download fixed revision of compliance playbook
+        shell: bash
+        run: |
+          git clone --quiet https://github.com/mjmirza/app-store-compliance.git "${RUNNER_TEMP}/app-store-compliance"
+          git -C "${RUNNER_TEMP}/app-store-compliance" checkout --quiet --detach 54c2e33254448a545fa2bcb25b3adfef984cf9dc
+          test "$(git -C "${RUNNER_TEMP}/app-store-compliance" rev-parse HEAD)" = "54c2e33254448a545fa2bcb25b3adfef984cf9dc"
+
+      - name: Check native Manager source without modifying it
+        id: audit
+        shell: bash
+        run: |
+          set +e
+          bash "${RUNNER_TEMP}/app-store-compliance/agent-os/hooks/app-store-compliance-guard.sh" "${GITHUB_WORKSPACE}/apps/manager-mobile" > "${RUNNER_TEMP}/app-store-compliance-report.txt" 2>&1
+          result=$?
+          set -e
+          cat "${RUNNER_TEMP}/app-store-compliance-report.txt"
+          echo "audit_exit_code=${result}" >> "${GITHUB_OUTPUT}"
+          {
+            echo "## HAIRCUT Manager compliance trial"
+            echo ""
+            echo "- Target: \`apps/manager-mobile/\` (Capacitor Android/iOS)"
+            echo "- Playbook revision: \`54c2e33254448a545fa2bcb25b3adfef984cf9dc\` (2.5.1)"
+            echo "- Scanner exit code: \`${result}\`"
+            echo "- This is an **informational trial**, not an App Store / Google Play approval."
+            echo ""
+            echo '```text'
+            sed -n '1,180p' "${RUNNER_TEMP}/app-store-compliance-report.txt"
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"
+          if [ "${result}" -ne 0 ]; then
+            echo "::warning::Compliance scanner reported exit code ${result}. Check the job summary and artifact."
+          fi
+
+      - name: Save complete scan report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: haircut-manager-app-store-compliance-trial
+          path: ${{ runner.temp }}/app-store-compliance-report.txt
+          if-no-files-found: warn
+          retention-days: 7

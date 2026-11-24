@@ -1,0 +1,72 @@
+# Fast, bounded scans; does not run the playbook's slow self-test harness.
+name: CH Hair Policy Detail (trial)
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/ch-hair-policy-detail-trial.yml
+
+permissions:
+  contents: read
+
+jobs:
+  policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: 22
+      - name: Fetch the exact policy playbook revision
+        run: |
+          git clone --quiet https://github.com/mjmirza/app-store-compliance.git "${RUNNER_TEMP}/playbook"
+          git -C "${RUNNER_TEMP}/playbook" checkout --quiet --detach 54c2e33254448a545fa2bcb25b3adfef984cf9dc
+          test "$(git -C "${RUNNER_TEMP}/playbook" rev-parse HEAD)" = "54c2e33254448a545fa2bcb25b3adfef984cf9dc"
+      - name: Run bounded policy scanners, preserve findings without modifying source
+        shell: bash
+        run: |
+          mkdir -p audit-output
+          set +e
+          timeout 120s bash "${RUNNER_TEMP}/playbook/agent-os/hooks/app-store-compliance-guard.sh" apps/manager-mobile > audit-output/app-store-guard.txt 2>&1
+          echo "guard exit=$?" | tee -a audit-output/status.txt
+          timeout 120s python3 "${RUNNER_TEMP}/playbook/scripts/validate-privacy-manifest.py" apps/manager-mobile/ios/App/App/PrivacyInfo.xcprivacy > audit-output/privacy-manifest.txt 2>&1
+          echo "privacy manifest exit=$?" | tee -a audit-output/status.txt
+          timeout 120s python3 "${RUNNER_TEMP}/playbook/scripts/accessibility-audit.py" apps/manager-mobile > audit-output/accessibility.txt 2>&1
+          echo "accessibility exit=$?" | tee -a audit-output/status.txt
+          set -e
+          cat audit-output/status.txt
+      - name: Audit production npm dependency lock files
+        shell: bash
+        run: |
+          set +e
+          for workspace in customer-web firebase/functions apps/admin-web apps/manager-mobile; do
+            key="${workspace//\//-}"
+            (cd "${workspace}" && timeout 120s npm audit --package-lock-only --omit=dev --audit-level=high --json) > "audit-output/npm-${key}.json" 2>&1
+            echo "npm audit ${key} exit=$?" | tee -a audit-output/status.txt
+          done
+          set -e
+      - name: Store audit evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: ch-hair-policy-detail
+          path: audit-output
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Print outcomes
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## CH Hair policy detail (source scan only)"
+            echo ""
+            echo "No Store account access, no production credentials, no signed app, no deployment."
+            echo ""
+            echo '~~~'
+            cat audit-output/status.txt || true
+            echo '~~~'
+            echo "Download the job artifact to inspect every individual finding."
+          } >> "${GITHUB_STEP_SUMMARY}"
